@@ -113,6 +113,7 @@ private:
             high  = isHigh;
             g     = on ? 1.0f : 0.0f;
             hzNow = hz;
+            phase = 0;
             for (auto& b : bq)
             {
                 b.design (high, hzNow, rate);
@@ -120,35 +121,50 @@ private:
             }
         }
 
+        int phase = 0;   // samples into the glide's cadence — carried across calls, so the sweep keeps audio time
+
+        void redesign (double rate) noexcept
+        {
+            for (auto& b : bq)
+                b.design (high, hzNow, rate);
+        }
+
         void run (float* const* ch, int nc, int n, bool on, double hzWant, double rate, float fade, double keep) noexcept
         {
             const float want = on ? 1.0f : 0.0f;
 
-            // Off and faded out: not run — and its memory already cleared when it got here.
+            // Off and faded out: not run, its memory already cleared when it got here. It stands at the frequency asked —
+            // coefficients and all — so it comes back where its word says; and the cadence keeps time while it waits.
             if (g <= 0.0f && ! on)
             {
-                hzNow = hzWant;   // where it stands when it comes back: a cut fades in at its place, it does not sweep there
+                if (hzNow < hzWant || hzNow > hzWant)
+                {
+                    hzNow = hzWant;
+                    redesign (rate);
+                }
+                phase = (int) (((long long) phase + n) % cadence);
                 return;
             }
 
-            for (int start = 0; start < n; start += cadence)
+            for (int start = 0; start < n;)
             {
-                const int len = std::min (cadence, n - start);
-
-                // The frequency's glide, log-evenly, a step per cadence; snapped once within 0.1 %.
-                if (std::abs (std::log (hzWant / hzNow)) > 0.001)
+                // A step of the glide on the cadence, counted in samples from the snap whatever the host's blocks:
+                // log-evenly, snapped once within 0.1 %.
+                if (phase == 0)
                 {
-                    hzNow = std::exp (std::log (hzWant) + (std::log (hzNow) - std::log (hzWant)) * keep);
-                    for (int c = 0; c < nc; ++c)
-                        bq[(size_t) c].design (high, hzNow, rate);
-                }
-                else if (hzNow < hzWant || hzNow > hzWant)   // an exact landing, once
-                {
-                    hzNow = hzWant;
-                    for (int c = 0; c < nc; ++c)
-                        bq[(size_t) c].design (high, hzNow, rate);
+                    if (std::abs (std::log (hzWant / hzNow)) > 0.001)
+                    {
+                        hzNow = std::exp (std::log (hzWant) + (std::log (hzNow) - std::log (hzWant)) * keep);
+                        redesign (rate);
+                    }
+                    else if (hzNow < hzWant || hzNow > hzWant)   // an exact landing, once
+                    {
+                        hzNow = hzWant;
+                        redesign (rate);
+                    }
                 }
 
+                const int  len    = std::min (n - start, cadence - phase);
                 const bool fading = std::abs (want - g) > 0.0f;
                 for (int c = 0; c < nc; ++c)
                 {
@@ -170,12 +186,15 @@ private:
                         g = gg;
                 }
 
-                // Faded out: the filter's memory goes with it.
+                start += len;
+                phase  = (phase + len) % cadence;
+
+                // Faded out: the filter's memory goes with it; the rest of the block is the input, as it stands.
                 if (g <= 0.0f && ! on)
                 {
                     for (auto& b : bq)
                         b.reset();
-                    // The rest of the block is the input, as it stands.
+                    phase = (int) (((long long) phase + (n - start)) % cadence);
                     return;
                 }
             }
