@@ -18,49 +18,31 @@
 namespace orbitamp::core
 {
 
-/** OrbitBass's COMP: felitronics-core's compressor under ONE KNOB, the law agreed with the owner.
+/** OrbitBass's COMP: felitronics-core's compressor, EACH CONTROL ONE JOB (the owner, 31.10).
 
-    The knob, 0..1:
-      - 0 is no compressor — once the knob has glided there, nothing is computed and the signal passes bit
-        for bit;
-      - up the knob the threshold falls from -12 to -36 dB and the ratio rises from 2:1 to 6:1, over a soft
-        knee of 8 dB, with core's static auto make-up;
-      - over the knob's FIRST 5 % the compressor is crossfaded in against the signal, so the knob is
-        continuous from its zero: 0+ is not already the make-up's +3 dB;
-      - up the knob a share of the signal passes UNCOMPRESSED beside it, parallel — a quarter at the top —
-        so a note's attack survives the squeeze;
-      - the knob GLIDES (20 ms for its whole travel): a recall, a register or automation moves the threshold,
-        the ratio and the parallel share as a hand would, never as a step;
-      - no lookahead: no latency, and the uncompressed share lines up with the compressed one sample for sample.
+      - THE THRESHOLD, dB (-48..0), its own: the line on the picture is where the detector works, in either character.
+      - THE RATIO, 2:1..10:1, its own.
+      - THE KNOB IS BLEND — parallel compression: 0 is no compressor at all (once glided there nothing is computed and
+        the signal passes bit for bit), 1 all of the signal compressed, between the compressed signal over the clean one,
+        sample-aligned (no lookahead, no latency).
+      - MAKE-UP is automatic: core's static make-up from the threshold and the ratio (half what the curve takes from 0
+        dBFS), gliding as the squeeze does — up at the attack's pace, down at the release's.
+      - Every move GLIDES: the blend over 20 ms for its whole travel, the threshold over 20 ms for its 48 dB, the ratio
+        over 20 ms for 2:1..10:1 — a drag, a recall or automation is never a step.
+      - CHARACTER chooses the detector: SMOOTH hears the level's RMS over 10 ms, PUNCHY its peaks. (The old law raised
+        PUNCHY's threshold 4 dB so the two played about as loud; with a threshold of its own the line says where it works,
+        and PUNCHY at the same line squeezes harder — the player sets the line.)
 
-    STANDBY (the strip's arrow) is the house's crossfade (BypassFade, 15 ms), handed in per block. While the
-    link stands by with the knob up the compressor is still FED — its detector and its make-up stay where the
-    playing has put them — so switching it in fades to a compressor already settled, not to a fresh one that
-    lets the first 15 ms through at the whole make-up. Only with the knob at zero does it stop, and its memory
-    is cleared then, when nothing of it is in the sound. A knob recalled up from zero starts a FRESH
-    compressor, which has heard nothing yet: it is fed and not heard for three of its attacks and `warmMs` — the
-    detector's window, the squeeze and the make-up catching up with the playing — and only then faded in. A
-    PREPARE is not a recall: a chain that arrives with COMP up plays it from its first sample (snapAmount).
+    STANDBY (the strip's arrow) is the house's crossfade (BypassFade, 15 ms), handed in per block. While the link stands
+    by with BLEND up the compressor is still FED, so switching it in fades to a compressor already settled. Only with
+    BLEND at zero does it stop, its memory cleared then. A BLEND recalled up from zero starts a FRESH compressor, fed and
+    not heard for three of its attacks and `warmMs`, then faded in. A PREPARE is not a recall: a chain that arrives with
+    BLEND up plays it from its first sample (snapAmount).
 
-    ITS MAKE-UP IS ITS OWN, not core's: the static auto make-up's number (half what the curve takes from 0 dBFS),
-    gliding toward it as the squeeze does — up at the attack's pace, down at the release's — so a knob turned
-    down mid-note does not drop the make-up in 30 ms while the squeeze lets go over 400, a duck of the whole
-    note for half a second; and a fresh start's make-up rises with its squeeze, not ahead of it.
-
-    The detector hears the bass through a 30 Hz high-pass, 12 dB/oct (the key; core gives the input, the
-    product the filter): the lowest fundamentals do not pump the rest. It was 40 Hz at 24 dB/oct, and the
-    harder it squeezed the louder the low B came out against the strings above it — a key deaf to a note is a
-    compressor that leaves that note alone.
-
-    The menu: ATTACK slow 30 / MED 15 / fast 5 ms; RELEASE AUTO — program-dependent, 80 ms after a short peak
-    and growing toward 400 ms as the squeeze is held, the smooth, optical way — or FAST 80 / SLOW 400 ms;
-    CHARACTER SMOOTH hears the level's average (RMS over 10 ms), PUNCHY its peaks, its threshold
-    `punchyOffsetDb` higher, so the two play about as loud on a bass.
-
-    ITS TIME IS ITS OWN, NOT THE HOST'S BLOCKS: the knob and the release reach the compressor on a fixed
-    cadence counted in samples from the prepare, and the hold behind AUTO is read sample by sample from the
-    compressor's own gain-reduction tap — the same playing gives the same samples whether a host hands 32
-    samples a block or 4096.
+    The detector hears the bass through a 30 Hz high-pass, 12 dB/oct (the key): the lowest fundamentals do not pump the
+    rest. ATTACK slow 30 / MED 15 / fast 5 ms; RELEASE AUTO — 80 ms after a short peak growing toward 400 ms as the squeeze
+    is held — or FAST 80 / SLOW 400 ms. ITS TIME IS ITS OWN: the controls and the release reach the compressor on a fixed
+    cadence counted in samples from the prepare — the same playing gives the same samples whatever the host's blocks.
 
     Mono, as the bass's chain is. Real-time safe: prepare() allocates, process() does not. */
 class BassComp
@@ -70,13 +52,9 @@ public:
     enum class Release   { automatic, fast, slow };
     enum class Character { smooth, punchy };
 
-    static constexpr double thresholdTopDb    = -12.0, thresholdBottomDb = -36.0;
-    static constexpr double ratioLow          = 2.0,   ratioHigh         = 6.0;
     static constexpr double kneeDb            = 8.0;
     static constexpr double attackSlowMs      = 30.0,  attackMedMs = 15.0, attackFastMs = 5.0;
     static constexpr double releaseFastMs     = 80.0,  releaseSlowMs = 400.0;
-    static constexpr double uncompressedAtTop = 0.25;
-    static constexpr double knobFadeTop       = 0.05;   // the knob's share the compressor fades in over
     static constexpr double amountGlideMs     = 20.0;   // the knob's whole travel
     static constexpr double holdMs            = 500.0;  // AUTO's memory of the squeeze
     static constexpr double holdFullDb        = 6.0;    // ...held this deep, the release is at its slowest
@@ -84,12 +62,6 @@ public:
     static constexpr double warmMs            = 30.0;   // a fresh start is fed, not heard, three attacks and this long...
     static constexpr double warmFadeMs        = 15.0;   // ...then fades in over BypassFade's length
 
-    /** PUNCHY's threshold over SMOOTH's. A peak detector reads a sine 3 dB over its 10 ms RMS and a plucked
-        bass more — a real DI 8 to 12 dB (reviewed 31.10) — so PUNCHY, at SMOOTH's threshold, squeezed the
-        same playing harder and played it quieter. The offset is measured on the gate's plucked bass line,
-        whose attack puts its peaks about as far over its RMS as a finger on a DI (tests/OrbitBassTests.cpp
-        prints both); the owner sets the rest by ear. */
-    static constexpr double punchyOffsetDb = 4.0;
 
     /** The key's high-pass: this one, or another for a comparison — the first version's was 40 Hz, two
         sections (24 dB/oct). */
@@ -99,41 +71,12 @@ public:
         int    sections = 1;    // 12 dB/oct each
     };
 
-    /** Where the knob puts the curve. */
-    struct Law
-    {
-        double thresholdDb;
-        double ratio;
-        double uncompressed;   // the parallel share, 0..uncompressedAtTop
-    };
 
-    /** THE THRESHOLD LINE AND THE SLIDER ARE ONE CONTROL (the COMP block): where the knob puts the threshold the detector
-        works at — the law's, PUNCHY's offset over it — and back, the knob whose threshold that is, clamped to the
-        knob's travel. */
-    static double thresholdAt (double amount, Character c) noexcept
-    {
-        return lawAt (amount).thresholdDb + (c == Character::punchy ? punchyOffsetDb : 0.0);
-    }
-
-    static double amountForThreshold (double db, Character c) noexcept
-    {
-        const double law = db - (c == Character::punchy ? punchyOffsetDb : 0.0);
-        return std::clamp ((law - thresholdTopDb) / (thresholdBottomDb - thresholdTopDb), 0.0, 1.0);
-    }
-
-    /** A RATIO THE HAND HOLDS (params::compRatio, dragged in the block's transfer square), within these; the knob's
-        threshold, its parallel share and its fade stay the law's. Taken and given back by GLIDING, as the knob does —
-        twice the law's own pace, 10 ms for 2:1 to 6:1 — never by a step; following the law the ratio IS the law's,
-        sample for sample. */
-    static constexpr double heldRatioMin = 2.0, heldRatioMax = 10.0;
-
-    static Law lawAt (double amount) noexcept
-    {
-        const double a = std::clamp (amount, 0.0, 1.0);
-        return { thresholdTopDb + (thresholdBottomDb - thresholdTopDb) * a,
-                 ratioLow + (ratioHigh - ratioLow) * a,
-                 uncompressedAtTop * a };
-    }
+    /** EACH CONTROL ONE JOB (the owner, 31.10): the THRESHOLD is the threshold alone, in dB; the RATIO the ratio alone;
+        the knob is BLEND — parallel compression, 0 none at all, 1 all of the signal compressed. Make-up is automatic,
+        from the threshold and the ratio. */
+    static constexpr double thresholdMinDb = -48.0, thresholdMaxDb = 0.0, defaultThresholdDb = -24.0;
+    static constexpr double ratioMin = 2.0, ratioMax = 10.0, defaultRatio = 4.0;
 
     static double attackMsOf (Attack a) noexcept
     {
@@ -148,7 +91,8 @@ public:
         block     = std::max (1, maxBlock);
         cadence   = std::max (1, (int) std::lround (fs * cadenceMs * 0.001));
         glideStep = 1.0 / (amountGlideMs * 0.001 * fs);
-        ratioStep = 2.0 * (ratioHigh - ratioLow) * (double) cadence * glideStep;   // faster than the law can move it
+        ratioStep = (ratioMax - ratioMin) * (double) cadence * glideStep;                      // 2:1 to 10:1 in 20 ms
+        thrStep   = (thresholdMaxDb - thresholdMinDb) * (double) cadence * glideStep;          // the whole travel in 20 ms
         warmSamples = (3.0 * attackMedMs + warmMs) * 0.001 * fs;   // the attack's own, from the first apply
         warmFade    = warmFadeMs * 0.001 * fs;
         holdK     = 1.0 - std::exp (-1.0 / (holdMs * 0.001 * fs));
@@ -176,7 +120,6 @@ public:
         clock       = 0;
         sinceStart  = 0;
         makeupNowDb = 0.0;
-        parallelNow = 0.0;
         snapMakeup  = false;
         running     = false;
         paramsValid = false;
@@ -195,10 +138,12 @@ public:
     /** One block of the mono chain, in place. `link` is the strip's STANDBY crossfade for this block; `heldRatio` the
         ratio the hand holds, or 0 or below for the law's. */
     void process (float* x, int n, double amountTarget, const BypassFade::Span& link,
-                  Attack attack, Release release, Character character, double heldRatio = 0.0) noexcept
+                  Attack attack, Release release, Character character,
+                  double thresholdDb = defaultThresholdDb, double ratio = defaultRatio) noexcept
     {
         const double target = std::clamp (amountTarget, 0.0, 1.0);
-        ratioHeld = heldRatio > 0.0 ? std::clamp (heldRatio, heldRatioMin, heldRatioMax) : 0.0;
+        thrWant   = std::isfinite (thresholdDb) ? std::clamp (thresholdDb, thresholdMinDb, thresholdMaxDb) : thrWant;
+        ratioWant = std::isfinite (ratio) ? std::clamp (ratio, ratioMin, ratioMax) : ratioWant;
 
         // The knob at zero and glided there: nothing at all — and the memory cleared, now that nothing of it
         // is in the sound.
@@ -256,20 +201,16 @@ public:
                 if (! heard)
                     continue;
 
-                // The knob's first 5 % is a crossfade of the compressor against the signal, so the knob is continuous
-                // from its zero. A JUMP to zero is the link's own fade's (the processor fades the link toward
-                // "on AND up"), which takes it out in 15 ms, before this glide lands and the stage stops.
-                // The parallel share follows the knob at the make-up's paces too: down as the squeeze lets go, or a knob
-                // turned down would take the uncompressed attack away before the compressed note came back up.
-                const double pWant = uncompressedAtTop * amt;
-                parallelNow += (pWant - parallelNow) * (pWant > parallelNow ? makeupUpK : makeupDownK);
-                const double p     = parallelNow;
+                // BLEND — parallel compression: the compressed signal over the clean one, sample-aligned (no lookahead),
+                // in the share the knob has glided to; continuous from its zero by construction. A JUMP to zero is the
+                // link's own fade's (the processor fades the link toward "on AND up"), out in 15 ms, before this glide
+                // lands and the stage stops.
                 const double fresh = std::clamp (((double) (sinceStart + (k - i)) - warmSamples) / warmFade, 0.0, 1.0);
-                const double knob  = std::min (1.0, amt / knobFadeTop) * fresh;
-                const float  g    = link.moving ? (k < ramp ? link.from + linkStep * (float) k : link.to) : link.to;
-                const float  d    = dry[(size_t) k];
-                const float  wet  = (float) ((1.0 - p) * (double) work[(size_t) k] + p * (double) d);
-                x[k] = d + (wet - d) * (float) (knob * (double) g);
+                const double blend = amt * fresh;
+                const float  g     = link.moving ? (k < ramp ? link.from + linkStep * (float) k : link.to) : link.to;
+                const float  d     = dry[(size_t) k];
+                const float  wet   = work[(size_t) k];
+                x[k] = d + (wet - d) * (float) (blend * (double) g);
             }
 
             i          += len;
@@ -298,21 +239,25 @@ public:
 private:
     void apply (Attack attack, Release release, Character character) noexcept
     {
-        const auto law = lawAt (amt);
-
-        // The ratio: the law's, or the hand's, gliding between them; a fresh compressor starts on its own.
-        const double ratioWant = ratioHeld > 0.0 ? ratioHeld : law.ratio;
+        // The threshold and the ratio, each its own control, GLIDING to where they are asked — a drag or a recall is a
+        // glide, never a step; a fresh compressor starts on them.
         if (! paramsValid)
+        {
+            thrAt   = thrWant;
             ratioAt = ratioWant;
+        }
         else
+        {
+            thrAt   = thrWant > thrAt ? std::min (thrWant, thrAt + thrStep) : std::max (thrWant, thrAt - thrStep);
             ratioAt = ratioWant > ratioAt ? std::min (ratioWant, ratioAt + ratioStep) : std::max (ratioWant, ratioAt - ratioStep);
+        }
 
         double releaseMs = release == Release::fast ? releaseFastMs : releaseSlowMs;
         if (release == Release::automatic)
             releaseMs = releaseFastMs + (releaseSlowMs - releaseFastMs) * std::clamp (heldDb / holdFullDb, 0.0, 1.0);
 
         felitronics::dynamics::CompressorParams p;
-        p.thresholdDb = law.thresholdDb + (character == Character::punchy ? punchyOffsetDb : 0.0);
+        p.thresholdDb = thrAt;   // the line is where the detector works, in either character (no offset any more)
 
         // The make-up's number — core's static auto make-up, half what the curve takes from 0 dBFS, which lies past
         // the knee for every threshold the law reaches — and the paces it glides at (see the class comment).
@@ -323,7 +268,6 @@ private:
         if (snapMakeup)
         {
             makeupNowDb = makeupTargetDb;
-            parallelNow = law.uncompressed;
             snapMakeup  = false;
         }
         p.ratio       = ratioAt;
@@ -359,10 +303,11 @@ private:
     int    keySections = 1;
     std::vector<float> key, dry, work, gr;
     double fs = 48000.0, heldDb = 0.0, amt = 0.0, glideStep = 0.001, holdK = 0.001;
-    double ratioHeld = 0.0, ratioAt = ratioLow, ratioStep = 0.4;
+    double thrWant = defaultThresholdDb, thrAt = defaultThresholdDb, thrStep = 0.05;
+    double ratioWant = defaultRatio, ratioAt = defaultRatio, ratioStep = 0.4;
     long long clock = 0, sinceStart = 0;
     double warmSamples = 960.0, warmFade = 720.0;
-    double makeupNowDb = 0.0, makeupTargetDb = 0.0, makeupUpK = 0.001, makeupDownK = 0.001, parallelNow = 0.0;
+    double makeupNowDb = 0.0, makeupTargetDb = 0.0, makeupUpK = 0.001, makeupDownK = 0.001;
     bool   snapMakeup = false;
     int    block = 0, cadence = 48;
     bool   ready = false, running = false, paramsValid = false;

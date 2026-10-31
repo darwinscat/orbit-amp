@@ -454,10 +454,12 @@ inline const juce::StringArray compAttacks    { "Slow", "Med", "Fast" };
 inline const juce::StringArray compReleases   { "Auto", "Fast", "Slow" };
 inline const juce::StringArray compCharacters { "Smooth", "Punchy" };
 
-/** COMP's RATIO when the hand holds one: dragged in the COMP block's transfer square, it holds there whatever the
-    slider says (`compRatioHeld` on) until the menu's "RATIO: BY THE SLIDER" gives it back to the law. Both saved. */
+/** COMP, EACH CONTROL ONE JOB (the owner, 31.10): `comp` is its BLEND — parallel compression, 0 none at all .. 1 all
+    of the signal compressed (the strip's arrow its STANDBY); its THRESHOLD in dB and its RATIO are their own (the
+    picture's line, the ratio slider over the square); make-up automatic. Its menu: attack, release, character. */
+inline constexpr const char* compThreshold = "comp_threshold";
 inline constexpr const char* compRatio     = "comp_ratio";
-inline constexpr const char* compRatioHeld = "comp_ratio_held";
+inline constexpr float compThresholdMin = -48.0f, compThresholdMax = 0.0f, compThresholdDefault = -24.0f;
 inline constexpr float compRatioMin = 2.0f, compRatioMax = 10.0f;
 
 /** THE BASS'S THREE EFFECTS (felitronics-core's octave, envfilter and chorus), each a block in the strip — its

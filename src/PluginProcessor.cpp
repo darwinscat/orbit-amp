@@ -175,8 +175,8 @@ AmpProcessor::AmpProcessor (const Product& product)
         bass.hpfOn         = raw (params::bassHpfOn);
         bass.lpfOn         = raw (params::bassLpfOn);
         bass.compRatio     = raw (params::compRatio);
-        bass.compRatioHeld = raw (params::compRatioHeld);
-        jassert (bass.compAmount != nullptr && bass.lpfHzSlap != nullptr && bass.chorusCentreMs != nullptr && bass.compRatioHeld != nullptr);
+        bass.compThreshold = raw (params::compThreshold);
+        jassert (bass.compAmount != nullptr && bass.lpfHzSlap != nullptr && bass.chorusCentreMs != nullptr && bass.compThreshold != nullptr);
     }
 
     gateThresholdParam = apvts.getRawParameterValue (params::gateThreshold);
@@ -222,7 +222,8 @@ AmpProcessor::AmpProcessor (const Product& product)
                 // The bass's effects' sliders keep their last number through a NaN: their default, 0, would switch an
                 // effect off on an invalid automation point (review round 3).
                 const bool holds = ranged->paramID == params::octaveAmount || ranged->paramID == params::filterAmount
-                                || ranged->paramID == params::chorusAmount || ranged->paramID == params::compAmount;
+                                || ranged->paramID == params::chorusAmount || ranged->paramID == params::compAmount
+                                || ranged->paramID == params::compThreshold || ranged->paramID == params::compRatio;
                 const float fallback = ranged->convertFrom0to1 (engineDefault (*ranged));
                 parameterGuards.push_back ({ raw, fallback, holds, fallback });
             }
@@ -2003,7 +2004,7 @@ void AmpProcessor::processChunk (juce::AudioBuffer<float>& buffer)
                           static_cast<core::BassComp::Attack>    (juce::jlimit (0, 2, juce::roundToInt (bass.compAttack->load()))),
                           static_cast<core::BassComp::Release>   (juce::jlimit (0, 2, juce::roundToInt (bass.compRelease->load()))),
                           static_cast<core::BassComp::Character> (juce::jlimit (0, 1, juce::roundToInt (bass.compCharacter->load()))),
-                          bass.compRatioHeld->load() > 0.5f ? (double) bass.compRatio->load() : 0.0);
+                          (double) bass.compThreshold->load(), (double) bass.compRatio->load());
         compGrDb.store (bassComp.grDb.load (std::memory_order_relaxed), std::memory_order_relaxed);
         innerCut (1);   // after COMP
         nsStage[stComp] = elapsedNs (a);

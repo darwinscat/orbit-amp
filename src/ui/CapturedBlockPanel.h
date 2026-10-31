@@ -51,7 +51,7 @@ class CapturedBlockPanel final : public BlockFrame,
 {
 public:
     /** OrbitBass's knob beside the GAIN dial, BLEND, takes a column this wide — the AMP block, and the whole face,
-        that much wider (FaceplateView::bassExtraWidth): the picture well keeps the room its row of hands needs. */
+        that much wider within the AMP's row: the picture well keeps the room its row of hands needs. */
     static constexpr int bassSideW = 66;
 
     /** Its console — a gate asks whose cuts its switches are (EqSection::cutsAreBass). */

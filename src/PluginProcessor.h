@@ -1414,7 +1414,7 @@ private:
         std::atomic<float>* chorusCrossoverHz = nullptr;
         std::atomic<float>* chorusCentreMs = nullptr;
         std::atomic<float>* compRatio = nullptr;
-        std::atomic<float>* compRatioHeld = nullptr;
+        std::atomic<float>* compThreshold = nullptr;
         std::atomic<float>* hpfOn = nullptr;
         std::atomic<float>* lpfOn = nullptr;
     } bass;

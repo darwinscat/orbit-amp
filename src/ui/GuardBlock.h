@@ -108,7 +108,9 @@ protected:
         // The name, centred on the top line; the frame opens the line under it.
         const auto box = boxArea();
         const int  w   = juce::roundToInt (theme::trackedWidth (name, theme::displayFont (titleHeight), 0.15f)) + 1;
-        nameBox        = juce::Rectangle<int> (w, (int) titleHeight + 6).withCentre ({ box.getCentreX(), box.getY() });
+        // ...left of the gear where the block wears one (OrbitBass), so the two do not meet.
+        nameBox        = juce::Rectangle<int> (w, (int) titleHeight + 6)
+                             .withCentre ({ box.getCentreX() - (hasGear() ? gearSize / 2 + 2 : 0), box.getY() });
         borderSlotUsed = nameBox;
 
         // The lamp across the block's whole width at its foot (Oleh, 24.10); above it the rail at the

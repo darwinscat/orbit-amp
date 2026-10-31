@@ -66,7 +66,8 @@ private:
     /** The design's own width for this product — OrbitBass's wider by its knobs beside the AMP's dial. */
     static int minDesignWidthFor (const AmpProcessor& p)
     {
-        return FaceplateView::designWidth + (p.product().chain == Chain::bass ? FaceplateView::bassExtraWidth : 0);
+        juce::ignoreUnused (p);
+        return FaceplateView::designWidth;   // OrbitBass's three rows are the guitar's width at their least (31.10)
     }
 
     const int               minDesignWidth;

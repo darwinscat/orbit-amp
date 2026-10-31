@@ -36,11 +36,13 @@ public:
         : amp (processor),
           amountP (*processor.apvts.getParameter (params::compAmount)),
           characterP (*processor.apvts.getParameter (params::compCharacter)),
+          thresholdP (*processor.apvts.getParameter (params::compThreshold)),
           onP (*processor.apvts.getParameter (params::compOn)),
           cols ((size_t) columnsShown)
     {
         amountAtt    = std::make_unique<juce::ParameterAttachment> (amountP,    [this] (float) { repaint(); });
         onAtt        = std::make_unique<juce::ParameterAttachment> (onP,        [] (float) {});
+        thrAtt       = std::make_unique<juce::ParameterAttachment> (thresholdP, [this] (float) { repaint(); });
         characterAtt = std::make_unique<juce::ParameterAttachment> (characterP, [this] (float) { repaint(); });
         setMouseCursor (juce::MouseCursor::UpDownResizeCursor);
         startTimerHz (30);   // always: it is how the picture learns an ancestor was hidden or shown (refresh)
@@ -82,7 +84,7 @@ public:
     /** Where the line stands: the detector's threshold at the knob as it is, dB. */
     double thresholdDb() const
     {
-        return core::BassComp::thresholdAt ((double) amountP.convertFrom0to1 (amountP.getValue()), character());
+        return (double) thresholdP.convertFrom0to1 (thresholdP.getValue());   // the threshold, its own parameter
     }
 
     /** The line taken, dragged to `y`, let go: ONE gesture — COMP's knob and its switch, as the rail moves them (a drag
@@ -90,7 +92,7 @@ public:
     void beginLineDrag()
     {
         amp.history.beginGesture();
-        amountAtt->beginGesture();
+        thrAtt->beginGesture();
         onAtt->beginGesture();
         dragging = true;
         repaint();
@@ -98,7 +100,7 @@ public:
 
     void dragLineTo (float y)
     {
-        amountAtt->setValueAsPartOfGesture ((float) core::BassComp::amountForThreshold (dbAtY (y), character()));
+        thrAtt->setValueAsPartOfGesture ((float) juce::jlimit ((double) params::compThresholdMin, (double) params::compThresholdMax, dbAtY (y)));
         onAtt->setValueAsPartOfGesture (1.0f);
     }
 
@@ -106,7 +108,7 @@ public:
     {
         if (dragging)
         {
-            amountAtt->endGesture();
+            thrAtt->endGesture();
             onAtt->endGesture();
             amp.history.endGesture();
         }
@@ -126,11 +128,11 @@ public:
         return { levels().getX() + 3.0f, lineY() - meterrail::gripH * 0.5f, handleW, meterrail::gripH };
     }
 
-    /** CLICK-TO-TYPE on the handle: a threshold in dB moves the knob to it, clamped to the law's travel — one gesture. */
+    /** CLICK-TO-TYPE on the handle: a threshold in dB, clamped to its travel — one gesture. */
     void typeThreshold (double db)
     {
         amp.history.beginGesture();
-        amountAtt->setValueAsCompleteGesture ((float) core::BassComp::amountForThreshold (db, character()));
+        thrAtt->setValueAsCompleteGesture ((float) juce::jlimit ((double) params::compThresholdMin, (double) params::compThresholdMax, db));
         onAtt->setValueAsCompleteGesture (1.0f);
         amp.history.endGesture();
     }
@@ -310,8 +312,9 @@ private:
     AmpProcessor& amp;
     juce::RangedAudioParameter& amountP;
     juce::RangedAudioParameter& characterP;
+    juce::RangedAudioParameter& thresholdP;
     juce::RangedAudioParameter& onP;
-    std::unique_ptr<juce::ParameterAttachment> amountAtt, characterAtt, onAtt;
+    std::unique_ptr<juce::ParameterAttachment> amountAtt, characterAtt, onAtt, thrAtt;
     std::vector<core::CompTap::Column> cols;
     int shown = 0;
     std::uint32_t lastWritten = 0;
@@ -322,8 +325,8 @@ private:
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (CompGraph)
 };
 
-/** COMP'S RATIO, the parameters both its controls share: the ratio shown — the hand's when it holds one, the law's at
-    the knob otherwise — and a drag that takes it into the hand: COMP's ratio held, one gesture on `comp_ratio`. */
+/** COMP'S RATIO, what both its controls share: the ratio, its own parameter, and a drag of it — COMP switched in with
+    it, one gesture on `comp_ratio`, one undo step. */
 struct CompRatio
 {
     explicit CompRatio (AmpProcessor& processor)
@@ -332,23 +335,19 @@ struct CompRatio
           amountP (*processor.apvts.getParameter (params::compAmount)),
           characterP (*processor.apvts.getParameter (params::compCharacter)),
           ratioP (*processor.apvts.getParameter (params::compRatio)),
-          heldP (*processor.apvts.getParameter (params::compRatioHeld)) {}
-
-    bool held() const { return heldP.getValue() > 0.5f; }
+          thresholdP (*processor.apvts.getParameter (params::compThreshold)) {}
 
     double thresholdDb() const
     {
-        const auto c = characterP.getValue() > 0.5f ? core::BassComp::Character::punchy : core::BassComp::Character::smooth;
-        return core::BassComp::thresholdAt ((double) amountP.convertFrom0to1 (amountP.getValue()), c);
+        return (double) thresholdP.convertFrom0to1 (thresholdP.getValue());
     }
 
     double ratio() const
     {
-        return held() ? (double) ratioP.convertFrom0to1 (ratioP.getValue())
-                      : core::BassComp::lawAt ((double) amountP.convertFrom0to1 (amountP.getValue())).ratio;
+        return (double) ratioP.convertFrom0to1 (ratioP.getValue());   // the ratio, its own parameter
     }
 
-    /** Taken: the ratio shown becomes the hand's — held from here, so the grip does not jump — and COMP switched in, as
+    /** Taken: from the ratio where it stands, so the grip does not jump — and COMP switched in, as
         its line and its rail do: one gesture, and one undo step, until let go. */
     void take()
     {
@@ -358,9 +357,6 @@ struct CompRatio
         onP.setValueNotifyingHost (1.0f);
         ratioP.beginChangeGesture();
         ratioP.setValueNotifyingHost (ratioP.convertTo0to1 (now));
-        heldP.beginChangeGesture();
-        heldP.setValueNotifyingHost (1.0f);
-        heldP.endChangeGesture();
         taken = true;
     }
 
@@ -386,19 +382,33 @@ struct CompRatio
     juce::RangedAudioParameter& amountP;
     juce::RangedAudioParameter& characterP;
     juce::RangedAudioParameter& ratioP;
-    juce::RangedAudioParameter& heldP;
+    juce::RangedAudioParameter& thresholdP;
     bool taken = false;
 };
 
+/** COMP'S RATIO DETENTS (the owner, 31.10): a drag near 2, 3, 4, 5, 7 or 10 : 1 — within `detentPx` of it on the control —
+    sticks to it; between them the ratio moves freely; a typed ratio is taken as typed. */
+inline constexpr double compRatioDetents[] { 2.0, 3.0, 4.0, 5.0, 7.0, 10.0 };
+inline constexpr float  compDetentPx = 4.0f;
+
+template <typename PositionOf>
+double snapRatio (double r, float at, PositionOf positionOf)
+{
+    for (const double d : compRatioDetents)
+        if (std::abs (positionOf (d) - at) <= compDetentPx)
+            return d;
+    return r;
+}
+
 /** COMP'S RATIO SLIDER, over the IN/OUT square: 2:1 … 10:1 along `comp_ratio`'s own travel, a lilac track and an orange
-    grip — the hand's — carrying the ratio at 13 px. Not held, it shows and follows the slider's law; moved, it holds
-    the ratio (one gesture a drag), as a drag in the square does; "RATIO: BY THE SLIDER" in the menu gives it back. */
+    grip — the hand's — carrying the ratio at 13 px, the ratio's own control (the detents: compRatioDetents); moved, it sets
+    the ratio (one gesture a drag), as a drag in the square does. */
 class CompRatioSlider final : public juce::Component
 {
 public:
     explicit CompRatioSlider (AmpProcessor& processor) : ratio (processor)
     {
-        for (auto* p : { &ratio.amountP, &ratio.characterP, &ratio.ratioP, &ratio.heldP })
+        for (auto* p : { &ratio.amountP, &ratio.characterP, &ratio.ratioP, &ratio.thresholdP })
             atts.push_back (std::make_unique<juce::ParameterAttachment> (*p, [this] (float) { repaint(); }));
         setMouseCursor (juce::MouseCursor::LeftRightResizeCursor);
     }
@@ -434,7 +444,7 @@ public:
                                                                    b.getY() + textH * 0.5f });
     }
 
-    /** CLICK-TO-TYPE on the ratio: what is typed is held, 2..10 — one gesture. */
+    /** CLICK-TO-TYPE on the ratio: taken as typed, 2..10 — one gesture. */
     void typeRatio (double r)
     {
         ratio.take();
@@ -451,7 +461,7 @@ public:
     bool isTyping() const { return typing.isOpen(); }
 
     void beginDrag()          { ratio.take(); repaint(); }
-    void dragTo (float x)     { ratio.moveTo (ratioAtX (x)); }
+    void dragTo (float x)     { ratio.moveTo (snapRatio (ratioAtX (x), x, [this] (double d) { return xOfRatio (d); })); }
     void endDrag()            { ratio.letGo(); repaint(); }
 
     void paint (juce::Graphics& g) override
@@ -522,7 +532,7 @@ class CompTransfer final : public juce::Component
 public:
     explicit CompTransfer (AmpProcessor& processor) : ratio (processor)
     {
-        for (auto* p : { &ratio.amountP, &ratio.characterP, &ratio.ratioP, &ratio.heldP })
+        for (auto* p : { &ratio.amountP, &ratio.characterP, &ratio.ratioP, &ratio.thresholdP })
             atts.push_back (std::make_unique<juce::ParameterAttachment> (*p, [this] (float) { repaint(); }));
         setMouseCursor (juce::MouseCursor::UpDownResizeCursor);
     }
@@ -542,7 +552,7 @@ public:
         const auto   b   = box();
         const double t   = ratio.thresholdDb();
         const double out = juce::jlimit (t + 0.05, 0.0, (double) (lowDb * (y - b.getY()) / b.getHeight()));
-        ratio.moveTo (-t / (out - t));
+        ratio.moveTo (snapRatio (-t / (out - t), y, [this] (double d) { return yOfRatio (d); }));
     }
     void endRatioDrag()     { ratio.letGo(); }
 
@@ -622,10 +632,9 @@ private:
 };
 
 /** THE BASS'S COMP, A BLOCK OF ITS OWN (the owner, 31.10): after the GATE and before OCTAVE on the panel, as in the
-    strip. Inside, left to right: its SLIDER (a rail over COMP's one knob, 0..1, the law's threshold -12..-36 and ratio
-    2:1..6:1), its PICTURE with the threshold line — the slider seen another way — and its RATIO, a slider over the
-    IN/OUT square. ATTACK, RELEASE, CHARACTER and the ratio given back to the slider are its menu, on a right click
-    anywhere on it. Our own DSP, so violet; its arrow in the strip switches it, and standing by it dims in place, still
+    strip. Inside, left to right: its BLEND (a rail, 0..100 %, parallel compression), its PICTURE with its THRESHOLD
+    line, and its RATIO, a slider over the IN/OUT square — each control one job. ATTACK, RELEASE and CHARACTER are its
+    settings (the gear, a right click). Our own DSP, so violet; its arrow in the strip switches it, and standing by it dims in place, still
     in reach. */
 class CompBlock final : public BlockFrame
 {

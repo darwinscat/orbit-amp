@@ -8,6 +8,7 @@
 #include "BassControls.h"
 #include "ChorusBlock.h"
 #include "CompBlock.h"
+#include "BassSettings.h"
 #include "FilterBlock.h"
 #include "OctaveScope.h"
 
@@ -15,7 +16,8 @@ namespace orbitamp
 {
 
 FaceplateView::FaceplateView (AmpProcessor& processor)
-    : preamp (processor, processor.preamp, params::preampName, params::preampId, 0,
+    : owner (processor),
+      preamp (processor, processor.preamp, params::preampName, params::preampId, 0,
               processor.blockSpectrumTap[0], processor.blockInSpectrumTap[0]),
       delay (processor), reverb (processor), cabinet (processor),
       gate ("GATE", *processor.apvts.getParameter (params::gateThreshold), *processor.apvts.getParameter (params::gateOn),
@@ -104,9 +106,37 @@ FaceplateView::FaceplateView (AmpProcessor& processor)
 
     limit.labelDecimals = 1;
     limit.railOnLeft    = false;
+
+    // ORBITBASS: every block's GEAR at the top right of its frame, and a right click on it, open its settings window.
+    if (processor.product().chain == Chain::bass)
+    {
+        bassRows = true;   // three rows by the signal's way
+        const auto gear = [this] (BlockFrame* b, const char* name) { if (b != nullptr) b->enableSettings ([this, name] { openSettings (name); }); };
+        gear (&gate, "GATE");
+        gear (comp.get(), "COMP");
+        gear (octave.get(), "OCTAVE");
+        gear (filter.get(), "ENVELOPE");
+        gear (&preamp, "AMP");
+        gear (chorus.get(), "CHORUS");
+        gear (&cabinet, "CAB IR");
+        gear (&limit, "LIMIT");
+    }
 }
 
 FaceplateView::~FaceplateView() = default;
+
+void FaceplateView::openSettings (const juce::String& block)
+{
+    lastSettings = block;
+    juce::Component* at = block == "COMP" ? (juce::Component*) comp.get() : block == "OCTAVE" ? (juce::Component*) octave.get()
+                        : block == "ENVELOPE" ? (juce::Component*) filter.get() : block == "CHORUS" ? (juce::Component*) chorus.get()
+                        : block == "AMP" ? (juce::Component*) &preamp : block == "CAB IR" ? (juce::Component*) &cabinet
+                        : block == "GATE" ? (juce::Component*) &gate : (juce::Component*) &limit;
+    if (at == nullptr || ! at->isShowing())
+        return;
+    if (auto panel = bass::makeSettings (owner, block))
+        juce::CallOutBox::launchAsynchronously (std::move (panel), at->getScreenBounds(), nullptr);
+}
 
 BlockFrame& FaceplateView::frame (Block b)
 {
@@ -121,8 +151,64 @@ BlockFrame& FaceplateView::frame (Block b)
     return cabinet;   // unreachable; keeps the compiler calm
 }
 
+void FaceplateView::layOutBassRows()
+{
+    auto lane = getLocalBounds().reduced (0, lanePadY);
+    auto fx   = lane.removeFromTop (bassFxRowH);
+    lane.removeFromTop (rowGap);
+    auto amp  = lane.removeFromTop (bassAmpRowH);
+    lane.removeFromTop (rowGap);
+    auto back = lane.removeFromTop (bassFxRowH);
+
+    for (auto* b : { (juce::Component*) &gate, (juce::Component*) &limit, (juce::Component*) comp.get(), (juce::Component*) octave.get(),
+                     (juce::Component*) filter.get(), (juce::Component*) chorus.get() })
+        if (b != nullptr)
+            b->setVisible (true);
+
+    // Row 1, before the amp: GATE, COMP, OCTAVE, ENVELOPE. A wider window goes to the pictures: a third of it to COMP,
+    // the rest to OCTAVE and ENVELOPE alike.
+    gate.setBounds (fx.removeFromLeft (GuardBlock::designWidth));
+    fx.removeFromLeft (colGap);
+    constexpr int fxLeast = 219;   // OCTAVE's and ENVELOPE's share at the least width (880)
+    const int rest  = fx.getWidth() - compWidth - 2 * colGap;
+    const int extra = juce::jmax (0, rest - 2 * fxLeast);
+    const int compW = compWidth + extra / 3;
+    if (comp != nullptr)
+        comp->setBounds (fx.removeFromLeft (compW));
+    fx.removeFromLeft (colGap);
+    const int half = (fx.getWidth() - colGap) / 2;
+    if (octave != nullptr)
+        octave->setBounds (fx.removeFromLeft (half));
+    fx.removeFromLeft (colGap);
+    if (filter != nullptr)
+        filter->setBounds (fx);
+
+    // Row 2: the AMP, the whole width.
+    preamp.setVisible (shownFlags[(size_t) Block::preamp]);
+    preamp.setBounds (amp);
+
+    // Row 3, after the amp: CHORUS, the cabinet (what is left), LIMIT at the end.
+    delay.setVisible (false);
+    reverb.setVisible (false);
+    limit.setBounds (back.removeFromRight (GuardBlock::designWidth));
+    back.removeFromRight (colGap);
+    if (chorus != nullptr)
+    {
+        chorus->setBounds (back.removeFromLeft (chorusWidth + juce::jmax (0, back.getWidth() - 880) / 4));
+        back.removeFromLeft (colGap);
+    }
+    cabinet.setVisible (shownFlags[(size_t) Block::cabinet]);
+    cabinet.setBounds (back);
+}
+
 void FaceplateView::resized()
 {
+    if (bassRows)
+    {
+        layOutBassRows();
+        return;
+    }
+
     auto lane = getLocalBounds().reduced (0, lanePadY);
 
     // Both rows standing is the design's own proportions, and there is only one way to draw it.

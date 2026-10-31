@@ -43,7 +43,7 @@ public:
     {
         hop = std::max (1, (int) std::lround (sampleRate * hopSeconds));
         rmsK = (float) (1.0 - std::exp (-1.0 / (rmsSeconds * std::max (1.0, sampleRate))));
-        meanSquare = 0.0f;
+        meanSquare = meanSquareOut = 0.0f;
         inPeak = outPeak = grLow = 0.0f;
         filled = 0;
         quiet  = holdColumns + 1;   // nothing has played yet: nothing to scroll
@@ -58,9 +58,13 @@ public:
         for (int i = 0; i < n; ++i)
         {
             const float x = std::isfinite (in[i]) ? in[i] : 0.0f;
-            meanSquare += rmsK * (x * x - meanSquare);
-            inPeak  = std::max (inPeak, rms ? std::sqrt (meanSquare) : std::abs (x));
-            outPeak = std::max (outPeak, std::abs (out[i]));
+            const float y = std::isfinite (out[i]) ? out[i] : 0.0f;
+            meanSquare    += rmsK * (x * x - meanSquare);
+            meanSquareOut += rmsK * (y * y - meanSquareOut);
+            // ...and the OUTPUT measured exactly as the input: at 0 the two traces lie on each other, and their gap is what
+            // COMP did.
+            inPeak  = std::max (inPeak,  rms ? std::sqrt (meanSquare)    : std::abs (x));
+            outPeak = std::max (outPeak, rms ? std::sqrt (meanSquareOut) : std::abs (y));
             if (grDb != nullptr)
                 grLow = std::min (grLow, grDb[i]);
             if (++filled == hop)
@@ -114,7 +118,7 @@ private:
     std::array<std::atomic<float>, columns> ins {}, outs {}, grs {};
     std::atomic<std::uint32_t> count { 0 };
     static constexpr double rmsSeconds = 0.010;   // BassComp's SMOOTH detector: RMS over 10 ms
-    float inPeak = 0.0f, outPeak = 0.0f, grLow = 0.0f, meanSquare = 0.0f, rmsK = 0.002f;
+    float inPeak = 0.0f, outPeak = 0.0f, grLow = 0.0f, meanSquare = 0.0f, meanSquareOut = 0.0f, rmsK = 0.002f;
     int   filled = 0, hop = 240, quiet = holdColumns + 1;
 };
 

@@ -8,6 +8,7 @@
 #include "CapturedBlockPanel.h"
 #include "DelayBlock.h"
 #include "GuardBlock.h"
+#include "BassSettingsOpener.h"
 
 #include <memory>
 #include "ReverbBlock.h"
@@ -31,11 +32,17 @@ class AmpProcessor;
     Row one is what makes the sound — the gate's narrow block, then the captured preamp across the
     rest of the row. Row two is what happens to it afterwards, in chain order: delay, reverb,
     cabinet in even shares, then the limiter's narrow block. */
-class FaceplateView : public juce::Component
+class FaceplateView : public juce::Component,
+                      public bass::SettingsOpener
 {
 public:
     explicit FaceplateView (AmpProcessor&);
     ~FaceplateView() override;
+
+    /** ORBITBASS: a block's settings window (ui/BassSettings.h), over the face, pointing at the block — its gear's, its
+        right click's. `lastSettings` says which was asked for last (a gate reads it). */
+    void openSettings (const juce::String& block) override;
+    juce::String lastSettings;
 
     /** The loaded device changed — the captured blocks rebuild their faces from their packs. */
     void deviceChanged() { preamp.deviceChanged(); }
@@ -95,6 +102,9 @@ public:
         nobody to give the height to, and the panel closes up. */
     int currentHeight() const
     {
+        if (bassRows)
+            return bassDesignHeight;
+
         const bool r1 = rowPopulated (0), r2 = rowPopulated (1);
 
         if (! r1 && ! r2)
@@ -116,7 +126,7 @@ public:
     static constexpr int colGap = 14;
 
     /** OrbitBass's COMP block, after the GATE: its slider, its picture and its ratio square (ui/CompBlock.h). */
-    static constexpr int compWidth = 360;
+    static constexpr int compWidth = 320;
 
     /** OrbitBass's OCTAVE block, its rail and its picture of the note and its sub (ui/OctaveScope.h), after COMP. */
     static constexpr int octaveWidth = 170;
@@ -128,11 +138,12 @@ public:
         row's width is the AMP's, so the cabinet gives up what it takes. */
     static constexpr int chorusWidth = 200;
 
-    /** ...and by its COMP block and two of its effects at the head of the AMP's row, OCTAVE and ENVELOPE — the face
-        wider by all three, so the AMP keeps the width it had beside narrow rails (its section 2 is the lever's, its EQ
-        row's knobs need theirs). CHORUS stands at the head of the cabinet's row, which takes what is left. */
-    static constexpr int bassExtraWidth = CapturedBlockPanel::bassSideW + compWidth + colGap
-                                        + (octaveWidth + colGap) + (filterWidth + colGap);
+    /** ORBITBASS'S FACE, THREE ROWS by the signal's way (the owner, 31.10): GATE, COMP, OCTAVE and ENVELOPE before the
+        amp; the AMP across the whole width; CHORUS, CAB IR and LIMIT after it (the cabinet takes what is left — room for
+        one more block). Its least width is the guitar's; a wider window widens the pictures, every knob keeps its size. */
+    static constexpr int bassFxRowH  = 180;
+    static constexpr int bassAmpRowH = 200;
+    static constexpr int bassDesignHeight = 2 * 2 + bassFxRowH + 12 + bassAmpRowH + 12 + bassFxRowH;   // lanePadY, rowGap
 
     // Row 1 is the AMP: three sections side by side — the GAIN dial, the channel lever, the picture
     // well with the meters at its edges — each a tier over one shared strip of controls. The EQ curve
@@ -165,6 +176,7 @@ private:
 
     BlockFrame& frame (Block b);
 
+    AmpProcessor&      owner;   // first: the blocks below are built after it
     CapturedBlockPanel preamp;
     DelayBlock         delay;
     ReverbBlock        reverb;
@@ -188,6 +200,8 @@ private:
     std::array<bool, 4> shownFlags { true, true, true, true };
 
     bool fillsHeight = true;   // see setFillsHeight
+    bool bassRows    = false;  // OrbitBass's three rows (bassDesignHeight)
+    void layOutBassRows();
 
     friend class WebFaceplate;   // the site's kit reads where the parts stand (WebFaceplate.h)
 

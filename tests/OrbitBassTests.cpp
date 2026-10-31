@@ -3,7 +3,7 @@
 
 // Gate for ORBITBASS'S CHAIN (src/Product.h, Chain::bass), headless, run as OrbitBass:
 //
-//   where a fresh one stands — the gate off, COMP on at 0, BLEND 0 at 150 Hz, DI/CAB 30 % DI, its own HPF at
+//   where a fresh one stands — the gate off, COMP on at BLEND half, the AMP's BLEND 0 at 150 Hz, DI/CAB 30 % DI, its own HPF at
 //   5 (22 Hz) and LPF off, the cabinet's own cuts off, no delay and no reverb, mono, on its one temporary pack;
 //   its strip — GATE, COMP, AMP, CAB, LIMIT, in that order — while OrbitAmp's keeps the delay and the reverb
 //   and has no COMP, nor any of the bass's parameters;
@@ -33,6 +33,7 @@
 #include "core/ChorusTap.h"
 #include "ui/FaceplateView.h"
 #include "ui/GuardRail.h"
+#include "ui/BassSettings.h"
 #include "ui/EqSection.h"
 #include "ui/CapturedBlockPanel.h"
 #include "ui/BassControls.h"
@@ -301,10 +302,10 @@ int ORBITAMP_GATE_MAIN()
                "its LPF off (FINGERS at 4.5 kHz, SLAP at 9.5 kHz)");
         check (value (a, params::cabHpfOn) < 0.5f && value (a, params::cabLpfOn) < 0.5f,
                "the cabinet's own cuts off: its IR plays as it was shot");
-        check (value (a, params::compOn) > 0.5f && juce::approximatelyEqual (value (a, params::compAmount), 0.0f)
+        check (value (a, params::compOn) > 0.5f && juce::approximatelyEqual (value (a, params::compAmount), 0.5f)
                    && juce::roundToInt (value (a, params::compAttack)) == 1 && juce::roundToInt (value (a, params::compRelease)) == 0
                    && juce::roundToInt (value (a, params::compCharacter)) == 0,
-               "COMP on at 0, MED attack, AUTO release, SMOOTH");
+               "COMP on, BLEND at half, MED attack, AUTO release, SMOOTH");
         check (juce::approximatelyEqual (value (a, params::ampBlend), 0.0f) && juce::approximatelyEqual (value (a, params::ampBlendHz), 150.0f)
                    && value (a, params::ampBlendInvert) < 0.5f,
                "BLEND 0, its crossover at 150 Hz, not inverted");
@@ -366,8 +367,15 @@ int ORBITAMP_GATE_MAIN()
         auto off = make (bass);
         set (*off, params::compAmount, 0.6f);
         set (*off, params::compOn, 0.0f);
+        off->prepareToPlay (sampleRate, blockSize);   // standing by from the start (a fresh one's BLEND is up: its link fades)
+        off->pumpDeviceWork();
         const auto heard = play (*off, blocks, false);
-        check (worstApart (heard.l, plain.l) == 0.0f, "COMP standing by at 0.6 plays as COMP at 0, bit for bit");
+        auto zero = make (bass);
+        set (*zero, params::compAmount, 0.0f);
+        zero->prepareToPlay (sampleRate, blockSize);
+        zero->pumpDeviceWork();
+        const auto none = play (*zero, blocks, false);
+        check (worstApart (heard.l, none.l) == 0.0f, "COMP standing by at 0.6 plays as COMP at 0, bit for bit");
 
         auto up = make (bass);
         set (*up, params::compAmount, 1.0f);
@@ -445,6 +453,7 @@ int ORBITAMP_GATE_MAIN()
             auto b = make (bass);
             set (*b, params::bassHpfOn, 0.0f);
             set (*b, params::diMix, 0.0f);
+            set (*b, params::compAmount, 0.0f);   // COMP's BLEND at 0: no compressor, as at step 1
             return b;
         };
 
@@ -526,6 +535,7 @@ int ORBITAMP_GATE_MAIN()
         {
             auto t = make (bass);
             set (*t, params::cabOn, 0.0f);
+            set (*t, params::compAmount, 0.0f);
             set (*t, params::bassHpfOn, 0.0f);
             const bool hp = juce::String (id) == params::bassHpf;
             set (*t, hp ? params::bassHpfOn : params::bassLpfOn, position < 0 ? 0.0f : 1.0f);
@@ -748,10 +758,53 @@ int ORBITAMP_GATE_MAIN()
             std::printf ("      the bass line's crest over 10 ms RMS: %.1f dB mean, %.1f dB worst\n", sum / std::max (1, counted), worst);
         }
 
-        const auto bottom = BassComp::lawAt (0.0), top = BassComp::lawAt (1.0);
-        check (bottom.thresholdDb == -12.0 && bottom.ratio == 2.0 && bottom.uncompressed == 0.0
-                   && top.thresholdDb == -36.0 && top.ratio == 6.0 && top.uncompressed == 0.25,
-               "COMP's law: from -12 dB at 2:1 to -36 dB at 6:1, a quarter uncompressed at the top");
+        // EACH CONTROL ONE JOB (the owner, 31.10): the threshold its own (-48..0 dB, -24 by default), the ratio its own
+        // (2:1..10:1, 4:1), the knob BLEND (0..1, a half) — the defaults the processor's and the stage's alike.
+        struct Curve { double thresholdDb, ratio, uncompressed; };
+        const Curve top { BassComp::defaultThresholdDb, BassComp::defaultRatio, 0.0 };
+        {
+            auto* thr = amp->apvts.getParameter (params::compThreshold);
+            auto* rat = amp->apvts.getParameter (params::compRatio);
+            check (thr != nullptr && rat != nullptr && thr->getNormalisableRange().start == -48.0f && thr->getNormalisableRange().end == 0.0f
+                       && value (*amp, params::compThreshold) == (float) BassComp::defaultThresholdDb && value (*amp, params::compRatio) == (float) BassComp::defaultRatio
+                       && rat->getNormalisableRange().start == 2.0f && rat->getNormalisableRange().end == 10.0f && value (*amp, params::compAmount) == 0.5f,
+                   "COMP's three: THRESHOLD -48..0 dB at -24, RATIO 2:1..10:1 at 4:1, BLEND at half");
+        }
+
+        // BLEND IS PARALLEL COMPRESSION, SAMPLE-ALIGNED: at half, what comes out is the dry and the all-compressed summed
+        // half and half, sample for sample (no lookahead, no latency between the two).
+        {
+            const auto runAt = [] (double blend)
+            {
+                BassComp c;
+                (void) c.prepare (sampleRate, blockSize);
+                c.snapAmount (blend);
+                core::BypassFade link;
+                link.prepare (sampleRate);
+                link.snapTo (blend > 0.0);
+                std::vector<float> out, x ((size_t) blockSize);
+                long long n = 0;
+                for (int b = 0; b < 100; ++b)
+                {
+                    for (int i = 0; i < blockSize; ++i, ++n)
+                        x[(size_t) i] = (float) (0.5 * std::exp (-2.0 * std::fmod ((double) n / sampleRate, 0.6))
+                                                 * std::sin (juce::MathConstants<double>::twoPi * 97.0 * (double) n / sampleRate));
+                    c.process (x.data(), blockSize, blend, link.advance (blockSize, blend > 0.0),
+                               BassComp::Attack::med, BassComp::Release::automatic, BassComp::Character::smooth);
+                    out.insert (out.end(), x.begin(), x.end());
+                }
+                return out;
+            };
+            const auto dry = runAt (0.0), all = runAt (1.0), half = runAt (0.5);
+            double worst = dry.size() == half.size() ? 0.0 : 1.0e9, apart = 0.0;
+            for (size_t i = 0; i < half.size() && i < all.size(); ++i)
+            {
+                worst = std::max (worst, std::abs ((double) half[i] - ((double) dry[i] + 0.5 * ((double) all[i] - (double) dry[i]))));
+                apart = std::max (apart, std::abs ((double) all[i] - (double) dry[i]));
+            }
+            check (worst < 1.0e-5 && apart > 0.01, "COMP's BLEND at half: the dry and the compressed summed sample for sample (worst "
+                                                       + juce::String (worst, 9) + "; the compressed apart from the dry by " + juce::String (apart, 3) + ")");
+        }
 
         // A steady tone 30 dB over the top's threshold (RMS -6 dBFS): squeezed as the curve says, (L - T)(1/R - 1).
         const auto squeeze = [] (double hzTone, double amount)
@@ -788,7 +841,7 @@ int ORBITAMP_GATE_MAIN()
             check (same, "...at 0, no compressor: loud noise passes bit for bit");
         }
 
-        const double at120 = squeeze (120.0, 1.0), want = (-6.0 + 36.0) * (1.0 / 6.0 - 1.0);
+        const double at120 = squeeze (120.0, 1.0), want = (-6.0 - top.thresholdDb) * (1.0 / top.ratio - 1.0);   // the defaults: -24 dB, 4:1
         check (std::abs (at120 - want) < 2.0, "...at the top, 120 Hz at -6 dBFS squeezed " + juce::String (at120, 1)
                                                   + " dB, the curve says " + juce::String (want, 1));
         const double at25 = squeeze (25.0, 1.0);
@@ -1126,8 +1179,10 @@ int ORBITAMP_GATE_MAIN()
             set (*moved, params::chorusCentreMs, 20.0f);
             // The HPF's inner cuts are the chain's since 31.10 and not step 2b's: out here, measured on their own below.
             moved->innerCutsOut.store (true);
+            set (*moved, params::compAmount, 0.0f);   // COMP at 0 as at step 2b (its BLEND is half by default since 31.10)
             auto freshAmp = make (bass);
             freshAmp->innerCutsOut.store (true);
+            set (*freshAmp, params::compAmount, 0.0f);
             const auto heard = play (*moved, stepTwoB.blocks, false);
             const auto fresh = play (*freshAmp, stepTwoB.blocks, false);
             const float apartL = worstApart (heard.l, stepTwoB.was), apartR = worstApart (heard.r, stepTwoB.was);
@@ -1503,26 +1558,8 @@ int ORBITAMP_GATE_MAIN()
             return found;
         };
 
-        // THE LAW BOTH WAYS: every knob position the parameter holds (its step, 0.001) to its threshold and back,
-        // either character; the ends where the law puts them.
-        {
-            double worst = 0.0;
-            for (const auto c : { BassComp::Character::smooth, BassComp::Character::punchy })
-                for (int k = 0; k <= 1000; ++k)
-                {
-                    const double a = k * 0.001;
-                    worst = std::max (worst, std::abs (BassComp::amountForThreshold (BassComp::thresholdAt (a, c), c) - a));
-                }
-            const auto s = BassComp::Character::smooth;
-            check (worst < 1.0e-12 && BassComp::thresholdAt (0.0, s) == -12.0 && BassComp::thresholdAt (1.0, s) == -36.0
-                       && BassComp::amountForThreshold (-60.0, s) == 1.0 && BassComp::amountForThreshold (0.0, s) == 0.0
-                       && BassComp::thresholdAt (0.5, BassComp::Character::punchy) == -24.0 + BassComp::punchyOffsetDb,
-                   "COMP's line and slider, the law both ways: knob -> threshold -> knob, worst " + juce::String (worst, 15));
-        }
-
-        // ...AND ON THE FACE: the line dragged across every pixel row of the law's span moves the slider to the knob whose
-        // threshold it is, the line drawn back where the hand is — one gesture for the whole drag; the slider moved, the
-        // line follows.
+        // THE LINE IS THE THRESHOLD: dragged across every pixel row of its travel it sets the threshold where the line is,
+        // drawn back where the hand is — one gesture for the whole drag; the threshold typed, the line follows.
         {
             auto t = make (bass);
             std::unique_ptr<juce::AudioProcessorEditor> ed (t->createEditor());
@@ -1534,7 +1571,7 @@ int ORBITAMP_GATE_MAIN()
                 void parameterValueChanged (int, float) override {}
                 void parameterGestureChanged (int, bool starting) override { ++(starting ? begun : ended); }
             } gestures;
-            auto* amountP = t->apvts.getParameter (params::compAmount);
+            auto* amountP = t->apvts.getParameter (params::compThreshold);
             float worstPx = 1.0e9f;
             int rows = 0;
             if (graph != nullptr)
@@ -1542,19 +1579,19 @@ int ORBITAMP_GATE_MAIN()
                 amountP->addListener (&gestures);
                 worstPx = 0.0f;
                 graph->beginLineDrag();
-                for (float y = std::ceil (graph->yOfDb (-12.0)); y <= std::floor (graph->yOfDb (-36.0)); y += 1.0f, ++rows)
+                for (float y = std::ceil (graph->yOfDb (-2.0)); y <= std::floor (graph->yOfDb (-46.0)); y += 1.0f, ++rows)
                 {
                     graph->dragLineTo (y);
                     worstPx = std::max (worstPx, std::abs (graph->yOfDb (graph->thresholdDb()) - y));
                 }
                 graph->endLineDrag();
                 amountP->removeListener (&gestures);
-                set (*t, params::compAmount, 0.5f);
+                set (*t, params::compThreshold, -24.0f);
             }
             check (graph != nullptr && block != nullptr && block->getWidth() == FaceplateView::compWidth && rows > 20 && worstPx <= 0.5f
                        && gestures.begun == 1 && gestures.ended == 1 && std::abs (graph->thresholdDb() + 24.0) < 1.0e-3,
-                   "the line dragged over " + juce::String (rows) + " pixel rows: the slider where the line says, the line back within "
-                       + juce::String (worstPx, 3) + " px, " + juce::String (gestures.begun) + " gesture; the slider at 0.5, the line at "
+                   "the line dragged over " + juce::String (rows) + " pixel rows: the threshold where the line says, the line back within "
+                       + juce::String (worstPx, 3) + " px, " + juce::String (gestures.begun) + " gesture; the threshold set to -24, the line at "
                        + juce::String (graph != nullptr ? graph->thresholdDb() : 0.0, 2) + " dB");
         }
 
@@ -1578,7 +1615,7 @@ int ORBITAMP_GATE_MAIN()
             double atSeven = 0.0, atThree = 0.0;
             if (slider != nullptr && square != nullptr)
             {
-                const double law = BassComp::lawAt ((double) value (*t, params::compAmount)).ratio;
+                const double law = (double) value (*t, params::compRatio);   // the ratio, its own parameter
                 lawShown = slider->shownRatio() == law && square->shownRatio() == law;
                 auto* ratioP = t->apvts.getParameter (params::compRatio);
                 ratioP->addListener (&gestures);
@@ -1588,21 +1625,21 @@ int ORBITAMP_GATE_MAIN()
                 slider->endDrag();
                 ratioP->removeListener (&gestures);
                 atSeven = slider->shownRatio();
-                heldSeven = value (*t, params::compRatioHeld) > 0.5f && std::abs (atSeven - 7.0) < 0.02
+                heldSeven = std::abs (atSeven - 7.0) < 0.02
                          && square->shownRatio() == atSeven && std::abs (slider->xOfRatio (atSeven) - slider->xOfRatio (7.0)) <= 0.5f;
                 square->beginRatioDrag();
                 square->dragRatioTo (square->yOfRatio (3.0));
                 square->endRatioDrag();
                 atThree  = square->shownRatio();
                 followed = std::abs (atThree - 3.0) < 0.02 && slider->shownRatio() == atThree;
-                set (*t, params::compRatioHeld, 0.0f);
-                back = slider->shownRatio() == law && square->shownRatio() == law;
+                set (*t, params::compRatio, (float) law);
+                back = std::abs (slider->shownRatio() - law) < 1.0e-6 && std::abs (square->shownRatio() - law) < 1.0e-6;
             }
             check (range.start == 2.0f && range.end == 10.0f && lawShown && heldSeven && gestures.begun == 1 && gestures.ended == 1
                        && followed && back,
-                   "COMP's ratio, 2:1 .. 10:1: the slider and the square show the law's; the slider dragged to 7 holds "
+                   "COMP's ratio, 2:1 .. 10:1, its own: the slider and the square show it; the slider dragged to 7 sets "
                        + juce::String (atSeven, 2) + ":1 in " + juce::String (gestures.begun) + " gesture, the square with it; the square dragged to 3, the slider at "
-                       + juce::String (atThree, 2) + ":1; given back, both the law's again");
+                       + juce::String (atThree, 2) + ":1; set from elsewhere, both follow");
         }
 
         // EVERY NUMBER A PARAMETER SHOWS IS TYPED: the threshold on the line (a dB, the knob moved to it, clamped to the
@@ -1627,9 +1664,9 @@ int ORBITAMP_GATE_MAIN()
                 block->picture().openTyping();
                 const bool lineField = block->picture().isTyping();
                 block->picture().typeThreshold (-30.0);
-                const float atThirty = value (*t, params::compAmount);
+                const float atThirty = value (*t, params::compThreshold);
                 block->picture().typeThreshold (-60.0);
-                const float clamped = value (*t, params::compAmount);
+                const float clamped = value (*t, params::compThreshold);
                 block->fader().openTyping();
                 const bool faderField = block->fader().isTyping();
                 block->fader().typeValue (0.42f);
@@ -1638,9 +1675,9 @@ int ORBITAMP_GATE_MAIN()
                 block->ratio().openTyping();
                 const bool ratioField = block->ratio().isTyping();
                 block->ratio().typeRatio (6.5);
-                ok = lineField && faderField && ratioField && std::abs (atThirty - 0.75f) < 0.001f && clamped == 1.0f
-                  && std::abs (typed - 0.42f) < 0.001f && gestures.begun == 3
-                  && value (*t, params::compRatioHeld) > 0.5f && std::abs (value (*t, params::compRatio) - 6.5f) < 0.01f;
+                ok = lineField && faderField && ratioField && std::abs (atThirty + 30.0f) < 0.01f && clamped == -48.0f
+                  && std::abs (typed - 0.42f) < 0.001f && gestures.begun == 1
+                  && std::abs (value (*t, params::compRatio) - 6.5f) < 0.01f;
                 said = ": -30 dB typed -> " + juce::String (atThirty, 3) + ", -60 -> " + juce::String (clamped, 3) + ", the fader 0.42 -> "
                      + juce::String (typed, 3) + " (" + juce::String (gestures.begun) + " gestures), the ratio 6.5 -> held "
                      + juce::String (value (*t, params::compRatio), 2) + ":1";
@@ -1648,51 +1685,40 @@ int ORBITAMP_GATE_MAIN()
             check (ok, "COMP's numbers are fields: the threshold, the ratio, the fader" + said);
         }
 
-        // THE RATIO HELD AND GIVEN BACK: the law's at the knob; held at 8:1 it stays 8:1 with the slider moved; "RATIO: BY
-        // THE SLIDER" and it is the law's again, exactly — gliding there mid-note, no burst, no step.
+        // THE RATIO IS ITS OWN: 8:1 stays 8:1 with BLEND moved; moved mid-note 10:1 -> 4:1 it glides, no burst, no step; a
+        // session and a preset keep the threshold, the ratio and BLEND.
         {
             auto t = make (bass);
-            set (*t, params::compAmount, 0.5f);
-            (void) tone (*t, 97.0, -6.0f, 40);
-            const double law = t->compRatioNow();
             set (*t, params::compRatio, 8.0f);
-            set (*t, params::compRatioHeld, 1.0f);
-            (void) tone (*t, 97.0, -6.0f, 10);
-            const double held = t->compRatioNow();
+            (void) tone (*t, 97.0, -6.0f, 20);
+            const double eight = t->compRatioNow();
             set (*t, params::compAmount, 0.8f);
             (void) tone (*t, 97.0, -6.0f, 10);
-            const double heldMoved = t->compRatioNow();
-            set (*t, params::compRatioHeld, 0.0f);
-            (void) tone (*t, 97.0, -6.0f, 10);
-            const double given = t->compRatioNow();
-            check (law == BassComp::lawAt ((double) 0.5f).ratio
-                       && std::abs (held - 8.0) < 1.0e-3 && std::abs (heldMoved - 8.0) < 1.0e-3
-                       && given == BassComp::lawAt ((double) value (*t, params::compAmount)).ratio,
-                   "COMP's ratio: the law's " + juce::String (law, 2) + ":1, held " + juce::String (held, 2) + ":1, the slider moved "
-                       + juce::String (heldMoved, 2) + ":1, given back " + juce::String (given, 2) + ":1");
+            const double stays = t->compRatioNow();
+            check (std::abs (eight - 8.0) < 1.0e-3 && std::abs (stays - 8.0) < 1.0e-3,
+                   "COMP's ratio its own: 8:1 set " + juce::String (eight, 2) + ":1, BLEND moved " + juce::String (stays, 2) + ":1");
 
             auto u = make (bass);
             set (*u, params::cabOn, 0.0f);
-            set (*u, params::compAmount, 0.5f);
             set (*u, params::compRatio, 10.0f);
-            set (*u, params::compRatioHeld, 1.0f);
-            const auto v = tone (*u, 97.0, -6.0f, 220, 120, [&] { set (*u, params::compRatioHeld, 0.0f); });
+            const auto v = tone (*u, 97.0, -6.0f, 220, 120, [&] { set (*u, params::compRatio, 4.0f); });
             const auto w = judgeSwitch (v, 120, 30.0);
-            check (w.burstDb <= 1.0 && w.stepRatio <= 3.0, "...given back mid-note at 10:1, a glide: " + juce::String (w.burstDb, 1)
+            check (w.burstDb <= 1.0 && w.stepRatio <= 3.0, "...10:1 to 4:1 mid-note, a glide: " + juce::String (w.burstDb, 1)
                                                                + " dB over steady, step x" + juce::String (w.stepRatio, 1));
 
-            // A session and a preset keep both.
             set (*t, params::compRatio, 7.5f);
-            set (*t, params::compRatioHeld, 1.0f);
+            set (*t, params::compThreshold, -31.0f);
+            set (*t, params::compAmount, 0.35f);
             juce::MemoryBlock session;
             t->getStateInformation (session);
             auto back = make (bass);
             back->setStateInformation (session.getData(), (int) session.getSize());
             const auto preset = t->presetForSaving();
             const auto inPreset = [&] (const char* id) { return (float) preset.getChildWithProperty ("id", id).getProperty ("value", -1.0f); };
-            check (std::abs (value (*back, params::compRatio) - 7.5f) < 0.01f && value (*back, params::compRatioHeld) > 0.5f
-                       && std::abs (inPreset (params::compRatio) - 7.5f) < 0.01f && inPreset (params::compRatioHeld) > 0.5f,
-                   "a session and a preset keep the held ratio and that it is held");
+            check (std::abs (value (*back, params::compRatio) - 7.5f) < 0.01f && std::abs (value (*back, params::compThreshold) + 31.0f) < 0.01f
+                       && std::abs (value (*back, params::compAmount) - 0.35f) < 0.001f
+                       && std::abs (inPreset (params::compRatio) - 7.5f) < 0.01f && std::abs (inPreset (params::compThreshold) + 31.0f) < 0.01f,
+                   "a session and a preset keep COMP's threshold, ratio and BLEND");
         }
 
         // THE TAPS: idle with no picture on screen — an editor up but not showing included; written while it is; still
@@ -1983,7 +2009,7 @@ int ORBITAMP_GATE_MAIN()
         // switches it in; one undo gives back the knob AND the switch. The ratio square and the ratio slider, the same.
         {
             auto t = make (bass);
-            set (*t, params::compAmount, 0.3f);
+            set (*t, params::compThreshold, -24.0f);
             set (*t, params::compOn, 0.0f);
             settle (*t);
             std::unique_ptr<juce::AudioProcessorEditor> ed (t->createEditor());
@@ -2003,17 +2029,19 @@ int ORBITAMP_GATE_MAIN()
                 g.endLineDrag();
                 settle (*t);
                 const bool on = value (*t, params::compOn) > 0.5f;
-                const float moved = value (*t, params::compAmount);
+                const float moved = value (*t, params::compThreshold);
                 t->history.undo();
-                const bool line = on && std::abs (moved - 0.3f) > 0.05f && std::abs (value (*t, params::compAmount) - 0.3f) < 1.0e-3f
+                const bool line = on && std::abs (moved + 24.0f) > 1.0f && std::abs (value (*t, params::compThreshold) + 24.0f) < 1.0e-3f
                                && value (*t, params::compOn) < 0.5f;
-                said << "the line: on " << (on ? "yes" : "no") << ", undone to " << juce::String (value (*t, params::compAmount), 3);
+                said << "the line: on " << (on ? "yes" : "no") << ", undone to " << juce::String (value (*t, params::compThreshold), 2) + " dB";
 
                 bool rest = true;
                 for (juce::Component* c : { (juce::Component*) squares[0], (juce::Component*) sliders[0] })
                 {
                     set (*t, params::compOn, 0.0f);
+                    set (*t, params::compRatio, 6.0f);   // between detents: the drag moves it freely
                     settle (*t);
+                    const float ratioBefore = value (*t, params::compRatio);
                     const auto start = c->getLocalBounds().toFloat().getCentre().withY (c == sliders[0] ? (float) c->getHeight() - 10.0f
                                                                                                        : c->getLocalBounds().toFloat().getCentreY());
                     const auto end = c == sliders[0] ? start.translated (20.0f, 0.0f) : start.translated (0.0f, 20.0f);
@@ -2023,11 +2051,12 @@ int ORBITAMP_GATE_MAIN()
                     c->mouseDrag (mouse (*c, end, start));
                     c->mouseUp (mouse (*c, end, start));
                     settle (*t);
-                    const bool switched = value (*t, params::compOn) > 0.5f && value (*t, params::compRatioHeld) > 0.5f;
+                    const bool switched = value (*t, params::compOn) > 0.5f && std::abs (value (*t, params::compRatio) - ratioBefore) > 0.01f;
                     t->history.undo();
-                    rest = rest && switched && value (*t, params::compOn) < 0.5f && value (*t, params::compRatioHeld) < 0.5f;
+                    const bool gaveBack = std::abs (value (*t, params::compRatio) - ratioBefore) < 1.0e-3f;
+                    rest = rest && switched && value (*t, params::compOn) < 0.5f && gaveBack;
                     said << (c == sliders[0] ? "; the slider " : "; the square ") << (switched ? "switched in" : "did not switch in")
-                         << ", one undo " << (value (*t, params::compRatioHeld) < 0.5f ? "gave it back" : "did not give it back");
+                         << ", one undo " << (gaveBack ? "gave it back" : "did not give it back");
                 }
                 ok = line && rest;
             }
@@ -2044,13 +2073,15 @@ int ORBITAMP_GATE_MAIN()
             auto sliders = findAll (*ed, (CompRatioSlider*) nullptr);
             bool ok = squares.size() == 1 && sliders.size() == 1;
             double after = 0.0;
+            set (*t, params::compRatio, 6.0f);   // between detents: a drag moves it freely, a detent does not take it
+            const float ratioAtStart = value (*t, params::compRatio);
             if (ok)
                 for (juce::Component* c : { (juce::Component*) squares[0], (juce::Component*) sliders[0] })
                 {
                     const auto at = c->getLocalBounds().toFloat().getCentre().translated (7.0f, c == sliders[0] ? 9.0f : 23.0f);
                     c->mouseDown (mouse (*c, at, at));
                     c->mouseUp (mouse (*c, at, at));
-                    ok = ok && value (*t, params::compRatioHeld) < 0.5f;
+                    ok = ok && value (*t, params::compRatio) == ratioAtStart;
                 }
             if (ok)
             {
@@ -2059,11 +2090,11 @@ int ORBITAMP_GATE_MAIN()
                 const auto from = juce::Point<float> (sq.box().getCentreX(), sq.yOfRatio (before) + 15.0f);
                 sq.mouseDown (mouse (sq, from, from));
                 sq.mouseDrag (mouse (sq, from.translated (0.0f, 2.0f), from));   // under the threshold: nothing yet
-                const bool still = value (*t, params::compRatioHeld) < 0.5f;
-                sq.mouseDrag (mouse (sq, from.translated (0.0f, -12.0f), from));
-                sq.mouseUp (mouse (sq, from.translated (0.0f, -12.0f), from));
+                const bool still = value (*t, params::compRatio) == ratioAtStart;
+                sq.mouseDrag (mouse (sq, from.translated (0.0f, -6.0f), from));
+                sq.mouseUp (mouse (sq, from.translated (0.0f, -6.0f), from));
                 after = sq.shownRatio();
-                ok = still && std::abs (sq.yOfRatio (after) - (sq.yOfRatio (before) - 12.0f)) <= 1.0f;
+                ok = still && after < before;   // up the square, a lower ratio — from where it stood (its detents may take it)
             }
             check (ok, "a click in COMP's ratio square or on its slider changes nothing; a drag moves the ratio from where it was taken (now "
                            + juce::String (after, 2) + ":1)");
@@ -2277,18 +2308,14 @@ int ORBITAMP_GATE_MAIN()
             };
             walk (*ed);
             auto* scope = findScope (*ed);
-            // The guitar face's AMP at the same window (the face less the bass's extra, less the GATE) and the BLEND column.
-            const int ampThen = faceW - FaceplateView::bassExtraWidth - GuardBlock::designWidth - FaceplateView::colGap
-                              + CapturedBlockPanel::bassSideW;
-            check (widths["OCTAVE"] == FaceplateView::octaveWidth && FaceplateView::octaveWidth == 170
-                       && widths["ENVELOPE"] == FaceplateView::filterWidth && widths["CHORUS"] == FaceplateView::chorusWidth
-                       && scope != nullptr && scope->getWidth() > 100 && scope->getHeight() > 100,
+            // THREE ROWS (the owner, 31.10): OCTAVE and ENVELOPE share what row one leaves after the GATE and COMP, alike;
+            // CHORUS at least its width; the AMP the whole width of its own row.
+            check (std::abs (widths["OCTAVE"] - widths["ENVELOPE"]) <= 1 && widths["OCTAVE"] >= 170 && widths["CHORUS"] >= FaceplateView::chorusWidth
+                       && scope != nullptr && scope->getWidth() > 100 && scope->getHeight() > 90,
                    "OCTAVE's block " + juce::String (widths["OCTAVE"]) + " px wide with its picture "
                        + (scope != nullptr ? juce::String (scope->getWidth()) + " x " + juce::String (scope->getHeight()) : juce::String ("missing"))
                        + "; ENVELOPE " + juce::String (widths["ENVELOPE"]) + ", CHORUS " + juce::String (widths["CHORUS"]));
-            check (faceW > 0 && ampW == ampThen,
-                   "the AMP " + juce::String (ampW) + " px wide at the face's least width " + juce::String (faceW)
-                       + " — as wide as it stood beside narrow rails (" + juce::String (ampThen) + ")");
+            check (faceW > 0 && ampW == faceW, "the AMP " + juce::String (ampW) + " px wide: the whole face's width (" + juce::String (faceW) + "), a row of its own");
             check (lamps == 2, "the bass's effects show no lamp, COMP, OCTAVE, ENVELOPE and CHORUS alike: the GATE's and the LIMIT's alone ("
                                    + juce::String (lamps) + " lamps)");
         }
@@ -2495,7 +2522,7 @@ int ORBITAMP_GATE_MAIN()
             auto t = make (bass);
             std::unique_ptr<juce::AudioProcessorEditor> ed (t->createEditor());
             auto* blk = findIn (*ed, (FilterBlock*) nullptr);
-            check (blk != nullptr && blk->getWidth() == FaceplateView::filterWidth && blk->picture().getWidth() > 90
+            check (blk != nullptr && blk->getWidth() >= FaceplateView::filterWidth && blk->picture().getWidth() > 90
                        && blk->picture().getHeight() > 120,
                    "ENVELOPE's block " + juce::String (blk != nullptr ? blk->getWidth() : 0) + " wide, its picture "
                        + juce::String (blk != nullptr ? blk->picture().getWidth() : 0) + " x " + juce::String (blk != nullptr ? blk->picture().getHeight() : 0));
@@ -3124,6 +3151,127 @@ int ORBITAMP_GATE_MAIN()
                    "ENVELOPE's picture through a gap: its newest column " + juce::String (shown, 1) + " Hz, the sweep at " + juce::String (now, 1) + " Hz (columns "
                        + juce::String ((int) t->filterTap.written()) + ": " + juce::String (got > 3 ? cols[0].hz : 0.0f, 1) + " " + juce::String (got > 3 ? cols[1].hz : 0.0f, 1)
                        + " " + juce::String (got > 3 ? cols[2].hz : 0.0f, 1) + " at " + juce::String (got > 3 ? (int) cols[3].index : -1) + ")");
+        }
+    }
+
+    // ---- STEP 8: COMP'S IN AND OUT MEASURED ALIKE; THE RATIO'S DETENTS; A GEAR AND A SETTINGS WINDOW ON EVERY BLOCK ---------
+    {
+        const auto first = [] (juce::Component& root, auto* none)
+        {
+            using T = std::remove_pointer_t<decltype (none)>;
+            T* found = nullptr;
+            std::function<void (juce::Component&)> walk = [&] (juce::Component& c)
+            {
+                if (auto* t = dynamic_cast<T*> (&c); t != nullptr && found == nullptr)
+                    found = t;
+                for (auto* child : c.getChildren())
+                    walk (*child);
+            };
+            walk (root);
+            return found;
+        };
+        const auto settle = [] (AmpProcessor& a) { for (int i = 0; i < 40; ++i) a.history.tick(); };
+
+        // COMP AT 0, AND STANDING BY, DRAWS IN AND OUT ON EACH OTHER: the output measured as the input (RMS in SMOOTH).
+        for (const bool standing : { false, true })
+        {
+            auto t = make (bass);
+            set (*t, params::compAmount, 0.0f);
+            if (standing)
+            {
+                set (*t, params::compAmount, 0.6f);
+                set (*t, params::compOn, 0.0f);
+            }
+            t->compWatched.store (true);
+            (void) tone (*t, 110.0, -12.0f, 60);
+            std::vector<core::CompTap::Column> cols (40);
+            const int got = t->compTap.read (cols.data(), 40);
+            double worst = got > 0 ? 0.0 : 99.0;
+            for (int i = 10; i < got; ++i)
+                worst = std::max (worst, std::abs (20.0 * std::log10 ((double) cols[(size_t) i].out / (double) cols[(size_t) i].in)));
+            check (worst <= 0.1, juce::String ("COMP ") + (standing ? "standing by" : "at 0") + ": IN and OUT on each other within "
+                                     + juce::String (worst, 3) + " dB");
+        }
+
+        // THE RATIO'S DETENTS: dragged to within the reach of 5:1 it lands exactly there; just outside, it does not; the
+        // square snaps the same; a typed 4.6 stays 4.6.
+        {
+            auto t = make (bass);
+            std::unique_ptr<juce::AudioProcessorEditor> ed (t->createEditor());
+            auto* slider = first (*ed, (CompRatioSlider*) nullptr);
+            auto* square = first (*ed, (CompTransfer*) nullptr);
+            double in = 0.0, out = 0.0, sq = 0.0, typed = 0.0;
+            if (slider != nullptr && square != nullptr)
+            {
+                slider->beginDrag();
+                slider->dragTo (slider->xOfRatio (5.0) + 3.0f);
+                slider->endDrag();
+                in = slider->shownRatio();
+                slider->beginDrag();
+                slider->dragTo (slider->xOfRatio (5.0) + 9.0f);
+                slider->endDrag();
+                out = slider->shownRatio();
+                square->beginRatioDrag();
+                square->dragRatioTo (square->yOfRatio (3.0) + 2.0f);
+                square->endRatioDrag();
+                sq = square->shownRatio();
+                slider->typeRatio (4.6);
+                typed = slider->shownRatio();
+            }
+            check (in == 5.0 && std::abs (out - 5.0) > 0.05 && sq == 3.0 && std::abs (typed - 4.6) < 0.006,
+                   "COMP's ratio detents: 3 px from 5:1 lands " + juce::String (in, 3) + ", 9 px away " + juce::String (out, 3)
+                       + "; the square near 3:1 lands " + juce::String (sq, 3) + "; typed 4.6 stays " + juce::String (typed, 3));
+        }
+
+        // A GEAR ON EVERY BLOCK, and a right click on a block's control opens its window.
+        {
+            auto t = make (bass);
+            std::unique_ptr<juce::AudioProcessorEditor> ed (t->createEditor());
+            juce::StringArray without;
+            int gears = 0;
+            std::function<void (juce::Component&)> walk = [&] (juce::Component& c)
+            {
+                if (auto* b = dynamic_cast<BlockFrame*> (&c); b != nullptr && b->isVisible())
+                    (b->hasGear() ? gears : (without.add (b->getName()), gears)) += b->hasGear() ? 1 : 0;
+                for (auto* child : c.getChildren())
+                    walk (*child);
+            };
+            walk (*ed);
+            auto* face = first (*ed, (FaceplateView*) nullptr);
+            auto* compBlock = first (*ed, (CompBlock*) nullptr);
+            if (compBlock != nullptr)
+                bass::showCompMenu (t->apvts, compBlock);
+            check (gears == 8 && face != nullptr && face->lastSettings == "COMP",
+                   "every OrbitBass block wears a gear (" + juce::String (gears) + " of 8); a right click on COMP opens its window ("
+                       + (face != nullptr ? face->lastSettings : juce::String ("no face")) + ")");
+        }
+
+        // THE WINDOWS: every block's, with what its menu held; a typed number one undo step; RESET one step back to defaults.
+        {
+            auto t = make (bass);
+            settle (*t);
+            bool all = true;
+            for (const char* block : { "GATE", "COMP", "OCTAVE", "ENVELOPE", "AMP", "CHORUS", "CAB IR", "LIMIT" })
+                all = all && bass::makeSettings (*t, block) != nullptr;
+            auto comp = bass::makeSettings (*t, "COMP");
+            bool typed = false, reset = false;
+            if (comp != nullptr)
+            {
+                comp->type (params::compRatio, 6.5f);
+                comp->type (params::compAttack, 2.0f);
+                settle (*t);
+                t->history.undo();
+                typed = std::abs (value (*t, params::compRatio) - 6.5f) < 0.01f && juce::roundToInt (value (*t, params::compAttack)) == 1;
+                comp->type (params::compAttack, 0.0f);
+                comp->type (params::compCharacter, 1.0f);
+                settle (*t);
+                comp->reset();
+                settle (*t);
+                const bool back = juce::roundToInt (value (*t, params::compAttack)) == 1 && value (*t, params::compCharacter) < 0.5f;
+                t->history.undo();
+                reset = back && juce::roundToInt (value (*t, params::compAttack)) == 0 && value (*t, params::compCharacter) > 0.5f;
+            }
+            check (all && typed && reset, "every block's settings window; COMP's: a typed value one undo step, RESET to the defaults one step back");
         }
     }
 

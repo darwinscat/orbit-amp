@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "BassSettingsOpener.h"
 #include "GuardRail.h"
 #include "Knob.h"
 #include "Theme.h"
@@ -192,28 +193,24 @@ inline void show (juce::PopupMenu& m, juce::Component* target, std::vector<std::
                      });
 }
 
-/** COMP's menu: its attack, its release, its character — and its ratio given back to the slider's law when the hand
-    holds one (the transfer square). */
+/** COMP's menu: its attack, its release, its character. */
 inline void showCompMenu (juce::AudioProcessorValueTreeState& state, juce::Component* target)
 {
+    if (openSettingsFrom (target, "COMP"))   // on the bass's face: its block's settings window
+        return;
     juce::PopupMenu m;
     std::vector<std::function<void()>> acts;
     addChoices (m, state, params::compAttack,    "ATTACK",    0,  acts);
     addChoices (m, state, params::compRelease,   "RELEASE",   10, acts);
     addChoices (m, state, params::compCharacter, "CHARACTER", 20, acts);
-    m.addSeparator();
-    const bool held = plain (state, params::compRatioHeld) > 0.5f;
-    acts.resize (31);
-    acts[30] = [&state] { setPlain (state, params::compRatioHeld, 0.0f); };
-    m.addItem (31, "RATIO: BY THE SLIDER", true, ! held);
-    if (held)
-        m.addItem (32, "RATIO: HELD AT " + juce::String (plain (state, params::compRatio), 1) + ":1", false, true);
     show (m, target, std::move (acts));
 }
 
 /** BLEND's menu: where the clean lows give way to the capture, and the clean leg's polarity. */
 inline void showBlendMenu (juce::AudioProcessorValueTreeState& state, juce::Component* target)
 {
+    if (openSettingsFrom (target, "AMP"))   // on the bass's face: its block's settings window
+        return;
     juce::PopupMenu m;
     std::vector<std::function<void()>> acts;
     m.addSectionHeader ("CROSSOVER");
@@ -288,6 +285,8 @@ inline juce::String dbWord (float v) { return juce::String (juce::roundToInt (v)
 /** OCTAVE's menu: the -2 at the slider's top, the sub's TONE and its SUB HP, the tracking GATE. */
 inline void showOctaveMenu (juce::AudioProcessorValueTreeState& state, juce::Component* target)
 {
+    if (openSettingsFrom (target, "OCTAVE"))   // on the bass's face: its block's settings window
+        return;
     juce::PopupMenu m;
     std::vector<std::function<void()>> acts;
     addToggle (m, state, params::octaveSub2, "-2 OCTAVE AT THE TOP", 0, acts);
@@ -303,6 +302,8 @@ inline void showOctaveMenu (juce::AudioProcessorValueTreeState& state, juce::Com
 /** FILTER's menu: LP or BP, up or down, its resonance and range, the clean lows and their corner, the follower. */
 inline void showFilterMenu (juce::AudioProcessorValueTreeState& state, juce::Component* target)
 {
+    if (openSettingsFrom (target, "ENVELOPE"))   // on the bass's face: its block's settings window
+        return;
     juce::PopupMenu m;
     std::vector<std::function<void()>> acts;
     addChoices (m, state, params::filterMode,      "MODE",      0,  acts);
@@ -324,6 +325,8 @@ inline void showFilterMenu (juce::AudioProcessorValueTreeState& state, juce::Com
 /** CHORUS's menu: its rate, its crossover (below it the voice falls away), the centre its head swings about. */
 inline void showChorusMenu (juce::AudioProcessorValueTreeState& state, juce::Component* target)
 {
+    if (openSettingsFrom (target, "CHORUS"))   // on the bass's face: its block's settings window
+        return;
     juce::PopupMenu m;
     std::vector<std::function<void()>> acts;
     m.addSectionHeader ("RATE");

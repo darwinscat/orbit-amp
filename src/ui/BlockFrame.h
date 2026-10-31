@@ -196,9 +196,26 @@ public:
             paintSwitch (g, sw);
     }
 
+    /** ORBITBASS: a GEAR on the frame's border at the top right, opposite the title, opening the block's settings
+        window — and a right click on the frame opens the same. Off unless asked: the guitar faces have neither. */
+    void enableSettings (std::function<void()> open)
+    {
+        onSettings = std::move (open);
+        gear = std::make_unique<Gear>();
+        gear->onClick = [this] { if (onSettings != nullptr) onSettings(); };
+        addAndMakeVisible (*gear);
+        if (! getLocalBounds().isEmpty())
+            resized();
+    }
+
+    bool hasGear() const noexcept { return gear != nullptr; }
+
     void resized() override final
     {
         shield.setBounds (getLocalBounds());
+        if (gear != nullptr)
+            gear->setBounds (juce::Rectangle<int> (gearSize, gearSize)
+                                 .withCentre ({ boxArea().getRight() - borderInset - gearSize / 2, boxArea().getY() }));
         layOutHeader (headerWidgetArea());
         layOutContent (contentArea());
     }
@@ -209,7 +226,10 @@ public:
         // never need hunting for a target.
         if (e.mods.isPopupMenu())
         {
-            showPowerMenu (e.getScreenPosition());
+            if (onSettings != nullptr)
+                onSettings();
+            else
+                showPowerMenu (e.getScreenPosition());
             return;
         }
 
@@ -414,7 +434,8 @@ protected:
             return {};
 
         const int left  = (showTitle ? titleArea().getRight() : boxArea().getX() + borderInset) + borderInset / 2;
-        const int right = (hasSwitch ? switchArea().getX() : boxArea().getRight() - borderInset) - borderInset / 2;
+        const int right = (hasSwitch ? switchArea().getX() : boxArea().getRight() - borderInset) - borderInset / 2
+                        - (gear != nullptr ? gearSize + borderInset / 2 : 0);   // the gear keeps its corner of the line
 
         return juce::Rectangle<int> (left, 0, juce::jmax (0, right - left), switchH)
                  .withCentre ({ (left + right) / 2, boxArea().getY() });
@@ -496,6 +517,38 @@ protected:
     /** Off: a dark block stays in reach. For the blocks whose own hand is their way back on — the
         guards', whose rails switch them on when dragged (GuardBlock.h). */
     bool shieldsWhenOff = true;
+
+    /** The settings gear (enableSettings): a small wheel of lilac lines on a plate of the frame's own top colour, so the
+        border line stops behind it as it does behind the title. */
+    struct Gear final : public juce::Component
+    {
+        std::function<void()> onClick;
+        Gear() { setMouseCursor (juce::MouseCursor::PointingHandCursor); setTitle ("Settings"); }
+        void paint (juce::Graphics& g) override
+        {
+            const auto r = getLocalBounds().toFloat();
+            g.setColour (theme::dspTop);
+            g.fillEllipse (r);
+            const auto c = r.getCentre();
+            const float outer = r.getWidth() * 0.42f, inner = r.getWidth() * 0.30f;
+            juce::Path teeth;
+            for (int k = 0; k < 8; ++k)
+            {
+                const float a = juce::MathConstants<float>::twoPi * (float) k / 8.0f;
+                teeth.addLineSegment ({ c.x + inner * std::cos (a), c.y + inner * std::sin (a), c.x + outer * std::cos (a), c.y + outer * std::sin (a) }, 2.2f);
+            }
+            g.setColour (isMouseOver() ? theme::lilac.brighter (0.3f) : theme::lilac);
+            g.fillPath (teeth);
+            g.drawEllipse (juce::Rectangle<float> (inner * 2.0f, inner * 2.0f).withCentre (c), 1.6f);
+            g.drawEllipse (juce::Rectangle<float> (inner * 0.8f, inner * 0.8f).withCentre (c), 1.2f);
+        }
+        void mouseEnter (const juce::MouseEvent&) override { repaint(); }
+        void mouseExit (const juce::MouseEvent&) override  { repaint(); }
+        void mouseDown (const juce::MouseEvent&) override  { if (onClick != nullptr) onClick(); }
+    };
+    std::unique_ptr<Gear> gear;
+    std::function<void()> onSettings;
+    static constexpr int gearSize = 18;
 
 private:
 
