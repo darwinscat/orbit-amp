@@ -1528,18 +1528,14 @@ void TunerFace::paint (juce::Graphics& g)
                 juce::Justification::centredLeft, false);
     if (hum() != 0)
     {
-        // Its mains takes the octave's place, as wide as its two digits are.
-        const auto mains     = juce::String (hum());
-        const auto mainsFont = labelFont (stage::px13);
-        auto mainsArea = noteArea.removeFromRight (juce::GlyphArrangement::getStringWidth (mainsFont, mains) + 2.0f);
-        const auto humFont = labelFont (humPx);
-        const float humW   = juce::GlyphArrangement::getStringWidth (humFont, "HUM") + 2.0f;
+        // HUM and its mains as one label, where the note's name stands — the digits never on their own,
+        // where they would read as the ruler's caption.
+        const auto label = "HUM " + juce::String (hum());
+        const auto font  = labelFont (humPx);
+        const float w    = juce::GlyphArrangement::getStringWidth (font, label) + 2.0f;
         g.setColour (heard);
-        g.setFont (humFont);
-        g.drawText ("HUM", noteArea.withX (mainsArea.getX() - 4.0f - humW).withWidth (humW), juce::Justification::centredRight, false);
-        g.setColour (lilac.withAlpha (quietAlpha));
-        g.setFont (mainsFont);
-        g.drawText (mains, mainsArea.withTrimmedTop (mainsArea.getHeight() * 0.42f), juce::Justification::centredLeft, false);
+        g.setFont (font);
+        g.drawText (label, noteArea.withX (noteArea.getRight() - 4.0f - w).withWidth (w), juce::Justification::centredRight, false);
     }
     else if (live)
     {

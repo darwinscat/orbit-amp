@@ -654,12 +654,11 @@ public:
     static constexpr float idleAlpha = 0.35f, quietAlpha = 0.8f, numberAlpha = 0.6f;
     static constexpr float majorAlpha = 0.9f, minorAlpha = 0.4f, warmCents = 25.0f;
 
-    /** MAINS HUM (core::TunerEar::humMains): HUM and its mains — HUM 50, HUM 60 — where the note's name
-        stands, in the note's ink, the mains where the octave stands when the octave has a place of its
-        own; the needle at `humAlpha` of its light, never gone. On the big screen HUM is `humPx` high,
-        its mains `stage::px13` like the octave. Where a note's slot is too narrow for the label, the
-        label takes the room it needs: the strip's ruler gives way, the dial's window is overrun. */
-    static constexpr float humAlpha = 0.4f, humPx = 28.0f;
+    /** MAINS HUM (core::TunerEar::humMains): HUM and its mains — HUM 50, HUM 60 — as one label where the
+        note's name stands, in the note's ink; the needle at `humAlpha` of its light, never gone. On the
+        big screen the label is `humPx` high. Where a note's slot is too narrow for it, the label takes the
+        room it needs: the strip's ruler gives way, the dial's window is overrun. */
+    static constexpr float humAlpha = 0.4f, humPx = 24.0f;
 
 private:
     const core::TunerEar& ear;
