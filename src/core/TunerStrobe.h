@@ -40,14 +40,18 @@ namespace orbitamp::core
     — strength over 0, its phase counted — only once it has stood CLEAR of the noise for `settleTaus` of
     the filters' time constant: after a restart (a new note, the flip, a new A, a stretch of input it never
     saw), and after a pluck out of silence alike — the well alone until then, a wheel spinning up. CLEAR is
-    the INPUT over half the player's level floor, and the band within 24 dB of the strongest band since
-    the note began. The floor is judged on the input, before any band's filter: a band's filter takes a
-    fast beat down by 40 dB and more (E6 45 c sharp beats at 34.6 Hz), so a quiet, detuned high note the
-    ear names would never clear a floor judged after it. And when the INPUT falls 24 dB under its own recent peak faster than a ringing string
-    ever falls — a damped string, while the ear still holds its name — the filters start again at once
-    rather than show their tail: hiss never throws stripes about. While the ear hears no note it filters
-    nothing at all: silence filtered on the message thread decays into subnormals, which x86 pays for
-    fifty times over.
+    the INPUT over the player's level floor itself — where the ear starts a note — and the band within
+    24 dB of the strongest band since the note began. The floor is judged on the input, before any band's
+    filter: a band's filter takes a fast beat down by 40 dB and more (E6 45 c sharp beats at 34.6 Hz), so a
+    quiet, detuned high note the ear names would never clear a floor judged after it; on a level eased
+    over 20 ms, so a low E's own ripple never reads as a crossing; and with 1 dB of hysteresis, so a note
+    hovering at the floor does not flicker. And when the input falls 24 dB under its own recent peak
+    faster than a ringing string ever falls — a damped string, while the ear still holds its name — the
+    filters start again at once rather than show their tail, and the strobe stays HUSHED until a string
+    comes again: the input 6 dB over the lowest it fell to (a pluck), or holding over the floor for 100 ms
+    (a note's sustain after an attack that fell like a damping). Hiss never throws stripes about, however
+    close under the floor it is. While the ear hears no note it filters nothing at all: silence filtered
+    on the message thread decays into subnormals, which x86 pays for fifty times over.
 
     WHERE IT RUNS: the message thread, on the processor's tuner pump, after the ear — it reads the tap's new
     samples since its last tick (TunerTap::readSince), so the audio thread pays nothing. It allocates
@@ -78,12 +82,14 @@ public:
         sr = sampleRate;
         peakFall  = std::pow (10.0, -peakFallDb / 20.0 * (double) decimate / sr);
         levelEase = 1.0 - std::exp (-(double) decimate / (levelTau * sr));
+        floorEase = 1.0 - std::exp (-(double) decimate / (floorTau * sr));
+        sustainSamples = (unsigned) std::lround (sustainSeconds * sr);
         reset();
     }
 
-    /** The player's level floor (prefs::tunerFloor, as the ear has it), in dBFS RMS: an input under
-        `floorShare` of it is taken for noise. Cheap: call it every tick. */
-    void setLevelFloorDb (double db) noexcept { floorEnergy = std::pow (std::pow (10.0, db / 20.0) * floorShare, 2.0); }
+    /** The player's level floor (prefs::tunerFloor, as the ear has it), in dBFS RMS: an input under it is
+        taken for noise. Cheap: call it every tick. */
+    void setLevelFloorDb (double db) noexcept { floorEnergy = std::pow (10.0, db / 10.0); }
 
     /** Forget the note, the filters and where it read the tap: the next tick starts from now. */
     void reset() noexcept
@@ -95,8 +101,9 @@ public:
         noteHz = 0.0;
         count  = 0;
         settleSamples = 0;
-        peak = level = levelPeak = energy = 0.0;
-        loud = false;
+        peak = level = levelPeak = energy = floorLevel = lowest = 0.0;
+        loud = hushed = false;
+        loudFor = 0;
         working = false;
         for (auto& b : band)
             b = Band {};
@@ -270,17 +277,19 @@ private:
     static constexpr unsigned decimate = 16;  // the phase is read every this many samples...
     static constexpr unsigned resync  = 256;  // ...the oscillator re-drawn from its exact phase every this many
 
-    /** Noise: the input's RMS under `floorShare` of the player's level floor (-6 dB: the ear names nothing
-        under the floor itself, and a note it names may dip that far between two of its windows), or a band
-        under `keepShare` of the strongest band's peak since the note began (-24 dB), which falls
-        `peakFallDb` a second — slower than a ringing string's, far slower than filters letting go of a
-        damped one. */
-    static constexpr double floorShare = 0.5, keepShare = 0.063, peakFallDb = 30.0;
+    /** Noise: the input's RMS under the player's level floor — eased over `floorTau`, and once over it,
+        under `holdShare` of it (1 dB less, in energy) — or a band under `keepShare` of the strongest band's
+        peak since the note began (-24 dB), which falls `peakFallDb` a second: slower than a ringing
+        string's, far slower than filters letting go of a damped one. */
+    static constexpr double floorTau = 0.020, holdShare = 0.794, keepShare = 0.063, peakFallDb = 30.0;
 
-    /** The input's own level: the energy of each 16 samples, eased over `levelTau` (a low E's period
-        reads as a level, not a ripple); a CUT is the level under `cutShare` of its peak (-24 dB in
-        energy), the peak falling `peakFallDb` a second like the bands'. */
-    static constexpr double levelTau = 0.005, cutShare = 0.004;
+    /** The input's own level: the energy of each 16 samples, eased over `levelTau`; a CUT is the level
+        under `cutShare` of its peak (-24 dB in energy), the peak falling `peakFallDb` a second like the
+        bands'. Hushed by a cut until the level stands `onsetShare` over the lowest it fell to (+6 dB) — or
+        holds over the floor, never falling `fallShare` (3 dB) under its last low, for `sustainSeconds`: a
+        damped string's tail falls into the hiss in milliseconds, and hiss under the floor never holds over
+        it; a sustain after an attack that fell like a damping does. */
+    static constexpr double levelTau = 0.005, cutShare = 0.004, onsetShare = 4.0, fallShare = 0.5, sustainSeconds = 0.1;
     static constexpr double tiny = 1.0e-30;
 
     struct Band
@@ -310,14 +319,38 @@ private:
         {
             peak  *= peakFall;
             level += levelEase * (energy / (double) decimate - level);
-            levelPeak = std::max (levelPeak * peakFall * peakFall, level);
+            levelPeak *= peakFall * peakFall;
+            floorLevel += floorEase * (energy / (double) decimate - floorLevel);
+            levelPeak = std::max (levelPeak, level);
             energy = 0.0;
             if (level < cutShare * levelPeak)
             {
                 restart();          // the string is gone: no tail, no hiss shown — and a new start for the next
                 levelPeak = level;
+                if (! hushed)
+                {
+                    hushed  = true;
+                    lowest  = level;
+                    loudFor = 0;
+                }
             }
-            loud = level >= floorEnergy;
+
+            const bool overFloor = floorLevel >= (loud ? holdShare * floorEnergy : floorEnergy);
+            if (hushed)
+            {
+                // A string again: a pluck — the input 6 dB over the lowest it fell to — or a sustain the cut
+                // took for a damping: over the floor, and no new low 3 dB under the last, for `sustainSeconds`.
+                if (level < fallShare * lowest)
+                {
+                    lowest  = level;
+                    loudFor = 0;
+                }
+                else
+                    loudFor = level >= floorEnergy ? loudFor + decimate : 0u;
+                if (level > onsetShare * lowest || loudFor >= sustainSamples)
+                    hushed = false;
+            }
+            loud = overFloor && ! hushed;
         }
 
         for (int k = 0; k < numBands; ++k)
@@ -391,8 +424,9 @@ private:
             b.ci = -std::sin (2.0 * pi * b.phase);
         }
         restart();
-        level = levelPeak = energy = 0.0;   // across a gap the input's level says nothing
-        loud  = false;
+        level = levelPeak = energy = floorLevel = lowest = 0.0;   // across a gap the input's level says nothing
+        loud = hushed = false;
+        loudFor = 0;
     }
 
     /** The filters empty, the bands blank and still, each to settle again — and the bands' peak forgotten:
@@ -416,9 +450,11 @@ private:
     void follow (const TunerEar& ear) { follow (ear.live(), ear.hz(), ear.referenceHz()); }
 
     double sr = 0.0, coeff = 0.0, noteHz = 0.0;
-    double peak = 0.0, peakFall = 1.0, floorEnergy = 0.25e-6;   // the floor: -60 dBFS, as the ear's, less 6 dB
+    double peak = 0.0, peakFall = 1.0, floorEnergy = 1.0e-6;   // the floor: -60 dBFS, as the ear's
     double level = 0.0, levelPeak = 0.0, levelEase = 1.0, energy = 0.0;
-    bool   loud = false;                                       // the input over it, at the last reading
+    double floorLevel = 0.0, floorEase = 1.0, lowest = 0.0;
+    bool   loud = false, hushed = false;                       // over the floor, and not hushed by a cut
+    unsigned loudFor = 0, sustainSamples = 0;
     int    target = -1;
     float  a4Used = 0.0f;
     bool   heard = false, fresh = true, running = false, working = false;

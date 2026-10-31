@@ -569,11 +569,14 @@ namespace
                                                               [&s] { s.hold (45, 442.0f); }));
         }
 
-        // ---- THE STRING DAMPED: the ear holds its note 700 ms more, the input is the interface's hiss. The
-        //      bands go blank within 100 ms, and no band that shows moves after the string has gone: never
-        //      stripes thrown about by noise. (What a band did in the tick it went blank in is never drawn.) ----
+        // ---- THE STRING DAMPED: the ear holds its note 700 ms more, the input is the interface's hiss —
+        //      at -70 dBFS, and at -68, -65 and -62, just under the level floor (-60). The bands go blank
+        //      within 100 ms and stay blank while the ear holds: never stripes thrown about by noise. (What a
+        //      band did in the tick it went blank in is never drawn.) ----
+        for (const double hissDb : { -70.0, -68.0, -65.0, -62.0 })
         for (const double hz : { 110.0, 41.2034 })
         {
+            const float hiss = (float) (std::pow (10.0, hissDb / 20.0) * std::sqrt (3.0));   // lcgNoise's RMS is 1/sqrt 3
             Tone tone;
             tone.hz = hz;
             TunerTap tap;
@@ -587,12 +590,13 @@ namespace
             unsigned now = 0;
             const long stopAt = (long) (1.5 * tone.sr);
             double blankAfter = -1.0, motion = 0.0, liveAfter = 0.0;
+            int shownAfter = 0;
             std::array<double, 3> was {};
             std::array<float, 3> wasShown {};
             for (int b = 0; n < (long) (2.5 * tone.sr); ++b)
             {
                 for (auto& v : block)
-                    v = n++ < stopAt ? tone.next() : 5.5e-4f * lcgNoise (seed);   // hiss at -70 dBFS
+                    v = n++ < stopAt ? tone.next() : hiss * lcgNoise (seed);
                 tap.write (block.data(), 512);
                 if (b % 3 != 2)
                     continue;
@@ -613,13 +617,80 @@ namespace
                     liveAfter = t;
                 if (t > 0.0 && blank && blankAfter < 0.0)
                     blankAfter = t;
+                else if (blankAfter >= 0.0 && ! blank && ear.live())
+                    ++shownAfter;
             }
             char name[96];
-            std::snprintf (name, sizeof (name), "strobe: %.0f Hz damped, blank after, s", hz);
+            std::snprintf (name, sizeof (name), "strobe: %.0f Hz damped, hiss %.0f dB, blank after, s", hz, hissDb);
             check (name, blankAfter, 0.0, 0.1);
-            std::snprintf (name, sizeof (name), "strobe: %.0f Hz damped, motion while the ear holds", hz);
+            std::snprintf (name, sizeof (name), "strobe: %.0f Hz damped, hiss %.0f dB, ticks shown again", hz, hissDb);
+            check (name, shownAfter, 0.0, 0.0);
+            std::snprintf (name, sizeof (name), "strobe: %.0f Hz damped, hiss %.0f dB, motion", hz, hissDb);
             check (name, motion, 0.0, 0.01);
             checkTrue ("...while the ear held the note on for half a second more", liveAfter > 0.5);
+        }
+
+        // ---- THE HUSH LETS GO when a string comes again. Each a 48 kHz A2 through the ear; `shape` scales the
+        //      tone sample by sample, the hiss under it at `hissDb`. Reported: when, counted from `from` seconds,
+        //      the bands show again after having been blank, and how many times they went blank once shown. ----
+        {
+            const auto run = [] (const std::function<double (double)>& shape, double seconds, double from, double hissDb = -65.0)
+            {
+                Tone tone;
+                TunerTap tap;
+                TunerEar ear;
+                TunerStrobe s;
+                ear.prepare (tone.sr);
+                s.prepare (tone.sr);
+                std::vector<float> block (512);
+                std::uint32_t seed = 11;
+                const float hiss = (float) (std::pow (10.0, hissDb / 20.0) * std::sqrt (3.0));
+                long n = 0;
+                unsigned now = 0;
+                double shownAt = -1.0;
+                int blanks = 0;
+                bool was = false, blankSeen = false;
+                for (int b = 0; n < (long) (seconds * tone.sr); ++b)
+                {
+                    for (auto& v : block)
+                    {
+                        const double t = (double) n++ / tone.sr;
+                        v = (float) (shape (t) * tone.next()) + hiss * lcgNoise (seed);
+                    }
+                    tap.write (block.data(), 512);
+                    if (b % 3 != 2)
+                        continue;
+                    ear.update (tap, now += 32);
+                    s.update (tap, ear);
+                    const double t = (double) n / tone.sr;
+                    const bool shown = s.strength (0) > 0.0f;
+                    blankSeen = blankSeen || (t > from && ! shown);
+                    if (blankSeen && shown && shownAt < 0.0)
+                        shownAt = t - from;
+                    if (shownAt >= 0.0 && was && ! shown && ear.live())
+                        ++blanks;
+                    was = shown;
+                }
+                return std::pair<double, int> { shownAt, blanks };
+            };
+
+            // Damped for 0.3 s — the ear still holds the note — then plucked again: shown within the lock-on.
+            const auto replucked = run ([] (double t) { return t < 1.0 || t >= 1.3 ? 1.0 : 0.0; }, 2.0, 1.3);
+            check ("strobe: plucked again 0.3 s after a damping, shown after, s", replucked.first, 0.2, 0.05);
+
+            // Plucked again with an attack 40 dB over its sustain, gone in a few milliseconds — it falls like a
+            // damping: the sustain still shows, and stays.
+            const auto popped = run ([] (double t) { return t < 1.0 ? 1.0 : 0.01 * (1.0 + 100.0 * std::exp (-(t - 1.0) / 0.003)); },
+                                     2.5, 1.0);
+            check ("strobe: a sustain after a falling attack, shown after, s", popped.first, 0.3, 0.1);
+            check ("...and went blank again", popped.second, 0.0, 0.0);
+
+            // A note hovering at the floor: A2 at -59.7 dBFS RMS, swinging 0.5 dB either way once a second, no
+            // hiss — once it shows, it never flickers off.
+            const double atFloor = std::pow (10.0, -59.7 / 20.0) / 0.3745;   // the tone's RMS at 1.0 is 0.3745
+            const auto hovering = run ([atFloor] (double t) { return atFloor * std::pow (10.0, 0.5 * std::sin (2.0 * pi * t) / 20.0); }, 4.0, 0.0, -200.0);
+            checkTrue ("strobe: a note hovering at the floor shows", hovering.first >= 0.0);
+            check ("...and never went blank", hovering.second, 0.0, 0.0);
         }
 
         // ---- A QUIET, DETUNED HIGH NOTE SHOWS: what the ear hears, the strobe shows — a sine just over the
