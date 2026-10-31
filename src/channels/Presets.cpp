@@ -97,6 +97,12 @@ bool Presets::load (const juce::String& name)
     if (! tree.isValid())
         return false;
 
+    // Another chain's preset — the bass's, renamed into this folder — is not this amp's, and nothing of it is taken:
+    // not its IRs, not its sound (AmpProcessor::belongs). Refused before anything is unpacked.
+    if (! amp.belongs (tree))
+        return false;
+    AmpProcessor::unstamp (tree);
+
     amp.takeEmbeddedIrs (tree);     // a cabinet IR it carries goes to the store, not into the history
     amp.takeFormerTrims (tree);     // a preset of 0.8.0's: its gate set where 0.8.0's key heard the guitar
     amp.takeFormerCabinet (tree);   // ...and one saved while every amp opened on DARK MATTER, on RED GIANT

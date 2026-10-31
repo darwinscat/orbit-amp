@@ -2619,7 +2619,17 @@ void Console::showPresetMenu()
                                 });
                             };
 
-                            if (picked >= firstPreset)                  safe->presets.load (names[picked - firstPreset]);
+                            if (picked >= firstPreset)
+                            {
+                                const auto& name = names[picked - firstPreset];
+                                if (! safe->presets.load (name))   // another amp's, or not a preset at all
+                                    juce::AlertWindow::showAsync (juce::MessageBoxOptions()
+                                                                      .withIconType (juce::MessageBoxIconType::WarningIcon)
+                                                                      .withTitle ("Not loaded")
+                                                                      .withMessage (name + "\n\nThis preset is another amp's, or no preset at all.")
+                                                                      .withButton ("OK"),
+                                                                  nullptr);
+                            }
                             else if (picked == itemSave && onDisk)      safe->presets.save (current);
                             else if (picked == itemSave
                                      || picked == itemSaveAs)           ask ("Save preset", current, &Presets::save);
