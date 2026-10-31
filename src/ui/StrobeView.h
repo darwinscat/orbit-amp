@@ -18,16 +18,19 @@ namespace orbitamp::strobeview
 
     THE INK is the needle's own — green when the string is home, warming to orange off it — so the strobe
     says everything the needle said by its colour, and its stillness says the rest. Under a HUM label a
-    face hands it lilac, dimmed as the needle is: a block of dimmed orange is not a line but a wash, and
-    rots to brick on the violet panel. A band's contrast is its partial's strength against the strongest; a
-    band moving faster than the face's frames can show is drawn as the blur a real strobe's window shows —
-    in `wash`, never the ink — not as stripes that alias. Sharp moves right, and the disc clockwise, as the
-    needle does. */
+    face hands it lilac, dimmed as the needle is. The ink is never drawn fainter: dimmed orange over the
+    violet is a wash, and rots to brick — and fading it toward an opaque well is the same blend by another
+    name. So a weaker band, or one fading into its blur, draws NARROWER stripes of the solid ink: a band's
+    partial strength against the strongest sets their width, from half the stripe down to a sixth. A band
+    moving faster than the face's frames can show is drawn as the blur a real strobe's window shows — in
+    `wash`, the only colour ever drawn translucent — not as stripes that alias. Sharp moves right, and the
+    disc clockwise, as the needle does. */
 
-/** A band's stripes, as seen this frame: how much of them is stripes (the rest a smear), times its strength. */
+/** A band's stripes, as seen this frame: how wide each is, a share of its period (0: none), and how much
+    of the band is the blur. */
 struct Look
 {
-    float stripes = 0.0f, smear = 0.0f;
+    float width = 0.0f, smear = 0.0f;
 };
 
 inline Look lookOf (const core::TunerStrobe& s, int k) noexcept
@@ -37,7 +40,7 @@ inline Look lookOf (const core::TunerStrobe& s, int k) noexcept
     const float rate   = std::abs (s.speed (k)) * (float) core::TunerStrobe::partials[(size_t) k];
     const float sharp  = juce::jlimit (0.0f, 1.0f, 1.0f - (rate - 8.0f) / 6.0f);
     const float weight = juce::jlimit (0.0f, 1.0f, (s.strength (k) - 0.05f) / 0.45f);
-    return { weight * sharp, weight * (1.0f - sharp) * 0.5f };
+    return { weight > 0.0f ? 0.5f * (0.3f + 0.7f * weight) * sharp : 0.0f, weight * (1.0f - sharp) * 0.5f };
 }
 
 /** The bands stacked in `area`, the fundamental at the bottom and two octaves on top — the top of a
@@ -64,17 +67,19 @@ inline void paintBands (juce::Graphics& g, juce::Rectangle<float> area, const co
             g.setColour (wash.withMultipliedAlpha (look.smear));
             g.fillRect (band);
         }
-        if (look.stripes <= 0.0f)
+        if (look.width <= 0.0f)
             continue;
 
-        const float p   = period / (float) core::TunerStrobe::partials[(size_t) k];
-        const float off = std::fmod (s.stripes (k) * period, p);
+        const float p     = period / (float) core::TunerStrobe::partials[(size_t) k];
+        const float off   = std::fmod (s.stripes (k) * period, p);
+        const float w     = p * look.width;
+        const float inset = (p * 0.5f - w) * 0.5f;   // a narrower stripe keeps its centre
 
         juce::Graphics::ScopedSaveState clip (g);
         g.reduceClipRegion (band.toNearestInt());
-        g.setColour (ink.withMultipliedAlpha (look.stripes));
+        g.setColour (ink);
         for (float x = band.getX() + off - p; x < band.getRight(); x += p)
-            g.fillRect (juce::Rectangle<float> (x, band.getY(), p * 0.5f, band.getHeight()));
+            g.fillRect (juce::Rectangle<float> (x + inset, band.getY(), w, band.getHeight()));
     }
 }
 
@@ -106,7 +111,7 @@ inline void paintDisc (juce::Graphics& g, juce::Point<float> centre, float inner
             g.setColour (wash.withMultipliedAlpha (look.smear));
             g.fillPath (window);
         }
-        if (look.stripes <= 0.0f)
+        if (look.width <= 0.0f)
             continue;
 
         // One stripe of the fundamental's ring is 2 pi / segments; the strobe's phase turns all three
@@ -114,13 +119,16 @@ inline void paintDisc (juce::Graphics& g, juce::Point<float> centre, float inner
         const float pitch = juce::MathConstants<float>::twoPi / (float) (segments * core::TunerStrobe::partials[(size_t) k]);
         const float turn  = std::fmod (s.stripes (k) * juce::MathConstants<float>::twoPi / (float) segments, pitch);
 
+        const float span  = pitch * look.width;
+        const float inset = (pitch * 0.5f - span) * 0.5f;
+
         juce::Path lit;
         for (float a = -sweep - pitch + turn; a < sweep; a += pitch)
-            lit.addPieSegment (ringArea (r1), a, a + pitch * 0.5f, r0 / r1);
+            lit.addPieSegment (ringArea (r1), a + inset, a + inset + span, r0 / r1);
 
         juce::Graphics::ScopedSaveState clip (g);
         g.reduceClipRegion (window);
-        g.setColour (ink.withMultipliedAlpha (look.stripes));
+        g.setColour (ink);
         g.fillPath (lit);
     }
 }
