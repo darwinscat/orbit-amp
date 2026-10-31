@@ -144,25 +144,36 @@ public:
     }
 
 private:
-    /** HUM, OR A NOTE — what the sound has DONE decides, never the pitch alone. Its LEVEL is the RMS of
-        the newest 100 ms of input (whole periods of 50 and 60 Hz, so hum reads flat), and the sound is
-        UNKNOWN, a STRING or STEADY:
-        - a PLUCK is the level standing 3 dB or more over where it stood 100 ms before, when it had not
+    /** HUM, OR A NOTE. The two mistakes do not cost the same: a real string labelled HUM is a defect;
+        hum shown as a note for a few seconds is only what the tuner always did. So HUM needs positive
+        evidence — a level that HOLDS — and whatever is in doubt carries no label.
+
+        The LEVEL is the RMS of the newest 100 ms of input (whole periods of 50 and 60 Hz: hum reads
+        flat). The sound is UNKNOWN, a STRING, or STEADY; only STEADY on a mains line reads HUM.
+        - A PLUCK is the level standing 3 dB or more over where it stood 100 ms before, when it had not
           been rising in the 100 ms before that: a pick's attack is that sudden; hum swinging +-4 dB at
-          1 Hz rises 2.5 dB in that time, and was rising already. Over hum (the level stood at the hum
-          heard last within 0.4 s) a rise out of a dip more than 3 dB under the hum is no pluck: it is a
-          dying string beating against the hum. A pluck makes the sound a STRING; another, louder or
-          softer, renews it.
-        - a STRING turns STEADY once, 2.5 s after its last pluck, its level has stopped falling (a slope
-          fitted over those 2.5 s above -0.25 dB/s) — or, plucked over hum, once it is back within 3 dB of
-          the hum it rose from. A note held by a sustainer or flattened by a compressor ahead of the amp
-          does stop falling, and turns STEADY; a string re-plucked before it has fallen 3 dB is not seen
-          as plucked again.
-        - with no history — the tuner just opened, or no tick for 1.5 s — the sound is UNKNOWN: a STRING
-          if in its first 0.8 s the level falls 1 dB without rising, STEADY if not. A shorter stall keeps
-          what the sound was.
-        The label is HUM 50 / HUM 60 while the sound is STEADY and the reading stands on a mains line
-        (mainsLineOf). Nothing is hidden: a mistake only puts the label on a reading that is still shown. */
+          1 Hz rises 2.5 dB in that time, and was rising already. Over hum (STEADY, its level known) a
+          pluck must also stand 3 dB over that hum: hum coming back after a hand left the strings, or
+          a dying string beating against it, only returns to it. A pluck makes a STRING; another,
+          louder or softer, renews it.
+        - The level HOLDS when a slope fitted over the last 2.5 s is above -0.1 dB/s. A STRING turns
+          STEADY when it holds, 2.5 s after its last pluck — or, plucked over hum, once it is back within
+          3 dB of that hum.
+        - UNKNOWN — the tuner just opened, or no tick for 1.5 s — turns STEADY when its level has stayed
+          within 0.1 dB for 0.8 s (hum is that flat; a string falling even 0.15 dB/s is not), or when it
+          holds; until then, no label.
+        - STEADY goes back to UNKNOWN when its level has been FALLING for 2.5 s the way a string does:
+          steeper than -0.25 dB/s, never rising 0.5 dB, never dropping 3 dB at once (a hand on the
+          strings) — unless it is coming down onto the hum (within 3 dB of it), a string dying into it.
+        - The hum's level is the loudest that read HUM. Never lowered: a level more than 3 dB under it
+          is a hand on the strings, and the hum is forgotten only when it has stayed under for 2.5 s.
+        What still reads HUM though it is a string: a note held by a sustainer or a compressor ahead of
+        the amp, flat within 0.1 dB/s, on a line; a string on a line re-plucked faster than every 0.5 s
+        (tremolo), each pluck under 3 dB. What reads as a note a while though it is hum: hum that comes
+        in with a thump (2.7 s), hum that swings slowly when the tuner opens (up to ~3.5 s), hum that
+        comes in and then fades with a slow swing (until it stops fading), and hum swinging slower than
+        ~0.2 Hz, whose fading half is a string's fall (it loses the label while it fades). Nothing is
+        hidden either way: the reading is always shown. */
     void listenForHum (double level, unsigned nowMs)
     {
         if (level >= 0.0)
@@ -171,11 +182,9 @@ private:
                 levelCount = 0;
             if (levelCount == 0)
             {
-                sound     = Sound::unknown;
-                humDb     = noHum;
-                firstAt   = nowMs;
-                unknownLow = unknownHigh = noHum;
-                unknownRose = false;
+                sound   = Sound::unknown;
+                humDb   = noHum;
+                firstAt = nowMs;
             }
 
             const float db = (float) (20.0 * std::log10 (std::max (level, 1.0e-8)));
@@ -195,39 +204,15 @@ private:
                 nearest (prior, l, 2 * stepMs);
             });
 
-            const bool humAround = humDb > noHum && nowMs - humSeenAt <= (unsigned) humAroundMs;
-            const bool sudden    = before != nullptr && db - before->db >= pluckDb
-                                   && (prior == nullptr || before->db - prior->db < risingDb);
-            const bool outOfDip  = humAround && before != nullptr && before->db < humDb - dipDb;
-            if (sudden && ! (sound == Sound::steady && outOfDip))
+            const bool overHum = sound == Sound::steady && humDb > noHum;
+            const bool sudden  = before != nullptr && db - before->db >= pluckDb
+                                 && (prior == nullptr || before->db - prior->db < risingDb);
+            if (sudden && (! overHum || db >= humDb + pluckDb))
             {
                 if (sound != Sound::string)
-                    overHumDb = sound == Sound::steady && humAround ? before->db : noHum;   // a renewal keeps the first's
+                    overHumDb = overHum ? humDb : noHum;   // a renewal keeps what the first rose from
                 sound   = Sound::string;
                 onsetAt = nowMs;
-            }
-
-            if (sound == Sound::unknown)
-            {
-                unknownRose = unknownRose || (unknownLow > noHum && db > unknownLow + unknownDb);
-                unknownLow  = unknownLow > noHum ? std::min (unknownLow, db) : db;
-                unknownHigh = std::max (unknownHigh, db);
-                if (nowMs - firstAt >= (unsigned) decideMs)
-                {
-                    sound   = ! unknownRose && unknownHigh - db >= unknownDb ? Sound::string : Sound::steady;
-                    onsetAt = nowMs;
-                }
-            }
-            else if (sound == Sound::string)
-            {
-                if (db < overHumDb + backDb)
-                {
-                    sound = Sound::steady;
-                    humDb = overHumDb;   // the hum it died into is still there
-                    humSeenAt = nowMs;
-                }
-                else if (nowMs - onsetAt >= (unsigned) (heldMs + settleMs) && slopeOver (heldMs, nowMs, db) > -heldSlopeDb)
-                    sound = Sound::steady;
             }
 
             if (levelCount == 0 || nowMs - slotOpenedAt >= (unsigned) spacingMs)
@@ -238,17 +223,105 @@ private:
             }
             levels[(size_t) newest] = { nowMs, db };   // a faster pump: the newest slot follows it
 
-            // The hum's level follows what reads HUM — but not down into a beat's dip.
+            if (sound == Sound::unknown)
+            {
+                if ((nowMs - firstAt >= (unsigned) flatMs && rangeSince (firstAt, nowMs) <= flatDb)
+                    || (nowMs - firstAt >= (unsigned) heldMs && holds (nowMs)))
+                    sound = Sound::steady;
+            }
+            else if (sound == Sound::string)
+            {
+                if (db < overHumDb + backDb)
+                    sound = Sound::steady;   // died into the hum it rose from: humDb is that hum still
+                else if (nowMs - onsetAt >= (unsigned) (heldMs + settleMs) && holds (nowMs))
+                    sound = Sound::steady;
+            }
+            else if (fallingLikeAString (nowMs) && ! (humDb > noHum && db < humDb + backDb && db >= humDb - dipDb))
+            {
+                sound   = Sound::unknown;
+                firstAt = nowMs;
+            }
+
             mains = sound == Sound::steady ? mainsLineOf (displayHz) : 0;
-            if (mains != 0 && (! humAround || db >= humDb - dipDb))
-                humDb = db;
-            if (humDb > noHum && db >= humDb - dipDb)
-                humSeenAt = nowMs;
+
+            if (humDb > noHum && db < humDb - dipDb)
+            {
+                if (lowSince == 0)
+                    lowSince = nowMs;
+                else if (nowMs - lowSince >= (unsigned) heldMs)
+                    humDb = noHum;   // not a hand on the strings: the hum is gone
+            }
+            else
+            {
+                lowSince = 0;
+                if (mains != 0)
+                    humDb = std::max (humDb, db);   // up at once; down only by being forgotten
+            }
         }
         else
         {
             mains = sound == Sound::steady ? mainsLineOf (displayHz) : 0;
         }
+    }
+
+    /** The fitted slope of the level over the last 2.5 s is above -0.1 dB/s. */
+    bool holds (unsigned nowMs) const
+    {
+        return slopeOver (heldMs, nowMs) > -holdSlopeDb;
+    }
+
+    /** Over the last 2.5 s the level fell like a string: steeper than -0.25 dB/s, never rising 0.5 dB
+        over the lowest it had come to, never dropping 3 dB from one 100 ms step to the next. */
+    bool fallingLikeAString (unsigned nowMs) const
+    {
+        if (levelCount == 0 || nowMs - oldestWithin (heldMs, nowMs) < (unsigned) (heldMs - stepMs)
+            || slopeOver (heldMs, nowMs) > -fallSlopeDb)
+            return false;
+
+        // Oldest first: the running lowest, and the step 100 ms back.
+        float low = -noHum;
+        for (int i = levelCount - 1; i >= 0; --i)
+        {
+            const auto& l = levels[(size_t) ((newest - i + (int) levels.size()) % (int) levels.size())];
+            if (nowMs - l.ms >= (unsigned) heldMs)
+                continue;
+            if (l.db > low + roseDb)
+                return false;
+            low = std::min (low, l.db);
+            for (int k = i + 1; k < levelCount; ++k)
+            {
+                const auto& e = levels[(size_t) ((newest - k + (int) levels.size()) % (int) levels.size())];
+                if (l.ms - e.ms >= (unsigned) stepMs)
+                {
+                    if (e.db - l.db >= pluckDb)
+                        return false;
+                    break;
+                }
+            }
+        }
+        return true;
+    }
+
+    unsigned oldestWithin (int spanMs, unsigned nowMs) const
+    {
+        unsigned oldest = nowMs;
+        forEachLevel ([&] (const LevelAt& l) { if (nowMs - l.ms < (unsigned) spanMs) oldest = l.ms; });
+        return oldest;
+    }
+
+    /** How far the level has ranged since `since`, in dB. */
+    float rangeSince (unsigned since, unsigned nowMs) const
+    {
+        float lo = -noHum, hi = noHum;
+        forEachLevel ([&] (const LevelAt& l)
+        {
+            if (nowMs - l.ms <= nowMs - since)
+            {
+                lo = std::min (lo, l.db);
+                hi = std::max (hi, l.db);
+            }
+        });
+        return hi - lo;
     }
 
     /** The RMS of the newest 100 ms of the snapshot, its mean taken out. */
@@ -265,17 +338,18 @@ private:
         return std::sqrt (std::max (0.0, sq / n - mean * mean));
     }
 
-    /** The level's slope over the last `spanMs`, fitted, in dB per second — `db` as it is now included. */
-    double slopeOver (int spanMs, unsigned nowMs, float db) const
+    /** The level's slope over the last `spanMs`, fitted, in dB per second. */
+    double slopeOver (int spanMs, unsigned nowMs) const
     {
         double st = 0.0, sl = 0.0, stt = 0.0, stl = 0.0;
         int    n  = 0;
-        const auto add = [&] (double t, double l) { st += t; sl += l; stt += t * t; stl += t * l; ++n; };
-        add (0.0, db);
         forEachLevel ([&] (const LevelAt& l)
         {
-            if (nowMs - l.ms < (unsigned) spanMs && l.ms != nowMs)
-                add (-(double) (nowMs - l.ms) / 1000.0, l.db);
+            if (nowMs - l.ms < (unsigned) spanMs)
+            {
+                const double t = -(double) (nowMs - l.ms) / 1000.0;
+                st += t; sl += l.db; stt += t * t; stl += t * l.db; ++n;
+            }
         });
         const double den = n * stt - st * st;
         return n >= 8 && den > 0.0 ? (n * stl - st * sl) / den : -1.0e9;
@@ -295,14 +369,15 @@ private:
     static constexpr float pluckDb       = 3.0f;    // a pluck: the level this much over...
     static constexpr int   stepMs        = 100;     // ...where it stood this long before...
     static constexpr float risingDb      = 1.0f;    // ...when it was not already rising by this
-    static constexpr float dipDb         = 3.0f;    // over hum: a rise from further under it is a beat...
-    static constexpr int   humAroundMs   = 400;     // ...while the level stood at the hum this recently
-    static constexpr int   heldMs        = 2500;    // a string held: no fall over this...
-    static constexpr int   settleMs      = 150;     // ...counted from this after its pluck...
-    static constexpr float heldSlopeDb   = 0.25f;   // ...steeper than this, dB per second
+    static constexpr int   heldMs        = 2500;    // the level holds: over this...
+    static constexpr float holdSlopeDb   = 0.1f;    // ...no steeper fall than this, dB per second
+    static constexpr int   settleMs      = 150;     // a string held: counted from this after its pluck
     static constexpr float backDb        = 3.0f;    // plucked over hum: back within this of it, gone
-    static constexpr int   decideMs      = 800;     // UNKNOWN: this long to tell...
-    static constexpr float unknownDb     = 1.0f;    // ...a fall of this, without a rise of this, from steady
+    static constexpr int   flatMs        = 800;     // UNKNOWN: flat for this long...
+    static constexpr float flatDb        = 0.1f;    // ...within this — hum
+    static constexpr float fallSlopeDb   = 0.25f;   // STEADY falling like a string: steeper than this...
+    static constexpr float roseDb        = 0.5f;    // ...never rising this much
+    static constexpr float dipDb         = 3.0f;    // under the hum by more: a dip (a hand on the strings)
     static constexpr int   forgetMs      = 1500;    // no tick for longer: the history is not about now
     static constexpr int   spacingMs     = 20;      // the history keeps a level no closer than this...
     static constexpr float noHum         = -1000.0f;
@@ -335,10 +410,8 @@ private:
     Sound    sound       = Sound::unknown;
     unsigned onsetAt     = 0, firstAt = 0, slotOpenedAt = 0;
     float    overHumDb   = noHum;   // the level of the hum a pluck rose from; noHum when it rose from none
-    float    humDb       = noHum;   // the level of the hum last heard as hum
-    unsigned humSeenAt   = 0;       // ...and when the level last stood there
-    float    unknownLow  = noHum, unknownHigh = noHum;
-    bool     unknownRose = false;
+    float    humDb       = noHum;   // the level of the hum last heard as hum; noHum: none
+    unsigned lowSince    = 0;       // the level under the hum since then (a hand on the strings?)
     int      mains       = 0;
 };
 
