@@ -63,6 +63,13 @@ private:
 
     AmpProcessor& amp;
 
+    /** OrbitBass's own row (ui/BassControls.h): its cuts' words in the places of the cabinet's own HPF and
+        LPF — which the bass leaves off, its cuts being a stage after DI/CAB — and DI/CAB's knob at the
+        picture's edge. On the bass's chain alone. */
+    struct BassRow;
+    std::unique_ptr<BassRow> bassRow;
+    static constexpr int bassDiW = 64;
+
     VoicingSelector ir;
     felitronics::appkit::IrWaveView wave;
 

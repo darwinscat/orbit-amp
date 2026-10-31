@@ -54,6 +54,45 @@ namespace
     }
 }
 
+void addBassParameters (juce::AudioProcessorValueTreeState::ParameterLayout& layout)
+{
+    using Bool   = juce::AudioParameterBool;
+    using Choice = juce::AudioParameterChoice;
+    using Float  = juce::AudioParameterFloat;
+    const auto hz = [] (float lo, float hi, float centre)
+    {
+        return juce::NormalisableRange<float> (lo, hi, 0.1f, std::log (0.5f) / std::log ((centre - lo) / (hi - lo)));
+    };
+
+    // COMP: on in the strip, the knob at 0 — present, and doing nothing until it is turned.
+    layout.add (std::make_unique<Bool>   (juce::ParameterID { compOn, 1 },        "Comp", true),
+                std::make_unique<Float>  (juce::ParameterID { compAmount, 1 },    "Comp Amount",
+                                          juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f),
+                std::make_unique<Choice> (juce::ParameterID { compAttack, 1 },    "Comp Attack",    compAttacks, 1),
+                std::make_unique<Choice> (juce::ParameterID { compRelease, 1 },   "Comp Release",   compReleases, 0),
+                std::make_unique<Choice> (juce::ParameterID { compCharacter, 1 }, "Comp Character", compCharacters, 0));
+
+    layout.add (std::make_unique<Float> (juce::ParameterID { ampBlend, 1 },       "Amp Blend",
+                                         juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f),
+                std::make_unique<Float> (juce::ParameterID { ampBlendHz, 1 },     "Amp Blend Hz",
+                                         hz (ampBlendMinHz, ampBlendMaxHz, ampBlendDefaultHz), ampBlendDefaultHz),
+                std::make_unique<Bool>  (juce::ParameterID { ampBlendInvert, 1 }, "Amp Blend Invert", false));
+
+    layout.add (std::make_unique<Float> (juce::ParameterID { diMix, 1 }, "DI/Cab",
+                                         juce::NormalisableRange<float> (0.0f, 100.0f, 0.1f), diMixDefault));
+
+    layout.add (std::make_unique<Choice> (juce::ParameterID { bassHpf, 1 },          "Bass HPF", bassHpfPositions, (int) BassHpf::five),
+                std::make_unique<Float>  (juce::ParameterID { bassHpfHz4, 1 },       "Bass HPF 4 Hz",
+                                          juce::NormalisableRange<float> (20.0f, 60.0f, 0.1f), bassHpfDefaultHz4),
+                std::make_unique<Float>  (juce::ParameterID { bassHpfHz5, 1 },       "Bass HPF 5 Hz",
+                                          juce::NormalisableRange<float> (15.0f, 45.0f, 0.1f), bassHpfDefaultHz5),
+                std::make_unique<Choice> (juce::ParameterID { bassLpf, 1 },          "Bass LPF", bassLpfPositions, (int) BassLpf::off),
+                std::make_unique<Float>  (juce::ParameterID { bassLpfHzFingers, 1 }, "Bass LPF Fingers Hz",
+                                          hz (2000.0f, 8000.0f, 4500.0f), bassLpfDefaultHzFingers),
+                std::make_unique<Float>  (juce::ParameterID { bassLpfHzSlap, 1 },    "Bass LPF Slap Hz",
+                                          hz (5000.0f, 16000.0f, 9500.0f), bassLpfDefaultHzSlap));
+}
+
 float engineDefault (const juce::RangedAudioParameter& p, int enginePlace)
 {
     const Opening engine;
@@ -237,9 +276,9 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout (const juce::St
 
     // The IR's own post: two cuts, a trim and a flip, each behind a switch — off, the IR plays as
     // it was shot. The frequencies are ranged as OrbitCab ranges them.
-    layout.add (std::make_unique<Bool>  (juce::ParameterID { cabHpfOn,  1 }, "Cab HPF", opening.cabHpfOn),
+    layout.add (std::make_unique<Bool>  (juce::ParameterID { cabHpfOn,  1 }, "Cab HPF", false),
                 std::make_unique<Float> (juce::ParameterID { cabHpfHz,  1 }, "Cab HPF Hz",
-                                         juce::NormalisableRange<float> (cabHpfMinHz, cabHpfMaxHz, 1.0f, 0.5f), opening.cabHpfHz),
+                                         juce::NormalisableRange<float> (cabHpfMinHz, cabHpfMaxHz, 1.0f, 0.5f), cabHpfDefaultHz),
                 std::make_unique<Choice> (juce::ParameterID { cabHpfSlope, 1 }, "Cab HPF Slope", eqSlopes, 1),
                 std::make_unique<Bool>  (juce::ParameterID { cabLpfOn,  1 }, "Cab LPF", false),
                 std::make_unique<Float> (juce::ParameterID { cabLpfHz,  1 }, "Cab LPF Hz",

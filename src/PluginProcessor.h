@@ -16,6 +16,7 @@
 #include "core/WaveRibbon.h"
 #include "core/EqLink.h"
 #include "core/HumLearnLink.h"
+#include "core/BassComp.h"
 #include "core/BypassFade.h"
 #include "core/BypassWire.h"
 #include "core/CabinetIr.h"
@@ -831,7 +832,7 @@ public:
         host's automation), and has no arrow on the strip and no block on the panel. */
     bool chainHolds (params::ChainRow row) const noexcept
     {
-        return ownProduct.chain != Chain::bass || params::bassChainHolds (row);
+        return ownProduct.chain == Chain::bass ? params::bassChainHolds (row) : params::guitarChainHolds (row);
     }
 
 private:
@@ -898,6 +899,10 @@ private:
     /** Reads each EQ link's parameters into its stack. Called per block from the audio thread;
         a stack only redesigns when something actually moved. */
     void updateEqSettings() noexcept;
+
+    /** The bass's own cuts (params::bassHpf, bassLpf) into their stage — per block, audio thread; a stage
+        redesigns only when something moved. */
+    void updateBassCuts() noexcept;
 
     /** Same, for the reverb: character and mix, applied only when they move. */
     void updateReverbSettings() noexcept;
@@ -1049,6 +1054,10 @@ public:
         Written by the audio thread, read by the strip's thumb and the zoomed gate on their
         repaint clocks. */
     std::atomic<float> gateMeterDb { 0.0f };
+
+    /** The bass's COMP squeezing now, in dB (0 or below) — the indicator beside its knob. 0 on every
+        guitar amp, which has no COMP. */
+    std::atomic<float> compGrDb { 0.0f };
 
     /** THE HUM AT THE INPUT, as the stage last heard it — written by the audio thread at the end of
         every block, read by the windows on their own clocks. `humInForce` is the mode the stage is
@@ -1252,6 +1261,32 @@ private:
     float limiterCeilingSet = 1.0e9f;      // the ceiling last handed to it, dB
 
     core::CabinetIr cab;
+
+    /** THE BASS'S OWN LINKS (Chain::bass) — prepared and run on its chain alone: its COMP after the gate, the
+        DI's copy beside the cabinet, its own cuts after DI/CAB. */
+    core::BassComp bassComp;
+    core::EqLink   bassCuts;
+    juce::AudioBuffer<float> diDry;
+
+    /** OrbitBass's own parameters (params::addBassParameters), read where it has them; null on every guitar
+        amp, which has none. */
+    struct BassParams
+    {
+        std::atomic<float>* compAmount = nullptr;
+        std::atomic<float>* compAttack = nullptr;
+        std::atomic<float>* compRelease = nullptr;
+        std::atomic<float>* compCharacter = nullptr;
+        std::atomic<float>* blend = nullptr;
+        std::atomic<float>* blendHz = nullptr;
+        std::atomic<float>* blendInvert = nullptr;
+        std::atomic<float>* diMix = nullptr;
+        std::atomic<float>* hpf = nullptr;
+        std::atomic<float>* hpfHz4 = nullptr;
+        std::atomic<float>* hpfHz5 = nullptr;
+        std::atomic<float>* lpf = nullptr;
+        std::atomic<float>* lpfHzFingers = nullptr;
+        std::atomic<float>* lpfHzSlap = nullptr;
+    } bass;
     std::atomic<float>* cabHpfOnParam = nullptr;
     std::atomic<float>* cabHpfHzParam = nullptr;
     std::atomic<float>* cabHpfSlopeParam = nullptr;

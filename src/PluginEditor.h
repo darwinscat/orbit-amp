@@ -63,8 +63,14 @@ private:
     /** THE WIDTH IS THE WINDOW'S CHOICE. The height sets the zoom; what the corner gives beyond the
         design's own width is laid out across — the pictures and the air widen, every knob keeps its
         size. From the design's own width up to a window of `maxAspect`. */
-    static constexpr int    minDesignWidth = FaceplateView::designWidth;
-    static constexpr int    minBaseWidth   = minDesignWidth + margin * 2;
+    /** The design's own width for this product — OrbitBass's wider by its knobs beside the AMP's dial. */
+    static int minDesignWidthFor (const AmpProcessor& p)
+    {
+        return FaceplateView::designWidth + (p.product().chain == Chain::bass ? FaceplateView::bassExtraWidth : 0);
+    }
+
+    const int               minDesignWidth;
+    const int               minBaseWidth   = minDesignWidth + margin * 2;
     static constexpr double maxAspect      = 2.2;
 
     int designW = minDesignWidth;   // the faceplate's width in design units, as the window stands it

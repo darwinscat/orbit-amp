@@ -104,6 +104,10 @@ public:
     // The faceplate's design size, at 100%. The editor scales from these and never re-lays out.
     static constexpr int designWidth  = 880;
 
+    /** OrbitBass's face is wider by its COMP and BLEND columns beside the AMP's dial
+        (CapturedBlockPanel::bassSideW): its least width is designWidth and this. */
+    static constexpr int bassExtraWidth = 2 * CapturedBlockPanel::bassSideW;
+
     // Row 1 is the AMP: three sections side by side — the GAIN dial, the channel lever, the picture
     // well with the meters at its edges — each a tier over one shared strip of controls. The EQ curve
     // became one of the well's pictures and its row of knobs the third strip, so the console is no

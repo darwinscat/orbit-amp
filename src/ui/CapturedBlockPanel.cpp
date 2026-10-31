@@ -6,6 +6,7 @@
 #include "../AmpChannels.h"
 #include "../PluginProcessor.h"
 #include "../device/SwitchWords.h"
+#include "BassControls.h"
 #include "FactoryMissing.h"
 
 #include <felitronics/appkit/WebpImage.h>
@@ -14,6 +15,59 @@
 
 namespace orbitamp
 {
+
+struct CapturedBlockPanel::BassKnobs
+{
+    explicit BassKnobs (AmpProcessor& p) : state (p.apvts), gr (p.compGrDb) {}
+
+    juce::AudioProcessorValueTreeState& state;
+    bass::MenuKnob comp  { "COMP",  theme::orange, 0 };
+    bass::MenuKnob blend { "BLEND", theme::orange, 0 };
+    bass::GrMeter  gr;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> compAtt, blendAtt;
+    std::unique_ptr<juce::ParameterAttachment> compOnAtt;
+
+    void addTo (juce::Component& owner)
+    {
+        for (auto* k : { &comp, &blend })
+        {
+            owner.addAndMakeVisible (*k);
+            k->setValueRowShown (true);
+            k->valueForText = [] (const juce::String& t) { return t.getDoubleValue() / 100.0; };
+            k->textForValue = [] (double v) { return juce::String (juce::roundToInt (v * 100.0)) + "%"; };
+        }
+        owner.addAndMakeVisible (gr);
+
+        compAtt  = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (state, params::compAmount, comp);
+        blendAtt = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (state, params::ampBlend, blend);
+        comp.setHint ("COMP:   0 is none; up the knob, harder and lower. Right click: attack, release, character");
+        blend.setHint ("BLEND:   the clean bass under the crossover, the amp above it. Right click: where, and polarity");
+        comp.onMenu  = [this] { bass::showCompMenu (state, &comp); };
+        blend.onMenu = [this] { bass::showBlendMenu (state, &blend); };
+
+        // COMP standing by in the strip: its knob and its squeeze dim, as a block's face does.
+        compOnAtt = std::make_unique<juce::ParameterAttachment> (*state.getParameter (params::compOn),
+            [this] (float v) { comp.setAlpha (v > 0.5f ? 1.0f : 0.4f); gr.setAlpha (v > 0.5f ? 1.0f : 0.4f); });
+        compOnAtt->sendInitialUpdate();
+    }
+
+    /** The two columns beside the dial: each knob in the middle of its own, COMP's squeeze at its outer edge. */
+    void layOut (juce::Rectangle<int> left, juce::Rectangle<int> right)
+    {
+        const int side = juce::jmin (52, left.getWidth() - 10);
+        const int h    = side + Knob::valueRowH + 18;
+        comp.setBounds (left.withSizeKeepingCentre (side, h).translated (4, 0));
+        gr.setBounds (juce::Rectangle<int> (left.getX(), comp.getY() + 18, 4, side));
+        blend.setBounds (right.withSizeKeepingCentre (side, h));
+    }
+
+    void setVisible (bool v)
+    {
+        comp.setVisible (v);
+        blend.setVisible (v);
+        gr.setVisible (v);
+    }
+};
 
 namespace
 {
@@ -105,6 +159,12 @@ CapturedBlockPanel::CapturedBlockPanel (AmpProcessor& processor, Block& b,
 
     addAndMakeVisible (device);
     addAndMakeVisible (gain);
+
+    if (processor.product().chain == Chain::bass)
+    {
+        bassKnobs = std::make_unique<BassKnobs> (processor);
+        bassKnobs->addTo (*this);
+    }
 
     device.fontHeight = 16.0f;   // the device's NAME, set exactly like the block's own beside it
     device.tracking   = 0.15f;
@@ -903,7 +963,7 @@ void CapturedBlockPanel::layOutContent (juce::Rectangle<int> area)
 
     // ---- THREE SECTIONS, each a tier over a strip. The two narrow ones are a FIXED width and the
     //      well takes the rest, so the widest thing on the block is the picture. ----
-    auto s1 = area.removeFromLeft (section1W);
+    auto s1 = area.removeFromLeft (section1W + (bassKnobs != nullptr ? 2 * bassSideW : 0));
     const auto column1 = s1;   // GAIN's whole column: its strip is its own, not the shared one
     area.removeFromLeft (sectionGap);
     auto s2 = area.removeFromLeft (section2W);
@@ -944,6 +1004,16 @@ void CapturedBlockPanel::layOutContent (juce::Rectangle<int> area)
         auto column = column1;
         auto strip1 = column.removeFromBottom (reserved * pickRowH + (reserved - 1) * pickRowGap);
         column.removeFromBottom (dialGap);
+
+        // The bass's COMP and BLEND stand either side of the dial, in the signal's order.
+        if (bassKnobs != nullptr)
+        {
+            const auto left = column.removeFromLeft (bassSideW);
+            const auto right = column.removeFromRight (bassSideW);
+            bassKnobs->layOut (left, right);
+            strip1.removeFromLeft (bassSideW);
+            strip1.removeFromRight (bassSideW);
+        }
 
         const int gainSide = juce::jmin (maxGainSide, juce::jmin (column.getWidth(), column.getHeight() - Knob::valueRowH));
         gain.setBounds (column.withSizeKeepingCentre (gainSide, gainSide + Knob::valueRowH));
@@ -1001,6 +1071,8 @@ float CapturedBlockPanel::pickWordWidth (const PickSlot& sel)
 void CapturedBlockPanel::setControlsVisible (bool v)
 {
     gain.setVisible (v);
+    if (bassKnobs != nullptr)
+        bassKnobs->setVisible (v);
     smoothTag.setVisible (v);
     device.setEnabled (v);
 

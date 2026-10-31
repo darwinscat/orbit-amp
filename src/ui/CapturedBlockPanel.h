@@ -50,6 +50,11 @@ class CapturedBlockPanel final : public BlockFrame,
                                  private juce::Timer
 {
 public:
+    /** Each of OrbitBass's knobs beside the GAIN dial, COMP and BLEND, takes a column this wide — the AMP
+        block, and the whole face, that much wider twice over (FaceplateView::bassExtraWidth): the picture
+        well keeps the room its row of hands needs. */
+    static constexpr int bassSideW = 66;
+
     using Block = core::CapturedBlock;
 
     /** `eqLink` is which EQ console is this block's — they belong to the blocks now, and the index
@@ -177,6 +182,11 @@ private:
     /** No label: the dial is the block's one big control and needs no caption to be found; its
         name rides the hint. The row a label took is diameter now. */
     Knob gain { "", theme::orange, 0 };
+
+    /** OrbitBass's COMP before the GAIN dial and BLEND after it, in the signal's order, COMP's squeeze
+        beside its knob (ui/BassControls.h) — on the bass's chain alone; none on a guitar amp's. */
+    struct BassKnobs;
+    std::unique_ptr<BassKnobs> bassKnobs;
 
     /** SMOOTH or STEP — how the dial moves between the captured positions. The first line of the
         dial's strip: a little lever and the word, at reading size now that it has a line of its own

@@ -32,7 +32,7 @@ std::vector<LayoutStrip::Row> AmpEditor::stripRows (const AmpProcessor& p)
 }
 
 AmpEditor::AmpEditor (AmpProcessor& p)
-    : juce::AudioProcessorEditor (&p), amp (p), chrome (p), faceplate (p),
+    : juce::AudioProcessorEditor (&p), minDesignWidth (minDesignWidthFor (p)), amp (p), chrome (p), faceplate (p),
       inColumn  (VolumeColumn::Side::in,  p.gateKeyDb, p.inClip,
                  *p.apvts.getParameter (params::inTrim)),
       outColumn (VolumeColumn::Side::out, p.outDb,     p.outClip,

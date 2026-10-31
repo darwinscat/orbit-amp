@@ -151,6 +151,17 @@ AmpProcessor::AmpProcessor (const Product& product)
     if (! ownProduct.tunerSwitch)
         rowOn[(size_t) params::rowTuner] = nullptr;   // it listens always (Product::tunerSwitch)
 
+    // The bass's own parameters, where its chain has them.
+    if (ownProduct.chain == Chain::bass)
+    {
+        const auto raw = [this] (const char* id) { return apvts.getRawParameterValue (id); };
+        bass = { raw (params::compAmount), raw (params::compAttack), raw (params::compRelease), raw (params::compCharacter),
+                 raw (params::ampBlend), raw (params::ampBlendHz), raw (params::ampBlendInvert), raw (params::diMix),
+                 raw (params::bassHpf), raw (params::bassHpfHz4), raw (params::bassHpfHz5),
+                 raw (params::bassLpf), raw (params::bassLpfHzFingers), raw (params::bassLpfHzSlap) };
+        jassert (bass.compAmount != nullptr && bass.lpfHzSlap != nullptr);
+    }
+
     gateThresholdParam = apvts.getRawParameterValue (params::gateThreshold);
     gatePosParam       = apvts.getRawParameterValue (params::gatePos);
     gateDecayParam     = apvts.getRawParameterValue (params::gateDecay);
@@ -767,6 +778,11 @@ void AmpProcessor::pumpDeviceWork()
 
     pump (preamp,   preampGainParam, preampSmoothParam, params::preampMeasured, params::preampId);
 
+    // The bass's BLEND, its clean low end under the capture: the player's crossover, told from here as every
+    // other setting of the device is. Amount 0 is the player without it.
+    if (bass.blend != nullptr)
+        preamp.setCrossover (bass.blend->load(), bass.blendHz->load(), bass.blendInvert->load() > 0.5f);
+
     // A model that landed may carry rate-matching the host has to know about.
     reportLatency();
 
@@ -1006,6 +1022,12 @@ void AmpProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     delayReady  = chainHolds (params::rowDelay)  && delay.prepare (sampleRate, block, channels);
     reverbReady = chainHolds (params::rowReverb) && reverb.prepare (sampleRate, block, channels);
     preamp.prepare (sampleRate, block, channels);
+    if (ownProduct.chain == Chain::bass)
+    {
+        (void) bassComp.prepare (sampleRate, block);   // a refusal leaves it a wire (BassComp::process)
+        bassCuts.prepare (sampleRate, juce::jmax (1, channels));
+        diDry.setSize (juce::jmax (2, channels), block);
+    }
     demo.prepare (sampleRate);
     ear.prepare (sampleRate);
     scopeDry.setSize (1, block);
@@ -1125,6 +1147,21 @@ void AmpProcessor::updateReverbSettings() noexcept
     reverb.setDecay (reverbDecayParam->load());
     reverb.setPredelayMs (reverbPredelayParam->load());
     reverb.setHpfHz (reverbHpfHzParam->load());
+}
+
+void AmpProcessor::updateBassCuts() noexcept
+{
+    const auto hpf = static_cast<params::BassHpf> (juce::jlimit (0, 2, juce::roundToInt (bass.hpf->load())));
+    const auto lpf = static_cast<params::BassLpf> (juce::jlimit (0, 2, juce::roundToInt (bass.lpf->load())));
+
+    core::EqLink::Settings s;
+    s.hpfOn    = hpf != params::BassHpf::off;
+    s.hpfHz    = (double) (hpf == params::BassHpf::four ? bass.hpfHz4 : bass.hpfHz5)->load();
+    s.hpfSlope = params::bassCutSlope;
+    s.lpfOn    = lpf != params::BassLpf::off;
+    s.lpfHz    = (double) (lpf == params::BassLpf::slap ? bass.lpfHzSlap : bass.lpfHzFingers)->load();
+    s.lpfSlope = params::bassCutSlope;
+    bassCuts.setSettings (s);
 }
 
 void AmpProcessor::updateEqSettings() noexcept
@@ -1589,9 +1626,21 @@ void AmpProcessor::processChunk (juce::AudioBuffer<float>& buffer)
 
     nsStage[stGate] = elapsedNs (tGate);
 
-    // THE BASS'S PLACES BEFORE THE AMP (Chain::bass), in its order, each still empty — nothing here runs
-    // for any amp yet:
-    //   [COMP]    the one-knob compressor, its detector deaf below 40 Hz, no look-ahead;
+    // THE BASS'S COMP (Chain::bass), after the gate, on its one signal: ONE KNOB (core::BassComp) — at 0, or
+    // standing by, no compressor at all, the block passing bit for bit.
+    if (bass.compAmount != nullptr && nch > 0)
+    {
+        const auto a = PerfClock::now();
+        const double amount = linkWorks (params::rowComp) ? (double) bass.compAmount->load() : 0.0;
+        bassComp.process (channels[0], numSamples, amount,
+                          static_cast<core::BassComp::Attack>    (juce::jlimit (0, 2, juce::roundToInt (bass.compAttack->load()))),
+                          static_cast<core::BassComp::Release>   (juce::jlimit (0, 2, juce::roundToInt (bass.compRelease->load()))),
+                          static_cast<core::BassComp::Character> (juce::jlimit (0, 1, juce::roundToInt (bass.compCharacter->load()))));
+        compGrDb.store (bassComp.grDb.load (std::memory_order_relaxed), std::memory_order_relaxed);
+        nsStage[stComp] = elapsedNs (a);
+    }
+
+    // THE BASS'S PLACES STILL EMPTY BEFORE THE AMP, in its order:
     //   [OCTAVE]  the sub octave, under the dry;
     //   [FILTER]  the envelope filter, the low end kept.
 
@@ -1803,6 +1852,15 @@ void AmpProcessor::processChunk (juce::AudioBuffer<float>& buffer)
               juce::FloatVectorOperations::copy (fadeDry.getWritePointer (ch),
                                                  buffer.getReadPointer (ch), numSamples);
 
+      // THE BASS'S DI/CAB: the DI is the signal the cabinet is handed, kept aside to be mixed with what the
+      // cabinet makes of it — the cabinet's IR plays at sample zero, so the two line up as they are. With the
+      // cabinet out there is nothing to mix against, and the share does nothing.
+      const float diShare = bass.diMix != nullptr && cabOn
+                                ? juce::jlimit (0.0f, 1.0f, bass.diMix->load() * 0.01f) : 0.0f;
+      if (diShare > 0.0f && numSamples <= diDry.getNumSamples())
+          for (int ch = 0; ch < nchBack; ++ch)
+              juce::FloatVectorOperations::copy (diDry.getWritePointer (ch), buffer.getReadPointer (ch), numSamples);
+
       if (cabOn)
       {
           const float* d = buffer.getReadPointer (0);
@@ -1815,6 +1873,18 @@ void AmpProcessor::processChunk (juce::AudioBuffer<float>& buffer)
 
       if (cabFade)
           core::BypassFade::blend (channels, fadeDry.getArrayOfReadPointers(), nchBack, numSamples, cabSpan);
+
+      if (diShare > 0.0f && numSamples <= diDry.getNumSamples())
+          for (int ch = 0; ch < nchBack; ++ch)
+          {
+              if (diShare >= 1.0f)   // all DI: the signal the cabinet was handed, bit for bit
+                  juce::FloatVectorOperations::copy (channels[ch], diDry.getReadPointer (ch), numSamples);
+              else
+              {
+                  juce::FloatVectorOperations::multiply (channels[ch], 1.0f - diShare, numSamples);
+                  juce::FloatVectorOperations::addWithMultiply (channels[ch], diDry.getReadPointer (ch), diShare, numSamples);
+              }
+          }
 
       // Once the fade is over and nothing of the cabinet is in the sum, drop what it remembers.
       // Otherwise the first IR-length after it comes back convolves what was played BEFORE it
@@ -1834,10 +1904,16 @@ void AmpProcessor::processChunk (juce::AudioBuffer<float>& buffer)
           buffer.getMagnitude (0, 0, numSamples), -90.0f));
       nsStage[stCab] = elapsedNs (a); }
 
-    // THE BASS'S PLACES AFTER THE CABINET (Chain::bass): [DI/CAB], the DI's share beside the cabinet's,
-    // still empty; then HPF/LPF — today the cabinet's own two cuts, baked into its IR (CabinetIr's post),
-    // so they come and go with it. The bass's HPF stands on at 25 Hz (params::Opening); its own place,
-    // here after the mix so the DI is cut too, comes with the DI.
+    // THE BASS'S CUTS (Chain::bass), a stage of their own after DI/CAB, so the DI is cut as the cabinet is —
+    // not the cabinet's own two, baked into its IR, which the bass leaves off: HPF by the strings, LPF by the
+    // hand (params::bassHpf, bassLpf). Off, the stage is a wire. Its time is the cabinet's on the breakdown.
+    if (bass.hpf != nullptr)
+    {
+        const auto a = PerfClock::now();
+        updateBassCuts();
+        bassCuts.process (channels, nchBack, numSamples);
+        nsStage[stCab] += elapsedNs (a);
+    }
 
     // THE BOOST'S LEVEL (params::boostLevel): the lift of a boost that is on, after everything that
     // makes the sound and before the master's hand and the limiter, so the ceiling still holds at +9.

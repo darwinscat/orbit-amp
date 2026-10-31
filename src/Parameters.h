@@ -439,10 +439,57 @@ inline constexpr const char* tunerMute     = "tuner_mute";
 /** Which link a cost entry belongs to, or `numChainRows` for one that belongs to nobody (TOTAL,
     and any stage no link has claimed). Declared after the table below — see `rowForStage`. */
 
+/** ORBITBASS'S OWN PARAMETERS — added by its Product (OrbitBassStart.cpp, addParameters, through
+    addBassParameters below); no guitar amp has them, and a processor reads them only on the bass's chain.
+
+    COMP, after the gate: its STANDBY/ON (the strip's arrow) and ONE KNOB, 0..1 — 0 is no compressor at
+    all; up the knob the threshold falls -12 -> -36 dB and the ratio rises 2:1 -> 6:1 (core::BassComp). Its
+    menu: the attack, the release and the character. */
+inline constexpr const char* compOn        = "comp_on";
+inline constexpr const char* compAmount    = "comp";
+inline constexpr const char* compAttack    = "comp_attack";
+inline constexpr const char* compRelease   = "comp_release";
+inline constexpr const char* compCharacter = "comp_character";
+inline const juce::StringArray compAttacks    { "Slow", "Med", "Fast" };
+inline const juce::StringArray compReleases   { "Auto", "Fast", "Slow" };
+inline const juce::StringArray compCharacters { "Smooth", "Punchy" };
+
+/** BLEND, in the AMP: the clean input below a frequency, the capture above it (RigPlayer's crossover
+    blend) — 0 is the capture alone. The frequency and the polarity in its menu. */
+inline constexpr const char* ampBlend       = "amp_blend";
+inline constexpr const char* ampBlendHz     = "amp_blend_hz";
+inline constexpr const char* ampBlendInvert = "amp_blend_invert";
+inline constexpr float ampBlendMinHz = 80.0f, ampBlendMaxHz = 250.0f, ampBlendDefaultHz = 150.0f;
+
+/** DI/CAB, after the cabinet: the DI's share — the signal before the cabinet's IR — against the
+    cabinet's, in percent. */
+inline constexpr const char* diMix = "di_mix";
+inline constexpr float diMixDefault = 30.0f;
+
+/** The bass's own cuts, a stage of their own after DI/CAB (not baked into the cabinet's IR): the HPF by
+    the strings — 5 (a low B whole) or 4 — or off from its menu; the LPF by the hand — FINGERS or SLAP —
+    or off, as the family's are. Each position's frequency is its own, set from the menu. */
+inline constexpr const char* bassHpf          = "bass_hpf";
+inline constexpr const char* bassHpfHz4       = "bass_hpf_hz_4";
+inline constexpr const char* bassHpfHz5       = "bass_hpf_hz_5";
+inline constexpr const char* bassLpf          = "bass_lpf";
+inline constexpr const char* bassLpfHzFingers = "bass_lpf_hz_fingers";
+inline constexpr const char* bassLpfHzSlap    = "bass_lpf_hz_slap";
+inline const juce::StringArray bassHpfPositions { "Off", "4", "5" };
+inline const juce::StringArray bassLpfPositions { "Off", "Fingers", "Slap" };
+enum class BassHpf { off, four, five };
+enum class BassLpf { off, fingers, slap };
+inline constexpr float bassHpfDefaultHz4 = 32.0f, bassHpfDefaultHz5 = 22.0f;
+inline constexpr float bassLpfDefaultHzFingers = 4500.0f, bassLpfDefaultHzSlap = 9500.0f;
+inline constexpr int   bassCutSlope = 12;   // dB/oct, the family's cuts' own default
+
+/** OrbitBass's own parameters, after the engine's. */
+void addBassParameters (juce::AudioProcessorValueTreeState::ParameterLayout&);
+
 /** The DSP cost entries, in the order the chain runs them: a captured block is followed by its own
     console. Here rather than in the processor so a link can name its stage and the footer can
     label one, without either of them having to know about the other. */
-enum Stage { stTotal, stTuner, stGate, stPreamp, stPreampEq, stDelay, stReverb,
+enum Stage { stTotal, stTuner, stGate, stComp, stPreamp, stPreampEq, stDelay, stReverb,
              stCab, stLimit, stOut, numStages };
 
 /** What the breakdown calls a stage. TWO spellings, both ASCII on purpose: the copied report runs
@@ -454,6 +501,7 @@ inline constexpr StageName stageNames[numStages] = {
     { "TOTAL",  "TOTAL"     },
     { "TUNER",  "TUNER"     },
     { "GATE",   "GATE"      },
+    { "COMP",   "COMP"      },
     { "AMP",    "AMP"       },
     { "AMP EQ", "AMP EQ"    },
     { "DELAY",  "DELAY"     },
@@ -466,7 +514,7 @@ inline constexpr StageName stageNames[numStages] = {
 /** A link's place in the chain — by NAME, not by arithmetic. The order is the chain's order and
     doubles as the index into `chainLinks`; naming the places is what lets one stand down without
     every row after it sliding under somebody's `i - first` sum. */
-enum ChainRow { rowIn, rowTuner, rowGate, rowPreamp, rowDelay, rowReverb, rowCab,
+enum ChainRow { rowIn, rowTuner, rowGate, rowComp, rowPreamp, rowDelay, rowReverb, rowCab,
                 rowLimit, rowOut, numChainRows };
 
 /** One link of the chain. */
@@ -484,6 +532,7 @@ inline constexpr ChainLink chainLinks[numChainRows] = {
     /* IN     */ { "IN",     false, true,  nullptr,   numStages, numStages },
     /* TUNER  */ { "TUNER",  false, true,  tunerOn,   stTuner,  numStages },
     /* GATE   */ { "GATE",   false, false, gateOn,    stGate,   numStages },
+    /* COMP   */ { "COMP",   false, false, compOn,    stComp,   numStages },
     /* AMP    */ { "AMP",    true,  true,  preampOn,  stPreamp, stPreampEq },
     /* DELAY  */ { "DELAY",  false, true,  delayOn,   stDelay,  numStages },
     /* REVERB */ { "REVERB", false, true,  reverbOn,  stReverb, numStages },
@@ -493,10 +542,18 @@ inline constexpr ChainLink chainLinks[numChainRows] = {
 };
 
 /** THE BASS'S CHAIN (OrbitBass, Product's Chain::bass): every link of the guitar's but the delay and the
-    reverb — neither is in its sound, its strip or its panel. Its blocks still to come have no row yet. */
+    reverb — neither is in its sound, its strip or its panel — and its COMP. Its blocks still to come have no
+    row yet. */
 inline constexpr bool bassChainHolds (ChainRow row) noexcept
 {
     return row != rowDelay && row != rowReverb;
+}
+
+/** THE GUITAR'S CHAIN, every amp's but OrbitBass's: every link but the bass's COMP, which no guitar amp has a
+    parameter for. */
+inline constexpr bool guitarChainHolds (ChainRow row) noexcept
+{
+    return row != rowComp;
 }
 
 /** Whose cost a stage is. A captured block owns two — itself and its own console — and TOTAL
@@ -539,14 +596,11 @@ struct Opening
     float delayMix      = 0.0f;         // the delay's, percent
     StereoMode stereoMode = StereoMode::mono;
 
-    // WHAT THE PRODUCT'S CHAIN IS, not where it opens: a link its chain has no place for stands off, and
-    // its cabinet's cuts stand where its instrument wants them — OrbitBass's HPF on, at 25 Hz. Declared
-    // like the rest, and nothing puts them back elsewhere: engineDefault leaves them their declared
+    // WHAT THE PRODUCT'S CHAIN IS, not where it opens: a link its chain has no place for stands off.
+    // Declared like the rest, and nothing puts them back elsewhere: engineDefault leaves them their declared
     // defaults, so INIT never brings a bass's reverb back.
     bool  delayOn  = true;
     bool  reverbOn = true;
-    bool  cabHpfOn = false;
-    float cabHpfHz = cabHpfDefaultHz;
 };
 
 /** The engine's parameters, for the product of that name: the devices a parameter offers are the ones
