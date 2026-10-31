@@ -53,16 +53,10 @@ public:
         playing, which a lower floor lets through as a note of its own. */
     void setLevelFloorDb (double db) noexcept { rmsFloor = std::pow (10.0, db / 20.0); }
 
-    /** The level of the window the last analyse() looked at: the RMS after the anti-alias filter,
-        DC removed, linear — set whether or not the window read as a note (under the floor too).
-        Negative when there was no window to look at. Nothing the reading depends on. */
-    double windowRms() const noexcept { return lastRms; }
-
     /** One window, oldest sample first. Every call is its own snapshot — no state carries over,
         so a torn or repeated window costs one reading, never a stuck tuner. */
     Reading analyse (const float* x, int n)
     {
-        lastRms = -1.0;
         if (x == nullptr || n < decim * 256)
             return {};
 
@@ -85,8 +79,7 @@ public:
         }
 
         // A window this quiet is the gap between notes, not a note.
-        lastRms = std::sqrt (energy / W);
-        if (lastRms < rmsFloor)
+        if (std::sqrt (energy / W) < rmsFloor)
             return {};
 
         // Prefix sums of squares: the normalization term for ANY lag in O(1), which is what
@@ -225,7 +218,6 @@ private:
     static constexpr double keyMaxShare  = 0.90;
     static constexpr double clarityFloor = 0.85;    // below this the window is noise, not note
     double rmsFloor = 1.0e-3;                       // -60 dBFS — see setLevelFloorDb
-    double lastRms  = -1.0;                         // see windowRms
     static constexpr int    windowCap    = 3072;    // decimated samples analysed, ~280 ms
 
     /** Normalized square difference at one lag, from the prefix sums. */

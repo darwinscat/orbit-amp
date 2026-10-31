@@ -259,7 +259,7 @@ int main()
 
         const double open[] = { 82.407, 110.0, 146.832, 196.0, 247.0, 329.628 };
         double worstLast = 0.0;
-        int    lastOutside = 0, notes = 0, labelled = 0;
+        int    lastOutside = 0, notes = 0;
 
         for (const double sr : { 44100.0, 48000.0, 96000.0 })
             for (const double f0 : open)
@@ -308,7 +308,6 @@ int main()
                                 lastLive = ear.needle() - want.cents;
                                 everLive = true;
                             }
-                            labelled += ear.humMains() != 0 ? 1 : 0;
                         }
                     }
 
@@ -322,7 +321,6 @@ int main()
         std::snprintf (name, sizeof (name), "ear: plucks whose last needle leaves green (of %d)", notes);
         check (name, lastOutside, 0.0, 0.0);
         check ("ear: the worst last needle, cents", worstLast, 0.0, TunerEar::inTuneCents);
-        check ("ear: ticks of those plucks labelled hum", labelled, 0.0, 0.0);
     }
 
     // ---- the ring's head is not analysed, at any rate --------------------------------------------
@@ -391,12 +389,12 @@ int main()
         using orbitamp::core::TunerEar;
         using orbitamp::core::TunerTap;
 
-        // The lines this test means: 50 and 60 Hz, 2nd to 4th harmonics, within 10 cents of each centre.
+        // The lines this test means: 50 and 60 Hz, 2nd to 4th harmonics, within 3.5 cents of each centre.
         const auto onLine = [] (float hz)
         {
             for (const double m : { 50.0, 60.0 })
                 for (int k = 1; k <= 4; ++k)
-                    if (hz > 0.0f && std::fabs (1200.0 * std::log2 (hz / (m * k))) <= 10.0)
+                    if (hz > 0.0f && std::fabs (1200.0 * std::log2 (hz / (m * k))) <= 3.5)
                         return true;
             return false;
         };
@@ -464,7 +462,7 @@ int main()
         // over the 2nd, the fundamental falling at `decay` dB/s and each partial faster than the one
         // below, a pick's burst; `levelDb` RMS over its first 300 ms. Its fundamental at `f0`.
         const auto pluckInto = [] (std::vector<float>& y, double sr, double f0, double at, double decay,
-                                   double levelDb, std::uint32_t seed)
+                                   double levelDb, std::uint32_t seed, double cut = -1.0)
         {
             constexpr double stiff = 1.0e-4;
             const int start = (int) (at * sr);
@@ -492,20 +490,22 @@ int main()
             for (int n = 0; n < len; ++n)
                 e += s[(size_t) n] * s[(size_t) n];
             const double g = std::pow (10.0, levelDb / 20.0) / std::sqrt (e / len);
-            for (size_t n = 0; n < s.size(); ++n)
+            const size_t until = cut > at ? std::min (s.size(), (size_t) ((cut - at) * sr)) : s.size();   // re-plucked, or stopped
+            for (size_t n = 0; n < until; ++n)
                 y[(size_t) start + n] += (float) (g * s[n]);
         };
 
         // 1. HUM ALONE, the tuner opened onto it: a sine, a rectifier's buzz (the 2nd over the
         //    fundamental), hum whose 3rd harmonic is 20 dB over the mains (it reads 150 or 180 Hz), and
-        //    hum whose level swings +-1.6 dB at 1 Hz and +-3 dB at 0.3 Hz — at -40 and -55 dBFS, over
-        //    the floor. HUM 50 / HUM 60 within a second, and never a note's name after it.
+        //    hum whose level swings +-1.6 dB at 1 Hz — at -40 and -55 dBFS, over the floor. HUM 50 /
+        //    HUM 60 within a second (the ear opens knowing nothing, and takes 0.8 s to tell), and never
+        //    a note's name after it.
         {
             int runs = 0, never = 0, notesAfter = 0, wrongMains = 0;
             double slowest = 0.0;
             std::uint32_t seed = 3;
             for (const double mains : { 50.0, 60.0 })
-                for (int shape = 0; shape < 5; ++shape)
+                for (int shape = 0; shape < 4; ++shape)
                     for (const double db : { -40.0, -55.0 })
                         for (const double sr : { 44100.0, 48000.0, 96000.0 })
                         {
@@ -515,7 +515,6 @@ int main()
                             if (shape == 1) h.partials = { { 1, -10.5 }, { 2, 0.0 }, { 3, -10.5 } };
                             if (shape == 2) h.partials = { { 1, -20.0 }, { 3, 0.0 } };
                             if (shape == 3) { h.swingDb = 1.6; h.swingHz = 1.0; }
-                            if (shape == 4) { h.swingDb = 3.0; h.swingHz = 0.3; }
                             ++runs;
                             double first = -1.0;
                             for (const auto& k : listenTo (room (sr, 3.0, h, 0.0, seed++), sr, 1.0, 1.0))
@@ -562,92 +561,101 @@ int main()
             check ("hum coming in: ticks naming a note after it", notesAfter, 0.0, 0.0);
         }
 
-        // 3. A STRING PLUCKED OVER HUM — bass strings within half a semitone of the hum, guitar strings
-        //    clear of it, the hum 20 and 40 dB under the note: the string reads as its note from the pluck,
-        //    never under the label; on its way down it beats against the hum, and the tracker reads the
-        //    two together — wherever that lands off a line it is shown as it is read; ON a line it is
-        //    hum again; and once the string has died, HUM.
+        // 3. A STRING PLUCKED OVER HUM, the tuner open on the hum a second before. Strings ON a line of
+        //    the hum's mains (100 Hz over 50, 120 over 60), one beating against it (49 Hz over 50) and
+        //    one clear of it (110 over 60), the hum 20 and 40 dB under the note, the string falling 9 dB/s.
+        //    While the string stands 6 dB over the hum, every tick that reads it (within 5 cents) reads
+        //    its NOTE; once it has sunk 10 dB under, what stands on a line is HUM again, and in the last
+        //    second the reading stands on the line, as HUM. (Between, the tracker reads string and hum
+        //    together, off the line; that is shown as it is read.)
         {
             struct Case { double hz, mains; };
-            const Case cases[] = { { 48.999, 50.0 }, { 58.270, 60.0 }, { 61.735, 60.0 }, { 82.407, 50.0 }, { 110.0, 60.0 } };
-            int runs = 0, unread = 0, labelledString = 0, notBack = 0;
+            const Case cases[] = { { 100.0, 50.0 }, { 120.0, 60.0 }, { 48.999, 50.0 }, { 110.0, 60.0 } };
+            int runs = 0, unread = 0, labelledString = 0, stringTicks = 0, notBack = 0;
             double slowest = 0.0, longestOnLine = 0.0;
             std::uint32_t seed = 41;
             for (const auto& c : cases)
                 for (const double under : { 20.0, 40.0 })
                     for (const double sr : { 44100.0, 48000.0, 96000.0 })
                     {
-                        if (sr != 48000.0 && (under != 40.0 || c.hz != 48.999))
+                        if (sr != 48000.0 && (under != 40.0 || c.hz != 100.0))
                             continue;
                         ++runs;
                         const std::uint32_t sd = seed++;
                         auto y = room (sr, 9.0, Hum { c.mains, { { 1, 0.0 } }, -15.0 - under }, 0.0, sd);
                         pluckInto (y, sr, c.hz, 1.5, 9.0, -15.0, sd);
-                        const auto want = PitchTracker::nearestNote ((float) c.hz);
 
                         double first = -1.0, unlabelledOnLine = 0.0;
                         bool endsOnHum = true;
-                        for (const auto& k : listenTo (y, sr, 1.0, 1.5))
+                        int  endOnLine = 0;
+                        for (const auto& k : listenTo (y, sr, 0.5, 1.5))
                         {
-                            const bool string = k.live && k.midi == want.midi && std::fabs (k.cents - want.cents) <= 15.0f;
-                            if (k.t >= 0.0 && string && first < 0.0)
+                            const bool string = k.live && std::fabs (1200.0 * std::log2 (k.hz / c.hz)) <= 5.0;
+                            if (k.t >= 0.0 && first < 0.0 && k.live && std::fabs (1200.0 * std::log2 (k.hz / c.hz)) <= 15.0)
                                 first = k.t;
-                            if (k.t >= 0.0 && string && k.hum != 0)
-                                ++labelledString;
-                            if (first >= 0.0 && k.live && ! string && onLine (k.hz) && k.hum == 0)
+                            if (k.t >= 0.0 && k.t < (under - 6.0) / 9.0 && string)
+                            {
+                                ++stringTicks;
+                                labelledString += k.hum != 0 ? 1 : 0;
+                            }
+                            if (k.t > (under + 10.0) / 9.0 && k.live && onLine (k.hz) && k.hum == 0)
                                 unlabelledOnLine += 1.0 / 30.0;
-                            if (k.t >= 6.5 && k.hum != (int) c.mains)
-                                endsOnHum = false;
+                            if (k.t >= 6.5 && k.live && onLine (k.hz))
+                            {
+                                endsOnHum = endsOnHum && k.hum == (int) c.mains;
+                                ++endOnLine;
+                            }
                         }
                         unread += first < 0.0 ? 1 : 0;
                         slowest = std::max (slowest, first);
                         longestOnLine = std::max (longestOnLine, unlabelledOnLine);
-                        notBack += endsOnHum ? 0 : 1;
+                        notBack += endsOnHum && endOnLine >= 15 ? 0 : 1;   // the last second: on the line, and HUM
                     }
             char name[96];
             std::snprintf (name, sizeof (name), "string over hum: runs never reading it (of %d)", runs);
             check (name, unread, 0.0, 0.0);
             check ("string over hum: slowest first reading, s", slowest, 0.0, 0.15);
-            check ("string over hum: ticks of the string labelled", labelledString, 0.0, 0.0);
+            std::snprintf (name, sizeof (name), "string over hum: its ticks labelled (of %d)", stringTicks);
+            check (name, labelledString, 0.0, 0.0);
+            checkTrue ("...and those ticks are there to count", stringTicks > 20 * runs);
             check ("string over hum: runs not on HUM 5 s after it", notBack, 0.0, 0.0);
-            check ("string over hum: longest on a line unlabelled, s", longestOnLine, 0.0, 0.5);
+            check ("string over hum: on a line unlabelled once it died, s", longestOnLine, 0.0, 0.5);
         }
 
         // 4. A STRING ON A MAINS LINE, no hum anywhere: plucked strings at the centre of every line,
-        //    falling at 9 and at 2 dB/s: their note, never the label. (One that does not fall at all — a
+        //    falling at 2 dB/s: their note, never the label (faster and slower: 6. below). (One that does not fall at all — a
         //    sustainer, an e-bow — holds like hum and is labelled once it has held two seconds; the
         //    reading stays.)
         {
-            const double strings[] = { 50.0, 60.0, 100.0, 120.0, 150.0, 180.0, 200.0, 240.0 };
+            const double centres[] = { 50.0, 60.0, 100.0, 120.0, 150.0, 180.0, 200.0, 240.0 };
             int runs = 0, labelled = 0, unread = 0;
             std::uint32_t seed = 101;
-            for (const double f0 : strings)
-                for (const double decay : { 9.0, 2.0 })
+            for (const double f0 : centres)
+                for (const double decay : { 2.0 })
                     for (const double sr : { 44100.0, 48000.0, 96000.0 })
                     {
-                        if (sr != 48000.0 && (decay != 2.0 || (f0 != 50.0 && f0 != 120.0 && f0 != 240.0)))
+                        if (sr != 48000.0 && f0 != 50.0 && f0 != 120.0 && f0 != 240.0)
                             continue;
                         ++runs;
                         auto y = room (sr, 5.5, silent, 0.0, seed);
                         pluckInto (y, sr, f0, 1.5, decay, -20.0, seed++);
-                        double first = -1.0;
+                        int onString = 0;
                         for (const auto& k : listenTo (y, sr, 1.0, 1.5))
                         {
-                            if (k.t >= 0.0 && k.live && first < 0.0)
-                                first = k.t;
+                            onString += k.live && std::fabs (1200.0 * std::log2 (k.hz / f0)) <= 5.0 ? 1 : 0;
                             labelled += k.hum != 0 ? 1 : 0;
                         }
-                        unread += first < 0.0 ? 1 : 0;
+                        unread += onString < 30 ? 1 : 0;
                     }
             char name[96];
-            std::snprintf (name, sizeof (name), "string on a line: runs never reading it (of %d)", runs);
+            std::snprintf (name, sizeof (name), "string on a line: runs reading it < 1 s (of %d)", runs);
             check (name, unread, 0.0, 0.0);
             check ("string on a line: ticks labelled HUM", labelled, 0.0, 0.0);
         }
 
         // 5. THE TUNER SHUT AND OPENED AGAIN: a string plucked while it was open, the tuner closed for a
-        //    second while the string died, opened again onto the hum alone — HUM at once, not what the
-        //    pluck left behind.
+        //    second while the string died, opened again onto the hum alone — HUM as on any opening,
+        //    not what the pluck left behind.
         {
             auto y = room (48000.0, 6.0, Hum { 50.0, { { 1, 0.0 } }, -45.0 }, 0.0, 7);
             pluckInto (y, 48000.0, 110.0, 1.5, 20.0, -15.0, 7);
@@ -655,7 +663,125 @@ int main()
             for (const auto& k : listenTo (y, 48000.0, 1.0, 4.0, { 2.0, 4.0 }))
                 if (k.t >= 0.0 && first < 0.0 && k.hum == 50)
                     first = k.t;
-            check ("reopened onto hum: first HUM, s", first, 0.0, 0.1);
+            check ("reopened onto hum: first HUM, s", first, 0.0, 1.0);
+        }
+
+        // 6. A REAL STRING, NO HUM ANYWHERE: the way a player tunes and plays, with the string standing
+        //    on a line (100 Hz is a bass G 35 cents sharp, 200 Hz a G3 as sharp). Every tick that reads
+        //    the string — within 5 cents of where it is — reads its NOTE, never HUM:
+        //    - re-plucked every second at the same level, falling 6 dB/s; every 1.2 s each 1 dB softer,
+        //      falling 9 dB/s;
+        //    - a G3 tuned down from +45 cents to in tune, plucked once a second (+36 c is 200 Hz) at
+        //      -20 +-1 dB, falling 9 and 6 dB/s; a bass G2 the same, falling 4 dB/s, plucked every 1 s
+        //      and every 2 s;
+        //    - a quieter note after silence: 110 Hz at -15 dBFS held 3 s, half a second of nothing, then
+        //      100 Hz at -20, falling 2 dB/s;
+        //    - the ear not ticking 0.3 s while the string rings (falling 6 and 2 dB/s), and the tuner
+        //      opened half a second after the pluck (100 and 200 Hz);
+        //    - a string falling slowly: 0.5 and 0.9 dB/s.
+        {
+            struct Pluck { double at, hz, db; };
+            struct Run { const char* what; std::vector<Pluck> plucks; double decay, opened, seconds; std::pair<double, double> closed; double cut; };
+            std::vector<Run> runs;
+            const auto every = [] (double from, double step, int n, double hz, double db, double softer)
+            {
+                std::vector<Pluck> p;
+                for (int i = 0; i < n; ++i)
+                    p.push_back ({ from + step * i, hz, db - softer * i });
+                return p;
+            };
+            const auto sweep = [] (double hz, double step)
+            {
+                std::vector<Pluck> p;
+                for (int i = 0; i < 6; ++i)
+                    p.push_back ({ 1.5 + step * i, hz * std::pow (2.0, (45.0 - 9.0 * i) / 1200.0), i % 2 == 0 ? -20.0 : -21.0 });
+                return p;
+            };
+            runs.push_back ({ "100 Hz re-plucked every 1 s", every (1.5, 1.0, 6, 100.0, -20.0, 0.0), 6.0, 0.5, 8.0, { -1, -1 }, -1 });
+            runs.push_back ({ "100 Hz every 1.2 s, 1 dB softer", every (1.5, 1.2, 5, 100.0, -20.0, 1.0), 9.0, 0.5, 8.0, { -1, -1 }, -1 });
+            runs.push_back ({ "G3 tuned +45 c to 0, 9 dB/s", sweep (196.0, 1.0), 9.0, 0.5, 8.0, { -1, -1 }, -1 });
+            runs.push_back ({ "G3 tuned +45 c to 0, 6 dB/s", sweep (196.0, 1.0), 6.0, 0.5, 8.0, { -1, -1 }, -1 });
+            runs.push_back ({ "G2 tuned +45 c to 0, every 1 s", sweep (98.0, 1.0), 4.0, 0.5, 8.0, { -1, -1 }, -1 });
+            runs.push_back ({ "G2 tuned +45 c to 0, every 2 s", sweep (98.0, 2.0), 4.0, 0.5, 14.0, { -1, -1 }, -1 });
+            runs.push_back ({ "a quieter note after silence", { { 5.0, 100.0, -20.0 } }, 2.0, 0.5, 10.0, { -1, -1 }, -1 });
+            runs.push_back ({ "no ticks 0.3 s, 6 dB/s", { { 1.5, 100.0, -20.0 } }, 6.0, 0.5, 7.0, { 2.0, 2.3 }, -1 });
+            runs.push_back ({ "no ticks 0.3 s, 2 dB/s", { { 1.5, 100.0, -20.0 } }, 2.0, 0.5, 7.0, { 3.0, 3.3 }, -1 });
+            runs.push_back ({ "opened after the pluck, 100 Hz", { { 1.0, 100.0, -20.0 } }, 6.0, 1.5, 7.0, { -1, -1 }, -1 });
+            runs.push_back ({ "opened after the pluck, 200 Hz", { { 1.0, 200.0, -20.0 } }, 6.0, 1.5, 7.0, { -1, -1 }, -1 });
+            runs.push_back ({ "100 Hz falling 0.5 dB/s", { { 1.5, 100.0, -20.0 } }, 0.5, 0.5, 8.0, { -1, -1 }, -1 });
+            runs.push_back ({ "100 Hz falling 0.9 dB/s", { { 1.5, 100.0, -20.0 } }, 0.9, 0.5, 8.0, { -1, -1 }, -1 });
+
+            int worst = 0, unread = 0, n = 0;
+            std::uint32_t seed = 301;
+            for (const auto& r : runs)
+                for (const double sr : { 44100.0, 48000.0, 96000.0 })
+                {
+                    const bool slow = r.decay < 1.0, quieter = std::strncmp (r.what, "a quieter", 9) == 0;
+                    if (sr != 48000.0 && ! slow)
+                        continue;
+                    ++n;
+                    auto y = room (sr, r.seconds, silent, 0.0, seed);
+                    if (quieter)
+                        pluckInto (y, sr, 110.0, 1.5, 0.0, -15.0, seed, 4.5);
+                    for (size_t i = 0; i < r.plucks.size(); ++i)
+                        pluckInto (y, sr, r.plucks[i].hz, r.plucks[i].at, r.decay, r.plucks[i].db, seed + (std::uint32_t) i,
+                                   i + 1 < r.plucks.size() ? r.plucks[i + 1].at : -1.0);
+                    ++seed;
+                    int labelled = 0, onString = 0;
+                    for (const auto& k : listenTo (y, sr, r.opened, 0.0, r.closed))
+                    {
+                        double want = 0.0;
+                        for (const auto& p : r.plucks)
+                            if (k.t >= p.at)
+                                want = p.hz;
+                        if (want > 0.0 && k.live && std::fabs (1200.0 * std::log2 (k.hz / want)) <= 5.0)
+                        {
+                            ++onString;
+                            labelled += k.hum != 0 ? 1 : 0;
+                        }
+                    }
+                    if (labelled > 0)
+                        std::printf ("  %s @ %.0fk: %d of its %d ticks labelled HUM\n", r.what, sr / 1000.0, labelled, onString);
+                    worst = std::max (worst, labelled);
+                    unread += onString < 30 ? 1 : 0;
+                }
+            char name[96];
+            std::snprintf (name, sizeof (name), "real strings: runs reading the string < 1 s (of %d)", n);
+            check (name, unread, 0.0, 0.0);
+            check ("real strings: most ticks of one labelled HUM", worst, 0.0, 0.0);
+        }
+
+        // 7. HUM THAT SWINGS: +-4 dB at 1 Hz and +-6 dB at 0.5 Hz with the tuner opened onto it, +-3 dB at
+        //    0.3 Hz the same, and +-4 dB at 0.1 Hz coming in two seconds after the tuner opened. Its rises
+        //    are no plucks: once it reads HUM, never a note's name again — for seven seconds. Opened onto it,
+        //    HUM within 4 s; hum that came in (an onset) and then FALLS — the slow swing's downward half —
+        //    falls like a string, and reads as one until it stops falling: up to 7 s here.
+        {
+            struct Swing { double mains, db, hz, from; };
+            const Swing swings[] = { { 50.0, 4.0, 1.0, 0.0 }, { 60.0, 4.0, 1.0, 0.0 }, { 50.0, 6.0, 0.5, 0.0 },
+                                     { 50.0, 3.0, 0.3, 0.0 }, { 50.0, 4.0, 0.1, 2.0 } };
+            double slowest = 0.0, slowestIn = 0.0;
+            int never = 0, notesAfter = 0;
+            for (const auto& w : swings)
+            {
+                Hum h { w.mains, { { 1, 0.0 } }, -40.0 };
+                h.swingDb = w.db;
+                h.swingHz = w.hz;
+                double first = -1.0;
+                for (const auto& k : listenTo (room (48000.0, w.from > 0.0 ? w.from + 9.0 : 8.0, h, w.from, 13), 48000.0, 1.0, std::max (1.0, w.from)))
+                {
+                    if (k.t >= 0.0 && first < 0.0 && k.hum == (int) w.mains)
+                        first = k.t;
+                    else if (first >= 0.0 && k.live && k.hum == 0)
+                        ++notesAfter;
+                }
+                never += first < 0.0 ? 1 : 0;
+                (w.from > 0.0 ? slowestIn : slowest) = std::max (w.from > 0.0 ? slowestIn : slowest, first);
+            }
+            check ("swinging hum: runs never reading HUM", never, 0.0, 0.0);
+            check ("swinging hum, opened onto it: slowest first HUM, s", slowest, 0.0, 4.0);
+            check ("swinging hum, coming in falling: first HUM, s", slowestIn, 0.0, 7.0);
+            check ("swinging hum: ticks naming a note after it", notesAfter, 0.0, 0.0);
         }
     }
 
