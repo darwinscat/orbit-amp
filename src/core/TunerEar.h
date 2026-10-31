@@ -155,8 +155,10 @@ private:
         - A PLUCK is the level standing 3 dB or more over where it stood 100 ms before, when it had not
           been rising in the 100 ms before that: a pick's attack is that sudden; hum swinging +-4 dB at
           1 Hz rises 2.5 dB in that time, and was rising already. It makes a STRING; another, louder or
-          softer, renews it. Over hum that is HERE (STEADY, its level known, the level not gone under
-          it since) a pluck must stand 3 dB over that hum.
+          softer, renews it — and to a STRING or an UNKNOWN 1.5 dB up within 100 ms straight after a fall
+          is a pluck too (a string re-plucked gently, having fallen only so far; hum swinging +-1.6 dB
+          at 1 Hz climbs out of its trough under 1 dB in that time). Over hum that is HERE (STEADY, its
+          level known, the level not gone under it since) a pluck must stand 3 dB over that hum.
         - Any other SUDDEN CHANGE of a STEADY level — 3 dB within 100 ms, up but under the hum + 3 dB,
           or down; off a level that was flat, 1 dB or the reading more than a cent from where they
           stood 300 ms before — makes it UNKNOWN: a hand on the
@@ -169,7 +171,9 @@ private:
           level is flat (0.8 s on) or holds (2.5 s on); until then, no label. Hum within ~10 dB of the
           hiss is never flat: it waits for the 2.5 s fit.
         - STEADY goes back to UNKNOWN when its level has been FALLING for 2.5 s the way a string does,
-          and is falling still: steeper than -0.25 dB/s, over the last 0.8 s too, never rising 0.5 dB.
+          and is falling still: steeper than -0.25 dB/s, over the last 0.8 s too, never rising 0.5 dB —
+          and more than 2.5 dB under the hum's level: within that, it is the hum breathing (a single
+          coil, the player swaying).
         - The hum's level is the loudest that read HUM while the level had held within 1 dB for 0.8 s —
           never an attack, so a pluck cannot raise its own threshold. Never lowered: a level more than
           3 dB under it means the hum has gone (for a moment, maybe), and it is forgotten when it has
@@ -234,7 +238,12 @@ private:
                                  && (std::abs (db - earlier->db) >= stirDb
                                      || (earlier->hz > 0.0f && displayHz > 0.0f
                                          && std::abs (1200.0f * std::log2 (displayHz / earlier->hz)) > stirCents));
-            if (rise && (sound != Sound::steady || ! humHere || db >= humDb + pluckDb))
+            // A gentle re-pluck: 1.5 dB up within 100 ms straight after a fall — a string plucked again
+            // that had fallen only so far. Renews a STRING, decides an UNKNOWN; hum swinging +-1.6 dB at
+            // 1 Hz climbs out of its trough under 1 dB in that time.
+            const bool gentle  = sound != Sound::steady && before != nullptr && prior != nullptr
+                                 && db - before->db >= gentleDb && before->db < prior->db;
+            if ((rise && (sound != Sound::steady || ! humHere || db >= humDb + pluckDb)) || gentle)
             {
                 sound   = Sound::string;
                 onsetAt = nowMs;
@@ -267,7 +276,7 @@ private:
                     || (nowMs - onsetAt >= (unsigned) (heldMs + settleMs) && holds (nowMs)))
                     sound = Sound::steady;
             }
-            else if (fallingLikeAString (nowMs))
+            else if (fallingLikeAString (nowMs) && ! (humDb > noHum && db >= humDb - breathDb))   // hum breathing
             {
                 sound   = Sound::unknown;
                 firstAt = nowMs;
@@ -417,6 +426,8 @@ private:
     static constexpr float pluckDb       = 3.0f;    // a pluck: the level this much over...
     static constexpr int   stepMs        = 100;     // ...where it stood this long before...
     static constexpr float risingDb      = 1.0f;    // ...when it was not already rising by this
+    static constexpr float gentleDb      = 1.5f;    // a gentle re-pluck: this much up in 100 ms, after a fall
+    static constexpr float breathDb      = 2.5f;    // STEADY this close under the hum's level is the hum breathing
     static constexpr int   heldMs        = 2500;    // the level holds: over this...
     static constexpr float holdSlopeDb   = 0.1f;    // ...no steeper fall than this, dB per second
     static constexpr int   settleMs      = 150;     // a string held: counted from this after its pluck

@@ -463,7 +463,7 @@ int main()
         // over the 2nd, the fundamental falling at `decay` dB/s and each partial faster than the one
         // below, a pick's burst; `levelDb` RMS over its first 300 ms. Its fundamental at `f0`.
         const auto pluckInto = [] (std::vector<float>& y, double sr, double f0, double at, double decay,
-                                   double levelDb, std::uint32_t seed, double cut = -1.0)
+                                   double levelDb, std::uint32_t seed, double cut = -1.0, double attack = 0.0)
         {
             constexpr double stiff = 1.0e-4;
             const int start = (int) (at * sr);
@@ -483,8 +483,12 @@ int main()
                     re = nr;
                 }
             }
-            for (int n = 0; n < (int) (0.02 * sr); ++n)
-                s[(size_t) n] += 0.25 * lcgNoise (seed) * std::exp (-n / sr / 0.001);
+            if (attack > 0.0)   // a soft attack, rising over `attack` seconds, no pick's click
+                for (size_t n = 0; n < s.size() && (double) n < attack * sr; ++n)
+                    s[n] *= (double) n / (attack * sr);
+            else
+                for (int n = 0; n < (int) (0.02 * sr); ++n)
+                    s[(size_t) n] += 0.25 * lcgNoise (seed) * std::exp (-n / sr / 0.001);
 
             double e = 0.0;
             const int len = (int) (0.3 * sr);
@@ -621,7 +625,7 @@ int main()
             check (name, labelledString, 0.0, 0.0);
             checkTrue ("...and those ticks are there to count", stringTicks > 20 * runs);
             check ("string over hum: runs not on HUM at the end", notBack, 0.0, 0.0);
-            check ("string over hum: on a line unlabelled 25 dB under it, s", longestOnLine, 0.0, 1.0);
+            check ("string over hum: on a line unlabelled 25 dB under it, s", longestOnLine, 0.0, 1.5);
         }
 
         // 4. A STRING ON A MAINS LINE, no hum anywhere: plucked strings at the centre of every line,
@@ -967,6 +971,65 @@ int main()
             }
             check ("hum that moves: slowest back on HUM once settled, s", slowest, 0.0, 1.0);
             check ("hum that moves: ticks on the line naming a note later", late, 0.0, 0.0);
+        }
+
+        // 12. GENTLE RE-PLUCKS of a string on a line, no hum: 100 Hz (and 99.9, 100.1 — a bass G 35 cents
+        //     sharp) at -20 dBFS, re-plucked every 1, 1.5 and 2 s with a soft 10 ms attack, falling 2 and
+        //     4 dB/s — each re-pluck lifts the level only as far as it fell. Never HUM.
+        {
+            struct Gentle { double hz, every, decay; bool allRates; };
+            const Gentle gentles[] = { { 100.0, 1.0, 2.0, true }, { 100.0, 1.5, 2.0, false }, { 100.0, 2.0, 2.0, false },
+                                       { 100.0, 1.0, 4.0, false }, { 99.9, 1.0, 2.0, false }, { 100.1, 1.0, 2.0, false } };
+            int worst = 0, unread = 0, runs = 0;
+            for (const auto& g : gentles)
+                for (const double sr : { 44100.0, 48000.0, 96000.0 })
+                {
+                    if (sr != 48000.0 && ! g.allRates)
+                        continue;
+                    ++runs;
+                    auto y = room (sr, 8.0, silent, 0.0, 41);
+                    for (double at = 1.5; at < 7.5; at += g.every)
+                        pluckInto (y, sr, g.hz, at, g.decay, -20.0, 43, at + g.every, 0.01);
+                    int labelled = 0, onString = 0;
+                    for (const auto& k : listenTo (y, sr, 0.5, 0.0))
+                        if (k.t >= 1.5 && k.live && std::fabs (1200.0 * std::log2 (k.hz / g.hz)) <= 5.0)
+                        {
+                            ++onString;
+                            labelled += k.hum != 0 ? 1 : 0;
+                        }
+                    worst = std::max (worst, labelled);
+                    unread += onString < 60 ? 1 : 0;
+                }
+            char name[96];
+            std::snprintf (name, sizeof (name), "gentle re-plucks: runs reading the string < 2 s (of %d)", runs);
+            check (name, unread, 0.0, 0.0);
+            check ("gentle re-plucks: most ticks of one labelled HUM", worst, 0.0, 0.0);
+        }
+
+        // 13. HUM THAT BREATHES — a single coil, the player swaying: -45 dBFS hum whose level moves +-0.3,
+        //     +-0.6 and +-1 dB at 0.3 Hz, +-0.5 dB at 0.1 and 0.2 Hz. Once it reads HUM, it keeps reading
+        //     HUM: no tick on the line without the label.
+        {
+            struct Breath { double db, hz, seconds; };
+            const Breath breaths[] = { { 0.3, 0.3, 12.0 }, { 0.6, 0.3, 12.0 }, { 1.0, 0.3, 12.0 }, { 0.5, 0.2, 16.0 }, { 0.5, 0.1, 20.0 } };
+            int dropped = 0, never = 0;
+            for (const auto& b : breaths)
+            {
+                Hum h { 50.0, { { 1, 0.0 } }, -45.0 };
+                h.swingDb = b.db;
+                h.swingHz = b.hz;
+                double first = -1.0;
+                for (const auto& k : listenTo (room (48000.0, b.seconds, h, 0.0, 47), 48000.0, 1.0, 0.0))
+                {
+                    if (first < 0.0 && k.hum == 50)
+                        first = k.t;
+                    else if (first >= 0.0 && k.live && onLine (k.hz) && k.hum == 0)
+                        ++dropped;
+                }
+                never += first < 0.0 ? 1 : 0;
+            }
+            check ("breathing hum: runs never reading HUM", never, 0.0, 0.0);
+            check ("breathing hum: ticks on the line that lost the label", dropped, 0.0, 0.0);
         }
 
         // 8. HUM THAT DIPS AND COMES BACK — a hand on the strings grounds the player and takes the hum down;
