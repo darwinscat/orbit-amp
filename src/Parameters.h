@@ -454,6 +454,12 @@ inline const juce::StringArray compAttacks    { "Slow", "Med", "Fast" };
 inline const juce::StringArray compReleases   { "Auto", "Fast", "Slow" };
 inline const juce::StringArray compCharacters { "Smooth", "Punchy" };
 
+/** COMP's RATIO when the hand holds one: dragged in the COMP block's transfer square, it holds there whatever the
+    slider says (`compRatioHeld` on) until the menu's "RATIO: BY THE SLIDER" gives it back to the law. Both saved. */
+inline constexpr const char* compRatio     = "comp_ratio";
+inline constexpr const char* compRatioHeld = "comp_ratio_held";
+inline constexpr float compRatioMin = 1.5f, compRatioMax = 10.0f;
+
 /** THE BASS'S THREE EFFECTS (felitronics-core's octave, envfilter and chorus), each a block in the strip — its
     STANDBY/ON — and ONE slider, its amount 0..1 through the module's own law (<Module>Law.h, paramsForAmount): 0 is
     the dry bit for bit, nothing computed. Everything else is the block's menu — the menu's fields, never the law's.

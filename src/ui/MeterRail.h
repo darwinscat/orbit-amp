@@ -94,7 +94,7 @@ constexpr float gripH = 22.0f;
     CURRENT value, so the reading rides in the hand — no bubble, no footnote row. Click it to
     type. Each runner keeps its identity by colour — orange trims, violet gate. */
 inline void paintGrip (juce::Graphics& g, juce::Rectangle<float> track, float y,
-                       const juce::String& text, juce::Colour colour, bool lit = false)
+                       const juce::String& text, juce::Colour colour, bool lit = false, float textHeight = 11.0f)
 {
     constexpr float sightW = 4.0f;
 
@@ -108,7 +108,7 @@ inline void paintGrip (juce::Graphics& g, juce::Rectangle<float> track, float y,
     g.fillRect (frame.getX(),               y - 0.75f, sightW, 1.5f);
     g.fillRect (frame.getRight() - sightW,  y - 0.75f, sightW, 1.5f);
 
-    theme::drawTracked (g, text, frame, theme::displayFont (11.0f), 0.02f,
+    theme::drawTracked (g, text, frame, theme::displayFont (textHeight), 0.02f,
                         juce::Justification::centred);
 }
 

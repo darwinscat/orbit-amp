@@ -8,10 +8,14 @@
 #include "CapturedBlockPanel.h"
 #include "DelayBlock.h"
 #include "GuardBlock.h"
+
+#include <memory>
 #include "ReverbBlock.h"
 
 namespace orbitamp
 {
+
+class CompBlock;
 
 class AmpProcessor;
 
@@ -29,6 +33,7 @@ class FaceplateView : public juce::Component
 {
 public:
     explicit FaceplateView (AmpProcessor&);
+    ~FaceplateView() override;
 
     /** The loaded device changed — the captured blocks rebuild their faces from their packs. */
     void deviceChanged() { preamp.deviceChanged(); }
@@ -104,13 +109,16 @@ public:
     // The faceplate's design size, at 100%. The editor scales from these and never re-lays out.
     static constexpr int designWidth  = 880;
 
-    /** OrbitBass's face is wider by its COMP and BLEND columns beside the AMP's dial
-        (CapturedBlockPanel::bassSideW): its least width is designWidth and this. */
+    /** OrbitBass's face is wider by its BLEND column beside the AMP's dial (CapturedBlockPanel::bassSideW): its least
+        width is designWidth and this. */
     static constexpr int colGap = 14;
 
-    /** ...and by its three effects' rails at the head of the AMP's row, OCTAVE and FILTER (CHORUS stands at the head
-        of the cabinet's row, which takes what is left). */
-    static constexpr int bassExtraWidth = 2 * CapturedBlockPanel::bassSideW + 2 * (GuardBlock::designWidth + colGap);
+    /** OrbitBass's COMP block, after the GATE: its slider, its picture and its ratio square (ui/CompBlock.h). */
+    static constexpr int compWidth = 360;
+
+    /** ...and by its COMP block and two of its effects' rails at the head of the AMP's row, OCTAVE and FILTER (CHORUS
+        stands at the head of the cabinet's row, which takes what is left). */
+    static constexpr int bassExtraWidth = CapturedBlockPanel::bassSideW + compWidth + colGap + 2 * (GuardBlock::designWidth + colGap);
 
     // Row 1 is the AMP: three sections side by side — the GAIN dial, the channel lever, the picture
     // well with the meters at its edges — each a tier over one shared strip of controls. The EQ curve
@@ -150,8 +158,11 @@ private:
     GuardBlock         gate, limit;
 
     /** OrbitBass's three effects, each ONE slider — a guard's rail over its amount, 0..1, and its menu on a right
-        click (ui/BassControls.h); none on a guitar amp. Their lamps have nothing to latch. */
+        click (ui/BassControls.h); none on a guitar amp. Their lamps light while each works; they latch nothing. */
     std::unique_ptr<GuardBlock> octave, filter, chorus;
+
+    /** OrbitBass's COMP, a block of its own (ui/CompBlock.h); none on a guitar amp. */
+    std::unique_ptr<CompBlock> comp;
     std::atomic<bool> effectWorked[3] {};
 
     /** Who stands on the panel, indexed by Block. The core three out of the box; the delay is

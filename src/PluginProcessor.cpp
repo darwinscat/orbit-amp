@@ -172,7 +172,9 @@ AmpProcessor::AmpProcessor (const Product& product)
                  raw (params::filterRange), raw (params::filterKeepLows), raw (params::filterKeepHz), raw (params::filterAttackMs),
                  raw (params::filterReleaseMs),
                  raw (params::chorusAmount), raw (params::chorusRateHz), raw (params::chorusCrossoverHz), raw (params::chorusCentreMs) };
-        jassert (bass.compAmount != nullptr && bass.lpfHzSlap != nullptr && bass.chorusCentreMs != nullptr);
+        bass.compRatio     = raw (params::compRatio);
+        bass.compRatioHeld = raw (params::compRatioHeld);
+        jassert (bass.compAmount != nullptr && bass.lpfHzSlap != nullptr && bass.chorusCentreMs != nullptr && bass.compRatioHeld != nullptr);
     }
 
     gateThresholdParam = apvts.getRawParameterValue (params::gateThreshold);
@@ -214,7 +216,14 @@ AmpProcessor::AmpProcessor (const Product& product)
     for (auto* p : getParameters())
         if (auto* ranged = dynamic_cast<juce::RangedAudioParameter*> (p))
             if (auto* raw = apvts.getRawParameterValue (ranged->paramID))
-                parameterGuards.push_back ({ raw, ranged->convertFrom0to1 (engineDefault (*ranged)) });
+            {
+                // The bass's effects' sliders keep their last number through a NaN: their default, 0, would switch an
+                // effect off on an invalid automation point (review round 3).
+                const bool holds = ranged->paramID == params::octaveAmount || ranged->paramID == params::filterAmount
+                                || ranged->paramID == params::chorusAmount;
+                const float fallback = ranged->convertFrom0to1 (engineDefault (*ranged));
+                parameterGuards.push_back ({ raw, fallback, holds, fallback });
+            }
 
     // The product's own half, where it has one. HERE, before the history takes its baseline: what it
     // settles as it is built — the cockpit's chain, its channel, its pack — is how the amp starts,
@@ -1052,16 +1061,32 @@ void AmpProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     {
         (void) bassComp.prepare (sampleRate, block);   // a refusal leaves it a wire (BassComp::process)
         bassComp.snapAmount (bass.compAmount->load());
+        compTap.prepare (sampleRate);
         bassCuts.prepare (sampleRate);
         diNow  = juce::jlimit (0.0f, 1.0f, bass.diMix->load() * 0.01f);
         diStep = (float) (1000.0 / (juce::jmax (8000.0, sampleRate) * 20.0));   // the prepared rate, not getSampleRate()'s
 
-        // The three effects: mono up to the chorus, which takes the bus's planes. Prepared from rest, told nothing yet.
+        // The three effects: mono up to the chorus, which takes the bus's planes. TOLD WHERE THEY STAND BEFORE THEIR
+        // PREPARES, which snap to what they were told: a slider at 0 or standing by is idle from the first sample (CHORUS's
+        // stage used to arrive at its last knobs and fade out of them over 20 ms, wet at amount 0); one up arrives on its
+        // knobs, not gliding to them. Their own doors are theirs (core).
+        octaveToldValid = filterToldValid = chorusToldValid = false;
+        tellOctave();
+        tellFilter();
+        tellChorus();
         octaverReady   = octaver.prepare (sampleRate, block, 1);
         envFilterReady = envFilter.prepare (sampleRate, block, 1);
         chorusReady    = chorus.prepare (sampleRate, block, juce::jlimit (1, 2, channels));
-        octaveToldValid = filterToldValid = chorusToldValid = false;
+        for (auto& w : effectWorking)
+            w.store (false, std::memory_order_relaxed);
         filterKey.setSize (1, block);
+
+        // THE BACK HALF'S WIDTH: two planes from CHORUS on, on a stereo bus — ALWAYS, the chorus idle or not. Collapsing
+        // to one while it idles would start the second plane's cabinet cold the moment it engages: an IR's length of
+        // left and right apart. So the cabinet, the DI, the cuts and the limiter cost two planes here, and the load
+        // window says so (LoadBreakdown). A narrower call is played at this width (processBlock).
+        bassWide.store (juce::jlimit (1, 2, channels), std::memory_order_relaxed);
+        narrowBus.setSize (juce::jlimit (1, 2, channels), block);
         diDry.setSize (juce::jmax (2, channels), block);
     }
     demo.prepare (sampleRate);
@@ -1201,17 +1226,24 @@ void AmpProcessor::tellBlend()
 
 namespace
 {
-    /** The same knobs, byte for byte — the parameter structs are floats and enums, nothing between them. */
+    /** The same knobs, byte for byte. Sound only while the structs hold their fields and nothing between them — no
+        padding a memcmp would read: the sizes below are the sums of their fields, and a field added in core stops the
+        build here, to be looked at. */
     template <typename P>
     bool sameKnobs (const P& a, const P& b) noexcept { return std::memcmp (&a, &b, sizeof (P)) == 0; }
+
+    static_assert (sizeof (felitronics::octave::OctaverParams) == 7 * sizeof (float), "OctaverParams: 7 floats, no padding");
+    static_assert (sizeof (felitronics::envfilter::EnvelopeFilterParams)
+                       == 9 * sizeof (float) + sizeof (felitronics::envfilter::Direction) + sizeof (felitronics::envfilter::Mode),
+                   "EnvelopeFilterParams: 9 floats and 2 enums, no padding");
+    static_assert (sizeof (felitronics::chorus::BassChorusParams) == 5 * sizeof (float), "BassChorusParams: 5 floats, no padding");
 }
 
-void AmpProcessor::runOctave (float* const* channels, int numSamples) noexcept
+void AmpProcessor::tellOctave() noexcept
 {
-    if (! octaverReady)
-        return;
-
-    felitronics::octave::OctaverParams menu;
+    // The menu is the stage's current knobs — what it was last told, the law's own fields with them — and the menu's
+    // fields from their parameters (the family's contract: paramsForAmount's menu is the stage's current params).
+    auto menu = octaveToldValid ? octaveTold : felitronics::octave::OctaverParams {};
     menu.sub2Top = bass.octaveSub2->load() > 0.5f ? params::octaveSub2Top : 0.0f;
     menu.toneHz  = bass.octaveToneHz->load();
     menu.subHpHz = bass.octaveSubHpHz->load();
@@ -1221,18 +1253,15 @@ void AmpProcessor::runOctave (float* const* channels, int numSamples) noexcept
     if (! octaveToldValid || ! sameKnobs (p, octaveTold))
     {
         octaver.setParams (p);
+        ++effectTold[0];
         octaveTold = p;
         octaveToldValid = true;
     }
-    (void) octaver.process (channels, 1, numSamples);
 }
 
-void AmpProcessor::runFilter (float* const* channels, int numSamples) noexcept
+void AmpProcessor::tellFilter() noexcept
 {
-    if (! envFilterReady)
-        return;
-
-    felitronics::envfilter::EnvelopeFilterParams menu;
+    auto menu = filterToldValid ? filterTold : felitronics::envfilter::EnvelopeFilterParams {};
     const int range = juce::jlimit (0, 2, juce::roundToInt (bass.filterRange->load()));
     menu.attackMs   = bass.filterAttackMs->load();
     menu.releaseMs  = bass.filterReleaseMs->load();
@@ -1250,19 +1279,15 @@ void AmpProcessor::runFilter (float* const* channels, int numSamples) noexcept
     if (! filterToldValid || ! sameKnobs (p, filterTold))
     {
         envFilter.setParams (p);
+        ++effectTold[1];
         filterTold = p;
         filterToldValid = true;
     }
-    const float* key[] = { filterKey.getReadPointer (0) };
-    (void) envFilter.process (channels, 1, numSamples, numSamples <= filterKey.getNumSamples() ? key : nullptr, 1);
 }
 
-void AmpProcessor::runChorus (float* const* channels, int numChannels, int numSamples) noexcept
+void AmpProcessor::tellChorus() noexcept
 {
-    if (! chorusReady)
-        return;
-
-    auto menu = chorus.params();   // the stage's current knobs: the law keeps the menu's and sets its own two
+    auto menu = chorusToldValid ? chorusTold : chorus.params();
     menu.rateHz      = bass.chorusRateHz->load();
     menu.crossoverHz = bass.chorusCrossoverHz->load();
     menu.delayMs     = bass.chorusCentreMs->load();
@@ -1271,10 +1296,46 @@ void AmpProcessor::runChorus (float* const* channels, int numChannels, int numSa
     if (! chorusToldValid || ! sameKnobs (p, chorusTold))
     {
         chorus.setParams (p);
+        ++effectTold[2];
         chorusTold = p;
         chorusToldValid = true;
     }
+}
+
+void AmpProcessor::runOctave (float* const* channels, int numChannels, int numSamples) noexcept
+{
+    if (! octaverReady)
+        return;
+    tellOctave();
+    (void) octaver.process (channels, numChannels, numSamples);
+}
+
+void AmpProcessor::runFilter (float* const* channels, int numChannels, int numSamples) noexcept
+{
+    if (! envFilterReady)
+        return;
+    tellFilter();
+    const float* key[] = { filterKey.getReadPointer (0) };
+    const bool keyed = numChannels > 0 && numSamples <= filterKey.getNumSamples();
+    (void) envFilter.process (channels, numChannels, numSamples, keyed ? key : nullptr, keyed ? 1 : 0);
+    effectWorking[1].store (! envFilter.isIdle(), std::memory_order_relaxed);
+}
+
+void AmpProcessor::runChorus (float* const* channels, int numChannels, int numSamples) noexcept
+{
+    if (! chorusReady)
+        return;
+    tellChorus();
     (void) chorus.process (channels, numChannels, numSamples);
+    effectWorking[2].store (! chorus.isIdle(), std::memory_order_relaxed);
+}
+
+void AmpProcessor::passGap (int numSamples) noexcept
+{
+    sanitiseParameters();
+    runOctave (nullptr, 0, numSamples);
+    runFilter (nullptr, 0, numSamples);
+    runChorus (nullptr, 0, numSamples);
 }
 
 core::BassCuts::Settings AmpProcessor::bassCutSettings() const noexcept
@@ -1424,6 +1485,33 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
     const int total = buffer.getNumSamples();
     const int most  = preparedBlock.load (std::memory_order_relaxed);
 
+    // THE BASS'S BACK HALF HAS ONE WIDTH, the prepared bus's (bassWide, see prepareToPlay). A call carrying fewer
+    // channels is played on a scratch bus of that width — its missing plane the one signal the chain carries up to
+    // CHORUS anyway — and the planes it does carry are handed back, so no stage ever sees its width change without a
+    // prepare: the cuts keep every plane's coefficients, no delay line keeps a stale plane, the limiter never resets
+    // under the left. 2 -> 1 -> 2 plays exactly as calls that never narrowed. A call of positive length carrying NO
+    // channel is a gap (law 11c): the three effects are told it, their shared clocks running as through silence.
+    if (const int wide = bassWide.load (std::memory_order_relaxed); wide > 0 && most > 0 && buffer.getNumChannels() < wide)
+    {
+        if (buffer.getNumChannels() == 0)
+        {
+            if (total > 0)
+                passGap (total);
+            return;
+        }
+        for (int start = 0; start < total; start += most)
+        {
+            const int len = juce::jmin (most, total - start);
+            for (int ch = 0; ch < wide; ++ch)
+                narrowBus.copyFrom (ch, 0, buffer, juce::jmin (ch, buffer.getNumChannels() - 1), start, len);
+            juce::AudioBuffer<float> part (narrowBus.getArrayOfWritePointers(), wide, 0, len);
+            processChunk (part);
+            for (int ch = 0; ch < buffer.getNumChannels(); ++ch)
+                buffer.copyFrom (ch, start, narrowBus, ch, 0, len);
+        }
+        return;
+    }
+
     if (most <= 0 || total <= most)
     {
         processChunk (buffer);
@@ -1446,9 +1534,15 @@ void AmpProcessor::sanitiseParameters() noexcept
     // re-poisoned every block, silent for as long as the lane holds it. One pass here, before any
     // stage reads anything: a value that is not a number reads as the parameter's default until
     // someone sends a real one. A couple of hundred compares a block.
-    for (const auto& guard : parameterGuards)
-        if (! std::isfinite (guard.value->load (std::memory_order_relaxed)))
-            guard.value->store (guard.fallback, std::memory_order_relaxed);
+    // One that holds its last (the bass's effects' sliders) reads as the last number it had instead.
+    for (auto& guard : parameterGuards)
+    {
+        const float v = guard.value->load (std::memory_order_relaxed);
+        if (! std::isfinite (v))
+            guard.value->store (guard.holdsLast ? guard.last : guard.fallback, std::memory_order_relaxed);
+        else if (guard.holdsLast)
+            guard.last = v;
+    }
 }
 
 /** HOW HARD THE STAGE WORKS — TEMPORARY, for tuning by ear (ui/HumTuning.h). The machine's three
@@ -1762,7 +1856,18 @@ void AmpProcessor::processChunk (juce::AudioBuffer<float>& buffer)
     // FILTER's key, kept before COMP touches the signal: the gated input, the string itself — the filter follows the
     // playing, not the compressed signal nor the octave's sub.
     if (bass.filter != nullptr && nch > 0 && numSamples <= filterKey.getNumSamples())
+    {
         filterKey.copyFrom (0, 0, buffer, 0, 0, numSamples);
+
+        // ...gated wherever the gate mutes: at the START the copy is taken after the mute; at the END (the default) the
+        // curve the gate has just analysed is laid on the copy here, so a closed gate closes the detector too and the
+        // playing under the threshold does not move the sweep.
+        if (! muteAtStart)
+        {
+            float* key[] = { filterKey.getWritePointer (0) };
+            (void) gate.applyGain (key, 1, numSamples);
+        }
+    }
 
     // THE BASS'S COMP (Chain::bass), after the gate, on its one signal: ONE KNOB (core::BassComp). Its STANDBY is
     // the house's crossfade, toward the link in AND its knob up; standing by with the knob up it is fed, not heard;
@@ -1772,10 +1877,12 @@ void AmpProcessor::processChunk (juce::AudioBuffer<float>& buffer)
         const auto a = PerfClock::now();
         const double amount = (double) bass.compAmount->load();
         const auto span = blockFade[(size_t) params::rowComp].advance (numSamples, linkWorks (params::rowComp) && amount > 0.0);
+        bassComp.tap = compWatched.load (std::memory_order_relaxed) ? &compTap : nullptr;   // the picture on screen, or nobody
         bassComp.process (channels[0], numSamples, amount, span,
                           static_cast<core::BassComp::Attack>    (juce::jlimit (0, 2, juce::roundToInt (bass.compAttack->load()))),
                           static_cast<core::BassComp::Release>   (juce::jlimit (0, 2, juce::roundToInt (bass.compRelease->load()))),
-                          static_cast<core::BassComp::Character> (juce::jlimit (0, 1, juce::roundToInt (bass.compCharacter->load()))));
+                          static_cast<core::BassComp::Character> (juce::jlimit (0, 1, juce::roundToInt (bass.compCharacter->load()))),
+                          bass.compRatioHeld->load() > 0.5f ? (double) bass.compRatio->load() : 0.0);
         compGrDb.store (bassComp.grDb.load (std::memory_order_relaxed), std::memory_order_relaxed);
         nsStage[stComp] = elapsedNs (a);
     }
@@ -1785,13 +1892,13 @@ void AmpProcessor::processChunk (juce::AudioBuffer<float>& buffer)
     if (bass.octave != nullptr && nch > 0)
     {
         const auto a = PerfClock::now();
-        runOctave (channels, numSamples);
+        runOctave (channels, 1, numSamples);
         nsStage[stOctave] = elapsedNs (a);
     }
     if (bass.filter != nullptr && nch > 0)
     {
         const auto a = PerfClock::now();
-        runFilter (channels, numSamples);
+        runFilter (channels, 1, numSamples);
         nsStage[stFilter] = elapsedNs (a);
     }
 

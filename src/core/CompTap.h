@@ -1,0 +1,106 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of OrbitAmp — see LICENSE.
+
+#pragma once
+
+#include <algorithm>
+#include <array>
+#include <atomic>
+#include <cmath>
+#include <cstdint>
+
+namespace orbitamp::core
+{
+
+/** WHAT THE BASS'S COMP DID, FOR ITS PICTURE (ui/CompBlock.h): the level going in, the level coming out and the
+    squeeze, as COLUMNS — each the peaks of in and out and the deepest squeeze over `hopSeconds` of audio — in a ring
+    the picture reads the newest few hundred of.
+
+    The audio thread writes (write), only while the picture is on screen (AmpProcessor::compWatched); the message
+    thread reads (read) on its own timer. No lock and no allocation: fixed arrays of relaxed atomics and one release
+    count. SILENCE IS NOT WRITTEN: once in and out have stood under -80 dBFS, with no squeeze, for `holdColumns`
+    columns, nothing more goes in until the playing comes back — the picture stops scrolling rather than scroll
+    an empty floor away.
+
+    JUCE-free on purpose: built here first, moves to felitronics-core when it settles. */
+class CompTap
+{
+public:
+    static constexpr int    columns     = 1024;    // ~5 s of playing at 5 ms a column
+    static constexpr double hopSeconds  = 0.005;
+    static constexpr int    holdColumns = 40;      // 200 ms of a tail written after the playing stops
+    static constexpr float  silence     = 1.0e-4f; // -80 dBFS
+
+    struct Column
+    {
+        float in  = 0.0f;   // peak, linear
+        float out = 0.0f;   // peak, linear
+        float gr  = 0.0f;   // the deepest squeeze, dB (0 or below)
+    };
+
+    /** Off the audio thread, with the rate; starts empty. */
+    void prepare (double sampleRate) noexcept
+    {
+        hop = std::max (1, (int) std::lround (sampleRate * hopSeconds));
+        inPeak = outPeak = grLow = 0.0f;
+        filled = 0;
+        quiet  = holdColumns + 1;   // nothing has played yet: nothing to scroll
+    }
+
+    /** The audio thread: one block of COMP's input and output, the same instant, and its squeeze per sample in dB
+        (null for none — the link standing by, the knob at zero). */
+    void write (const float* in, const float* out, const float* grDb, int n) noexcept
+    {
+        for (int i = 0; i < n; ++i)
+        {
+            inPeak  = std::max (inPeak,  std::abs (in[i]));
+            outPeak = std::max (outPeak, std::abs (out[i]));
+            if (grDb != nullptr)
+                grLow = std::min (grLow, grDb[i]);
+            if (++filled == hop)
+                close();
+        }
+    }
+
+    /** Any thread: how many columns have gone in since the prepare. */
+    std::uint32_t written() const noexcept { return count.load (std::memory_order_acquire); }
+
+    /** The message thread: the newest `want` columns (at most `columns`), oldest first, into `dst`; how many there were. */
+    int read (Column* dst, int want) const noexcept
+    {
+        const auto k    = count.load (std::memory_order_acquire);
+        const int  have = (int) std::min<std::uint32_t> (k, (std::uint32_t) std::clamp (want, 0, columns));
+        for (int i = 0; i < have; ++i)
+        {
+            const auto at = (size_t) ((k - (std::uint32_t) have + (std::uint32_t) i) % (std::uint32_t) columns);
+            dst[i] = { ins[at].load (std::memory_order_relaxed), outs[at].load (std::memory_order_relaxed),
+                       grs[at].load (std::memory_order_relaxed) };
+        }
+        return have;
+    }
+
+private:
+    void close() noexcept
+    {
+        const bool silent = inPeak < silence && outPeak < silence && grLow > -0.05f;
+        quiet = silent ? std::min (quiet + 1, holdColumns + 1) : 0;
+        if (quiet <= holdColumns)
+        {
+            const auto k  = count.load (std::memory_order_relaxed);
+            const auto at = (size_t) (k % (std::uint32_t) columns);
+            ins[at].store (inPeak, std::memory_order_relaxed);
+            outs[at].store (outPeak, std::memory_order_relaxed);
+            grs[at].store (grLow, std::memory_order_relaxed);
+            count.store (k + 1, std::memory_order_release);
+        }
+        inPeak = outPeak = grLow = 0.0f;
+        filled = 0;
+    }
+
+    std::array<std::atomic<float>, columns> ins {}, outs {}, grs {};
+    std::atomic<std::uint32_t> count { 0 };
+    float inPeak = 0.0f, outPeak = 0.0f, grLow = 0.0f;
+    int   filled = 0, hop = 240, quiet = holdColumns + 1;
+};
+
+} // namespace orbitamp::core

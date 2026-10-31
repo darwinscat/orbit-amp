@@ -60,10 +60,20 @@ public:
     std::vector<Mark> marks;
     int  labelDecimals = 0;
 
+    /** Whether the labelled marks carry their numbers. Off, the scale is ticks alone — for a rail whose grip shows
+        its value, where 9.5 px numbers would be the one thing on the face read under 13 px. */
+    bool numbered = true;
+
     /** The rail at the block's left edge, the scale to its right — or mirrored. */
     bool railOnLeft = true;
 
     void mouseDown (const juce::MouseEvent& e) override { openMenu (e.getScreenPosition()); }
+
+    /** Its name, as the border writes it — and the size its scale's numbers are written at, 0 for none (a gate reads
+        both). */
+    const juce::String& guardName() const noexcept { return name; }
+    float numeralHeight() const noexcept { return numbered ? scaleFontHeight : 0.0f; }
+    static constexpr float scaleFontHeight = 9.5f;
 
 protected:
     void layOutContent (juce::Rectangle<int> r) override
@@ -92,7 +102,7 @@ protected:
 
         // THE SCALE, fixed: a tick against the rail at every mark, the number beyond it.
         const auto s    = scaleBox.toFloat();
-        const auto font = theme::displayFont (9.5f);
+        const auto font = theme::displayFont (scaleFontHeight);
 
         for (const auto& m : marks)
         {
@@ -102,7 +112,7 @@ protected:
             g.setColour (juce::Colours::white.withAlpha (m.labelled ? 0.45f : 0.28f));
             g.fillRect (railOnLeft ? s.getX() + 1.0f : s.getRight() - 1.0f - len, y - 0.5f, len, 1.0f);
 
-            if (! m.labelled)
+            if (! m.labelled || ! numbered)
                 continue;
 
             const auto text = labelDecimals == 0 ? juce::String (std::abs (juce::roundToInt (m.value)))

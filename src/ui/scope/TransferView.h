@@ -16,16 +16,36 @@ namespace orbitamp::scope
     reaction. */
 struct TransferView
 {
+    /** The square a transfer is drawn in: the largest centred in `r`. */
+    static juce::Rectangle<float> square (juce::Rectangle<float> r)
+    {
+        const float side = juce::jmin (r.getWidth(), r.getHeight());
+        return r.withSizeKeepingCentre (side, side);
+    }
+
+    /** Unity: the diagonal from the square's bottom left to its top right. */
+    static void paintUnity (juce::Graphics& g, juce::Rectangle<float> box)
+    {
+        g.setColour (theme::hair);
+        g.drawLine (box.getX(), box.getBottom(), box.getRight(), box.getY(), 1.0f);
+    }
+
+    /** A transfer's curve, as every transfer square draws it. */
+    static void strokeCurve (juce::Graphics& g, const juce::Path& p)
+    {
+        g.setColour (theme::orange.withAlpha (0.85f));
+        g.strokePath (p, juce::PathStrokeType (1.0f));
+    }
+
     static void paint (juce::Graphics& g, juce::Rectangle<float> r, const Frame& f)
     {
         if (f.isEmpty())
             return;
 
-        const float side = juce::jmin (r.getWidth(), r.getHeight());
-        const auto box = r.withSizeKeepingCentre (side, side);
+        const auto  box  = square (r);
+        const float side = box.getWidth();
 
-        g.setColour (theme::hair);
-        g.drawLine (box.getX(), box.getBottom(), box.getRight(), box.getY(), 1.0f);   // unity
+        paintUnity (g, box);
 
         // Normalised to the window's own peak — ONE factor for BOTH axes, so the slope and the
         // unity diagonal keep telling the truth; the curve just stretches along it. (A dB axis
@@ -48,8 +68,7 @@ struct TransferView
             else           p.lineTo (x, y);
         }
 
-        g.setColour (theme::orange.withAlpha (0.85f));
-        g.strokePath (p, juce::PathStrokeType (1.0f));
+        strokeCurve (g, p);
     }
 };
 

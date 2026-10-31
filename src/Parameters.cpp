@@ -70,7 +70,10 @@ void addBassParameters (juce::AudioProcessorValueTreeState::ParameterLayout& lay
                                           juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f),
                 std::make_unique<Choice> (juce::ParameterID { compAttack, 1 },    "Comp Attack",    compAttacks, 1),
                 std::make_unique<Choice> (juce::ParameterID { compRelease, 1 },   "Comp Release",   compReleases, 0),
-                std::make_unique<Choice> (juce::ParameterID { compCharacter, 1 }, "Comp Character", compCharacters, 0));
+                std::make_unique<Choice> (juce::ParameterID { compCharacter, 1 }, "Comp Character", compCharacters, 0),
+                std::make_unique<Float>  (juce::ParameterID { compRatio, 1 },     "Comp Ratio",
+                                          juce::NormalisableRange<float> (compRatioMin, compRatioMax, 0.01f, 0.5f), 4.0f),
+                std::make_unique<Bool>   (juce::ParameterID { compRatioHeld, 1 }, "Comp Ratio Held", false));
 
     // The three effects: in the strip, their sliders at 0 — present, and doing nothing until one is moved. The menus'
     // defaults are the modules' own.

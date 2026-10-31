@@ -22,6 +22,9 @@
 #include "core/BassComp.h"
 #include "device/DeviceLibrary.h"
 #include "ui/LoadBreakdown.h"
+#include "ui/GuardBlock.h"
+#include "ui/CompBlock.h"
+#include "ui/FaceplateView.h"
 #include "channels/Engine.h"
 #include "channels/Presets.h"
 
@@ -33,6 +36,7 @@
 #include <limits>
 #include <map>
 #include <string>
+#include <type_traits>
 
 namespace
 {
@@ -127,6 +131,36 @@ namespace
             worst = std::max (worst, std::abs (a[i] - b[i]));
         }
         return worst;
+    }
+
+    /** WHAT STEP 2b PLAYED (78e037a, before the three effects): the first `blocks` blocks of `play`'s phrase, channel 0,
+        on a fresh OrbitBass at its defaults — recorded by that tree's own build (a console linking 78e037a's sources
+        against the same libraries) as little-endian float32, tests/golden/orbitbass-step2b.f32. Bit for bit on the
+        compiler that recorded it; within 1e-4 on any other, whose libm and vector code may move a last bit. */
+    struct StepTwoB
+    {
+        static constexpr int blocks = 40;
+        std::vector<float> was;
+        bool  recorder = false;
+        float allowed  = 1.0e-4f;
+    };
+
+    StepTwoB stepTwoBReference()
+    {
+        StepTwoB ref;
+        juce::MemoryBlock bytes;
+        if (juce::File (ORBITBASS_STEP2B).loadFileAsData (bytes))
+        {
+            juce::MemoryInputStream in (bytes, false);
+            while (! in.isExhausted())
+                ref.was.push_back (in.readFloat());
+        }
+       #if defined (__APPLE__) && defined (__aarch64__)
+        ref.recorder = juce::String (__VERSION__) == "Apple LLVM 21.0.0 (clang-2100.1.1.101)";
+       #endif
+        if (ref.recorder)
+            ref.allowed = 0.0f;
+        return ref;
     }
 
     /** `blocks` blocks of a steady sine at `hz`, peak `db` dBFS (or silence, from block `quietFrom` on), into
@@ -295,6 +329,7 @@ int ORBITAMP_GATE_MAIN()
 
     // ---- ITS SOUND -----------------------------------------------------------------------------------
     constexpr int blocks = 250;   // 2.7 s: the phrase, and over a second of what rings after it
+    const auto stepTwoB = stepTwoBReference();
     const auto plain = play (*amp, blocks, false);
     check (peak (plain.l) > 1.0e-3f, "it sounds (peak " + juce::String (peak (plain.l), 4) + ")");
 
@@ -1070,9 +1105,15 @@ int ORBITAMP_GATE_MAIN()
             set (*moved, params::filterKeepLows, 0.0f);
             set (*moved, params::chorusRateHz, 2.5f);
             set (*moved, params::chorusCentreMs, 20.0f);
-            const auto heard = play (*moved, blocks, false);
-            check (worstApart (heard.l, plain.l) == 0.0f && worstApart (heard.r, plain.r) == 0.0f,
-                   "the three at 0, their menus moved: the step-2b output, bit for bit, both sides");
+            const auto heard = play (*moved, stepTwoB.blocks, false);
+            const auto fresh = play (*make (bass), stepTwoB.blocks, false);
+            const float apartL = worstApart (heard.l, stepTwoB.was), apartR = worstApart (heard.r, stepTwoB.was);
+            const float apartPlain = worstApart (fresh.l, stepTwoB.was);
+            check (stepTwoB.was.size() == (size_t) (stepTwoB.blocks * blockSize) && apartL <= stepTwoB.allowed
+                       && apartR <= stepTwoB.allowed && apartPlain <= stepTwoB.allowed,
+                   "the three at 0, their menus moved — and at their defaults: what step 2b (78e037a) played, "
+                       + juce::String (stepTwoB.recorder ? "bit for bit" : "within 1e-4") + ", both sides (worst "
+                       + juce::String (apartL, 9) + " / " + juce::String (apartR, 9) + ", defaults " + juce::String (apartPlain, 9) + ")");
         }
         // Each turned up is heard.
         for (const auto& [id, name] : { std::pair<const char*, const char*> { params::octaveAmount, "OCTAVE" },
@@ -1148,6 +1189,421 @@ int ORBITAMP_GATE_MAIN()
         }
     }
 
+    // ---- REVIEW ROUND 3 (step 3's): the adapter, the key, the planes, the face ----------------------------------
+    {
+        struct Fx { const char* amount; const char* on; const char* name; };
+        const Fx fx[] { { params::octaveAmount, params::octaveOn, "OCTAVE" }, { params::filterAmount, params::filterOn, "FILTER" },
+                        { params::chorusAmount, params::chorusOn, "CHORUS" } };
+        const auto again = [] (AmpProcessor& a) { a.prepareToPlay (sampleRate, blockSize); a.pumpDeviceWork(); };
+        const auto say = [] (const Switch& w) { return juce::String (w.burstDb, 1) + " dB over steady, step x" + juce::String (w.stepRatio, 1); };
+
+        // A PREPARE TELLS EACH EFFECT WHERE IT STANDS before its first sample: standing by with its slider up it is a
+        // slider at 0 from the first sample on — nothing of it, bit for bit, both sides (CHORUS's stage used to arrive at
+        // its own defaults, half wet, and fade out over 20 ms) — and up, it is told once, at the prepare, not again by
+        // the first block.
+        {
+            auto zero = make (bass);
+            again (*zero);
+            const auto quiet = play (*zero, 60, false);
+
+            auto standing = make (bass);
+            for (const auto& f : fx)
+            {
+                set (*standing, f.amount, 0.8f);
+                set (*standing, f.on, 0.0f);
+            }
+            again (*standing);
+            const auto heard = play (*standing, 60, false);
+            check (worstApart (heard.l, quiet.l) == 0.0f && worstApart (heard.r, quiet.r) == 0.0f
+                       && standing->effectIdle (0) && standing->effectIdle (1) && standing->effectIdle (2),
+                   "the three standing by from a prepare, their sliders at 0.8: the three at 0, bit for bit, both sides, idle (worst "
+                       + juce::String (worstApart (heard.l, quiet.l), 9) + " / " + juce::String (worstApart (heard.r, quiet.r), 9) + ")");
+
+            // ...and after they have played: up, then standing by, then a prepare — each idle from its first block, not
+            // arriving at its last knobs and fading out of them.
+            auto played = make (bass);
+            for (const auto& f : fx)
+                set (*played, f.amount, 0.8f);
+            (void) tone (*played, 82.41, -12.0f, 60);
+            for (const auto& f : fx)
+                set (*played, f.on, 0.0f);
+            again (*played);
+            (void) tone (*played, 82.41, -12.0f, 1);
+            check (played->effectIdle (0) && played->effectIdle (1) && played->effectIdle (2),
+                   "...and after playing up, standing by and a prepare: idle from the first block (OCTAVE "
+                       + juce::String (played->effectIdle (0) ? "idle" : "working") + ", FILTER " + (played->effectIdle (1) ? "idle" : "working")
+                       + ", CHORUS " + (played->effectIdle (2) ? "idle" : "working") + ")");
+
+            auto up = make (bass);
+            for (const auto& f : fx)
+                set (*up, f.amount, 0.8f);
+            const int before[] { up->effectTells (0), up->effectTells (1), up->effectTells (2) };
+            again (*up);
+            const int atPrepare[] { up->effectTells (0), up->effectTells (1), up->effectTells (2) };
+            (void) tone (*up, 82.41, -12.0f, 1);
+            bool once = true;
+            for (int k = 0; k < 3; ++k)
+                once = once && atPrepare[k] == before[k] + 1 && up->effectTells (k) == atPrepare[k];
+            check (once, "a prepare with the three up tells each its knobs once, before the first sample; the first block tells nothing more");
+
+            // ...and nothing moved, nothing told: a hundred blocks, not one more setParams.
+            const int settled[] { up->effectTells (0), up->effectTells (1), up->effectTells (2) };
+            (void) tone (*up, 82.41, -12.0f, 100);
+            check (up->effectTells (0) == settled[0] && up->effectTells (1) == settled[1] && up->effectTells (2) == settled[2],
+                   "...and 100 blocks with nothing moved tell nothing (" + juce::String (up->effectTells (0) - settled[0]) + ", "
+                       + juce::String (up->effectTells (1) - settled[1]) + ", " + juce::String (up->effectTells (2) - settled[2]) + ")");
+        }
+
+        // A SLIDER THAT IS NOT A NUMBER keeps the last one that was: the three up, a host's automation sends NaN to all
+        // three — they play on as they were, bit for bit (it used to read as their default, 0: all three switched off).
+        {
+            const auto run = [&] (bool poison)
+            {
+                auto t = make (bass);
+                set (*t, params::octaveAmount, 0.8f);
+                set (*t, params::filterAmount, 0.6f);
+                set (*t, params::chorusAmount, 0.7f);
+                return tone (*t, 82.41, -12.0f, 120, 40, [&]
+                {
+                    if (poison)
+                        for (const auto& f : fx)
+                            t->apvts.getRawParameterValue (f.amount)->store (std::numeric_limits<float>::quiet_NaN());
+                });
+            };
+            const float apart = worstApart (run (true), run (false));
+            check (apart == 0.0f, "the three's sliders sent NaN mid-note keep their last amounts, bit for bit (worst " + juce::String (apart, 9) + ")");
+        }
+
+        // STANDBY IS SLIDER 0: the three up, playing, then their arrows off — each ramps to idle and computes nothing.
+        {
+            auto t = make (bass);
+            for (const auto& f : fx)
+                set (*t, f.amount, 0.8f);
+            (void) tone (*t, 82.41, -12.0f, 60);
+            const bool working = ! t->effectIdle (0) && ! t->effectIdle (1) && ! t->effectIdle (2);
+            for (const auto& f : fx)
+                set (*t, f.on, 0.0f);
+            (void) tone (*t, 82.41, -12.0f, 100);
+            check (working && t->effectIdle (0) && t->effectIdle (1) && t->effectIdle (2),
+                   "the three up work; their arrows off, each ramps to idle and stops");
+        }
+
+        // TRANSITIONS THROUGH THE PROCESSOR, mid-note: a slider leaving 0, an arrow switched out with the slider up.
+        for (const auto& f : fx)
+        {
+            constexpr int at = 120, len = 220;
+            const auto bare = [&]
+            {
+                auto t = make (bass);
+                set (*t, params::cabOn, 0.0f);
+                set (*t, params::bassHpf, (float) params::BassHpf::off);
+                return t;
+            };
+            {
+                auto t = bare();
+                const auto v = tone (*t, 82.41, -12.0f, len, at, [&] { set (*t, f.amount, 0.8f); });
+                const auto w = judgeSwitch (v, at, 30.0);
+                check (w.burstDb <= 1.0 && w.stepRatio <= 3.0, juce::String (f.name) + "'s slider leaving 0 mid-note: " + say (w));
+            }
+            {
+                auto t = bare();
+                set (*t, f.amount, 0.8f);
+                const auto v = tone (*t, 82.41, -12.0f, len, at, [&] { set (*t, f.on, 0.0f); });
+                const auto w = judgeSwitch (v, at, 30.0);
+                check (w.burstDb <= 1.0 && w.stepRatio <= 3.0, juce::String (f.name) + "'s arrow switched out mid-note, its slider up: " + say (w));
+            }
+        }
+
+        // A MENU FIELD REACHES ITS MODULE with the slider up: LP against BP, the -2 at the top, KEEP LOWS.
+        {
+            const auto apart = [&] (const char* amount, const char* field, float a, float b)
+            {
+                const auto with = [&] (float v)
+                {
+                    auto t = make (bass);
+                    set (*t, amount, 0.8f);
+                    set (*t, field, v);
+                    return tone (*t, 82.41, -12.0f, 100);
+                };
+                return worstApart (with (a), with (b));
+            };
+            const float mode = apart (params::filterAmount, params::filterMode, 0.0f, 1.0f);
+            const float sub2 = apart (params::octaveAmount, params::octaveSub2, 0.0f, 1.0f);
+            const float keep = apart (params::filterAmount, params::filterKeepLows, 1.0f, 0.0f);
+            check (mode > 1.0e-3f && sub2 > 1.0e-3f && keep > 1.0e-3f,
+                   "the menus reach the modules, sliders up: FILTER LP/BP apart by " + juce::String (mode, 4) + ", OCTAVE's -2 by "
+                       + juce::String (sub2, 4) + ", KEEP LOWS by " + juce::String (keep, 4));
+        }
+
+        // THE ORDER: OCTAVE before FILTER and the AMP. FILTER at the top on BP, its lows not kept, sweeps the sub with the
+        // note: 41 Hz under an E2 falls against the note's 82 Hz — had the sub come after FILTER (or after the AMP, past
+        // it) the band would not touch it.
+        {
+            const auto subOverNote = [&] (bool bp)
+            {
+                auto t = make (bass);
+                set (*t, params::cabOn, 0.0f);
+                set (*t, params::bassHpf, (float) params::BassHpf::off);
+                set (*t, params::octaveAmount, 1.0f);
+                if (bp)
+                {
+                    set (*t, params::filterAmount, 1.0f);
+                    set (*t, params::filterMode, 1.0f);
+                    set (*t, params::filterKeepLows, 0.0f);
+                }
+                const auto v = tone (*t, 82.41, -12.0f, 150);
+                return levelAt (v, 41.2) - levelAt (v, 82.41);
+            };
+            const double plainRatio = subOverNote (false), swept = subOverNote (true);
+            check (swept < plainRatio - 6.0, "OCTAVE before FILTER and the AMP: the sub against the note "
+                                                 + juce::String (plainRatio, 1) + " dB, through FILTER's band " + juce::String (swept, 1) + " dB");
+        }
+
+        // FILTER'S KEY IS GATED WHEREVER THE GATE MUTES: a string under the gate's threshold moves the sweep no more with
+        // the gate at the END (the default) than at the START, where the key is taken after the mute.
+        {
+            const auto cutoffWith = [&] (bool gated, int pos)
+            {
+                auto t = make (bass);
+                set (*t, params::cabOn, 0.0f);
+                set (*t, params::gateOn, gated ? 1.0f : 0.0f);
+                set (*t, params::gateThreshold, -30.0f);
+                set (*t, params::gatePos, (float) pos);
+                set (*t, params::filterAmount, 1.0f);
+                (void) tone (*t, 110.0, -34.0f, 100);
+                return (double) t->filterShownCutoffHz();
+            };
+            const double open = cutoffWith (false, 1), atStart = cutoffWith (true, 0), atEnd = cutoffWith (true, 1);
+            check (open > 1.2 * atStart && std::abs (atEnd - atStart) <= 1.0e-3 * atStart,
+                   "FILTER's key gated with the gate at the END: a string under the threshold sweeps it to " + juce::String (atEnd, 1)
+                       + " Hz, as at the START (" + juce::String (atStart, 1) + " Hz); ungated it would to " + juce::String (open, 1) + " Hz");
+        }
+
+        // 2 -> 1 -> 2: A HOST NARROWS ITS CALLS AND WIDENS THEM AGAIN, no prepare between. The back half stays the
+        // prepared bus's width — the cuts' coefficients follow a move made while narrow, no plane keeps stale samples,
+        // the limiter keeps its topology — so the left plays, and the right comes back, exactly as through calls that
+        // never narrowed. CHORUS up (two different planes), the HPF moved while narrow; LIMIT in and out.
+        for (const bool limit : { true, false })
+        {
+            const auto run = [&] (bool narrow)
+            {
+                auto t = make (bass);
+                set (*t, params::chorusAmount, 0.6f);
+                set (*t, params::limiterOn, limit ? 1.0f : 0.0f);
+                Out out;
+                juce::AudioBuffer<float> two (2, blockSize), one (1, blockSize);
+                juce::MidiBuffer midi;
+                long long n = 0;
+                for (int b = 0; b < 200; ++b)
+                {
+                    const bool thin = narrow && b >= 60 && b < 100;
+                    if (b == 80)
+                        set (*t, params::bassHpf, (float) params::BassHpf::four);
+                    auto& buf = thin ? one : two;
+                    for (int i = 0; i < blockSize; ++i, ++n)
+                    {
+                        const double tt = (double) n / sampleRate;
+                        const auto v = (float) (0.5 * std::exp (-2.0 * std::fmod (tt, 0.8)) * std::sin (juce::MathConstants<double>::twoPi * 41.2 * tt));
+                        for (int ch = 0; ch < buf.getNumChannels(); ++ch)
+                            buf.setSample (ch, i, v);
+                    }
+                    t->processBlock (buf, midi);
+                    t->pumpDeviceWork();
+                    out.l.insert (out.l.end(), buf.getReadPointer (0), buf.getReadPointer (0) + blockSize);
+                    if (b >= 100)
+                        out.r.insert (out.r.end(), buf.getReadPointer (1), buf.getReadPointer (1) + blockSize);
+                }
+                return out;
+            };
+            const auto wide = run (false), thin = run (true);
+            const std::vector<float> wideLate (wide.l.end() - (std::ptrdiff_t) wide.r.size(), wide.l.end());   // the left, where the right is kept
+            check (worstApart (thin.l, wide.l) == 0.0f && worstApart (thin.r, wide.r) == 0.0f && worstApart (wideLate, wide.r) > 1.0e-4f,
+                   juce::String ("2 -> 1 -> 2 calls, LIMIT ") + (limit ? "in" : "out") + ": the left as through stereo calls, bit for bit (worst "
+                       + juce::String (worstApart (thin.l, wide.l), 9) + "), the returning right too (" + juce::String (worstApart (thin.r, wide.r), 9) + ")");
+        }
+
+        // THE LAMPS: each effect's lights while it works — OCTAVE while its sub plays (locked), FILTER and CHORUS while
+        // not idle — and goes dark when it stops.
+        {
+            auto t = make (bass);
+            for (const auto& f : fx)
+                set (*t, f.amount, 0.8f);
+            (void) tone (*t, 82.41, -12.0f, 60);
+            const bool lit = t->effectLampDepth (0) > 0.5f && t->effectLampDepth (1) > 0.5f && t->effectLampDepth (2) > 0.5f;
+            for (const auto& f : fx)
+                set (*t, f.amount, 0.0f);
+            (void) tone (*t, 82.41, -12.0f, 100, -1, {}, 0);
+            const bool dark = t->effectLampDepth (0) < 0.5f && t->effectLampDepth (1) < 0.5f && t->effectLampDepth (2) < 0.5f;
+            check (lit && dark, "the effects' lamps light while each works and go dark at 0");
+        }
+
+        // 13 PX: the effects' rails read nothing smaller — their scales carry no numbers (the grip shows the value); the
+        // guards' scales are as they were.
+        {
+            std::unique_ptr<juce::AudioProcessorEditor> ed (amp->createEditor());
+            juce::StringArray small, guards;
+            std::function<void (juce::Component&)> walk = [&] (juce::Component& c)
+            {
+                if (auto* g = dynamic_cast<GuardBlock*> (&c))
+                {
+                    const bool guard = g->guardName() == "GATE" || g->guardName() == "LIMIT";
+                    if (guard)
+                        guards.add (g->guardName());
+                    else if (g->numeralHeight() > 0.0f && g->numeralHeight() < 13.0f)
+                        small.add (g->guardName() + " " + juce::String (g->numeralHeight(), 1) + " px");
+                }
+                for (auto* child : c.getChildren())
+                    walk (*child);
+            };
+            walk (*ed);
+            check (small.isEmpty() && guards.size() == 2, "the effects' rails write no number under 13 px"
+                                                              + (small.isEmpty() ? juce::String() : ": " + small.joinIntoString (", ")));
+        }
+    }
+
+    // ---- STEP 4: COMP, A BLOCK OF ITS OWN — its line and its slider one control, its ratio held and given back, its
+    //      taps idle while nobody looks and still in silence ------------------------------------------------------------
+    {
+        using core::BassComp;
+        const auto findIn = [] (juce::Component& root, auto* none)
+        {
+            using T = std::remove_pointer_t<decltype (none)>;
+            T* found = nullptr;
+            std::function<void (juce::Component&)> walk = [&] (juce::Component& c)
+            {
+                if (auto* t = dynamic_cast<T*> (&c); t != nullptr && found == nullptr)
+                    found = t;
+                for (auto* child : c.getChildren())
+                    walk (*child);
+            };
+            walk (root);
+            return found;
+        };
+
+        // THE LAW BOTH WAYS: every knob position the parameter holds (its step, 0.001) to its threshold and back,
+        // either character; the ends where the law puts them.
+        {
+            double worst = 0.0;
+            for (const auto c : { BassComp::Character::smooth, BassComp::Character::punchy })
+                for (int k = 0; k <= 1000; ++k)
+                {
+                    const double a = k * 0.001;
+                    worst = std::max (worst, std::abs (BassComp::amountForThreshold (BassComp::thresholdAt (a, c), c) - a));
+                }
+            const auto s = BassComp::Character::smooth;
+            check (worst < 1.0e-12 && BassComp::thresholdAt (0.0, s) == -12.0 && BassComp::thresholdAt (1.0, s) == -36.0
+                       && BassComp::amountForThreshold (-60.0, s) == 1.0 && BassComp::amountForThreshold (0.0, s) == 0.0
+                       && BassComp::thresholdAt (0.5, BassComp::Character::punchy) == -24.0 + BassComp::punchyOffsetDb,
+                   "COMP's line and slider, the law both ways: knob -> threshold -> knob, worst " + juce::String (worst, 15));
+        }
+
+        // ...AND ON THE FACE: the line dragged across every pixel row of the law's span moves the slider to the knob whose
+        // threshold it is, the line drawn back where the hand is — one gesture for the whole drag; the slider moved, the
+        // line follows.
+        {
+            auto t = make (bass);
+            std::unique_ptr<juce::AudioProcessorEditor> ed (t->createEditor());
+            auto* graph = findIn (*ed, (CompGraph*) nullptr);
+            auto* block = findIn (*ed, (CompBlock*) nullptr);
+            struct Gestures final : juce::AudioProcessorParameter::Listener
+            {
+                int begun = 0, ended = 0;
+                void parameterValueChanged (int, float) override {}
+                void parameterGestureChanged (int, bool starting) override { ++(starting ? begun : ended); }
+            } gestures;
+            auto* amountP = t->apvts.getParameter (params::compAmount);
+            float worstPx = 1.0e9f;
+            int rows = 0;
+            if (graph != nullptr)
+            {
+                amountP->addListener (&gestures);
+                worstPx = 0.0f;
+                graph->beginLineDrag();
+                for (float y = std::ceil (graph->yOfDb (-12.0)); y <= std::floor (graph->yOfDb (-36.0)); y += 1.0f, ++rows)
+                {
+                    graph->dragLineTo (y);
+                    worstPx = std::max (worstPx, std::abs (graph->yOfDb (graph->thresholdDb()) - y));
+                }
+                graph->endLineDrag();
+                amountP->removeListener (&gestures);
+                set (*t, params::compAmount, 0.5f);
+            }
+            check (graph != nullptr && block != nullptr && block->getWidth() == FaceplateView::compWidth && rows > 20 && worstPx <= 0.5f
+                       && gestures.begun == 1 && gestures.ended == 1 && std::abs (graph->thresholdDb() + 24.0) < 1.0e-3,
+                   "the line dragged over " + juce::String (rows) + " pixel rows: the slider where the line says, the line back within "
+                       + juce::String (worstPx, 3) + " px, " + juce::String (gestures.begun) + " gesture; the slider at 0.5, the line at "
+                       + juce::String (graph != nullptr ? graph->thresholdDb() : 0.0, 2) + " dB");
+        }
+
+        // THE RATIO HELD AND GIVEN BACK: the law's at the knob; held at 8:1 it stays 8:1 with the slider moved; "RATIO: BY
+        // THE SLIDER" and it is the law's again, exactly — gliding there mid-note, no burst, no step.
+        {
+            auto t = make (bass);
+            set (*t, params::compAmount, 0.5f);
+            (void) tone (*t, 97.0, -6.0f, 40);
+            const double law = t->compRatioNow();
+            set (*t, params::compRatio, 8.0f);
+            set (*t, params::compRatioHeld, 1.0f);
+            (void) tone (*t, 97.0, -6.0f, 10);
+            const double held = t->compRatioNow();
+            set (*t, params::compAmount, 0.8f);
+            (void) tone (*t, 97.0, -6.0f, 10);
+            const double heldMoved = t->compRatioNow();
+            set (*t, params::compRatioHeld, 0.0f);
+            (void) tone (*t, 97.0, -6.0f, 10);
+            const double given = t->compRatioNow();
+            check (law == BassComp::lawAt ((double) 0.5f).ratio
+                       && std::abs (held - 8.0) < 1.0e-3 && std::abs (heldMoved - 8.0) < 1.0e-3
+                       && given == BassComp::lawAt ((double) value (*t, params::compAmount)).ratio,
+                   "COMP's ratio: the law's " + juce::String (law, 2) + ":1, held " + juce::String (held, 2) + ":1, the slider moved "
+                       + juce::String (heldMoved, 2) + ":1, given back " + juce::String (given, 2) + ":1");
+
+            auto u = make (bass);
+            set (*u, params::cabOn, 0.0f);
+            set (*u, params::compAmount, 0.5f);
+            set (*u, params::compRatio, 10.0f);
+            set (*u, params::compRatioHeld, 1.0f);
+            const auto v = tone (*u, 97.0, -6.0f, 220, 120, [&] { set (*u, params::compRatioHeld, 0.0f); });
+            const auto w = judgeSwitch (v, 120, 30.0);
+            check (w.burstDb <= 1.0 && w.stepRatio <= 3.0, "...given back mid-note at 10:1, a glide: " + juce::String (w.burstDb, 1)
+                                                               + " dB over steady, step x" + juce::String (w.stepRatio, 1));
+
+            // A session and a preset keep both.
+            set (*t, params::compRatio, 7.5f);
+            set (*t, params::compRatioHeld, 1.0f);
+            juce::MemoryBlock session;
+            t->getStateInformation (session);
+            auto back = make (bass);
+            back->setStateInformation (session.getData(), (int) session.getSize());
+            const auto preset = t->presetForSaving();
+            const auto inPreset = [&] (const char* id) { return (float) preset.getChildWithProperty ("id", id).getProperty ("value", -1.0f); };
+            check (std::abs (value (*back, params::compRatio) - 7.5f) < 0.01f && value (*back, params::compRatioHeld) > 0.5f
+                       && std::abs (inPreset (params::compRatio) - 7.5f) < 0.01f && inPreset (params::compRatioHeld) > 0.5f,
+                   "a session and a preset keep the held ratio and that it is held");
+        }
+
+        // THE TAPS: idle with no picture on screen — an editor up but not showing included; written while it is; still
+        // once the playing stops — the picture freezes in silence instead of scrolling an empty floor.
+        {
+            auto t = make (bass);
+            set (*t, params::compAmount, 0.6f);
+            std::unique_ptr<juce::AudioProcessorEditor> ed (t->createEditor());
+            (void) tone (*t, 97.0, -6.0f, 50);
+            const auto hidden = t->compTap.written();
+            t->compWatched.store (true);
+            (void) tone (*t, 97.0, -6.0f, 100);
+            const auto playing = t->compTap.written();
+            (void) tone (*t, 97.0, -6.0f, 200, -1, {}, 0);
+            const auto tail = t->compTap.written();
+            (void) tone (*t, 97.0, -6.0f, 100, -1, {}, 0);
+            const auto still = t->compTap.written();
+            check (hidden == 0 && playing > 0 && tail > playing && still == tail,
+                   "COMP's taps: nothing written with the picture off screen (" + juce::String ((int) hidden) + "), "
+                       + juce::String ((int) playing) + " columns while it shows, " + juce::String ((int) (tail - playing))
+                       + " of the tail, then none in silence (" + juce::String ((int) (still - tail)) + ")");
+        }
+    }
+
     // ---- WHOSE STATE IT IS ----------------------------------------------------------------------------
     {
         auto source = make (bass);
@@ -1205,6 +1661,36 @@ int ORBITAMP_GATE_MAIN()
                   && juce::approximatelyEqual (g->tunerLowestHz, core::PitchTracker::guitarLowestHz);
     check (guitars && juce::approximatelyEqual (core::PitchTracker::guitarLowestHz, 40.0),
            "every guitar amp's to 40, as before, on the guitar's chain");
+
+    // A GAP — a call of positive length that carries no channel (law 11c) — reaches the three: FILTER's follower lets go
+    // through it as through silence, its sweep falling back as far. Last, for an amp that falls over on one.
+    {
+        const auto after = [&] (bool gap)
+        {
+            auto t = make (bass);
+            set (*t, params::cabOn, 0.0f);
+            set (*t, params::filterAmount, 0.8f);
+            (void) tone (*t, 110.0, -6.0f, 60);
+            const double loud = t->filterShownCutoffHz();
+            if (gap)
+            {
+                juce::AudioBuffer<float> none (0, blockSize);
+                juce::MidiBuffer midi;
+                for (int b = 0; b < 40; ++b)
+                    t->processBlock (none, midi);
+            }
+            else
+            {
+                (void) tone (*t, 110.0, -6.0f, 40, -1, {}, 0);
+            }
+            return std::pair<double, double> { loud, (double) t->filterShownCutoffHz() };
+        };
+        const auto [loud, viaGap] = after (true);
+        const auto silent = after (false).second;
+        check (viaGap < 0.8 * loud && std::abs (viaGap - silent) <= 1.0e-3 * silent,
+               "a gap of 40 blocks lets FILTER's sweep fall as silence does: " + juce::String (loud, 0) + " Hz to " + juce::String (viaGap, 0)
+                   + " (silence: " + juce::String (silent, 0) + ")");
+    }
 
     std::printf ("%s\n", failed == 0 ? "PASSED" : "FAILED");
     return failed == 0 ? 0 : 1;

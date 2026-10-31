@@ -31,7 +31,12 @@ struct LoadBreakdown final : public juce::Component,
             if (const auto own = nameOf (stage, brief); own.isNotEmpty())
                 return own;
 
-        return brief ? params::stageNames[stage].brief : params::stageNames[stage].full;
+        // The bass's back half runs two planes on a stereo bus, its CHORUS idle or not (AmpProcessor::bassBackPlanes):
+        // the rows of what costs two planes there say so — CHORUS, CAB (its cuts' time is the cabinet's) and LIMIT.
+        const juce::String name = brief ? params::stageNames[stage].brief : params::stageNames[stage].full;
+        const bool twice = amp.bassBackPlanes() == 2
+                        && (stage == params::stChorus || stage == params::stCab || stage == params::stLimit);
+        return twice ? name + " x2" : name;
     }
 
     explicit LoadBreakdown (AmpProcessor& p) : amp (p)

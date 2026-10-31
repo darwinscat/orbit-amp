@@ -98,6 +98,38 @@ static const orbitamp::Product& switchedTunerAmp()
 
 static thread_local long long gAllocations = 0;
 
+// THE MALLOC FAMILY TOO, where a program can see it: on the Mac every malloc, calloc, realloc and aligned allocation —
+// JUCE's HeapBlock's, a C library's — passes libSystem's malloc_logger, which this file sets while it counts. It counts
+// the thread that asked to be counted alone (no thread-local in a hook that runs inside malloc: a thread-local's first
+// touch allocates). Elsewhere — glibc, the MSVC runtime — the family is not counted, and the gate says so rather than
+// claiming it.
+#if ORBITAMP_COUNT_ALLOCATIONS && defined(__APPLE__)
+  #define ORBITAMP_COUNT_MALLOCS 1
+  #include <pthread.h>
+extern "C"
+{
+    typedef void (malloc_logger_t) (uint32_t type, uintptr_t, uintptr_t, uintptr_t, uintptr_t result, uint32_t skip);
+    extern malloc_logger_t* malloc_logger;
+}
+static std::atomic<long long> gMallocs { 0 };
+static pthread_t gMallocThread {};
+static void countMalloc (uint32_t type, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uint32_t)
+{
+    if ((type & 2u) != 0 && pthread_equal (pthread_self(), gMallocThread))   // MALLOC_LOG_TYPE_ALLOCATE
+        gMallocs.fetch_add (1, std::memory_order_relaxed);
+}
+static void countMallocsHere (bool on)
+{
+    gMallocThread = pthread_self();
+    malloc_logger = on ? countMalloc : nullptr;
+}
+static long long mallocsSoFar() { return gMallocs.load (std::memory_order_relaxed); }
+#else
+  #define ORBITAMP_COUNT_MALLOCS 0
+static void countMallocsHere (bool) {}
+static long long mallocsSoFar() { return 0; }
+#endif
+
 #if ORBITAMP_COUNT_ALLOCATIONS
 static void* countedAlloc (std::size_t n)
 {
@@ -3674,10 +3706,33 @@ int main()
             set (amp, id, v);
         amp.pumpDeviceWork();
 
+        // THE INSTRUMENT FIRST: an allocation made on purpose, of each family, is seen — or the zero below says nothing.
+        static void* volatile sink = nullptr;
+        countMallocsHere (true);
+        const long long n0 = gAllocations, m0 = mallocsSoFar();
+        sink = std::malloc (64);
+        std::free (sink);
+        { juce::HeapBlock<float> held (256); sink = held.get(); }
+        sink = ::operator new (24);   // a call, not a new-expression: the compiler may not elide it
+        ::operator delete (sink);
+        const long long sawNew = gAllocations - n0, sawMalloc = mallocsSoFar() - m0;
+       #if ORBITAMP_COUNT_ALLOCATIONS
+        report ("the counter sees an allocation made on purpose: operator new", sawNew >= 1, juce::String (sawNew));
+       #endif
+       #if ORBITAMP_COUNT_MALLOCS
+        report ("...and malloc and JUCE's HeapBlock", sawMalloc >= 3, juce::String (sawMalloc));
+       #else
+        std::printf ("orbitbass: malloc and its family are not counted on this system — operator new is\n");
+       #endif
+
+        // FROM THE FIRST BLOCK — a fresh prepare, then every block counted: the stages' first calls, their wakes from idle
+        // and their falls back to it, a COMP started fresh, the arrows switched.
+        amp.prepareToPlay (48000.0, 512);
+        amp.pumpDeviceWork();
+        amp.compWatched.store (true);   // COMP's block on screen: its taps written every block, and that allocates nothing either
         juce::AudioBuffer<float> buf (2, 512);
         juce::MidiBuffer midi;
-        long long n = 0, inBass = 0;
-        bool counting = false;
+        long long n = 0, inBass = 0, inBassMalloc = 0;
         const auto play = [&] (int blocks)
         {
             for (int b = 0; b < blocks; ++b)
@@ -3689,25 +3744,37 @@ int main()
                     buf.setSample (0, i, v);
                     buf.setSample (1, i, v);
                 }
-                const long long b0 = gAllocations;   // processBlock alone: a hand on a parameter is the message thread's
+                const long long b0 = gAllocations, m1 = mallocsSoFar();   // processBlock alone: a hand on a parameter is the message thread's
                 amp.processBlock (buf, midi);
-                if (counting)
-                    inBass += gAllocations - b0;
+                inBass       += gAllocations - b0;
+                inBassMalloc += mallocsSoFar() - m1;
             }
         };
-        play (50);   // every stage woken, every door through
-        counting = true;
         play (300);
         set (amp, orbitamp::params::octaveAmount, 0.0f);   // the sliders moved while playing: the laws and the doors
         set (amp, orbitamp::params::filterMode, 1.0f);
         set (amp, orbitamp::params::chorusRateHz, 2.5f);
-        play (100);
-        set (amp, orbitamp::params::octaveAmount, 1.0f);
+        set (amp, orbitamp::params::compAmount, 0.0f);
+        play (100);                                         // ...OCTAVE and COMP falling to idle
+        set (amp, orbitamp::params::octaveAmount, 1.0f);    // ...waking
+        set (amp, orbitamp::params::compAmount, 0.6f);      // ...a fresh COMP
         set (amp, orbitamp::params::chorusAmount, 0.0f);
         play (100);
-        std::printf ("\norbitbass: 500 blocks with every effect turned up and moved allocated %lld times\n", inBass);
+        for (const auto* on : { orbitamp::params::compOn, orbitamp::params::octaveOn, orbitamp::params::filterOn, orbitamp::params::chorusOn })
+            set (amp, on, 0.0f);                            // the arrows out...
+        play (100);
+        for (const auto* on : { orbitamp::params::compOn, orbitamp::params::octaveOn, orbitamp::params::filterOn, orbitamp::params::chorusOn })
+            set (amp, on, 1.0f);                            // ...and in again
+        play (100);
+        countMallocsHere (false);
+        std::printf ("\norbitbass: 700 blocks from the first, every effect woken, stopped and switched, allocated %lld times"
+                     " (operator new), %lld (malloc family)\n", inBass, inBassMalloc);
        #if ORBITAMP_COUNT_ALLOCATIONS
-        report ("OrbitBass's processBlock allocates nothing, its three effects in it", inBass == 0, juce::String (inBass));
+        report ("OrbitBass's processBlock allocates nothing from its first block, its effects waking and stopping, COMP's picture shown", inBass == 0,
+                juce::String (inBass));
+       #endif
+       #if ORBITAMP_COUNT_MALLOCS
+        report ("...nor anything of the malloc family", inBassMalloc == 0, juce::String (inBassMalloc));
        #endif
     }
 

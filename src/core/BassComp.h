@@ -5,6 +5,7 @@
 
 #include "BassCuts.h"
 #include "BypassFade.h"
+#include "CompTap.h"
 
 #include <felitronics/dynamics/Compressor.h>
 
@@ -106,6 +107,26 @@ public:
         double uncompressed;   // the parallel share, 0..uncompressedAtTop
     };
 
+    /** THE THRESHOLD LINE AND THE SLIDER ARE ONE CONTROL (the COMP block): where the knob puts the threshold the detector
+        works at — the law's, PUNCHY's offset over it — and back, the knob whose threshold that is, clamped to the
+        knob's travel. */
+    static double thresholdAt (double amount, Character c) noexcept
+    {
+        return lawAt (amount).thresholdDb + (c == Character::punchy ? punchyOffsetDb : 0.0);
+    }
+
+    static double amountForThreshold (double db, Character c) noexcept
+    {
+        const double law = db - (c == Character::punchy ? punchyOffsetDb : 0.0);
+        return std::clamp ((law - thresholdTopDb) / (thresholdBottomDb - thresholdTopDb), 0.0, 1.0);
+    }
+
+    /** A RATIO THE HAND HOLDS (params::compRatio, dragged in the block's transfer square), within these; the knob's
+        threshold, its parallel share and its fade stay the law's. Taken and given back by GLIDING, as the knob does —
+        twice the law's own pace, 10 ms for 2:1 to 6:1 — never by a step; following the law the ratio IS the law's,
+        sample for sample. */
+    static constexpr double heldRatioMin = 1.5, heldRatioMax = 10.0;
+
     static Law lawAt (double amount) noexcept
     {
         const double a = std::clamp (amount, 0.0, 1.0);
@@ -127,6 +148,7 @@ public:
         block     = std::max (1, maxBlock);
         cadence   = std::max (1, (int) std::lround (fs * cadenceMs * 0.001));
         glideStep = 1.0 / (amountGlideMs * 0.001 * fs);
+        ratioStep = 2.0 * (ratioHigh - ratioLow) * (double) cadence * glideStep;   // faster than the law can move it
         warmSamples = (3.0 * attackMedMs + warmMs) * 0.001 * fs;   // the attack's own, from the first apply
         warmFade    = warmFadeMs * 0.001 * fs;
         holdK     = 1.0 - std::exp (-1.0 / (holdMs * 0.001 * fs));
@@ -170,11 +192,13 @@ public:
             sinceStart = 1LL << 40;   // past the warm: what a prepare finds up plays at once
     }
 
-    /** One block of the mono chain, in place. `link` is the strip's STANDBY crossfade for this block. */
+    /** One block of the mono chain, in place. `link` is the strip's STANDBY crossfade for this block; `heldRatio` the
+        ratio the hand holds, or 0 or below for the law's. */
     void process (float* x, int n, double amountTarget, const BypassFade::Span& link,
-                  Attack attack, Release release, Character character) noexcept
+                  Attack attack, Release release, Character character, double heldRatio = 0.0) noexcept
     {
         const double target = std::clamp (amountTarget, 0.0, 1.0);
+        ratioHeld = heldRatio > 0.0 ? std::clamp (heldRatio, heldRatioMin, heldRatioMax) : 0.0;
 
         // The knob at zero and glided there: nothing at all — and the memory cleared, now that nothing of it
         // is in the sound.
@@ -183,6 +207,8 @@ public:
             if (running)
                 reset();
             grDb.store (0.0f, std::memory_order_relaxed);
+            if (tap != nullptr && x != nullptr && n > 0)
+                tap->write (x, x, nullptr, n);   // the signal through, untouched: in is out
             return;
         }
         if (! ready || x == nullptr || n <= 0 || n > block)
@@ -253,7 +279,15 @@ public:
 
         // The indicator shows the squeeze that is heard: none while the link stands by, fed or not.
         grDb.store (heard ? gr[(size_t) n - 1] : 0.0f, std::memory_order_relaxed);
+        if (tap != nullptr)
+            tap->write (dry.data(), x, heard ? gr.data() : nullptr, n);
     }
+
+    /** Where the picture's columns go, while it is on screen — null otherwise (the processor sets it per block). */
+    CompTap* tap = nullptr;
+
+    /** The ratio the compressor works at now — the law's, or gliding to or holding the hand's (a gate reads it). */
+    double ratioNow() const noexcept { return ratioAt; }
 
     /** The squeeze now, in dB (0 or below) — for the indicator beside the knob. */
     std::atomic<float> grDb { 0.0f };
@@ -266,6 +300,13 @@ private:
     {
         const auto law = lawAt (amt);
 
+        // The ratio: the law's, or the hand's, gliding between them; a fresh compressor starts on its own.
+        const double ratioWant = ratioHeld > 0.0 ? ratioHeld : law.ratio;
+        if (! paramsValid)
+            ratioAt = ratioWant;
+        else
+            ratioAt = ratioWant > ratioAt ? std::min (ratioWant, ratioAt + ratioStep) : std::max (ratioWant, ratioAt - ratioStep);
+
         double releaseMs = release == Release::fast ? releaseFastMs : releaseSlowMs;
         if (release == Release::automatic)
             releaseMs = releaseFastMs + (releaseSlowMs - releaseFastMs) * std::clamp (heldDb / holdFullDb, 0.0, 1.0);
@@ -275,7 +316,7 @@ private:
 
         // The make-up's number — core's static auto make-up, half what the curve takes from 0 dBFS, which lies past
         // the knee for every threshold the law reaches — and the paces it glides at (see the class comment).
-        makeupTargetDb = 0.5 * (-p.thresholdDb) * (1.0 - 1.0 / law.ratio);
+        makeupTargetDb = 0.5 * (-p.thresholdDb) * (1.0 - 1.0 / ratioAt);
         makeupUpK      = 1.0 - std::exp (-1.0 / (attackMsOf (attack) * 0.001 * fs));
         makeupDownK    = 1.0 - std::exp (-1.0 / (releaseMs * 0.001 * fs));
         warmSamples    = (3.0 * attackMsOf (attack) + warmMs) * 0.001 * fs;
@@ -285,7 +326,7 @@ private:
             parallelNow = law.uncompressed;
             snapMakeup  = false;
         }
-        p.ratio       = law.ratio;
+        p.ratio       = ratioAt;
         p.kneeDb      = kneeDb;
         p.attackMs    = attackMsOf (attack);
         p.releaseMs   = releaseMs;
@@ -318,6 +359,7 @@ private:
     int    keySections = 1;
     std::vector<float> key, dry, work, gr;
     double fs = 48000.0, heldDb = 0.0, amt = 0.0, glideStep = 0.001, holdK = 0.001;
+    double ratioHeld = 0.0, ratioAt = ratioLow, ratioStep = 0.4;
     long long clock = 0, sinceStart = 0;
     double warmSamples = 960.0, warmFade = 720.0;
     double makeupNowDb = 0.0, makeupTargetDb = 0.0, makeupUpK = 0.001, makeupDownK = 0.001, parallelNow = 0.0;

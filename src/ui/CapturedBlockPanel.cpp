@@ -18,66 +18,38 @@ namespace orbitamp
 
 struct CapturedBlockPanel::BassKnobs
 {
-    explicit BassKnobs (AmpProcessor& p) : state (p.apvts), gr (p.compGrDb) {}
+    explicit BassKnobs (AmpProcessor& p) : state (p.apvts) {}
 
     juce::AudioProcessorValueTreeState& state;
-    bass::MenuKnob comp  { "COMP",  theme::orange, 0 };
     bass::MenuKnob blend { "BLEND", theme::orange, 0 };
-    bass::GrMeter  gr;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> compAtt, blendAtt;
-    std::unique_ptr<juce::ParameterAttachment> compOnAtt;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> blendAtt;
 
     void addTo (BlockFrame& owner)
     {
-        for (auto* k : { &comp, &blend })
-        {
-            owner.addAndMakeVisible (*k);
-            // Read at the family's fx knobs' sizes (Knob::fx*): the name at its floor, the number under the
-            // dial in the 13 px row, and not a second time inside it.
-            k->labelFontHeight = Knob::fxLabelH;
-            k->labelTracking   = Knob::fxLabelTracking;
-            k->labelRowHeight  = Knob::fxLabelRowH;
-            k->valueInDial     = false;
-            k->setValueRowShown (true);
-            k->valueForText = [] (const juce::String& t) { return t.getDoubleValue() / 100.0; };
-            k->textForValue = [] (double v) { return juce::String (juce::roundToInt (v * 100.0)) + "%"; };
-        }
-        owner.addAndMakeVisible (gr);
+        owner.addAndMakeVisible (blend);
+        // Read at the family's fx knobs' sizes (Knob::fx*): the name at its floor, the number under the dial in the
+        // 13 px row, and not a second time inside it.
+        blend.labelFontHeight = Knob::fxLabelH;
+        blend.labelTracking   = Knob::fxLabelTracking;
+        blend.labelRowHeight  = Knob::fxLabelRowH;
+        blend.valueInDial     = false;
+        blend.setValueRowShown (true);
+        blend.valueForText = [] (const juce::String& t) { return t.getDoubleValue() / 100.0; };
+        blend.textForValue = [] (double v) { return juce::String (juce::roundToInt (v * 100.0)) + "%"; };
 
-        // COMP is not the AMP's: it works while the AMP stands by, and its own arrow dims it (below).
-        owner.keepOutsideStandby (comp);
-        owner.keepOutsideStandby (gr);
-
-        compAtt  = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (state, params::compAmount, comp);
         blendAtt = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (state, params::ampBlend, blend);
-        comp.setHint ("COMP:   0 is none; up the knob, harder and lower. Right click: attack, release, character");
         blend.setHint ("BLEND:   the clean bass under the crossover, the amp above it. Right click: where, and polarity");
-        comp.onMenu  = [this] { bass::showCompMenu (state, &comp); };
         blend.onMenu = [this] { bass::showBlendMenu (state, &blend); };
-
-        // COMP standing by in the strip: its knob and its squeeze dim, as a block's face does.
-        compOnAtt = std::make_unique<juce::ParameterAttachment> (*state.getParameter (params::compOn),
-            [this] (float v) { comp.setAlpha (v > 0.5f ? 1.0f : 0.4f); gr.setAlpha (v > 0.5f ? 1.0f : 0.4f); });
-        compOnAtt->sendInitialUpdate();
     }
 
-    /** The two columns beside the dial: each knob in the middle of its own, COMP's squeeze at its outer edge. */
-    void layOut (juce::Rectangle<int> left, juce::Rectangle<int> right)
+    /** BLEND in the middle of its column beside the dial (COMP is a block of its own: ui/CompBlock.h). */
+    void layOut (juce::Rectangle<int> right)
     {
-        const int side = juce::jmin (52, left.getWidth() - 14);
-        const int h    = side + Knob::valueRowH + Knob::fxLabelRowH;
-        comp.setBounds (left.withSizeKeepingCentre (side, h).translated (5, 0));
-        // The squeeze stands clear of the frame's line, between it and the knob's dial.
-        gr.setBounds (juce::Rectangle<int> (comp.getX() - 9, comp.getY() + Knob::fxLabelRowH + 4, 4, side - 8));
-        blend.setBounds (right.withSizeKeepingCentre (side, h));
+        const int side = juce::jmin (52, right.getWidth() - 14);
+        blend.setBounds (right.withSizeKeepingCentre (side, side + Knob::valueRowH + Knob::fxLabelRowH));
     }
 
-    void setVisible (bool v)
-    {
-        comp.setVisible (v);
-        blend.setVisible (v);
-        gr.setVisible (v);
-    }
+    void setVisible (bool v) { blend.setVisible (v); }
 };
 
 namespace
@@ -975,7 +947,7 @@ void CapturedBlockPanel::layOutContent (juce::Rectangle<int> area)
 
     // ---- THREE SECTIONS, each a tier over a strip. The two narrow ones are a FIXED width and the
     //      well takes the rest, so the widest thing on the block is the picture. ----
-    auto s1 = area.removeFromLeft (section1W + (bassKnobs != nullptr ? 2 * bassSideW : 0));
+    auto s1 = area.removeFromLeft (section1W + (bassKnobs != nullptr ? bassSideW : 0));
     const auto column1 = s1;   // GAIN's whole column: its strip is its own, not the shared one
     area.removeFromLeft (sectionGap);
     auto s2 = area.removeFromLeft (section2W);
@@ -1017,13 +989,10 @@ void CapturedBlockPanel::layOutContent (juce::Rectangle<int> area)
         auto strip1 = column.removeFromBottom (reserved * pickRowH + (reserved - 1) * pickRowGap);
         column.removeFromBottom (dialGap);
 
-        // The bass's COMP and BLEND stand either side of the dial, in the signal's order.
+        // The bass's BLEND stands beside the dial, after it, by the GAIN it blends with.
         if (bassKnobs != nullptr)
         {
-            const auto left = column.removeFromLeft (bassSideW);
-            const auto right = column.removeFromRight (bassSideW);
-            bassKnobs->layOut (left, right);
-            strip1.removeFromLeft (bassSideW);
+            bassKnobs->layOut (column.removeFromRight (bassSideW));
             strip1.removeFromRight (bassSideW);
         }
 

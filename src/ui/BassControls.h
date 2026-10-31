@@ -173,7 +173,8 @@ inline void show (juce::PopupMenu& m, juce::Component* target, std::vector<std::
                      });
 }
 
-/** COMP's menu: its attack, its release, its character. */
+/** COMP's menu: its attack, its release, its character — and its ratio given back to the slider's law when the hand
+    holds one (the transfer square). */
 inline void showCompMenu (juce::AudioProcessorValueTreeState& state, juce::Component* target)
 {
     juce::PopupMenu m;
@@ -181,6 +182,13 @@ inline void showCompMenu (juce::AudioProcessorValueTreeState& state, juce::Compo
     addChoices (m, state, params::compAttack,    "ATTACK",    0,  acts);
     addChoices (m, state, params::compRelease,   "RELEASE",   10, acts);
     addChoices (m, state, params::compCharacter, "CHARACTER", 20, acts);
+    m.addSeparator();
+    const bool held = plain (state, params::compRatioHeld) > 0.5f;
+    acts.resize (31);
+    acts[30] = [&state] { setPlain (state, params::compRatioHeld, 0.0f); };
+    m.addItem (31, "RATIO: BY THE SLIDER", true, ! held);
+    if (held)
+        m.addItem (32, "RATIO: HELD AT " + juce::String (plain (state, params::compRatio), 1) + ":1", false, true);
     show (m, target, std::move (acts));
 }
 

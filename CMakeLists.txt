@@ -1512,7 +1512,8 @@ gate_in_binary(amberpaw-set      tests/AmpSetTests.cpp      PRODUCT AmberPawAmp 
 # its one temporary pack), the strip's arrows in its order (GATE, AMP, CAB, LIMIT), the delay and the reverb
 # out of its sound whatever their switches say, one signal to both outputs, OrbitAmp's links in OrbitAmp's
 # order less those two, and its tuner down to 25 Hz while every guitar amp's stays at 40.
-gate_in_binary(orbitbass         tests/OrbitBassTests.cpp   PRODUCT OrbitBass)
+gate_in_binary(orbitbass         tests/OrbitBassTests.cpp   PRODUCT OrbitBass
+               DEFINES "ORBITBASS_STEP2B=\"${CMAKE_CURRENT_SOURCE_DIR}/tests/golden/orbitbass-step2b.f32\"")
 
 # AN AMP WITH NO FACTORY FOLDER — copied off a zip without it, or the folder deleted: it plays, and says where
 # the folder belongs instead of opening an empty face (src/ui/FactoryMissing.h). OrbitAmp, the cockpit and the

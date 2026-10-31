@@ -102,8 +102,9 @@ private:
     /** The largest block prepareToPlay was told to expect; 0 before the first prepare. */
     std::atomic<int> preparedBlock { 0 };
 
-    /** A parameter's audio-thread mirror, and its default — see sanitiseParameters. */
-    struct ParameterGuard { std::atomic<float>* value; float fallback; };
+    /** A parameter's audio-thread mirror, and its default — see sanitiseParameters. One that `holdsLast` (the bass's
+        effects' sliders) falls back to the last number it held instead: the audio thread's own copy. */
+    struct ParameterGuard { std::atomic<float>* value; float fallback; bool holdsLast; float last; };
     std::vector<ParameterGuard> parameterGuards;
 
     /** Puts a parameter that is not a number back on its default before the chain reads it. */
@@ -867,6 +868,34 @@ public:
     /** The bass's FILTER: where its sweep stands now, Hz — the module's own read-out (any thread). */
     float filterShownCutoffHz() const noexcept { return envFilter.shownCutoffHz(); }
 
+    /** COMP'S PICTURE (ui/CompBlock.h): the columns of its in, its out and its squeeze — written by the audio thread
+        only while `compWatched`, which the picture sets while it is on screen; read on the picture's own timer. */
+    core::CompTap compTap;
+    std::atomic<bool> compWatched { false };
+
+    /** The ratio COMP works at now — the law's, or the hand's (the audio thread's; a gate reads it between blocks). */
+    double compRatioNow() const noexcept { return bassComp.ratioNow(); }
+
+    /** The three effects for a gate — 0 OCTAVE, 1 FILTER, 2 CHORUS: how many times each has been told its knobs, and
+        whether it stands idle (the audio thread's; a gate reads them between blocks). */
+    int  effectTells (int which) const noexcept { return effectTold[(size_t) juce::jlimit (0, 2, which)]; }
+    bool effectIdle (int which) const noexcept
+    {
+        return which == 0 ? octaver.isIdle() : which == 1 ? envFilter.isIdle() : chorus.isIdle();
+    }
+
+    /** What an effect's lamp shows, 0..1 (any thread): OCTAVE lights while its sub plays (locked), FILTER and CHORUS
+        while they are not idle — a lamp that could never light was noise. */
+    float effectLampDepth (int which) const noexcept
+    {
+        const bool lit = which == 0 ? octaver.isLocked() : effectWorking[(size_t) juce::jlimit (1, 2, which)].load (std::memory_order_relaxed);
+        return lit ? 1.0f : 0.0f;
+    }
+
+    /** How many planes the bass's back half runs — from CHORUS on: the prepared bus's, 1 or 2 — or 0 on a guitar amp's
+        chain. Any thread. */
+    int bassBackPlanes() const noexcept { return bassWide.load (std::memory_order_relaxed); }
+
     bool chainHolds (params::ChainRow row) const noexcept
     {
         return ownProduct.chain == Chain::bass ? params::bassChainHolds (row) : params::guitarChainHolds (row);
@@ -1344,6 +1373,8 @@ private:
         std::atomic<float>* chorusRateHz = nullptr;
         std::atomic<float>* chorusCrossoverHz = nullptr;
         std::atomic<float>* chorusCentreMs = nullptr;
+        std::atomic<float>* compRatio = nullptr;
+        std::atomic<float>* compRatioHeld = nullptr;
     } bass;
 
     /** THE BASS'S THREE EFFECTS (felitronics-core's octave, envfilter, chorus), on its chain alone: each fed its slider
@@ -1358,6 +1389,13 @@ private:
     felitronics::envfilter::EnvelopeFilterParams filterTold {};
     felitronics::chorus::BassChorusParams        chorusTold {};
     bool octaveToldValid = false, filterToldValid = false, chorusToldValid = false;
+    std::array<int, 3> effectTold {};     // setParams calls, per effect — for a gate (effectTells)
+    std::atomic<bool> effectWorking[3] {};  // FILTER's and CHORUS's "not idle", for their lamps (OCTAVE's is the module's)
+
+    /** The bass's back half's width — the prepared bus's, 1 or 2 — and the scratch bus a narrower call is played on
+        (processBlock); 0 on a guitar amp's chain. */
+    std::atomic<int> bassWide { 0 };
+    juce::AudioBuffer<float> narrowBus;
     juce::AudioBuffer<float> filterKey;   // FILTER's key: the gated input before COMP, the string itself
 
     /** BLEND's three to the player (CapturedBlock::setCrossover), under `blendControl`: the two control-side callers —
@@ -1365,9 +1403,18 @@ private:
     void tellBlend();
     std::mutex blendControl;
 
-    void runOctave (float* const* channels, int numSamples) noexcept;
-    void runFilter (float* const* channels, int numSamples) noexcept;
+    /** Each effect told its knobs — the module's law over the menu, the menu being what the stage was last told with the
+        menu's fields from their parameters — when they moved, and only then. */
+    void tellOctave() noexcept;
+    void tellFilter() noexcept;
+    void tellChorus() noexcept;
+    void runOctave (float* const* channels, int numChannels, int numSamples) noexcept;
+    void runFilter (float* const* channels, int numChannels, int numSamples) noexcept;
     void runChorus (float* const* channels, int numChannels, int numSamples) noexcept;
+
+    /** A call of positive length with no channel (law 11c), to the three effects: their shared clocks run as through
+        silence. */
+    void passGap (int numSamples) noexcept;
     std::atomic<float>* cabHpfOnParam = nullptr;
     std::atomic<float>* cabHpfHzParam = nullptr;
     std::atomic<float>* cabHpfSlopeParam = nullptr;

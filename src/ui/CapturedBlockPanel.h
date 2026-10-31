@@ -50,9 +50,8 @@ class CapturedBlockPanel final : public BlockFrame,
                                  private juce::Timer
 {
 public:
-    /** Each of OrbitBass's knobs beside the GAIN dial, COMP and BLEND, takes a column this wide — the AMP
-        block, and the whole face, that much wider twice over (FaceplateView::bassExtraWidth): the picture
-        well keeps the room its row of hands needs. */
+    /** OrbitBass's knob beside the GAIN dial, BLEND, takes a column this wide — the AMP block, and the whole face,
+        that much wider (FaceplateView::bassExtraWidth): the picture well keeps the room its row of hands needs. */
     static constexpr int bassSideW = 66;
 
     using Block = core::CapturedBlock;
