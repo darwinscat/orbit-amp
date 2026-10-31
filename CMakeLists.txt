@@ -1934,6 +1934,13 @@ add_executable(orbitamp_tuner_test tests/TunerTests.cpp)
 target_include_directories(orbitamp_tuner_test PRIVATE src)
 target_compile_features(orbitamp_tuner_test PRIVATE cxx_std_20)
 
+# Same gate for the polyphonic tuner's analysis: synthetic strums with a KNOWN detune per string go
+# in — every tuning, three rates, a muted string, one far off, mains hum, a single pluck — and each
+# string's cents come out. core::PolyTuner is plain C++ too.
+add_executable(orbitamp_polytuner_test tests/PolyTunerTests.cpp)
+target_include_directories(orbitamp_polytuner_test PRIVATE src)
+target_compile_features(orbitamp_polytuner_test PRIVATE cxx_std_20)
+
 # Same gate for the gate's LEARN: known traces in, the threshold out — and the arithmetic held to
 # what OrbitAmp's GateConsole did before the faces came to share it. core::GateLearn is plain C++.
 add_executable(orbitamp_gatelearn_test tests/GateLearnTests.cpp)
