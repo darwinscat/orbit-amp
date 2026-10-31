@@ -22,6 +22,8 @@
 #include "core/BassComp.h"
 #include "device/DeviceLibrary.h"
 #include "ui/LoadBreakdown.h"
+#include "channels/Engine.h"
+#include "channels/Presets.h"
 
 #include <cmath>
 #include <cstdio>
@@ -110,17 +112,18 @@ namespace
         return out;
     }
 
-    /** The largest difference, sample for sample — infinite where the two are not the same length or either
-        holds a sample that is not a number: a comparison that can be blind is no comparison. */
+    /** The largest difference, sample for sample — NOT A NUMBER where the two are not the same length or either holds
+        a sample that is not a number, so that every comparison with it fails, "the same" and "different" alike: a
+        comparison that can be blind is no comparison. */
     float worstApart (const std::vector<float>& a, const std::vector<float>& b)
     {
         if (a.size() != b.size() || a.empty())
-            return std::numeric_limits<float>::infinity();
+            return std::numeric_limits<float>::quiet_NaN();
         float worst = 0.0f;
         for (size_t i = 0; i < a.size(); ++i)
         {
             if (! std::isfinite (a[i]) || ! std::isfinite (b[i]))
-                return std::numeric_limits<float>::infinity();
+                return std::numeric_limits<float>::quiet_NaN();
             worst = std::max (worst, std::abs (a[i] - b[i]));
         }
         return worst;
@@ -519,6 +522,7 @@ int ORBITAMP_GATE_MAIN()
             core::BypassFade link;
             bool first = true;
             void prepare (BassComp::KeyCut cut = {}) { (void) c.prepare (sampleRate, 4096, cut); link.prepare (sampleRate); }
+            BassComp::Attack attack = BassComp::Attack::med;
             void run (float* x, int n, double amount, bool on, BassComp::Release r = BassComp::Release::automatic,
                       BassComp::Character ch = BassComp::Character::smooth)
             {
@@ -528,7 +532,7 @@ int ORBITAMP_GATE_MAIN()
                     c.snapAmount (amount);
                     first = false;
                 }
-                c.process (x, n, amount, link.advance (n, on && amount > 0.0), BassComp::Attack::med, r, ch);
+                c.process (x, n, amount, link.advance (n, on && amount > 0.0), attack, r, ch);
             }
         };
 
@@ -860,6 +864,193 @@ int ORBITAMP_GATE_MAIN()
         }
         check (amp->getTailLengthSeconds() >= 5.0 && amp->getTailLengthSeconds() < 8.0,
                "the bass's tail is at least the cabinet's longest, 5 s (" + juce::String (amp->getTailLengthSeconds(), 2) + " s)");
+    }
+
+    // ---- REVIEW ROUND 2 -----------------------------------------------------------------------------------
+    {
+        using core::BassComp;
+        using core::BassCuts;
+        const auto sine = [] (double hz, double peakDb, double seconds, double phase = 0.0)
+        {
+            std::vector<float> v ((size_t) (seconds * sampleRate));
+            const double a = juce::Decibels::decibelsToGain (peakDb);
+            for (size_t i = 0; i < v.size(); ++i)
+                v[i] = (float) (a * std::sin (juce::MathConstants<double>::twoPi * hz * (double) i / sampleRate + phase));
+            return v;
+        };
+        const auto rmsDb = [] (const std::vector<float>& v, size_t from, size_t to)
+        {
+            double sum = 0.0;
+            for (size_t i = from; i < to && i < v.size(); ++i)
+                sum += (double) v[i] * v[i];
+            return 10.0 * std::log10 (sum / (double) std::max<size_t> (1, std::min (to, v.size()) - from) + 1.0e-30);
+        };
+        // The cuts through a list of blocks, the settings switching at the sample counts `at` says.
+        const auto cuts = [] (BassCuts& c, std::vector<float> v, const std::vector<int>& blocks,
+                              const std::function<BassCuts::Settings (size_t)>& at)
+        {
+            size_t i = 0;
+            for (size_t b = 0; i < v.size(); ++b)
+            {
+                const int n = (int) std::min ((size_t) blocks[b % blocks.size()], v.size() - i);
+                float* ch[] = { v.data() + i };
+                c.process (ch, 1, n, at (i));
+                i += (size_t) n;
+            }
+            return v;
+        };
+
+        // 1. A cut moved while OFF comes back where its word says: HPF 22 Hz, off, 28 Hz, on — as a fresh one at 28.
+        {
+            const auto in = sine (26.0, -12.0, 3.0);
+            BassCuts moved, fresh;
+            moved.prepare (sampleRate);
+            fresh.prepare (sampleRate);
+            const auto a = cuts (moved, in, { 512 }, [] (size_t i)
+            {
+                BassCuts::Settings s;
+                s.hpfOn = i < 48000 || i >= 96000;
+                s.hpfHz = i < 72000 ? 22.0 : 28.0;
+                return s;
+            });
+            const auto b = cuts (fresh, in, { 512 }, [] (size_t) { BassCuts::Settings s; s.hpfOn = true; s.hpfHz = 28.0; return s; });
+            const double la = rmsDb (a, 120000, 144000), lb = rmsDb (b, 120000, 144000);
+            check (std::abs (la - lb) < 0.05, "a cut moved while off, 22 -> 28 Hz, comes back at 28: " + juce::String (la, 2)
+                                                  + " dB on 26 Hz, a fresh 28 Hz " + juce::String (lb, 2));
+        }
+        // 2. A cut's glide keeps audio time, whatever the host's blocks: 22 -> 32 Hz the same samples at 16, 512, and
+        // an irregular partition.
+        {
+            const auto in = sine (26.0, -12.0, 1.0);
+            // The move lands at sample 1 in every partition (each starts with a one-sample block, the snap at 22 Hz).
+            const auto move = [] (size_t i) { BassCuts::Settings s; s.hpfOn = true; s.hpfHz = i < 1 ? 22.0 : 32.0; return s; };
+            std::vector<std::vector<float>> outs;
+            for (const auto& parts : { std::vector<int> { 1, 512 }, std::vector<int> { 1, 16 }, std::vector<int> { 1, 7, 33, 100, 5, 61, 256 } })
+            {
+                BassCuts c;
+                c.prepare (sampleRate);
+                outs.push_back (cuts (c, in, parts, move));
+            }
+            check (worstApart (outs[0], outs[1]) == 0.0f && worstApart (outs[0], outs[2]) == 0.0f,
+                   "a cut's glide, host blocks 512 / 16 / irregular: " + juce::String (worstApart (outs[0], outs[1]), 9) + ", "
+                       + juce::String (worstApart (outs[0], outs[2]), 9) + " apart");
+        }
+        // 3. COMP recalled cold, every attack, on low notes at three phases, the whole settling: no burst.
+        {
+            double worst = -100.0;
+            juce::String where;
+            for (const auto attack : { BassComp::Attack::slow, BassComp::Attack::med, BassComp::Attack::fast })
+                for (const double hz : { 31.0, 41.2, 55.0 })
+                    for (const double phase : { 0.0, 2.1, 4.2 })
+                    {
+                        const auto in = sine (hz, -6.0, 2.0, phase);
+                        BassComp c;
+                        (void) c.prepare (sampleRate, 512);
+                        core::BypassFade link;
+                        link.prepare (sampleRate);
+                        link.snapTo (false);
+                        auto out = in;
+                        const size_t sw = (size_t) sampleRate;
+                        for (size_t i = 0; i < out.size(); i += 512)
+                        {
+                            const double amount = i >= sw ? 0.8 : 0.0;
+                            c.process (out.data() + i, (int) std::min<size_t> (512, out.size() - i), amount,
+                                       link.advance (512, amount > 0.0), attack, BassComp::Release::automatic, BassComp::Character::smooth);
+                        }
+                        const double burst = juce::Decibels::gainToDecibels ((double) peakIn (out, sw, out.size()) / (double) peakIn (in, 0, in.size()));
+                        if (burst > worst)
+                        {
+                            worst = burst;
+                            where = juce::String ((int) attack) + " attack, " + juce::String (hz, 1) + " Hz";
+                        }
+                    }
+            check (worst <= 1.0, "COMP recalled cold 0 -> 0.8, every attack, 31/41/55 Hz, three phases, a second after: worst peak "
+                                     + juce::String (worst, 2) + " dB over the input (" + where + ")");
+        }
+        // 4. A prepare with COMP up plays it from the first sample: a note from sample 0 is what a COMP that waited in
+        // silence hears when the note comes — no step 35 ms in.
+        {
+            const auto note = sine (97.0, -6.0, 0.5);
+            std::vector<float> late ((size_t) (sampleRate / 2), 0.0f);
+            late.insert (late.end(), note.begin(), note.end());
+            const auto run = [] (std::vector<float> v)
+            {
+                BassComp c;
+                (void) c.prepare (sampleRate, 512);
+                c.snapAmount (0.8);
+                core::BypassFade link;
+                link.prepare (sampleRate);
+                link.snapTo (true);
+                for (size_t i = 0; i < v.size(); i += 512)
+                    c.process (v.data() + i, (int) std::min<size_t> (512, v.size() - i), 0.8, link.advance (512, true),
+                               BassComp::Attack::med, BassComp::Release::automatic, BassComp::Character::smooth);
+                return v;
+            };
+            const auto first = run (note), waited = run (late);
+            const std::vector<float> tail (waited.begin() + (long) (sampleRate / 2), waited.end());
+            check (worstApart (first, tail) <= 1.0e-6f, "a prepare with COMP up plays it from the first sample, as one that waited: "
+                                                             + juce::String (worstApart (first, tail), 9) + " apart");
+        }
+        // 5. COMP turned down mid-note, 1 -> 0.3: the make-up comes down as the squeeze lets go — no duck under where
+        // the note stood or where it settles.
+        {
+            const auto in = sine (97.0, -6.0, 4.0);
+            BassComp c;
+            (void) c.prepare (sampleRate, 512);
+            c.snapAmount (1.0);
+            core::BypassFade link;
+            link.prepare (sampleRate);
+            link.snapTo (true);
+            auto out = in;
+            const size_t sw = (size_t) (2.0 * sampleRate);
+            for (size_t i = 0; i < out.size(); i += 512)
+                c.process (out.data() + i, (int) std::min<size_t> (512, out.size() - i), i >= sw ? 0.3 : 1.0, link.advance (512, true),
+                           BassComp::Attack::med, BassComp::Release::automatic, BassComp::Character::smooth);
+            const auto win = (size_t) (0.010 * sampleRate);
+            const double before = rmsDb (out, sw - 10 * win, sw), after = rmsDb (out, out.size() - 10 * win, out.size());
+            double lowest = 100.0;
+            for (size_t i = sw; i + win <= out.size(); i += win)
+                lowest = std::min (lowest, rmsDb (out, i, i + win));
+            check (lowest >= std::min (before, after) - 1.0, "COMP 1 -> 0.3 mid-note: the lowest 10 ms " + juce::String (lowest, 1)
+                                                                 + " dB, before " + juce::String (before, 1) + ", settled " + juce::String (after, 1));
+        }
+        // 6. BLEND as the state has it after a prepare on a host's own thread, rendered at once, before any tick.
+        {
+            auto b = make (bass);
+            auto* blendP = b->apvts.getParameter (params::ampBlend);
+            auto* hzP    = b->apvts.getParameter (params::ampBlendHz);
+            blendP->setValueNotifyingHost (blendP->convertTo0to1 (0.6f));
+            hzP->setValueNotifyingHost (hzP->convertTo0to1 (200.0f));
+            std::thread host ([&] { b->prepareToPlay (sampleRate, blockSize); });
+            host.join();
+            check (juce::approximatelyEqual (b->preamp.crossoverAmountTold(), 0.6f) && std::abs (b->preamp.crossoverHzTold() - 200.0f) < 0.5f,
+                   "BLEND after a prepare on the host's thread: told 60 %, 200 Hz before the first block ("
+                       + juce::String (b->preamp.crossoverAmountTold(), 2) + ")");
+        }
+        // 7. A bass preset renamed into the cockpit's folder is refused by the cockpit's own loader; its own loads.
+        {
+            auto cockpit = make (products::catpitAmp());
+            auto& engine = channels::Engine::of (*cockpit);
+            channels::Presets presets (*cockpit, engine.channels);
+            auto source = make (bass);
+            set (*source, params::inTrim, 6.0f);
+            const bool wrote = presets.store().write ("From the bass", source->presetForSaving());
+            const float trimBefore = value (*cockpit, params::inTrim);
+            const bool loaded = presets.load ("From the bass");
+            check (wrote && ! loaded && std::abs (value (*cockpit, params::inTrim) - trimBefore) < 0.01f,
+                   "the cockpit's own loader refuses a bass preset renamed into its folder");
+            (void) presets.store().remove ("From the bass");
+            check (presets.save ("Its own") && presets.load ("Its own"), "...and loads its own");
+            (void) presets.store().remove ("Its own");
+        }
+        // 8. COMP standing by, fed, shows no squeeze.
+        {
+            auto t = make (bass);
+            set (*t, params::compAmount, 0.8f);
+            set (*t, params::compOn, 0.0f);
+            (void) tone (*t, 97.0, -6.0f, 60);
+            check (t->compGrDb.load() == 0.0f, "COMP standing by shows no squeeze (" + juce::String (t->compGrDb.load(), 1) + " dB)");
+        }
     }
 
     // ---- THE THREE EFFECTS (step 3) ----------------------------------------------------------------------
