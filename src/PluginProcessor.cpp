@@ -172,6 +172,8 @@ AmpProcessor::AmpProcessor (const Product& product)
                  raw (params::filterRange), raw (params::filterKeepLows), raw (params::filterKeepHz), raw (params::filterAttackMs),
                  raw (params::filterReleaseMs),
                  raw (params::chorusAmount), raw (params::chorusRateHz), raw (params::chorusCrossoverHz), raw (params::chorusCentreMs) };
+        bass.hpfOn         = raw (params::bassHpfOn);
+        bass.lpfOn         = raw (params::bassLpfOn);
         bass.compRatio     = raw (params::compRatio);
         bass.compRatioHeld = raw (params::compRatioHeld);
         jassert (bass.compAmount != nullptr && bass.lpfHzSlap != nullptr && bass.chorusCentreMs != nullptr && bass.compRatioHeld != nullptr);
@@ -1066,6 +1068,8 @@ void AmpProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
         filterTap.prepare (sampleRate);
         filterTapLive = false;
         bassCuts.prepare (sampleRate);
+        for (auto& c : innerCuts)
+            c.prepare (sampleRate);
         diNow  = juce::jlimit (0.0f, 1.0f, bass.diMix->load() * 0.01f);
         diStep = (float) (1000.0 / (juce::jmax (8000.0, sampleRate) * 20.0));   // the prepared rate, not getSampleRate()'s
 
@@ -1375,15 +1379,24 @@ void AmpProcessor::passGap (int numSamples) noexcept
     runChorus (nullptr, 0, numSamples);
 }
 
+core::BassCuts::Settings AmpProcessor::innerCutSettings() const noexcept
+{
+    auto s  = bassCutSettings();
+    s.hpfHz *= 0.5;                                                     // an octave under the chosen
+    s.hpfOn  = s.hpfOn && ! innerCutsOut.load (std::memory_order_relaxed);
+    s.lpfOn  = false;                                                   // the LPF is the END's alone
+    return s;
+}
+
 core::BassCuts::Settings AmpProcessor::bassCutSettings() const noexcept
 {
-    const auto hpf = static_cast<params::BassHpf> (juce::jlimit (0, 2, juce::roundToInt (bass.hpf->load())));
-    const auto lpf = static_cast<params::BassLpf> (juce::jlimit (0, 2, juce::roundToInt (bass.lpf->load())));
+    const auto hpf = static_cast<params::BassHpf> (juce::jlimit (0, 1, juce::roundToInt (bass.hpf->load())));
+    const auto lpf = static_cast<params::BassLpf> (juce::jlimit (0, 1, juce::roundToInt (bass.lpf->load())));
 
     core::BassCuts::Settings s;
-    s.hpfOn = hpf != params::BassHpf::off;
+    s.hpfOn = bass.hpfOn->load() > 0.5f;
     s.hpfHz = (double) (hpf == params::BassHpf::four ? bass.hpfHz4 : bass.hpfHz5)->load();
-    s.lpfOn = lpf != params::BassLpf::off;
+    s.lpfOn = bass.lpfOn->load() > 0.5f;
     s.lpfHz = (double) (lpf == params::BassLpf::slap ? bass.lpfHzSlap : bass.lpfHzFingers)->load();
     return s;
 }
@@ -1400,7 +1413,7 @@ void AmpProcessor::updateEqSettings() noexcept
         const auto& p = eqParams[(size_t) l];
 
         core::EqLink::Settings s;
-        s.hpfOn    = p.hpfOn->load() > 0.5f;
+        s.hpfOn    = ownProduct.chain != Chain::bass && p.hpfOn->load() > 0.5f;   // the bass's HPF is its own (bassCuts)
         s.hpfHz    = (double) p.hpfHz->load();
         s.hpfSlope = slope (p.hpfSlope->load());
         s.loDb     = (double) p.loDb->load();
@@ -1417,7 +1430,7 @@ void AmpProcessor::updateEqSettings() noexcept
         s.b3Q      = (double) p.bellQ[2]->load();
         s.hiDb     = (double) p.hiDb->load();
         s.hiHz     = (double) p.hiHz->load();
-        s.lpfOn    = p.lpfOn->load() > 0.5f;
+        s.lpfOn    = ownProduct.chain != Chain::bass && p.lpfOn->load() > 0.5f;   // ...and its LPF
         s.lpfHz    = (double) p.lpfHz->load();
         s.lpfSlope = slope (p.lpfSlope->load());
 
@@ -1843,6 +1856,15 @@ void AmpProcessor::processChunk (juce::AudioBuffer<float>& buffer)
     // front, right after the tuner's ear: it keys off the raw guitar — the cleanest key there is —
     // and kills the hum before any dirt can multiply it. Its enable crossfade makes the toggle
     // pop-free, so it runs unconditionally and the switch is an argument.
+    // THE BASS'S HPF ACROSS THE CHAIN (innerCuts): its gentle cuts at the input and after COMP, OCTAVE and the AMP.
+    const auto innerSettings = bass.hpf != nullptr ? innerCutSettings() : core::BassCuts::Settings {};
+    const auto innerCut = [&] (int at)
+    {
+        if (bass.hpf != nullptr && nch > 0)
+            innerCuts[(size_t) at].process (channels, 1, numSamples, innerSettings);
+    };
+    innerCut (0);   // at the input: before the gate and before FILTER's key — no detector pumps on sub rumble
+
     const auto tGate = PerfClock::now();
     {
         // Of the channels the chain WORKS, not of everything that was handed in: in MONO and in STEREO
@@ -1923,6 +1945,7 @@ void AmpProcessor::processChunk (juce::AudioBuffer<float>& buffer)
                           static_cast<core::BassComp::Character> (juce::jlimit (0, 1, juce::roundToInt (bass.compCharacter->load()))),
                           bass.compRatioHeld->load() > 0.5f ? (double) bass.compRatio->load() : 0.0);
         compGrDb.store (bassComp.grDb.load (std::memory_order_relaxed), std::memory_order_relaxed);
+        innerCut (1);   // after COMP
         nsStage[stComp] = elapsedNs (a);
     }
 
@@ -1932,6 +1955,7 @@ void AmpProcessor::processChunk (juce::AudioBuffer<float>& buffer)
     {
         const auto a = PerfClock::now();
         runOctave (channels, 1, numSamples);
+        innerCut (2);   // after OCTAVE: its sub's own DC and thumps go before FILTER and the AMP hear them
         nsStage[stOctave] = elapsedNs (a);
     }
     if (bass.filter != nullptr && nch > 0)
@@ -2066,7 +2090,19 @@ void AmpProcessor::processChunk (juce::AudioBuffer<float>& buffer)
 
     // AMP and TONE, one captured block: the capture wearing the pack's own tone knobs (EqMode::native),
     // then its console — the bass's TONE as much as the guitar's.
+    if (probing.load (std::memory_order_relaxed) && nch > 0)
+        for (int i = 0; i < numSamples; ++i)
+            probeAmpInPeak = juce::jmax (probeAmpInPeak, std::abs (channels[0][i]));
+
     captured (preamp, 0, params::rowPreamp, blockOutDb[0], stPreamp, stPreampEq);
+    innerCut (3);   // after the AMP — after BLEND's sum, never inside one leg: both legs the same phase
+
+    if (probing.load (std::memory_order_relaxed) && nch > 0)
+    {
+        for (int i = 0; i < numSamples; ++i)
+            probeAmpOutSum += (double) channels[0][i];
+        probeAmpOutCount += numSamples;
+    }
 
     // MUTE pre-reverb — the G-String architecture, and the default: everything the chain ADDED
     // (the preamp's hiss) dies here too, and the reverb tail past it rings out.

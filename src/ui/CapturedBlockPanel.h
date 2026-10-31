@@ -54,6 +54,9 @@ public:
         that much wider (FaceplateView::bassExtraWidth): the picture well keeps the room its row of hands needs. */
     static constexpr int bassSideW = 66;
 
+    /** Its console — a gate asks whose cuts its switches are (EqSection::cutsAreBass). */
+    const EqSection& console() const noexcept { return eq; }
+
     using Block = core::CapturedBlock;
 
     /** `eqLink` is which EQ console is this block's — they belong to the blocks now, and the index

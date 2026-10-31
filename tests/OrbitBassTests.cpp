@@ -32,6 +32,9 @@
 #include "core/ChorusTap.h"
 #include "ui/FaceplateView.h"
 #include "ui/GuardRail.h"
+#include "ui/EqSection.h"
+#include "ui/CapturedBlockPanel.h"
+#include "ui/BassControls.h"
 #include "channels/Engine.h"
 #include "channels/Presets.h"
 
@@ -285,13 +288,13 @@ int ORBITAMP_GATE_MAIN()
     {
         auto& a = *amp;
         check (declared (a, params::gateOn) < 0.5f && value (a, params::gateOn) < 0.5f, "the gate is off");
-        check (juce::roundToInt (value (a, params::bassHpf)) == (int) params::BassHpf::five
+        check (value (a, params::bassHpfOn) > 0.5f && juce::roundToInt (value (a, params::bassHpf)) == (int) params::BassHpf::five
                    && juce::approximatelyEqual (value (a, params::bassHpfHz5), 22.0f)
                    && juce::approximatelyEqual (value (a, params::bassHpfHz4), 32.0f),
                "its HPF at 5, 22 Hz (4 at 32 Hz)");
         check (a.apvts.getParameter (params::bassHpfHz5)->getNormalisableRange().start <= 20.0f,
                "...in a range that reaches 20 Hz");
-        check (juce::roundToInt (value (a, params::bassLpf)) == (int) params::BassLpf::off
+        check (value (a, params::bassLpfOn) < 0.5f && juce::roundToInt (value (a, params::bassLpf)) == (int) params::BassLpf::fingers
                    && juce::approximatelyEqual (value (a, params::bassLpfHzFingers), 4500.0f)
                    && juce::approximatelyEqual (value (a, params::bassLpfHzSlap), 9500.0f),
                "its LPF off (FINGERS at 4.5 kHz, SLAP at 9.5 kHz)");
@@ -439,7 +442,7 @@ int ORBITAMP_GATE_MAIN()
         const auto asBefore = [&]
         {
             auto b = make (bass);
-            set (*b, params::bassHpf, (float) params::BassHpf::off);
+            set (*b, params::bassHpfOn, 0.0f);
             set (*b, params::diMix, 0.0f);
             return b;
         };
@@ -522,8 +525,11 @@ int ORBITAMP_GATE_MAIN()
         {
             auto t = make (bass);
             set (*t, params::cabOn, 0.0f);
-            set (*t, params::bassHpf, (float) params::BassHpf::off);
-            set (*t, id, (float) position);
+            set (*t, params::bassHpfOn, 0.0f);
+            const bool hp = juce::String (id) == params::bassHpf;
+            set (*t, hp ? params::bassHpfOn : params::bassLpfOn, position < 0 ? 0.0f : 1.0f);
+            if (position >= 0)
+                set (*t, id, (float) position);
             juce::AudioBuffer<float> buf (2, blockSize);
             juce::MidiBuffer midi;
             double sum = 0.0;
@@ -544,12 +550,12 @@ int ORBITAMP_GATE_MAIN()
             }
             return 10.0 * std::log10 (sum / (double) counted + 1.0e-30);
         };
-        const double hOff = level (26.0f, params::bassHpf, (int) params::BassHpf::off);
+        const double hOff = level (26.0f, params::bassHpf, -1);
         const double h5   = level (26.0f, params::bassHpf, (int) params::BassHpf::five);
         const double h4   = level (26.0f, params::bassHpf, (int) params::BassHpf::four);
         check (hOff > h5 + 0.5 && h5 > h4 + 2.0,
                "HPF on a 26 Hz tone: off " + juce::String (hOff, 1) + ", 5 " + juce::String (h5, 1) + ", 4 " + juce::String (h4, 1) + " dB");
-        const double lOff = level (6000.0f, params::bassLpf, (int) params::BassLpf::off);
+        const double lOff = level (6000.0f, params::bassLpf, -1);
         const double lS   = level (6000.0f, params::bassLpf, (int) params::BassLpf::slap);
         const double lF   = level (6000.0f, params::bassLpf, (int) params::BassLpf::fingers);
         check (lOff > lS + 0.2 && lS > lF + 3.0,
@@ -797,7 +803,7 @@ int ORBITAMP_GATE_MAIN()
             auto t = make (bass);
             set (*t, params::cabOn, 0.0f);
             set (*t, params::limiterOn, 0.0f);
-            set (*t, params::bassHpf, (float) params::BassHpf::off);
+            set (*t, params::bassHpfOn, 0.0f);
             return t;
         };
         constexpr int at = 120, len = 220;
@@ -854,7 +860,7 @@ int ORBITAMP_GATE_MAIN()
         {
             auto t = bare();
             set (*t, params::bassHpf, (float) params::BassHpf::five);
-            const auto v = tone (*t, 26.0, -12.0f, len, at, [&] { set (*t, params::bassHpf, (float) params::BassHpf::off); });
+            const auto v = tone (*t, 26.0, -12.0f, len, at, [&] { set (*t, params::bassHpfOn, 0.0f); });
             const auto w = judgeSwitch (v, at, 20.0);
             check (w.stepRatio <= 1.5, "HPF 5 switched off on 26 Hz: " + say (w));
         }
@@ -868,10 +874,12 @@ int ORBITAMP_GATE_MAIN()
         // An LPF switched off mid-note, then back on after silence: nothing of the note before comes back.
         {
             auto t = bare();
+            set (*t, params::bassLpfOn, 1.0f);
             set (*t, params::bassLpf, (float) params::BassLpf::fingers);
             constexpr int off = 60, on = 140;
-            const auto v = tone (*t, 3000.0, -6.0f, 160, off, [&] { set (*t, params::bassLpf, (float) params::BassLpf::off); }, off);
+            const auto v = tone (*t, 3000.0, -6.0f, 160, off, [&] { set (*t, params::bassLpfOn, 0.0f); }, off);
             // ...the second move, by hand: run on from where the first left off.
+            set (*t, params::bassLpfOn, 1.0f);
             set (*t, params::bassLpf, (float) params::BassLpf::fingers);
             const auto after = tone (*t, 3000.0, -6.0f, 10, -1, {}, 0);
             const float before = peakIn (v, (size_t) (on - 10) * blockSize, v.size());
@@ -1115,8 +1123,12 @@ int ORBITAMP_GATE_MAIN()
             set (*moved, params::filterKeepLows, 0.0f);
             set (*moved, params::chorusRateHz, 2.5f);
             set (*moved, params::chorusCentreMs, 20.0f);
+            // The HPF's inner cuts are the chain's since 31.10 and not step 2b's: out here, measured on their own below.
+            moved->innerCutsOut.store (true);
+            auto freshAmp = make (bass);
+            freshAmp->innerCutsOut.store (true);
             const auto heard = play (*moved, stepTwoB.blocks, false);
-            const auto fresh = play (*make (bass), stepTwoB.blocks, false);
+            const auto fresh = play (*freshAmp, stepTwoB.blocks, false);
             const float apartL = worstApart (heard.l, stepTwoB.was), apartR = worstApart (heard.r, stepTwoB.was);
             const float apartPlain = worstApart (fresh.l, stepTwoB.was);
             check (stepTwoB.was.size() == (size_t) (stepTwoB.blocks * blockSize) && apartL <= stepTwoB.allowed
@@ -1172,7 +1184,7 @@ int ORBITAMP_GATE_MAIN()
             {
                 auto t = make (bass);
                 set (*t, params::cabOn, 0.0f);
-                set (*t, params::bassHpf, (float) params::BassHpf::off);
+                set (*t, params::bassHpfOn, 0.0f);
                 set (*t, params::octaveAmount, amount);
                 return at (tone (*t, 82.41, -12.0f, 150), 41.2);
             };
@@ -1306,7 +1318,7 @@ int ORBITAMP_GATE_MAIN()
             {
                 auto t = make (bass);
                 set (*t, params::cabOn, 0.0f);
-                set (*t, params::bassHpf, (float) params::BassHpf::off);
+                set (*t, params::bassHpfOn, 0.0f);
                 return t;
             };
             {
@@ -1353,7 +1365,7 @@ int ORBITAMP_GATE_MAIN()
             {
                 auto t = make (bass);
                 set (*t, params::cabOn, 0.0f);
-                set (*t, params::bassHpf, (float) params::BassHpf::off);
+                set (*t, params::bassHpfOn, 0.0f);
                 set (*t, params::octaveAmount, 1.0f);
                 if (bp)
                 {
@@ -2579,6 +2591,9 @@ int ORBITAMP_GATE_MAIN()
             {
                 auto t = make (bass);
                 set (*t, params::filterAmount, 0.5f);
+                // The key as the mark's law reads it: the input's gentle HPF tilts a square's tops and overshoots its
+                // edges, which lifts this test signal's |x| by about 7 % — the signal's, not the mark's.
+                t->innerCutsOut.store (true);
                 std::unique_ptr<juce::AudioProcessorEditor> ed (t->createEditor());
                 auto& pic = findIn (*ed, (FilterBlock*) nullptr)->picture();
                 juce::AudioBuffer<float> buf (2, blockSize);
@@ -2706,6 +2721,127 @@ int ORBITAMP_GATE_MAIN()
         }
     }
 
+    // ---- ONE HPF ACROSS THE CHAIN, ONE LPF AT THE END, ONE PAIR ON THE FACE (the owner, 31.10) ----------------------
+    {
+        const auto param = [] (AmpProcessor& a, const juce::String& id) { return a.apvts.getParameter (id); };
+        const auto put = [&] (AmpProcessor& a, const juce::String& id, float v)
+        {
+            if (auto* p = param (a, id))
+            {
+                p->setValueNotifyingHost (p->convertTo0to1 (v));
+                a.pumpDeviceWork();
+            }
+        };
+        const bool structured = param (*amp, "bass_hpf_on") != nullptr && param (*amp, "bass_lpf_on") != nullptr;
+
+        // THE INNER CUTS COST THE LOWEST STRING ALMOST NOTHING: the whole chain with the HPF on, a low B at 5 STR and a low E
+        // at 4 STR, against the END cut alone — within 0.5 dB.
+        double lostB = 99.0, lostE = 99.0;
+        {
+            const auto level = [&] (double hz, int choice, bool inner)
+            {
+                auto t = make (bass);
+                set (*t, params::cabOn, 0.0f);
+                put (*t, "bass_hpf_on", 1.0f);
+                put (*t, params::bassHpf, (float) choice);
+                t->innerCutsOut.store (! inner);
+                return levelAt (tone (*t, hz, -12.0f, 150), hz);
+            };
+            lostB = level (30.9, (int) params::BassHpf::five, false) - level (30.9, (int) params::BassHpf::five, true);
+            lostE = level (41.2, (int) params::BassHpf::four, false) - level (41.2, (int) params::BassHpf::four, true);
+            check (structured && lostB <= 0.5 && lostE <= 0.5 && lostB >= 0.0 && lostE >= 0.0,
+                   "the inner cuts cost the low B at 5 STR " + juce::String (lostB, 2) + " dB and the low E at 4 STR "
+                       + juce::String (lostE, 2) + " dB against the END cut alone (0.5 at most)");
+        }
+
+        // ...AND THEY WORK: a sub thump (a 4 Hz half-sine) reaches the AMP far lower, and a DC offset on the string comes
+        // out of the AMP far lower, with the inner cuts than with the END cut alone.
+        {
+            const auto measure = [&] (bool inner, bool thump)
+            {
+                auto t = make (bass);
+                set (*t, params::cabOn, 0.0f);
+                t->innerCutsOut.store (! inner);
+                t->probing.store (true);
+                juce::AudioBuffer<float> buf (2, blockSize);
+                juce::MidiBuffer midi;
+                long long n = 0;
+                for (int b = 0; b < 120; ++b)
+                {
+                    if (b == 60)
+                    {
+                        t->probeAmpInPeak = 0.0f;
+                        t->probeAmpOutSum = 0.0;
+                        t->probeAmpOutCount = 0;
+                    }
+                    for (int i = 0; i < blockSize; ++i, ++n)
+                    {
+                        const double tt = (double) n / sampleRate;
+                        const double note = 0.3 * std::sin (juce::MathConstants<double>::twoPi * 55.0 * tt);
+                        const double bump = (tt >= 0.7 && tt < 0.825) ? 0.5 * std::sin (juce::MathConstants<double>::twoPi * 4.0 * (tt - 0.7)) : 0.0;
+                        const auto v = (float) (thump ? bump : note + 0.2);
+                        buf.setSample (0, i, v);
+                        buf.setSample (1, i, v);
+                    }
+                    t->processBlock (buf, midi);
+                    t->pumpDeviceWork();
+                }
+                return thump ? (double) t->probeAmpInPeak : std::abs (t->probeAmpOutSum / (double) juce::jmax (1LL, t->probeAmpOutCount));
+            };
+            const double thumpDb = juce::Decibels::gainToDecibels (measure (true, true) / juce::jmax (1.0e-9, measure (false, true)));
+            const double dcDb    = juce::Decibels::gainToDecibels (measure (true, false) / juce::jmax (1.0e-9, measure (false, false)));
+            check (thumpDb < -12.0 && dcDb < -12.0, "the inner cuts at work: a 4 Hz thump into the AMP " + juce::String (thumpDb, 1)
+                                                        + " dB, a string's DC offset out of the AMP " + juce::String (dcDb, 1) + " dB, against the END cut alone");
+        }
+
+        // THE GUITAR'S CUTS ARE OUT OF THE BASS: the AMP EQ's HPF switched on at 200 Hz and its LPF at 1 kHz change
+        // nothing, bit for bit.
+        {
+            auto plainAmp = make (bass);
+            const auto before = tone (*plainAmp, 110.0, -12.0f, 80);
+            auto cut = make (bass);
+            put (*cut, params::eqHpfOn (0), 1.0f);
+            put (*cut, params::eqHpfHz (0), 200.0f);
+            put (*cut, params::eqLpfOn (0), 1.0f);
+            put (*cut, params::eqLpfHz (0), 1000.0f);
+            const float apart = worstApart (tone (*cut, 110.0, -12.0f, 80), before);
+            check (apart == 0.0f, "the AMP EQ's guitar HPF and LPF switched on change nothing on the bass, bit for bit (worst "
+                                      + juce::String (apart, 9) + ")");
+        }
+
+        // THE SWITCH REMEMBERS ITS CHOICE: 4 STR chosen, the HPF switched off and on — at 4 STR again; a session keeps both.
+        {
+            auto t = make (bass);
+            put (*t, params::bassHpf, (float) params::BassHpf::four);
+            put (*t, "bass_hpf_on", 0.0f);
+            put (*t, "bass_hpf_on", 1.0f);
+            const bool kept = structured && juce::roundToInt (value (*t, params::bassHpf)) == (int) params::BassHpf::four && param (*t, "bass_hpf_on") != nullptr && param (*t, "bass_hpf_on")->getValue() > 0.5f;
+            check (kept, "the HPF switched off and on comes back at 4 STR, the choice kept apart from the switch");
+        }
+
+        // ONE PAIR ON THE FACE: the AMP block's HPF and LPF switches are the bass's cuts, the choices under them its
+        // positions; the cabinet carries no HPF or LPF word.
+        {
+            std::unique_ptr<juce::AudioProcessorEditor> ed (amp->createEditor());
+            int cabWords = 0;
+            bool bassPair = false;
+            std::function<void (juce::Component&)> walk = [&] (juce::Component& c)
+            {
+                if (auto* w = dynamic_cast<bass::WordSwitch*> (&c); w != nullptr && w->isVisible()
+                        && (w->getButtonText().startsWith ("HPF") || w->getButtonText() == "FINGERS" || w->getButtonText() == "SLAP"
+                            || w->getButtonText().startsWith ("LPF")))
+                    ++cabWords;
+                if (auto* panel = dynamic_cast<CapturedBlockPanel*> (&c); panel != nullptr && panel->console().cutsAreBass())
+                    bassPair = true;
+                for (auto* child : c.getChildren())
+                    walk (*child);
+            };
+            walk (*ed);
+            check (bassPair && cabWords == 0, "one pair on the face: the AMP's HPF and LPF are the bass's cuts ("
+                                                  + juce::String (bassPair ? "yes" : "no") + "), no cut words on the cabinet (" + juce::String (cabWords) + ")");
+        }
+    }
+
     // ---- WHOSE STATE IT IS ----------------------------------------------------------------------------
     {
         auto source = make (bass);
@@ -2770,6 +2906,7 @@ int ORBITAMP_GATE_MAIN()
         const auto after = [&] (bool gap)
         {
             auto t = make (bass);
+            t->innerCutsOut.store (true);   // the key as the effect's own: the input's HPF has a tail a gap has not
             set (*t, params::cabOn, 0.0f);
             set (*t, params::filterAmount, 0.8f);
             (void) tone (*t, 110.0, -6.0f, 60);

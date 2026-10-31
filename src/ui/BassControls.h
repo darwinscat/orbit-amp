@@ -166,7 +166,14 @@ inline void addFrequencies (juce::PopupMenu& m, juce::AudioProcessorValueTreeSta
         {
             setPlain (state, id, hz);
             if (position != nullptr)
+            {
                 setPlain (state, position, (float) place);
+                // The bass's cuts: a frequency picked under a switch switches it on.
+                if (juce::String (position) == params::bassHpf)
+                    setPlain (state, params::bassHpfOn, 1.0f);
+                if (juce::String (position) == params::bassLpf)
+                    setPlain (state, params::bassLpfOn, 1.0f);
+            }
         };
         const auto word = hz >= 1000.0f ? juce::String (hz / 1000.0f, 1) + " kHz" : juce::String (juce::roundToInt (hz)) + " Hz";
         m.addItem (base + k + 1, word, true, here && std::abs (now - hz) < 0.5f);
@@ -219,41 +226,32 @@ inline void showBlendMenu (juce::AudioProcessorValueTreeState& state, juce::Comp
     show (m, target, std::move (acts));
 }
 
-/** The HPF's menu: each string count's frequency, and off. */
+/** The HPF's menu, under its switch: each string count's frequency — picking one chooses that count and switches the
+    HPF on. */
 inline void showHpfMenu (juce::AudioProcessorValueTreeState& state, juce::Component* target)
 {
     juce::PopupMenu m;
     std::vector<std::function<void()>> acts;
-    m.addSectionHeader ("HPF 5 STRINGS");
+    m.addSectionHeader ("5 STR");
     addFrequencies (m, state, params::bassHpfHz5, { 18.0f, 20.0f, 22.0f, 25.0f, 28.0f }, 0, acts,
                     params::bassHpf, (int) params::BassHpf::five);
-    m.addSectionHeader ("HPF 4 STRINGS");
+    m.addSectionHeader ("4 STR");
     addFrequencies (m, state, params::bassHpfHz4, { 28.0f, 30.0f, 32.0f, 35.0f, 40.0f }, 10, acts,
                     params::bassHpf, (int) params::BassHpf::four);
-    m.addSeparator();
-    const bool off = juce::roundToInt (plain (state, params::bassHpf)) == (int) params::BassHpf::off;
-    acts.resize (21);
-    acts[20] = [&state] { setPlain (state, params::bassHpf, (float) params::BassHpf::off); };
-    m.addItem (21, "HPF OFF", true, off);
     show (m, target, std::move (acts));
 }
 
-/** The LPF's menu: each hand's frequency, and off. */
+/** The LPF's menu, under its switch: each hand's frequency — picking one chooses that hand and switches the LPF on. */
 inline void showLpfMenu (juce::AudioProcessorValueTreeState& state, juce::Component* target)
 {
     juce::PopupMenu m;
     std::vector<std::function<void()>> acts;
-    m.addSectionHeader ("LPF FINGERS");
+    m.addSectionHeader ("FINGERS");
     addFrequencies (m, state, params::bassLpfHzFingers, { 3500.0f, 4000.0f, 4500.0f, 5000.0f, 6000.0f }, 0, acts,
                     params::bassLpf, (int) params::BassLpf::fingers);
-    m.addSectionHeader ("LPF SLAP");
+    m.addSectionHeader ("SLAP");
     addFrequencies (m, state, params::bassLpfHzSlap, { 8000.0f, 9000.0f, 9500.0f, 10500.0f, 12000.0f }, 10, acts,
                     params::bassLpf, (int) params::BassLpf::slap);
-    m.addSeparator();
-    const bool off = juce::roundToInt (plain (state, params::bassLpf)) == (int) params::BassLpf::off;
-    acts.resize (21);
-    acts[20] = [&state] { setPlain (state, params::bassLpf, (float) params::BassLpf::off); };
-    m.addItem (21, "LPF OFF", true, off);
     show (m, target, std::move (acts));
 }
 
@@ -337,15 +335,9 @@ inline void showChorusMenu (juce::AudioProcessorValueTreeState& state, juce::Com
     show (m, target, std::move (acts));
 }
 
-/** The words the cuts' switches wear. */
-inline juce::String hpfWord (int position)
-{
-    return position == (int) params::BassHpf::five ? "HPF 5" : position == (int) params::BassHpf::four ? "HPF 4" : "HPF OFF";
-}
+/** The words the cuts' choices wear, under their switches. */
+inline juce::String hpfWord (int position) { return position == (int) params::BassHpf::four ? "4 STR" : "5 STR"; }
 
-inline juce::String lpfWord (int position)
-{
-    return position == (int) params::BassLpf::fingers ? "FINGERS" : position == (int) params::BassLpf::slap ? "SLAP" : "LPF OFF";
-}
+inline juce::String lpfWord (int position) { return position == (int) params::BassLpf::slap ? "SLAP" : "FINGERS"; }
 
 } // namespace orbitamp::bass
