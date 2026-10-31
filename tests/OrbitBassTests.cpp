@@ -24,11 +24,16 @@
 #include "ui/LoadBreakdown.h"
 #include "ui/GuardBlock.h"
 #include "ui/CompBlock.h"
+#include "ui/OctaveScope.h"
+#include "core/OctaveTap.h"
 #include "ui/FaceplateView.h"
 #include "ui/GuardRail.h"
 #include "channels/Engine.h"
 #include "channels/Presets.h"
 
+#include <array>
+#include <atomic>
+#include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -37,6 +42,7 @@
 #include <limits>
 #include <map>
 #include <string>
+#include <tuple>
 #include <type_traits>
 
 namespace
@@ -1951,6 +1957,237 @@ int ORBITAMP_GATE_MAIN()
             check (t->bassBackPlanes() == 1 && worstApart (l, r) == 0.0f,
                    "a mono bus handed two channels: one plane, both outputs the same (planes " + juce::String (t->bassBackPlanes()) + ", worst "
                        + juce::String (worstApart (l, r), 9) + ")");
+        }
+    }
+
+    // ---- STEP 5: OCTAVE'S PICTURE — the note it names the one played, the sub's period twice the note's, the frame held
+    //      still on the sub's rising edge; no sub line while nothing is caught; watching it changes nothing heard; its
+    //      taps idle while it is not on screen and still in silence; a read that never mixes two generations ---------------
+    {
+        const auto findScope = [] (juce::Component& root)
+        {
+            OctaveScope* found = nullptr;
+            std::function<void (juce::Component&)> walk = [&] (juce::Component& c)
+            {
+                if (auto* s = dynamic_cast<OctaveScope*> (&c); s != nullptr && found == nullptr)
+                    found = s;
+                for (auto* child : c.getChildren())
+                    walk (*child);
+            };
+            walk (root);
+            return found;
+        };
+
+        // A steady sine that goes on where it stopped — a phase jump would be a new note to the octaver.
+        const auto player = [] (AmpProcessor& amp, double hz, float db)
+        {
+            return [&amp, hz, a = juce::Decibels::decibelsToGain ((double) db), n = 0LL] (int blocks, bool silent = false) mutable
+            {
+                juce::AudioBuffer<float> buf (2, blockSize);
+                juce::MidiBuffer midi;
+                for (int b = 0; b < blocks; ++b)
+                {
+                    for (int i = 0; i < blockSize; ++i, ++n)
+                    {
+                        const auto v = silent ? 0.0f : (float) (a * std::sin (juce::MathConstants<double>::twoPi * hz * (double) n / sampleRate));
+                        buf.setSample (0, i, v);
+                        buf.setSample (1, i, v);
+                    }
+                    amp.processBlock (buf, midi);
+                }
+            };
+        };
+
+        // ITS PLACE: OCTAVE 170 wide, the AMP's row giving the width, FILTER and CHORUS as they were.
+        {
+            std::unique_ptr<juce::AudioProcessorEditor> ed (amp->createEditor());
+            std::map<juce::String, int> widths;
+            std::function<void (juce::Component&)> walk = [&] (juce::Component& c)
+            {
+                if (auto* g = dynamic_cast<GuardBlock*> (&c))
+                    widths[g->guardName()] = g->getWidth();
+                for (auto* child : c.getChildren())
+                    walk (*child);
+            };
+            walk (*ed);
+            auto* scope = findScope (*ed);
+            check (widths["OCTAVE"] == FaceplateView::octaveWidth && FaceplateView::octaveWidth == 170
+                       && widths["FILTER"] == GuardBlock::designWidth && widths["CHORUS"] == GuardBlock::designWidth
+                       && scope != nullptr && scope->getWidth() > 100 && scope->getHeight() > 100,
+                   "OCTAVE's block " + juce::String (widths["OCTAVE"]) + " px wide with its picture "
+                       + (scope != nullptr ? juce::String (scope->getWidth()) + " x " + juce::String (scope->getHeight()) : juce::String ("missing"))
+                       + "; FILTER " + juce::String (widths["FILTER"]) + ", CHORUS " + juce::String (widths["CHORUS"]));
+        }
+
+        // THE MAPPING: four notes across the bass's range, the -1 alone and then the -2 under it — the note named is the
+        // one played and the sub an octave down (A = 440, the tuner's reference untouched), the sub's period twice the
+        // note's, two of them across, the frame standing on the sub's rising edge and standing STILL: the same shape
+        // 3584 samples later (no whole number of periods).
+        for (const bool withSub2 : { false, true })
+            for (const auto& [hz, note, below] : { std::tuple<double, const char*, const char*> { 30.87, "B0", "B-1" },
+                                                   { 41.20, "E1", "E0" }, { 55.00, "A1", "A0" }, { 98.00, "G2", "G1" } })
+            {
+                auto t = make (bass);
+                set (*t, params::octaveAmount, 0.6f);
+                set (*t, params::octaveSub2, withSub2 ? 1.0f : 0.0f);
+                std::unique_ptr<juce::AudioProcessorEditor> ed (t->createEditor());
+                auto* scope = findScope (*ed);
+                if (scope == nullptr)
+                {
+                    check (false, "OCTAVE's picture is on the bass's face");
+                    break;
+                }
+                t->octaveWatched.store (true);   // as if on screen
+                auto play = player (*t, hz, -12.0f);
+                play (60);
+                scope->pull();
+                const auto a = scope->frame();
+                const auto [named, under] = scope->reading();
+                std::array<float, 64> shape {};
+                float peak = 0.0f;
+                for (size_t k = 0; k < shape.size(); ++k)
+                    peak = std::max (peak, std::abs (shape[k] = scope->subAt (a.start + a.span * (double) k / 64.0)));
+                const bool rising = a.subPeriod > 0.0 && scope->subAt (a.trigger - 0.25 * a.subPeriod) < 0.0f
+                                    && scope->subAt (a.trigger + 0.25 * a.subPeriod) > 0.0f;
+
+                play (7);
+                scope->pull();
+                const auto b = scope->frame();
+                float moved = 0.0f;
+                for (size_t k = 0; k < shape.size(); ++k)
+                    moved = std::max (moved, std::abs (scope->subAt (b.start + b.span * (double) k / 64.0) - shape[k]));
+
+                const double expected = 2.0 * a.rateHz / hz;   // the -1's period, samples
+                const double off      = a.subPeriod > 0.0 ? std::abs (a.subPeriod / expected - 1.0) : 1.0;
+                check (a.subShown && named == note && under == below && off < 0.005 && std::abs (a.span - 2.0 * a.subPeriod) < 1.0e-9
+                           && rising && peak > 0.0f && moved < 0.1f * peak && std::abs (b.trigger - a.trigger) > 1.0,
+                       juce::String (withSub2 ? "with the -2, " : "") + juce::String (hz, 2) + " Hz reads " + named + " -> " + under
+                           + " (" + note + " -> " + below + "), the sub's period " + juce::String (a.subPeriod, 1) + " samples ("
+                           + juce::String (expected, 1) + "), " + juce::String (a.span / juce::jmax (1.0, a.subPeriod), 2)
+                           + " of them across, " + (rising ? "on its rising edge" : "NOT on a rising edge") + ", moved "
+                           + juce::String (peak > 0.0f ? moved / peak : 1.0f, 3) + " of its peak 3584 samples later (its edge "
+                           + juce::String (a.trigger - b.trigger, 1) + " samples back in the ring)");
+            }
+
+        // THE NAMES: the octave by floor below MIDI 0 too — the sub of a 16 Hz note is C-1's octave down, not C-1 again.
+        check (OctaveScope::noteText (16.35, 440.0) == "C0" && OctaveScope::noteText (8.18, 440.0) == "C-1"
+                   && OctaveScope::noteText (7.72, 440.0) == "B-2" && OctaveScope::noteText (440.0, 440.0) == "A4"
+                   && OctaveScope::noteText (432.0, 432.0) == "A4" && OctaveScope::noteText (30.87, 440.0) == "B0",
+               "the reading's names: C0, C-1, B-2, A4 at 440 and at 432, B0; got " + OctaveScope::noteText (7.72, 440.0)
+                   + " for 7.72 Hz");
+
+        // NOTHING CAUGHT, NO SUB LINE: the slider at 0 — the note drawn, no sub, no reading; up, the sub; the note gone
+        // (the octaver lets go), no sub again.
+        {
+            auto t = make (bass);
+            set (*t, params::octaveAmount, 0.0f);
+            std::unique_ptr<juce::AudioProcessorEditor> ed (t->createEditor());
+            auto* scope = findScope (*ed);
+            t->octaveWatched.store (true);
+            auto play = player (*t, 41.2, -12.0f);
+            play (60);
+            bool atZero = false, up = false, gone = false;
+            if (scope != nullptr)
+            {
+                scope->pull();
+                atZero = ! scope->frame().subShown && scope->reading().first.isEmpty() && scope->frame().count > 0;
+                set (*t, params::octaveAmount, 0.6f);
+                play (60);
+                scope->pull();
+                up = scope->frame().subShown;
+                play (40, true);
+                scope->pull();
+                gone = ! scope->frame().subShown && scope->reading().first.isEmpty();
+            }
+            check (atZero && up && gone, juce::String ("no sub line at 0 (") + (atZero ? "yes" : "NO") + "), the sub at 0.6 ("
+                                             + (up ? "yes" : "NO") + "), none once the note has gone (" + (gone ? "yes" : "NO") + ")");
+        }
+
+        // WATCHING CHANGES NOTHING HEARD: the stage run in pieces to keep its dry (the octaver's output does not depend on
+        // how its calls are sliced) — a note, its -2, its end, bit for bit the same as with nobody watching.
+        {
+            auto quiet = make (bass), seen = make (bass);
+            for (auto* t : { quiet.get(), seen.get() })
+            {
+                set (*t, params::octaveAmount, 0.7f);
+                set (*t, params::octaveSub2, 1.0f);
+            }
+            seen->octaveWatched.store (true);
+            std::vector<float> rq, rs;
+            const auto vq = tone (*quiet, 41.2, -6.0f, 120, -1, {}, 80, &rq);
+            const auto vs = tone (*seen, 41.2, -6.0f, 120, -1, {}, 80, &rs);
+            check (vq.size() == vs.size() && std::memcmp (vq.data(), vs.data(), vq.size() * sizeof (float)) == 0
+                       && rq.size() == rs.size() && std::memcmp (rq.data(), rs.data(), rq.size() * sizeof (float)) == 0
+                       && seen->octaveTap->written() > 0 && quiet->octaveTap->written() == 0,
+                   "OCTAVE watched plays bit for bit what it plays unwatched (" + juce::String ((int) seen->octaveTap->written())
+                       + " samples into the tap)");
+        }
+
+        // THE TAPS: idle with no picture on screen — an editor up but not showing included; written while it is; still
+        // once the playing stops.
+        {
+            auto t = make (bass);
+            set (*t, params::octaveAmount, 0.6f);
+            std::unique_ptr<juce::AudioProcessorEditor> ed (t->createEditor());
+            auto* scope = findScope (*ed);
+            const bool off = scope != nullptr && ! scope->watching() && ! t->octaveWatched.load();
+            (void) tone (*t, 41.2, -6.0f, 50);
+            const auto hidden = t->octaveTap->written();
+            t->octaveWatched.store (true);
+            (void) tone (*t, 41.2, -6.0f, 100);
+            const auto playing = t->octaveTap->written();
+            (void) tone (*t, 41.2, -6.0f, 100, -1, {}, 0);
+            const auto tail = t->octaveTap->written();
+            (void) tone (*t, 41.2, -6.0f, 100, -1, {}, 0);
+            const auto still = t->octaveTap->written();
+            check (off && hidden == 0 && playing > 0 && tail > playing && still == tail,
+                   "OCTAVE's taps: the picture not on screen does not ask (" + juce::String (off ? "yes" : "NO") + "), nothing written ("
+                       + juce::String ((int) hidden) + "), " + juce::String ((int) playing) + " samples while it shows, "
+                       + juce::String ((int) (tail - playing)) + " of the tail, then none in silence (" + juce::String ((int) (still - tail)) + ")");
+        }
+
+        // NO READ MIXES TWO GENERATIONS: a writer lapping the ring as fast as it can, a reader taking the whole ring again
+        // and again — every read one unbroken run, the note and the sub of one sample together, the slots overtaken
+        // during a read dropped (and some were: a run that never saw a drop proves nothing).
+        {
+            auto tap = std::make_unique<core::OctaveTap>();
+            tap->prepare (sampleRate);
+            std::atomic<bool> stop { false };
+            std::thread writer ([&]
+            {
+                float d[64], w[64];
+                std::uint32_t j = 0;
+                while (! stop.load (std::memory_order_relaxed))
+                {
+                    for (int i = 0; i < 64; ++i, ++j)
+                    {
+                        d[i] = 1.0f + (float) (j % 4000000u);
+                        w[i] = 2.0f * d[i];   // the sub: exactly the note again
+                    }
+                    tap->write (d, w, 64);
+                }
+            });
+            std::vector<float> rd ((size_t) core::OctaveTap::capacity), rs ((size_t) core::OctaveTap::capacity);
+            long reads = 0, torn = 0, dropped = 0;
+            const auto until = std::chrono::steady_clock::now() + std::chrono::milliseconds (400);
+            while (std::chrono::steady_clock::now() < until)
+            {
+                const int n = tap->read (rd.data(), rs.data(), core::OctaveTap::capacity);
+                ++reads;
+                dropped += n < core::OctaveTap::capacity && tap->written() >= (std::uint32_t) core::OctaveTap::capacity ? 1 : 0;
+                for (int i = 0; i < n; ++i)
+                    if (rs[(size_t) i] != rd[(size_t) i]
+                        || (i > 0 && rd[(size_t) i] != rd[(size_t) i - 1] + 1.0f && ! (rd[(size_t) i] == 1.0f && rd[(size_t) i - 1] == 4000000.0f)))
+                    {
+                        ++torn;
+                        break;
+                    }
+            }
+            stop.store (true);
+            writer.join();
+            check (torn == 0 && dropped > 0 && reads > 50,
+                   "OCTAVE's tap read " + juce::String ((int) reads) + " times under a lapping writer: " + juce::String ((int) torn)
+                       + " torn, " + juce::String ((int) dropped) + " that dropped what was overtaken");
         }
     }
 

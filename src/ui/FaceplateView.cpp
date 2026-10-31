@@ -7,6 +7,7 @@
 #include "../PluginProcessor.h"
 #include "BassControls.h"
 #include "CompBlock.h"
+#include "OctaveScope.h"
 
 namespace orbitamp
 {
@@ -73,6 +74,7 @@ FaceplateView::FaceplateView (AmpProcessor& processor)
             return g;
         };
         octave = make ("OCTAVE", params::octaveAmount, params::octaveOn, 0, effectWorked[0], bass::showOctaveMenu);
+        octave->setPicture (std::make_unique<OctaveScope> (processor));   // the note and its sub, right of the rail
         filter = make ("FILTER", params::filterAmount, params::filterOn, 1, effectWorked[1], bass::showFilterMenu);
         chorus = make ("CHORUS", params::chorusAmount, params::chorusOn, 2, effectWorked[2], bass::showChorusMenu);
     }
@@ -182,7 +184,7 @@ void FaceplateView::resized()
         for (auto* fx : { octave.get(), filter.get() })
             if (fx != nullptr)
             {
-                fx->setBounds (row1.removeFromLeft (GuardBlock::designWidth));
+                fx->setBounds (row1.removeFromLeft (fx == octave.get() ? octaveWidth : GuardBlock::designWidth));
                 row1.removeFromLeft (colGap);
             }
     }

@@ -67,6 +67,19 @@ public:
     /** The rail at the block's left edge, the scale to its right — or mirrored. */
     bool railOnLeft = true;
 
+    /** A PICTURE of what the block's effect does, right of its rail and scale, over the lamp — OCTAVE's scope
+        (ui/OctaveScope.h). The block is then laid wider than designWidth and the picture takes the rest; with none it
+        is the guard's narrow block as it always was. A click on the picture is the block's: its menu. */
+    void setPicture (std::unique_ptr<juce::Component> p)
+    {
+        picture = std::move (p);
+        if (picture != nullptr)
+            addAndMakeVisible (*picture);
+        resized();
+    }
+
+    juce::Component* pictureShown() const noexcept { return picture.get(); }
+
     void mouseDown (const juce::MouseEvent& e) override { openMenu (e.getScreenPosition()); }
 
     /** Its name, as the border writes it — and the size its scale's numbers are written at, 0 for none (a gate reads
@@ -94,6 +107,16 @@ protected:
 
         auto col = railOnLeft ? r.removeFromLeft (GuardRail::designWidth) : r.removeFromRight (GuardRail::designWidth);
         rail.setBounds (col);
+
+        if (picture != nullptr)
+        {
+            // The scale's ticks in a strip beside the rail, the picture over the rest.
+            auto rest = r.withTop (col.getY()).withBottom (col.getBottom());
+            scaleBox  = railOnLeft ? rest.removeFromLeft (pictureScaleW) : rest.removeFromRight (pictureScaleW);
+            picture->setBounds (rest);
+            return;
+        }
+
         scaleBox = r.withTop (col.getY()).withBottom (col.getBottom());
     }
 
@@ -136,11 +159,12 @@ private:
             onMenu (screenPos);
     }
 
-    static constexpr int lampGap = 8;
+    static constexpr int lampGap = 8, pictureScaleW = 10;
 
     const juce::String name;
     GuardRail rail;
     GuardLamp lamp;
+    std::unique_ptr<juce::Component> picture;
     juce::Rectangle<int> nameBox, scaleBox;
 
     friend class WebFaceplate;   // the site's kit reads where the parts stand (WebFaceplate.h)

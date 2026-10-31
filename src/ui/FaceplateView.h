@@ -116,6 +116,10 @@ public:
     /** OrbitBass's COMP block, after the GATE: its slider, its picture and its ratio square (ui/CompBlock.h). */
     static constexpr int compWidth = 360;
 
+    /** OrbitBass's OCTAVE block, its rail and its picture of the note and its sub (ui/OctaveScope.h): wider than a
+        guard's rail alone, the width taken from the AMP's share of the row — the face's width stays bassExtraWidth's. */
+    static constexpr int octaveWidth = 170;
+
     /** ...and by its COMP block and two of its effects' rails at the head of the AMP's row, OCTAVE and FILTER (CHORUS
         stands at the head of the cabinet's row, which takes what is left). */
     static constexpr int bassExtraWidth = CapturedBlockPanel::bassSideW + compWidth + colGap + 2 * (GuardBlock::designWidth + colGap);
@@ -158,7 +162,8 @@ private:
     GuardBlock         gate, limit;
 
     /** OrbitBass's three effects, each ONE slider — a guard's rail over its amount, 0..1, and its menu on a right
-        click (ui/BassControls.h); none on a guitar amp. Their lamps light while each works; they latch nothing. */
+        click (ui/BassControls.h); none on a guitar amp. Their lamps light while each works; they latch nothing. OCTAVE's
+        block carries its picture beside the rail, the note and its sub (ui/OctaveScope.h), octaveWidth wide. */
     std::unique_ptr<GuardBlock> octave, filter, chorus;
 
     /** OrbitBass's COMP, a block of its own (ui/CompBlock.h); none on a guitar amp. */
