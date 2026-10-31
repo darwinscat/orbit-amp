@@ -12,6 +12,7 @@
 #include "core/DemoPlayer.h"
 #include "core/ScopeTap.h"
 #include "core/TunerEar.h"
+#include "core/TunerPoly.h"
 #include "core/TunerStrobe.h"
 #include "core/TunerTap.h"
 #include "core/WaveRibbon.h"
@@ -797,9 +798,13 @@ private:
     {
         // Nobody watching, or the tuner is not in the rig: an MPM pass thirty times a second
         // for a needle that is not there is the definition of waste.
+        const auto display = prefs::tunerDisplay (ownProduct);
+        tunerPoly.tune (prefs::tunerTuning (ownProduct), (float) prefs::tunerReference (ownProduct));   // its lanes, even off
+
         if (getActiveEditor() == nullptr || ! linkWorks (params::rowTuner))
         {
-            tunerStrobe.stop (prefs::tunerStrobe (ownProduct));   // off, a strobe still shows as one
+            tunerStrobe.stop (display == prefs::TunerDisplay::strobe);   // off, a strobe still shows as one
+            tunerPoly.stop (display == prefs::TunerDisplay::poly);       // ...and the lanes as lanes
             return;
         }
 
@@ -816,13 +821,19 @@ private:
 
         // The strobe, when the player reads by it: after the ear, whose note it holds to. Off, it is not
         // run at all, and the ear and its needle are exactly what they were without it.
-        if (prefs::tunerStrobe (ownProduct))
+        if (display == prefs::TunerDisplay::strobe)
         {
             tunerStrobe.setLevelFloorDb ((double) prefs::tunerFloor (ownProduct));   // what the ear takes for noise
             tunerStrobe.update (tunerTap, tunerEar);
         }
         else
             tunerStrobe.stop();
+
+        // POLY: every string of a strum at once, off the same tap — run only while the player reads by it.
+        if (display == prefs::TunerDisplay::poly)
+            tunerPoly.update (tunerTap, getSampleRate(), (double) prefs::tunerFloor (ownProduct));
+        else
+            tunerPoly.stop();
     }
 
     /** IS THIS LINK WORKING — the one question the chain asks, and the only shape of it. Every
@@ -1043,6 +1054,7 @@ public:
     core::TunerTap tunerTap;
     core::TunerEar tunerEar;
     core::TunerStrobe tunerStrobe;   // the same pump, after the ear — only while the player reads by it
+    core::TunerPoly   tunerPoly;     // ...and the polyphonic tuner, off the same tap, only while the player reads by it
 
     /** The gate's effective gain at the last block end, in dB — what a pressure meter shows.
         Written by the audio thread, read by the strip's thumb and the zoomed gate on their

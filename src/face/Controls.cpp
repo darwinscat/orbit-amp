@@ -2,6 +2,7 @@
 // Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of OrbitAmp — see LICENSE.
 
 #include "Controls.h"
+#include "../ui/PolyView.h"
 #include "../ui/StrobeView.h"
 
 #include <felitronics/appkit/BrandAssets.h>
@@ -1326,7 +1327,8 @@ void SegmentMeter::paint (juce::Graphics& g)
 }
 
 //==============================================================================
-TunerFace::TunerFace (const core::TunerEar& e, const core::TunerStrobe& s) : ear (e), strobe (s)
+TunerFace::TunerFace (const core::TunerEar& e, const core::TunerStrobe& s, const core::TunerPoly& pt)
+    : ear (e), strobe (s), poly (pt)
 {
     setInterceptsMouseClicks (false, false);
     startTimerHz (30);
@@ -1518,8 +1520,89 @@ void TunerFace::paintStrip (juce::Graphics& g)
     }
 }
 
+void TunerFace::paintPoly (juce::Graphics& g)
+{
+    const auto lanes = poly.lanes (listening);   // off, nothing is heard
+    const polyview::Ink ink { labelFont (stage::px13), heard, lilac.withAlpha (idleAlpha), home, orange,
+                              violet.withAlpha (majorAlpha), orange.withAlpha (majorAlpha), warmCents, 4.0f };
+    const auto state = juce::String (! listening ? "OFF" : muting ? "MUTE" : "ON");
+    const int a4 = juce::roundToInt (poly.referenceHz());
+    const bool otherA = a4 != juce::roundToInt (core::PitchTracker::concertA);
+
+    if (dial.reach > 0.0f)
+    {
+        // A GAUGE: two columns of lanes over the pivot, low strings first, row by row; the state under the
+        // pivot, as ever, and the A — when it is not 440 — in the window the note had.
+        const auto origin = getPosition().toFloat();
+        const auto pivot  = dial.pivot - origin;
+        const auto window = dial.window - origin;
+        const float hub   = dial.reach * 0.07f;
+        const int rows    = (lanes.count + 1) / 2;
+        const float rowH  = stage::px13, gapY = stage::px13 * 0.07f;
+        const float gridW = dial.reach * (2.0f * gridCell + gridGap), gridH = (float) rows * rowH + (float) (rows - 1) * gapY;
+        polyview::paintGrid (g, juce::Rectangle<float> (gridW, gridH).withPosition (pivot.x - gridW * 0.5f, pivot.y + hub - gridH),
+                             lanes, ink, 2, dial.reach * gridGap, gapY);
+
+        g.setFont (ink.font);
+        g.setColour (! listening ? violet : orange);
+        g.drawText (state, juce::Rectangle<float> (window.getWidth() * 2.0f, window.getY() - pivot.y - hub)
+                               .withPosition (pivot.x - window.getWidth(), pivot.y + hub),
+                    juce::Justification::centred, false);
+        if (otherA)
+        {
+            g.setColour (lilac.withAlpha (quietAlpha));
+            g.drawText ("A " + juce::String (a4), window, juce::Justification::centred, false);
+        }
+
+        const auto boss = juce::Rectangle<float> (hub * 2.0f, hub * 2.0f).withCentre (pivot);
+        g.setGradientFill (juce::ColourGradient (juce::Colour (0xff4a4a52), boss.getCentreX(), boss.getY(),
+                                                 juce::Colour (0xff101013), boss.getCentreX(), boss.getBottom(), false));
+        g.fillEllipse (boss);
+        g.setColour (juce::Colours::black.withAlpha (0.6f));
+        g.drawEllipse (boss, 0.8f);
+        return;
+    }
+
+    if (strip)
+    {
+        // A STRIP: its state first, as ever, then the lanes in a row.
+        auto area = getLocalBounds().toFloat().reduced (10.0f, 1.0f);
+        g.setFont (ink.font);
+        g.setColour (! listening ? violet : orange);
+        g.drawText (state, area.removeFromLeft (64.0f), juce::Justification::centredLeft, false);
+        area.removeFromLeft (6.0f);
+        polyview::paintRow (g, area, lanes, ink, polyGap);
+        return;
+    }
+
+    // THE SCREEN: big lanes, and under them the state in its corner, the A opposite when it is not 440, and
+    // between them the words for the plectrum, while one shows.
+    auto area = getLocalBounds().toFloat().reduced (18.0f, 10.0f);
+    auto foot = area.removeFromBottom (24.0f);
+    area.removeFromBottom (6.0f);
+    g.setFont (ink.font);
+    g.setColour (! listening ? violet : orange);
+    g.drawText (state, foot, juce::Justification::centredLeft, false);
+    if (otherA)
+    {
+        g.setColour (lilac.withAlpha (quietAlpha));
+        g.drawText ("A " + juce::String (a4), foot, juce::Justification::centredRight, false);
+    }
+    if (polyview::anyMasked (lanes))
+    {
+        g.setColour (orange);
+        g.drawText ("PLUCK ALONE", foot, juce::Justification::centred, false);
+    }
+    polyview::paintColumns (g, area, lanes, ink, labelFont (stage::px16), polyGap * 2.0f);
+}
+
 void TunerFace::paint (juce::Graphics& g)
 {
+    if (poly.on())
+    {
+        paintPoly (g);
+        return;
+    }
     if (dial.reach > 0.0f)
     {
         paintDial (g);

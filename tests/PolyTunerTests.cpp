@@ -7,10 +7,14 @@
 // sharp and settles, the strings struck one after another as a strum does. The truth is each
 // string's first partial. Seeded: the gate never rolls dice.
 //
+// And what the faces draw from it (core::TunerPoly): the tunings each product offers, a reading's lanes,
+// and the pump's tick — the analysis run only while it is asked for, nothing allocated per tick.
+//
 // POLY_STRUMS=<n> runs n random strums per tuning and rate instead of the gate's few (heavy runs).
 // JUCE-free, like the code under test: links nothing at all.
 
 #include "core/PolyTuner.h"
+#include "core/TunerPoly.h"
 #include "core/TunerTap.h"
 
 #include <chrono>
@@ -19,7 +23,9 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <new>
+#include <string>
 #include <vector>
 
 // Every allocation is counted while `countingAllocations` is set: the tuner's timer tick must not
@@ -489,6 +495,127 @@ int main()
         check (ok, "through the tap", t, sc, pt.reading());
         std::printf ("through the tap: %d readings, %.1f ms busy for %.2f s of audio (%.1f%% of a core), %ld allocations\n",
                      fresh, busy * 1000.0, sc.seconds, 100.0 * busy / sc.seconds, allocationsCounted);
+    }
+
+    // ---- what the faces draw: the tunings, the lanes, the pump --------------------------------------
+    {
+        using namespace orbitamp::core;
+        using Mark = PolyLane::Mark;
+        const auto expect = [] (bool ok, const char* what)
+        {
+            if (! ok)
+                ++failures;
+            std::printf ("%-58s %s\n", what, ok ? "ok" : "FAIL");
+        };
+
+        // A guitar amp offers the guitar's four, a bass amp the bass's five; a name it does not offer is its standard.
+        const auto ids = [] (bool bass)
+        {
+            std::string all;
+            for (const auto& t : polyTunings (bass))
+                all += std::string (t.id) + " ";
+            return all;
+        };
+        expect (ids (false) == "guitar guitar-drop-d guitar-half-down guitar-whole-down ", "tunings: a guitar amp's");
+        expect (ids (true) == "bass-4 bass-5 bass-6 bass-drop-d bass-half-down ", "tunings: a bass amp's");
+        expect (std::strcmp (polyTuning ("guitar-drop-d", false).id, "guitar-drop-d") == 0
+                    && std::strcmp (polyTuning ("bass-5", true).id, "bass-5") == 0, "tunings: by name");
+        expect (std::strcmp (polyTuning ("bass-5", false).id, "guitar") == 0 && std::strcmp (polyTuning ("", true).id, "bass-4") == 0
+                    && std::strcmp (polyTuning (nullptr, false).id, "guitar") == 0, "tunings: one not offered is the standard");
+
+        // A reading's lanes: every mark, the band, the clamp, and nothing at all while the tuner is off.
+        const auto& t = PolyTuner::tunings[0];
+        PolyTuner::Reading r;
+        r.strings = 6;
+        const PolyTuner::Heard heard[6] = { PolyTuner::Heard::near, PolyTuner::Heard::near, PolyTuner::Heard::masked,
+                                            PolyTuner::Heard::no, PolyTuner::Heard::far, PolyTuner::Heard::near };
+        const float cents[6] = { 12.0f, -30.0f, 0.0f, 0.0f, -150.0f, 2.4f };
+        for (int s = 0; s < 6; ++s)
+            r.string[(size_t) s] = { heard[s], cents[s], 0.0f, 0.0f, 0.0f, -20.0f };
+        const auto on = polyLanes (r, t, true);
+        bool names = on.count == 6;
+        for (int s = 0; s < 6; ++s)
+            names = names && on.lane[(size_t) s].midi == t.midi[(size_t) s];
+        expect (names, "lanes: one per string, lowest first, each its target");
+        expect (on.lane[0].mark == Mark::near && on.lane[0].cents == 12.0f && ! on.lane[0].green && on.lane[0].sharp
+                    && on.lane[1].mark == Mark::near && on.lane[1].cents == -30.0f && ! on.lane[1].sharp,
+                "lanes: near, its cents and its side");
+        expect (on.lane[2].mark == Mark::masked && on.lane[3].mark == Mark::none
+                    && on.lane[4].mark == Mark::far && ! on.lane[4].sharp, "lanes: masked, not heard, far");
+        expect (on.lane[5].green && on.lane[5].cents == 2.4f, "lanes: green within the needle's band");
+        r.string[5].cents = 2.6f;
+        r.string[0].cents = 80.0f;
+        const auto out = polyLanes (r, t, true);
+        expect (! out.lane[5].green && out.lane[0].cents == PolyLane::showCents, "lanes: past the band, past the scale");
+        const auto off = polyLanes (r, t, false);
+        bool none = off.count == 6;
+        for (int s = 0; s < 6; ++s)
+            none = none && off.lane[(size_t) s].mark == Mark::none;
+        expect (none, "lanes: the tuner off hears nothing");
+
+        // The pump, through the tap: the strum the faces were drawn with — A +12 c, G -30 c, B muted.
+        Scene sc;
+        sc.fs = 48000.0;
+        sc.seconds = 2.6;
+        sc.strumAt = 0.5;
+        sc.spreadMs = 14.0;
+        const double detune[6] = { 1.0, 12.0, -1.5, -30.0, 0.0, 0.8 };
+        for (int s = 0; s < 6; ++s)
+        {
+            StringSpec st;
+            st.f1 = targetOf (t, s) * std::pow (2.0, detune[s] / 1200.0);
+            st.B = 6.0e-5;
+            st.levelDb = -3.0 * (s % 2);
+            st.pluck = 0.13;
+            st.on = s != 4;
+            sc.strings.push_back (st);
+        }
+        const auto x = render (sc);
+        static TunerTap tap;
+        static TunerPoly poly;
+        expect (! poly.on() && ! poly.running(), "pump: nothing until asked");
+        poly.tune (t, 440.0f);
+        long perTick = 0;
+        int ticks = 0;
+        bool kept = true;
+        for (size_t i = 0; i < x.size(); i += 512)
+        {
+            tap.write (x.data() + i, (int) std::min<size_t> (512, x.size() - i));
+            if ((i / 512) % 3 != 2)
+                continue;
+            const auto before = poly.lanes (true);
+            allocationsCounted = 0;
+            countingAllocations = ticks > 0;   // the first tick prepares
+            poly.tune (t, 440.0f);             // every tick, as the processor's pump does
+            const auto after = poly.lanes (true);
+            for (int s = 0; s < after.count; ++s)
+                kept = kept && after.lane[(size_t) s].mark == before.lane[(size_t) s].mark
+                            && after.lane[(size_t) s].cents == before.lane[(size_t) s].cents;
+            poly.update (tap, sc.fs, -60.0);
+            countingAllocations = false;
+            perTick += allocationsCounted;
+            ++ticks;
+        }
+        expect (poly.on() && poly.running() && perTick == 0, "pump: runs, and no tick after the first allocates");
+        expect (kept && poly.reading().spanMs > 900.0f, "pump: the same tuning again keeps the reading");
+        const auto lanes = poly.lanes (true);
+        expect (lanes.lane[1].mark == Mark::near && std::abs (lanes.lane[1].cents - 12.0f) < 0.5f && ! lanes.lane[1].green
+                    && lanes.lane[3].mark == Mark::near && std::abs (lanes.lane[3].cents + 30.0f) < 0.5f
+                    && lanes.lane[4].mark == Mark::masked
+                    && lanes.lane[0].green && lanes.lane[2].green && lanes.lane[5].green,
+                "pump: the strum's lanes - +12, -30, B muted, the rest home");
+
+        poly.tune (t, 442.0f);
+        const auto retuned = poly.lanes (true);
+        bool cleared = poly.referenceHz() == 442.0f;
+        for (int s = 0; s < retuned.count; ++s)
+            cleared = cleared && retuned.lane[(size_t) s].mark == Mark::none;
+        expect (cleared, "pump: another A retunes, and reads afresh");
+        poly.update (tap, sc.fs, -60.0);
+        poly.stop (true);
+        expect (poly.on() && ! poly.running() && poly.reading().spanMs == 0.0f, "pump: stopped, shown, nothing kept");
+        poly.stop();
+        expect (! poly.on(), "pump: another display, not shown");
     }
 
     std::printf ("cost: %.2f ms per analysis on average (%d analyses), %.1f%% of a core at one per 200 ms\n",

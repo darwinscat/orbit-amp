@@ -142,12 +142,32 @@ void SetupPanel::buildTunerPage()
     {
         SettingsList::Row display;
         display.name = "DISPLAY";
-        display.note = "a needle, or a strobe - stripes that stand still when the string is in tune";
+        display.note = "a needle; a strobe, still when in tune; or poly - strum, and read every string";
         display.choices.add ("NEEDLE");
         display.choices.add ("STROBE");
-        display.chosen = [this] { return prefs::tunerStrobe (amp.product()) ? 1 : 0; };
-        display.choose = [this] (int k) { prefs::setTunerStrobe (amp.product(), k == 1); };
+        display.choices.add ("POLY");
+        display.chosen = [this] { return (int) prefs::tunerDisplay (amp.product()); };
+        display.choose = [this] (int k) { prefs::setTunerDisplay (amp.product(), (prefs::TunerDisplay) k); };
         rows.push_back (std::move (display));
+    }
+
+    {
+        // The product's own tunings: a guitar amp's the guitar's, a bass amp's the bass's.
+        const auto own = core::polyTunings (prefs::tunesBass (amp.product()));
+        SettingsList::Row tuning;
+        tuning.name = "TUNING";
+        tuning.note = "the open strings poly reads";
+        for (const auto& t : own)
+            tuning.choices.add (core::polyTuningName (t).pill);
+        tuning.chosen = [this, own]
+        {
+            for (size_t k = 0; k < own.size(); ++k)
+                if (&own[k] == &prefs::tunerTuning (amp.product()))
+                    return (int) k;
+            return -1;
+        };
+        tuning.choose = [this, own] (int k) { prefs::setTunerTuning (amp.product(), own[(size_t) k]); };
+        rows.push_back (std::move (tuning));
     }
 
     tunerPage.setRows (std::move (rows));

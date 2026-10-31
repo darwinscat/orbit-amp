@@ -4,7 +4,9 @@
 #pragma once
 
 #include "../core/TunerEar.h"
+#include "../core/TunerPoly.h"
 #include "../core/TunerStrobe.h"
+#include "PolyView.h"
 #include "StrobeView.h"
 #include "Theme.h"
 #include "ZoneSwitch.h"
@@ -22,12 +24,15 @@ namespace orbitamp
     It reads the same TunerEar every other needle reads, on its own repaint clock — the ear is
     pumped by the processor, so this is drawing only. While the player reads by the STROBE (the
     processor pumps it only then), its bands stand where the ruler stood, the note's name and the
-    cents are the strobe's note's, and the stripes wear the needle's colour. */
+    cents are the strobe's note's, and the stripes wear the needle's colour. While the player reads by
+    POLY, a lane for every string stands in a row where the note, the ruler and the cents stood
+    (PolyView.h) — no HUM label: the analysis models the mains itself. */
 class TunerStrip final : public juce::Component,
                          private juce::Timer
 {
 public:
-    TunerStrip (const core::TunerEar& tunerEar, const core::TunerStrobe& tunerStrobe) : ear (tunerEar), strobe (tunerStrobe)
+    TunerStrip (const core::TunerEar& tunerEar, const core::TunerStrobe& tunerStrobe, const core::TunerPoly& tunerPoly)
+        : ear (tunerEar), strobe (tunerStrobe), poly (tunerPoly)
     {
         setMouseCursor (juce::MouseCursor::PointingHandCursor);
         startTimerHz (30);
@@ -69,6 +74,17 @@ public:
         // not a frame — the quiet fill alone seats it into the panel.
         g.setColour (theme::panel);
         g.fillRoundedRectangle (r, theme::radiusMd);
+
+        // ---- POLY: the lanes in a row, between the left inset and the MUTE pill ----
+        if (poly.on())
+        {
+            auto lanes = r.reduced (14.0f, insetY);
+            lanes.removeFromRight (muteW + muteGap);
+            const polyview::Ink ink { theme::displayFont (13.0f).withExtraKerningFactor (0.05f), theme::tx, theme::txFaint,
+                                      inTune, theme::orange, theme::violet.withAlpha (0.6f), theme::lilac, 25.0f, 2.5f };
+            polyview::paintRow (g, lanes, poly.lanes (true), ink, polyGap);
+            return;
+        }
 
         const bool live  = ear.live();
         const bool strobing = strobe.on();
@@ -214,6 +230,7 @@ private:
     static constexpr float humPx = 13.0f, humDim = 0.4f;
     static constexpr float insetY = 5.0f;
     static constexpr float strobePeriod = 32.0f;   // the fundamental's stripe, px; its octaves' 16 and 8
+    static constexpr float polyGap = 8.0f;         // between POLY's lanes, px
 
     /** Where the pill stands: at the far right, centred on the strip, the cents just before it —
         the same insets `paint` lays the row out with. */
@@ -250,6 +267,7 @@ private:
 
     const core::TunerEar& ear;
     const core::TunerStrobe& strobe;
+    const core::TunerPoly& poly;
 
     friend class WebFaceplate;   // the site's kit reads where the parts stand (WebFaceplate.h)
 
