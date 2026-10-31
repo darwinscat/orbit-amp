@@ -4,6 +4,7 @@
 #pragma once
 
 #include "PerProduct.h"
+#include "core/PitchTracker.h"
 
 #include <juce_audio_processors/juce_audio_processors.h>
 
@@ -20,9 +21,9 @@
     face. There is no "current product" anywhere in a process: a host may run OrbitAmp and CatpitAmp side
     by side, out of one binary, and each processor is what it was made as.
 
-    Each amp says what it is in a file of its own — OrbitAmp in OrbitAmpStart.cpp, the cockpit in
-    catpit/CatpitLineup.cpp, each rover in its skin's file — and no two of them define anything under the
-    same name, so every amp's sources link into one binary. Each amp's plug-in makes a processor of its
+    Each amp says what it is in a file of its own — OrbitAmp in OrbitAmpStart.cpp, OrbitBass in
+    OrbitBassStart.cpp, the cockpit in catpit/CatpitLineup.cpp, each rover in its skin's file — and no two
+    of them define anything under the same name, so every amp's sources link into one binary. Each amp's plug-in makes a processor of its
     own product (createPluginFilter, beside its Product, compiled into that plug-in alone); a gate makes
     whichever it plays.
 
@@ -36,6 +37,12 @@ struct ProductEngine;
 
 namespace redpaw { struct Skin; }
 namespace params { struct Opening; }
+
+/** WHAT A PRODUCT'S CHAIN IS. The guitar's — gate, amp, delay, reverb, cabinet, limiter — is every amp's but
+    OrbitBass's. The bass's is one signal from the input to the output and holds neither the delay nor the
+    reverb (params::bassChainHolds); its blocks still to come — COMP, OCTAVE, FILTER, CHORUS, the DI beside
+    the cabinet — have their places named in the chain (AmpProcessor::processChunk). */
+enum class Chain { guitar, bass };
 
 struct Product
 {
@@ -79,6 +86,14 @@ struct Product
         their menus. OrbitAmp's listens always: its face has no switch for it, and a tuner left off in
         an old session would be off with nothing anywhere to turn it back on. */
     bool tunerSwitch = true;
+
+    /** ITS CHAIN (Chain, above): the guitar's unless it says otherwise. */
+    Chain chain = Chain::guitar;
+
+    /** THE LOWEST PITCH ITS TUNER LOOKS FOR, in Hz (core::PitchTracker::setLowestHz). Every guitar amp
+        stays at the guitar's, which reaches a bass's low E and costs a guitar nothing more; OrbitBass
+        reaches its low B and a drop-A's A0. */
+    double tunerLowestHz = core::PitchTracker::guitarLowestHz;
 };
 
 /** EVERY AMP OF THE FAMILY, each defined in its own file (above). A binary links the ones it plays. */
@@ -89,6 +104,7 @@ const Product& catpitAmp();
 const Product& redPawAmp();
 const Product& frostPawAmp();
 const Product& amberPawAmp();
+const Product& orbitBass();
 } // namespace products
 
 } // namespace orbitamp

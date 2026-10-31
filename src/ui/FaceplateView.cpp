@@ -34,6 +34,11 @@ FaceplateView::FaceplateView (AmpProcessor& processor)
 
     // Every block still binds its power parameter — the frames follow it for their own state.
 
+    // A block the product's chain does not hold is not on its panel (the bass's delay and reverb): the
+    // row splits among the rest.
+    shownFlags[(size_t) Block::delay]  = processor.chainHolds (params::rowDelay);
+    shownFlags[(size_t) Block::reverb] = processor.chainHolds (params::rowReverb);
+
     addAndMakeVisible (gate);
     addAndMakeVisible (limit);
     gate.setSwitchShown (false);

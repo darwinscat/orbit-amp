@@ -572,7 +572,7 @@ endfunction()
 # Standalone, and a CLAP through clap-juce-extensions — over the same processor; what differs is its
 # face, its name, its number and what it carries.
 #
-#   add_amp(<Name>  CODE <code>  [BY_NAME]
+#   add_amp(<Name>  CODE <code>  [BY_NAME]  [ICON <Amp>]
 #           SOURCES <files...>  LIBRARIES <targets...>  [ART <files...>]  [SET <packs...>]  [WHOLE_SHELF])
 #
 #   <Name>      the target, the PRODUCT_NAME and the stem of every bundle it builds; in lower case, its
@@ -586,6 +586,7 @@ endfunction()
 #               manufacturer code is the family's, Dcat (Darwin's Cat — >=1 uppercase, AU rule; same as
 #               OrbitCab).
 #   BY_NAME     not part of the default build (see below).
+#   ICON        another amp's icon, worn until its own is drawn: resources/icon/<Amp>-* rather than <Name>'s.
 #   SOURCES     what it is compiled from; LIBRARIES what it links, ahead of JUCE's recommended flags.
 #   ART         its renders, in the factory folder's Faces/<Name>, each under its own file's name, where its
 #               face reads them (src/face/Renders.h).
@@ -700,17 +701,21 @@ function(export_entry_points_only)
 endfunction()
 
 function(add_amp name)
-    cmake_parse_arguments(PARSE_ARGV 1 AMP "BY_NAME;WHOLE_SHELF" "CODE" "SOURCES;LIBRARIES;ART;SET")
+    cmake_parse_arguments(PARSE_ARGV 1 AMP "BY_NAME;WHOLE_SHELF" "CODE;ICON" "SOURCES;LIBRARIES;ART;SET")
     string(TOLOWER "${name}" id)
+    set(iconOf "${name}")
+    if(AMP_ICON)
+        set(iconOf "${AMP_ICON}")
+    endif()
 
     # Its icon. macOS 26 sets any icon that is not its own rounded square on a grey plate — the family's
     # disc came out as a small disc on a light square — so the Mac wears the amp's mark on the rounded
     # square the system expects (824 of the 1024 canvas, margins and all), the violet round its edge, and
     # it is shown as drawn. Windows and Linux keep the disc, or the same square on the whole canvas.
     if(APPLE)
-        set(icon "${CMAKE_CURRENT_SOURCE_DIR}/resources/icon/${name}-macOS-1024.png")
+        set(icon "${CMAKE_CURRENT_SOURCE_DIR}/resources/icon/${iconOf}-macOS-1024.png")
     else()
-        set(icon "${CMAKE_CURRENT_SOURCE_DIR}/resources/icon/${name}-1024.png")
+        set(icon "${CMAKE_CURRENT_SOURCE_DIR}/resources/icon/${iconOf}-1024.png")
     endif()
 
     juce_add_plugin(${name}
@@ -964,6 +969,9 @@ set(CATPITAMP_SET   "Soldano X88-IR Normal" "Soldano X88-IR Altered" "Soldano X8
 set(REDPAWAMP_SET   "Friedman IR-X Ch1 PowerAmp" "Friedman IR-X Ch2 PowerAmp")
 set(FROSTPAWAMP_SET "Two Notes ReVolt Clean PowerAmp" "Two Notes ReVolt Crunch PowerAmp" "Two Notes ReVolt Lead PowerAmp")
 set(AMBERPAWAMP_SET "Victory V4 Copper (clean)" "Victory V4 Sheriff (crunch)" "Victory V4 Kraken (hi-gain)")
+# OrbitBass plays bass packs alone — and until the bass captures are trained, ONE TEMPORARY PACK, a clean
+# guitar amp's, to play its chain through. The bass packs replace this line; it opens on the first.
+set(ORBITBASS_SET   "Two Notes ReVolt Clean PowerAmp")   # TEMPORARY — not a bass pack
 
 # A RELEASE SHIPS NO PACK OF AN AMP IT LEAVES OUT. A release (ORBITAMP_DEV_FACTORY OFF) carries the amps
 # installer/family.ini names; the packs only an amp it leaves out plays — today AmberPawAmp's V4 — are not
@@ -1141,6 +1149,12 @@ set(ORBITAMP_SOURCES
     src/ui/library/DeviceListView.cpp
     src/ui/library/IrTreeView.cpp
     src/face/Controls.cpp)           # the family's controls — the AMP's channel lever is a face::DetentLever
+
+# OrbitBass — the bass's workstation: OrbitAmp's processor and face, and OrbitBass itself — its Product, its
+# plug-in's entry (OrbitBassStart.cpp) — in place of OrbitAmp's.
+set(ORBITBASS_SOURCES ${ORBITAMP_SOURCES})
+list(REMOVE_ITEM ORBITBASS_SOURCES src/OrbitAmpStart.cpp)
+list(APPEND ORBITBASS_SOURCES src/OrbitBassStart.cpp)
 
 # A FACE is the family's console (src/face) over the family's channels (src/channels), on the same
 # processor: what the cockpit and every rover are compiled from before their own.
@@ -1359,6 +1373,17 @@ add_amp(AmberPawAmp   CODE Ambp    BY_NAME
     LIBRARIES ${ROVER_LIBRARIES}
     SET       ${AMBERPAWAMP_SET})
 
+# OrbitBass — the bass's workstation: OrbitAmp's frame and blocks over the bass's chain (src/Product.h,
+# Chain::bass) — mono, no delay, no reverb. It plays bass packs alone, ORBITBASS_SET's, and Darwin's Cat's
+# own cabinets. Not in the family's release (installer/family.ini), and asked for by name; OrbitAmp's
+# icon until it has its own.
+add_amp(OrbitBass     CODE Obas    BY_NAME    ICON OrbitAmp
+    SOURCES   ${ORBITBASS_SOURCES}
+    LIBRARIES
+        OrbitAmpData                 # the mark, the notice, the disclaimer — BinaryData::*
+        ${AMP_ENGINE_LIBRARIES}
+    SET       ${ORBITBASS_SET})
+
 # ----------------------------------------------------------------------------
 # THE FACES' GATES — in the gates binary, with every other (THE GATES BINARY, below); amp_console builds an amp
 # again under a main() of its own, for what is not a gate.
@@ -1479,6 +1504,12 @@ gate_in_binary(frostpaw-channel  tests/AmpChannelTests.cpp  PRODUCT FrostPawAmp 
 gate_in_binary(frostpaw-set      tests/AmpSetTests.cpp      PRODUCT FrostPawAmp  CHANNELS 6)
 gate_in_binary(amberpaw-channel  tests/AmpChannelTests.cpp  PRODUCT AmberPawAmp  CHANNELS 6)
 gate_in_binary(amberpaw-set      tests/AmpSetTests.cpp      PRODUCT AmberPawAmp  CHANNELS 6)
+
+# ORBITBASS'S CHAIN, headless: where a fresh one stands (the gate off, the HPF on at 25 Hz, the LPF off, mono,
+# its one temporary pack), the strip's arrows in its order (GATE, AMP, CAB, LIMIT), the delay and the reverb
+# out of its sound whatever their switches say, one signal to both outputs, OrbitAmp's links in OrbitAmp's
+# order less those two, and its tuner down to 25 Hz while every guitar amp's stays at 40.
+gate_in_binary(orbitbass         tests/OrbitBassTests.cpp   PRODUCT OrbitBass)
 
 # AN AMP WITH NO FACTORY FOLDER — copied off a zip without it, or the folder deleted: it plays, and says where
 # the folder belongs instead of opening an empty face (src/ui/FactoryMissing.h). OrbitAmp, the cockpit and the

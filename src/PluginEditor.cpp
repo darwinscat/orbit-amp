@@ -11,6 +11,26 @@
 namespace orbitamp
 {
 
+std::vector<LayoutStrip::Row> AmpEditor::stripRows (const AmpProcessor& p)
+{
+    // The layout strip: the chain, FIXED — every block's arrow is its STANDBY/ON, and nothing is
+    // ever taken off the panel. The two ends and the tuner are not arrows: their columns and their
+    // strip are always on the face. A link the product's chain does not hold (the bass's delay and
+    // reverb) has no arrow at all.
+    std::vector<LayoutStrip::Row> rows;
+
+    for (int i = 0; i < params::numChainRows; ++i)
+    {
+        const auto& link = params::chainLinks[(size_t) i];
+
+        LayoutStrip::Row row { link.name, link.captured ? theme::orange : theme::violet };
+        row.present = link.onParam != nullptr && i != params::rowTuner && p.chainHolds ((params::ChainRow) i);
+        rows.push_back (std::move (row));
+    }
+
+    return rows;
+}
+
 AmpEditor::AmpEditor (AmpProcessor& p)
     : juce::AudioProcessorEditor (&p), amp (p), chrome (p), faceplate (p),
       inColumn  (VolumeColumn::Side::in,  p.gateKeyDb, p.inClip,
@@ -105,23 +125,7 @@ AmpEditor::AmpEditor (AmpProcessor& p)
             window->setCentrePosition (area.getCentre());
     };
 
-    // The layout strip: the chain, FIXED — every block's arrow is its STANDBY/ON, and nothing is
-    // ever taken off the panel. The two ends and the tuner are not arrows: their columns and their
-    // strip are always on the face.
-    {
-        std::vector<LayoutStrip::Row> rows;
-
-        for (int i = 0; i < params::numChainRows; ++i)
-        {
-            const auto& link = params::chainLinks[(size_t) i];
-
-            LayoutStrip::Row row { link.name, link.captured ? theme::orange : theme::violet };
-            row.present = link.onParam != nullptr && i != params::rowTuner;
-            rows.push_back (std::move (row));
-        }
-
-        layoutStrip = std::make_unique<LayoutStrip> (std::move (rows));
-    }
+    layoutStrip = std::make_unique<LayoutStrip> (stripRows (amp));
 
     layoutStrip->onToggle = [this] (int i, bool on)
     {
@@ -143,7 +147,7 @@ AmpEditor::AmpEditor (AmpProcessor& p)
     {
         const auto& link = params::chainLinks[(size_t) i];
 
-        if (link.onParam != nullptr && i != params::rowTuner)
+        if (link.onParam != nullptr && i != params::rowTuner && amp.chainHolds ((params::ChainRow) i))
             blockRowAtts.push_back (std::make_unique<juce::ParameterAttachment> (
                 *amp.apvts.getParameter (link.onParam),
                 [this, i] (float v) { layoutStrip->setRowOn (i, v > 0.5f); }));

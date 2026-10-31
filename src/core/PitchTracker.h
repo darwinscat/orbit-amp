@@ -53,6 +53,20 @@ public:
         playing, which a lower floor lets through as a note of its own. */
     void setLevelFloorDb (double db) noexcept { rmsFloor = std::pow (10.0, db / 20.0); }
 
+    /** THE LOWEST PITCH LOOKED FOR, in Hz — a product's (Product::tunerLowestHz). Every lag up to one
+        period of it is correlated, so the cost of a window grows as this falls: a guitar amp stays at
+        `guitarLowestHz` and pays nothing for the bass's low strings; a bass amp asks for `bassLowestHz`.
+        Held to [`lowestHzFloor`, a quarter of the top]. */
+    void setLowestHz (double hz) noexcept { fMin = std::clamp (hz, lowestHzFloor, fMax / 4.0); }
+    double lowestHz() const noexcept      { return fMin; }
+
+    /** A bass's low E (41.2 Hz) with margin: every guitar amp's, and the tracker's own until told. */
+    static constexpr double guitarLowestHz = 40.0;
+
+    /** A bass's lowest string with margin — the drop-A A0 (27.5 Hz), the 5-string's B0 (30.9), the
+        drop-D D1 (36.7): OrbitBass's. */
+    static constexpr double bassLowestHz = 25.0;
+
     /** One window, oldest sample first. Every call is its own snapshot — no state carries over,
         so a torn or repeated window costs one reading, never a stuck tuner. */
     Reading analyse (const float* x, int n)
@@ -209,12 +223,15 @@ public:
     static int noteOctave (int midi) { return midi / 12 - 1; }   // MIDI convention: 69 = A4
 
 private:
-    // The analysis band. fMax clears the last fret of a 24-fret guitar (~1319 Hz); fMin reaches
-    // a bass low E with margin, so drop tunings never fall off the bottom of the ruler.
-    static constexpr double targetRate   = 12000.0;
-    static constexpr double aaCutoff     = 1500.0;
-    static constexpr double fMin         = 40.0;
-    static constexpr double fMax         = 1600.0;
+    // The analysis band. fMax clears the last fret of a 24-fret guitar (~1319 Hz); fMin is the
+    // product's (setLowestHz) — a bass low E with margin unless told lower, so a guitar's drop tunings
+    // never fall off the bottom of the ruler. The window (windowCap, ~256 ms at 12 kHz) holds more
+    // than six periods of the lowest it may be told, so the long-lag re-measure still has room.
+    static constexpr double targetRate    = 12000.0;
+    static constexpr double aaCutoff      = 1500.0;
+    static constexpr double lowestHzFloor = 20.0;
+    double                  fMin          = guitarLowestHz;
+    static constexpr double fMax          = 1600.0;
     static constexpr double keyMaxShare  = 0.90;
     static constexpr double clarityFloor = 0.85;    // below this the window is noise, not note
     double rmsFloor = 1.0e-3;                       // -60 dBFS — see setLevelFloorDb

@@ -1,14 +1,19 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of OrbitAmp — see LICENSE.
 
-// The tuner on a BASS — a characterisation, not a verdict. It plays every string a bassist tunes
-// through the tuner's own path and PRINTS what the needle shows; it fails only if the harness
-// itself stops hearing (a guitar's A2, which the tuner has always read). Whatever the bass rows
-// say, the run passes: the tables are the product, to be read and compared run to run.
+// The tuner on a BASS — a characterisation, and a verdict on the bass's lowest strings. It plays every
+// string a bassist tunes through the tuner's own path and PRINTS what the needle shows, at OrbitBass's
+// lowest pitch (core::PitchTracker::bassLowestHz, Product::tunerLowestHz). The tables are the product, to
+// be read and compared run to run; the run FAILS where the verdict does (0., below):
+//   - the harness hears a guitar's A2, which the tuner has always read;
+//   - at the bass's lowest pitch, A0, B0 and D1, in tune and 15 cents either side, show the right note in
+//     the right octave and lock within 3 cents, at every rate;
+//   - at the guitar's (every guitar amp's), an ear never told its lowest pitch reads every string here
+//     exactly as one told the guitar's: the guitar's tuner is the one it was.
 //
 // The path is the processor's, step for step (src/PluginProcessor.h, pumpTuner): the raw input
-// written into a TunerTap in host blocks, a TunerEar ticked at 30 Hz with the default level floor
-// (-60 dBFS) and reference (A4 = 440) set before every tick. 44.1, 48 and 96 kHz.
+// written into a TunerTap in host blocks, a TunerEar ticked at 30 Hz with the product's lowest pitch, the
+// default level floor (-60 dBFS) and reference (A4 = 440) set before every tick. 44.1, 48 and 96 kHz.
 //
 // The string: additive partials of a stiff string (B = 2e-4), each decaying faster than the one
 // below it, the fundamental at ~9 dB/s, so a note that starts at -15 dBFS RMS sinks under the
@@ -69,6 +74,10 @@ namespace
     constexpr int    lockTicks = 10;     // ... for this many ticks in a row is a lock
 
     bool perRun = false;
+
+    /** The lowest pitch the ear is told before every tick, as the processor tells it the product's; < 0
+        never tells it, as an ear of before. */
+    double lowest = PitchTracker::bassLowestHz;
 
     /** Deterministic noise — the run must not roll dice. */
     float lcgNoise (std::uint32_t& s)
@@ -196,6 +205,8 @@ namespace
 
             for (; nextTick <= end / sr; nextTick += 1.0 / tickHz)
             {
+                if (lowest > 0.0)
+                    ear->setLowestHz (lowest);
                 ear->setLevelFloorDb (floorDb);
                 ear->setReferenceHz (reference);
 
@@ -452,6 +463,46 @@ int main()
     }
     std::printf ("harness: a guitar A2 reads A2 and locks at every rate: %s\n\n", harnessHears ? "ok" : "FAIL");
 
+    // ---- 0. the verdict ---------------------------------------------------------------------------
+    // At the bass's lowest pitch the lowest strings read, in their octave, within lockCents; at the
+    // guitar's, the ear is the ear of before, tick for tick.
+    bool bassReads = true;
+    std::printf ("== 0. VERDICT at OrbitBass's lowest pitch, %.0f Hz: A0 B0 D1, in tune and +-15 c, every rate\n",
+                 PitchTracker::bassLowestHz);
+    for (const auto& b : { Bass { "A0", 27.500 }, Bass { "B0", 30.868 }, Bass { "D1", 36.708 } })
+        for (const double c : { -15.0, 0.0, 15.0 })
+            for (const double sr : rates)
+            {
+                const auto p  = play (b.hz, c, sr, { 6.0, false, "finger" }, {}, seed++);
+                const bool ok = p.v.shown == p.want.midi && p.v.lockMs >= 0.0 && std::fabs (p.v.errMed) <= lockCents;
+                bassReads = bassReads && ok;
+                std::printf ("   %s  %-3s %+4.0fc %5.1fk: shown %-4s (want %s), lock %5s ms, err %+5.1f c\n", ok ? "ok  " : "FAIL",
+                             b.name, c, sr / 1000.0, p.v.shown < 0 ? "-" : noteText (p.v.shown).c_str(),
+                             noteText (p.want.midi).c_str(), fmtMs (p.v.lockMs).c_str(), p.v.errMed);
+            }
+
+    bool guitarSame = true;
+    {
+        const double was = lowest;
+        for (const double hz : { 27.5, 30.868, 36.708, 41.203, 55.0, 110.0, 329.63 })
+            for (const double sr : rates)
+            {
+                const auto y = pluck (hz, sr, { 6.0, false, "finger" }, {}, 7);
+                lowest = -1.0;
+                const auto before = listen (y, sr);
+                lowest = PitchTracker::guitarLowestHz;
+                const auto told = listen (y, sr);
+                bool same = before.size() == told.size();
+                for (size_t i = 0; same && i < told.size(); ++i)
+                    same = before[i].live == told[i].live && before[i].midi == told[i].midi
+                        && before[i].hz == told[i].hz && before[i].needle == told[i].needle;
+                guitarSame = guitarSame && same;
+            }
+        lowest = was;
+    }
+    std::printf ("   %s  at the guitar's lowest pitch, %.0f Hz, the ear reads every string as an ear never told one\n\n",
+                 guitarSame ? "ok  " : "FAIL", PitchTracker::guitarLowestHz);
+
     // ---- 1. the range ---------------------------------------------------------------------------
     std::printf ("== 1. RANGE: a full-range finger pluck (fundamental +6 dB over the 2nd), folded over 44.1/48/96 kHz\n"
                  "   live/oct: least share of ticks before the floor showing anything / the right octave;\n"
@@ -593,5 +644,7 @@ int main()
         std::printf ("   %5.1f kHz: mean %6.1f us, worst %7.1f us over %ld ticks\n", sr / 1000.0,
                      c.calls > 0 ? c.totalUs / (double) c.calls : 0.0, c.worstUs, c.calls);
 
-    return harnessHears ? 0 : 1;
+    const bool passed = harnessHears && bassReads && guitarSame;
+    std::printf ("\n%s\n", passed ? "PASSED" : "FAILED");
+    return passed ? 0 : 1;
 }

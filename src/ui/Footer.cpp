@@ -25,17 +25,17 @@ namespace
         plugin links have always carried. Everything that describes the BUILD is added by appkit:
         `from` (the product slug), `platform` (the machine) and `format` (the wrapper). None of it
         reaches the payment page — the hop logs the query and redirects clean. */
-    /** What is OrbitAmp's own in the version window — its page (ProductPage.h), the family's tag on the
+    /** What is the amp's own in the version window (OrbitAmp's, or OrbitBass's) — its page (ProductPage.h), the family's tag on the
         maker's page and the tip jar; the rest of it is aboutConfig's. */
-    appkit::VersionBadge::Config badgeConfig (bool standalone)
+    appkit::VersionBadge::Config badgeConfig (const juce::String& name, bool standalone)
     {
-        return aboutConfig ("OrbitAmp", productPageUrl ("OrbitAmp", standalone), familyLinkTag ("OrbitAmp"));
+        return aboutConfig (name, productPageUrl (name, standalone), familyLinkTag (name));
     }
 }
 
 Footer::Footer (AmpProcessor& processor)
     : amp (processor),
-      versionBadge (processor.updateChecker(), badgeConfig (processor.wrapperType == juce::AudioProcessor::wrapperType_Standalone), processor.pluginFormat())
+      versionBadge (processor.updateChecker(), badgeConfig (processor.product().name, processor.wrapperType == juce::AudioProcessor::wrapperType_Standalone), processor.pluginFormat())
 {
     // MONO | STEREO | STEREO SPACE: the click walks the loop — parameter truth, no local state.
     stereo.theme = chrome::ChromeTheme { .fill       = theme::panel,
@@ -74,6 +74,13 @@ Footer::Footer (AmpProcessor& processor)
         });
 
     stereoAttachment->sendInitialUpdate();
+
+    // The bass's chain is mono, whatever the mode says (Product::chain): nothing to switch, no place.
+    if (amp.product().chain == Chain::bass)
+    {
+        stereo.setVisible (false);
+        stereoSlotW = 0;
+    }
 
     loadBadge.onClick = [this] { showLoadBreakdown(); };
     loadBadge.setMouseCursor (juce::MouseCursor::PointingHandCursor);

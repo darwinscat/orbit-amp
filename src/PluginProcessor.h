@@ -148,8 +148,14 @@ public:
     {
         double tail = 0.1;   // every ramp in here, and the models' handful of milliseconds
 
-        tail += (double) delay.tailSeconds();
-        tail += (double) reverb.tailSeconds();
+        // The bass's chain holds neither the echo nor the room (Product::chain): no tail of theirs, and
+        // no floor for them below.
+        const bool echoes = chainHolds (params::rowDelay) || chainHolds (params::rowReverb);
+
+        if (chainHolds (params::rowDelay))
+            tail += (double) delay.tailSeconds();
+        if (chainHolds (params::rowReverb))
+            tail += (double) reverb.tailSeconds();
         tail += (double) cab.tailSeconds();
 
         // A FLOOR, BECAUSE NOTHING CAN TELL A HOST THIS NUMBER MOVED. There is no such message in
@@ -165,7 +171,8 @@ public:
         // no longer cut at eight, and the one case that stays wrong in a caching host is one where
         // the old constant was exactly as wrong. Lifting the floor is a thing to do after watching
         // a real session in Cubase and Logic, not before.
-        tail = juce::jmax (tail, 8.0);
+        if (echoes)
+            tail = juce::jmax (tail, 8.0);
 
         return juce::jmin (tail, 30.0);
     }
@@ -803,6 +810,7 @@ private:
             sr > 0.0 && ! juce::approximatelyEqual (sr, tunerEar.preparedRate()))
             tunerEar.prepare (sr);
 
+        tunerEar.setLowestHz (ownProduct.tunerLowestHz);
         tunerEar.setLevelFloorDb ((double) prefs::tunerFloor (ownProduct));
         tunerEar.setReferenceHz ((float) prefs::tunerReference (ownProduct));
         tunerEar.update (tunerTap, juce::Time::getMillisecondCounter());
@@ -814,8 +822,19 @@ private:
     bool linkWorks (params::ChainRow row) const noexcept
     {
         const auto* on = rowOn[(size_t) row];
-        return on == nullptr || on->load() > 0.5f;
+        return chainHolds (row) && (on == nullptr || on->load() > 0.5f);
     }
+
+public:
+    /** WHETHER THIS PRODUCT'S CHAIN HAS THE LINK AT ALL (Product::chain) — the bass's has no delay and no
+        reverb. A link it does not hold never works, whatever its switch says (a state of another amp's, a
+        host's automation), and has no arrow on the strip and no block on the panel. */
+    bool chainHolds (params::ChainRow row) const noexcept
+    {
+        return ownProduct.chain != Chain::bass || params::bassChainHolds (row);
+    }
+
+private:
 
 
     /** The chain's round-trip to the host: whatever the three players' models need for

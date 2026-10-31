@@ -42,7 +42,8 @@ Chrome::Chrome (AmpProcessor& processor)
               .display    = felitronics::appkit::brand::textTypeface(),
               .tracking   = 0.06f },
       // The family's own kit: appkit carries the mark and the face, so nothing here embeds either.
-      brand ("OrbitAmp", productPageUrl ("OrbitAmp", processor.wrapperType == juce::AudioProcessor::wrapperType_Standalone)),     // ProductPage.h
+      brand (processor.product().name,
+             productPageUrl (processor.product().name, processor.wrapperType == juce::AudioProcessor::wrapperType_Standalone)),     // ProductPage.h
       preset (theme)
 {
     auto& history = amp.history;
@@ -179,7 +180,7 @@ void Chrome::showPresetMenu()
 {
     juce::PopupMenu menu;
 
-    const auto names = PresetManager::names();
+    const auto names = PresetManager::names (amp.product());
 
     if (names.isEmpty())
         menu.addItem ("No presets yet", false, false, [] {});
@@ -187,7 +188,7 @@ void Chrome::showPresetMenu()
     for (const auto& n : names)
         menu.addItem (n, true, n == presetName, [this, n]
         {
-            auto tree = PresetManager::read (n);
+            auto tree = PresetManager::read (amp.product(), n);
             if (! tree.isValid())
                 return;
 
@@ -217,7 +218,7 @@ void Chrome::showPresetMenu()
     menu.addSeparator();
     menu.addItem ("Delete", names.contains (presetName), false, [this]
     {
-        PresetManager::remove (presetName);
+        PresetManager::remove (amp.product(), presetName);
         presetName = "Default";
         preset.setCurrentName (presetName);
     });
@@ -253,7 +254,7 @@ void Chrome::savePreset (bool forceNewName)
 {
     auto store = [this] (const juce::String& name)
     {
-        if (! PresetManager::write (name, amp.presetForSaving()))
+        if (! PresetManager::write (amp.product(), name, amp.presetForSaving()))
             return;
 
         presetName = name;
@@ -261,7 +262,7 @@ void Chrome::savePreset (bool forceNewName)
         amp.history.markSaved();
     };
 
-    if (! forceNewName && PresetManager::names().contains (presetName))
+    if (! forceNewName && PresetManager::names (amp.product()).contains (presetName))
     {
         store (presetName);
         return;

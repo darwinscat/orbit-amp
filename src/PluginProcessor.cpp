@@ -1002,8 +1002,9 @@ void AmpProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 
     // Over the channels the bus carries — one or two, by the layouts this plugin accepts. A prepare
     // either refuses keeps that link out of the sound (see delayReady), the way the limiter's does.
-    delayReady  = delay.prepare (sampleRate, block, channels);
-    reverbReady = reverb.prepare (sampleRate, block, channels);
+    // A chain with no place for them (the bass's) never prepares them: they hold no memory and never run.
+    delayReady  = chainHolds (params::rowDelay)  && delay.prepare (sampleRate, block, channels);
+    reverbReady = chainHolds (params::rowReverb) && reverb.prepare (sampleRate, block, channels);
     preamp.prepare (sampleRate, block, channels);
     demo.prepare (sampleRate);
     ear.prepare (sampleRate);
@@ -1203,8 +1204,12 @@ bool AmpProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
 
 params::StereoMode AmpProcessor::modeOfEnvironment() const
 {
-    // Only what the AudioProcessor itself knows: the layout reads it while this processor's own
-    // members are still being made.
+    // Only what the AudioProcessor itself knows, and its product, which is made before anything that
+    // reads this: the layout reads it while this processor's own members are still being made. The
+    // bass's chain is one signal wherever it runs (Product::chain).
+    if (ownProduct.chain == Chain::bass)
+        return params::StereoMode::mono;
+
     return wrapperType == wrapperType_Standalone ? params::StereoMode::stereoSpace
          : getTotalNumInputChannels() >= 2       ? params::StereoMode::stereo
                                                  : params::StereoMode::mono;
@@ -1517,8 +1522,14 @@ void AmpProcessor::processChunk (juce::AudioBuffer<float>& buffer)
     // made at the seam, so the space is wide and the amp is paid for once. The seam stands BEFORE
     // the delay, not before the reverb: the delay's OFFSET is a stereo of its own, and a spread
     // the room then works on is wider than a spread the room has to make alone.
-    const auto mode = static_cast<params::StereoMode> (
-        juce::jlimit (0, params::stereoModes.size() - 1, juce::roundToInt (stereoModeParam->load())));
+    //
+    // THE BASS'S CHAIN IS MONO, whatever the mode's parameter says (a state of another amp's, a host's
+    // automation): one signal from the gate to the limiter, copied to the outputs at the end. Its stereo
+    // will be its CHORUS's alone, and only above the low end.
+    const auto mode = ownProduct.chain == Chain::bass
+                          ? params::StereoMode::mono
+                          : static_cast<params::StereoMode> (
+                                juce::jlimit (0, params::stereoModes.size() - 1, juce::roundToInt (stereoModeParam->load())));
     const int nch     = mode == params::StereoMode::stereo ? numChannels : juce::jmin (1, numChannels);
     const int nchBack = mode == params::StereoMode::mono   ? nch         : numChannels;
 
@@ -1577,6 +1588,12 @@ void AmpProcessor::processChunk (juce::AudioBuffer<float>& buffer)
         gate.applyGain (channels, nch, numSamples);
 
     nsStage[stGate] = elapsedNs (tGate);
+
+    // THE BASS'S PLACES BEFORE THE AMP (Chain::bass), in its order, each still empty — nothing here runs
+    // for any amp yet:
+    //   [COMP]    the one-knob compressor, its detector deaf below 40 Hz, no look-ahead;
+    //   [OCTAVE]  the sub octave, under the dry;
+    //   [FILTER]  the envelope filter, the low end kept.
 
     // A captured block, whole: the capture, then its own EQ.
     //
@@ -1701,6 +1718,8 @@ void AmpProcessor::processChunk (juce::AudioBuffer<float>& buffer)
         }
     };
 
+    // AMP and TONE, one captured block: the capture wearing the pack's own tone knobs (EqMode::native),
+    // then its console — the bass's TONE as much as the guitar's.
     captured (preamp, 0, params::rowPreamp, blockOutDb[0], stPreamp, stPreampEq);
 
     // MUTE pre-reverb — the G-String architecture, and the default: everything the chain ADDED
@@ -1713,6 +1732,10 @@ void AmpProcessor::processChunk (juce::AudioBuffer<float>& buffer)
     // rooms what it made.
     for (int ch = nch; ch < nchBack; ++ch)
         buffer.copyFrom (ch, 0, buffer, 0, 0, numSamples);
+
+    // THE BASS'S PLACE AFTER THE AMP (Chain::bass), still empty: [CHORUS], where its stereo will begin —
+    // above the low end only. It holds no delay and no reverb: neither is prepared, run or reset below
+    // (chainHolds), and their switches never work.
 
     // The echo before the space: repeats of what the preamp made, which the reverb then rooms.
     // First of the wide stages — the OFFSET is the block's stereo, so it works the back half's
@@ -1729,7 +1752,7 @@ void AmpProcessor::processChunk (juce::AudioBuffer<float>& buffer)
 
         nsStage[stDelay] = elapsedNs (a);
     }
-    else
+    else if (chainHolds (params::rowDelay))
     {
         delay.reset();
     }
@@ -1760,7 +1783,7 @@ void AmpProcessor::processChunk (juce::AudioBuffer<float>& buffer)
                                juce::roundToInt (juce::jmax (8000.0, getSampleRate()) / 30.0)); }
 
           nsStage[stReverb] = elapsedNs (a); }
-    else
+    else if (chainHolds (params::rowReverb))
         reverb.reset();
 
     // The cabinet closes the tone: the IR speaks last, before the master's hand and the safety.
@@ -1810,6 +1833,11 @@ void AmpProcessor::processChunk (juce::AudioBuffer<float>& buffer)
       cabOutDb.store (juce::Decibels::gainToDecibels (
           buffer.getMagnitude (0, 0, numSamples), -90.0f));
       nsStage[stCab] = elapsedNs (a); }
+
+    // THE BASS'S PLACES AFTER THE CABINET (Chain::bass): [DI/CAB], the DI's share beside the cabinet's,
+    // still empty; then HPF/LPF — today the cabinet's own two cuts, baked into its IR (CabinetIr's post),
+    // so they come and go with it. The bass's HPF stands on at 25 Hz (params::Opening); its own place,
+    // here after the mix so the DI is cut too, comes with the DI.
 
     // THE BOOST'S LEVEL (params::boostLevel): the lift of a boost that is on, after everything that
     // makes the sound and before the master's hand and the limiter, so the ceiling still holds at +9.

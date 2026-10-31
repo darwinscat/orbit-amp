@@ -492,6 +492,13 @@ inline constexpr ChainLink chainLinks[numChainRows] = {
     /* OUT    */ { "OUT",    false, true,  nullptr,   stOut,    numStages },
 };
 
+/** THE BASS'S CHAIN (OrbitBass, Product's Chain::bass): every link of the guitar's but the delay and the
+    reverb — neither is in its sound, its strip or its panel. Its blocks still to come have no row yet. */
+inline constexpr bool bassChainHolds (ChainRow row) noexcept
+{
+    return row != rowDelay && row != rowReverb;
+}
+
 /** Whose cost a stage is. A captured block owns two — itself and its own console — and TOTAL
     belongs to nobody, so it is always shown. Walked rather than tabulated: nine links, ten
     stages, and one table that cannot fall out of step with itself. */
@@ -531,6 +538,15 @@ struct Opening
     float reverbMix     = 30.0f;        // its share, percent
     float delayMix      = 0.0f;         // the delay's, percent
     StereoMode stereoMode = StereoMode::mono;
+
+    // WHAT THE PRODUCT'S CHAIN IS, not where it opens: a link its chain has no place for stands off, and
+    // its cabinet's cuts stand where its instrument wants them — OrbitBass's HPF on, at 25 Hz. Declared
+    // like the rest, and nothing puts them back elsewhere: engineDefault leaves them their declared
+    // defaults, so INIT never brings a bass's reverb back.
+    bool  delayOn  = true;
+    bool  reverbOn = true;
+    bool  cabHpfOn = false;
+    float cabHpfHz = cabHpfDefaultHz;
 };
 
 /** The engine's parameters, for the product of that name: the devices a parameter offers are the ones

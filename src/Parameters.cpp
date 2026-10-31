@@ -93,9 +93,10 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout (const juce::St
     // The tuner's mute ships OFF: a plugin that opens silent is a plugin reported as broken.
     layout.add (std::make_unique<Bool> (juce::ParameterID { tunerMute, 1 }, "Tuner Mute", false));
 
-    // Block power. Both are the sound, so both start on.
+    // Block power. Both are the sound, so both start on — the reverb where the product's chain holds one
+    // (Opening::reverbOn).
     layout.add (std::make_unique<Bool> (juce::ParameterID { preampOn, 1 }, preampName, true),
-                std::make_unique<Bool> (juce::ParameterID { reverbOn, 1 }, "Reverb", true));
+                std::make_unique<Bool> (juce::ParameterID { reverbOn, 1 }, "Reverb", opening.reverbOn));
 
     // The input trim, ahead of everything. Unity by default: it exists to fix a rig, not to be
     // part of a sound.
@@ -236,9 +237,9 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout (const juce::St
 
     // The IR's own post: two cuts, a trim and a flip, each behind a switch — off, the IR plays as
     // it was shot. The frequencies are ranged as OrbitCab ranges them.
-    layout.add (std::make_unique<Bool>  (juce::ParameterID { cabHpfOn,  1 }, "Cab HPF", false),
+    layout.add (std::make_unique<Bool>  (juce::ParameterID { cabHpfOn,  1 }, "Cab HPF", opening.cabHpfOn),
                 std::make_unique<Float> (juce::ParameterID { cabHpfHz,  1 }, "Cab HPF Hz",
-                                         juce::NormalisableRange<float> (cabHpfMinHz, cabHpfMaxHz, 1.0f, 0.5f), cabHpfDefaultHz),
+                                         juce::NormalisableRange<float> (cabHpfMinHz, cabHpfMaxHz, 1.0f, 0.5f), opening.cabHpfHz),
                 std::make_unique<Choice> (juce::ParameterID { cabHpfSlope, 1 }, "Cab HPF Slope", eqSlopes, 1),
                 std::make_unique<Bool>  (juce::ParameterID { cabLpfOn,  1 }, "Cab LPF", false),
                 std::make_unique<Float> (juce::ParameterID { cabLpfHz,  1 }, "Cab LPF Hz",
@@ -271,7 +272,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout (const juce::St
     // Sync ships ON at a quarter note: the free milliseconds are the specialist's mode, the division is
     // the player's. The BPM field is the standalone's conductor; in a host the session's tempo conducts,
     // unless the player asks the delay to keep its own.
-    layout.add (std::make_unique<Bool>   (juce::ParameterID { delayOn, 1 }, "Delay", true),
+    layout.add (std::make_unique<Bool>   (juce::ParameterID { delayOn, 1 }, "Delay", opening.delayOn),
                 std::make_unique<Bool>   (juce::ParameterID { delaySync, 1 }, "Delay Sync", true),
                 std::make_unique<Bool>   (juce::ParameterID { delayHostTempo, 1 }, "Delay Follows Host", true),
                 std::make_unique<Choice> (juce::ParameterID { delayDiv, 1 }, "Delay Division",

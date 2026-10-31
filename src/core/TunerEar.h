@@ -44,6 +44,11 @@ public:
         Cheap: call it every tick. */
     void setLevelFloorDb (double db) { tracker.setLevelFloorDb (db); }
 
+    /** The lowest pitch the tracker looks for — the product's (PitchTracker::setLowestHz). Cheap: call
+        it every tick. */
+    void   setLowestHz (double hz) noexcept { tracker.setLowestHz (hz); }
+    double lowestHz() const noexcept        { return tracker.lowestHz(); }
+
     /** The pitch A4 is tuned to, in Hz: what every note is named and measured from. Cheap: call it
         every tick — the needle eases to the new reading like to any other. */
     void  setReferenceHz (float hz) noexcept { a4 = hz > 0.0f ? hz : PitchTracker::concertA; }

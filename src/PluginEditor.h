@@ -46,6 +46,10 @@ public:
     /** Re-read the window preferences (Setup's VIEW page) and lay the editor out to match. */
     void applyViewPrefs();
 
+    /** The chain strip's rows for this processor's product, one per chain row, in the chain's order —
+        an arrow for each link with a switch that its chain holds. */
+    static std::vector<LayoutStrip::Row> stripRows (const AmpProcessor&);
+
 private:
     static constexpr int margin    = 2;    // the device fills its window: the columns touch the sides, the brand the corner
     static constexpr int headerGap = 0;    // toolbar to faceplate — the frames' own inset already keeps the switches clear
