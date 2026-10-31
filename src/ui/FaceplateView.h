@@ -146,13 +146,18 @@ public:
     /** OrbitBass's DELAY and REVERB, compact (ui/SpaceBlocks.h): after CHORUS in the cabinet's row, each this wide at the
         least — its MIX rail and its picture — and the cabinet never narrower than `bassCabLeast` beside them. */
     static constexpr int spaceWidth   = 150;
-    static constexpr int bassCabLeast = 226;   // the guitar face's cabinet at its least (three in a row)
+
+    /** THE CABINET'S LEAST on the bass: never under the guitar face's cabinet at its least (226, three in a row), and wide
+        enough that appkit's IrWaveView — which writes the IR's line itself ("85ms  |  48.0kHz  |  24-bit  |  mono", at
+        12 px, cut mid-word where it does not fit) — has room for such a line with a three-digit length at 13 px in this
+        platform's own sans. Measured once, on the message thread. */
+    static int bassCabLeast();
 
     /** THE LEAST WIDTH OF ORBITBASS'S FACEPLATE as its strip stands: the cabinet's row — CHORUS, DELAY, REVERB as they
         are in it, the cabinet at its least, LIMIT — or `fallback` (the guitar's least), whichever is wider. */
     static int bassLeastWidth (bool chorusIn, bool delayIn, bool reverbIn, int fallback)
     {
-        int row = GuardBlock::designWidth + colGap + bassCabLeast;
+        int row = GuardBlock::designWidth + colGap + bassCabLeast();
         if (chorusIn) row += chorusWidth + colGap;
         if (delayIn)  row += spaceWidth + colGap;
         if (reverbIn) row += spaceWidth + colGap;

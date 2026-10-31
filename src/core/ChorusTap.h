@@ -24,7 +24,8 @@ namespace orbitamp::core
     above 0 — is the stage's restart: the phase back to 0, the rate snapped. The one thing it does not see is the
     sample a stage fading to idle lands on mid-call; from there on the stage stands with no swing, and its next wake
     starts it from 0 again. The derivation runs on every call (a few operations); the RING is written only while the
-    picture is on screen (`write`), and nothing at all while the stage idles: the picture stands still.
+    picture is on screen and the stage at work (`write`), and nothing at all while the stage idles: the picture stands
+    still.
 
     The audio thread writes (follow); the message thread reads (read) on its own timer. No lock and no allocation:
     fixed arrays of relaxed atomics, one release count, and a GENERATION per slot — the entry's own number, 0 while it

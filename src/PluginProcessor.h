@@ -908,9 +908,6 @@ public:
 private:
 
 public:
-    /** WHETHER THIS PRODUCT'S CHAIN HAS THE LINK AT ALL (Product::chain) — the bass's has no delay and no
-        reverb. A link it does not hold never works, whatever its switch says (a state of another amp's, a
-        host's automation), and has no arrow on the strip and no block on the panel. */
     /** The bass's FILTER: where its sweep stands now, Hz — the module's own read-out (any thread). */
     float filterShownCutoffHz() const noexcept { return envFilter.shownCutoffHz(); }
 
@@ -970,6 +967,10 @@ public:
         chain. Any thread. */
     int bassBackPlanes() const noexcept { return bassWide.load (std::memory_order_relaxed); }
 
+    /** WHETHER THIS PRODUCT'S CHAIN HAS THE LINK AT ALL (Product::chain) — the bass's holds every one (its DELAY and
+        REVERB out of its strip until the player adds them: linkInRig); a guitar amp's none of the bass's own, COMP,
+        OCTAVE, ENVELOPE and CHORUS. A link it does not hold never works, whatever its switch says (a state of another
+        amp's, a host's automation), and has no arrow on the strip and no block on the panel. */
     bool chainHolds (params::ChainRow row) const noexcept
     {
         return ownProduct.chain == Chain::bass ? params::bassChainHolds (row) : params::guitarChainHolds (row);
@@ -1477,6 +1478,8 @@ private:
     felitronics::chorus::BassChorusParams        chorusTold {};
     bool octaveToldValid = false, filterToldValid = false, chorusToldValid = false;
     bool filterTapLive = false;   // the audio thread's: whether it wrote FILTER's tap last block (a fresh look wakes it)
+    bool octaveLive = false, filterLive = false, chorusLive = false;   // the audio thread's: each at work — in the chain,
+                                                                       // switched on, its slider up — its picture written only then
     std::array<int, 3> effectTold {};     // setParams calls, per effect — for a gate (effectTells)
     std::atomic<bool> effectWorking[3] {};  // FILTER's and CHORUS's "not idle", for their lamps (OCTAVE's is the module's)
 
@@ -1503,16 +1506,20 @@ private:
     /** THE BASS'S DELAY OR REVERB (Chain::bass), after its CHORUS, on the back half's planes: the stage run on a copy
         of what it is handed, what it ADDED cut below params::bassWetCutHz and put back over the dry — the repeats and
         the tail lose their lows, the bass keeps them. Out of the strip, a stage's whole contribution fades out over the
-        bypass fade, and then the stage is cleared and not run at all. */
+        bypass fade, and then — in the call the fade ends in — the stage is cleared and not run at all. Its picture is
+        written while `watched` and at work (switched on, `adds`: its MIX up). No channel (null, 0) is a gap: the stage
+        takes it as its own (law 11c). */
     template <typename Stage>
     void runSpaceStage (Stage&, bool ready, params::ChainRow, int which, core::SpaceTap&, const std::atomic<bool>& watched,
-                        float* const* channels, int numChannels, int numSamples) noexcept;
+                        bool adds, float* const* channels, int numChannels, int numSamples) noexcept;
+    bool delayAdds() const noexcept  { return delayMixParam != nullptr && delayMixParam->load() > 0.0f; }
+    bool reverbAdds() const noexcept { return reverbMixParam != nullptr && reverbMixParam->load() > 0.0f; }
     juce::AudioBuffer<float> spaceDry;                        // a stage's input, for what it added
     std::array<std::array<core::CutBiquad, 2>, 2> wetCuts {};  // [delay, reverb][plane]: the low cut on the wet
     std::array<bool, 2> spaceRunning {};                      // [delay, reverb]: ran last block
 
-    /** A call of positive length with no channel (law 11c), to the three effects: their shared clocks run as through
-        silence. */
+    /** A call of positive length with no channel (law 11c), to the three effects — their shared clocks run as through
+        silence — and to DELAY and REVERB, present and running. */
     void passGap (int numSamples) noexcept;
     std::atomic<float>* cabHpfOnParam = nullptr;
     std::atomic<float>* cabHpfHzParam = nullptr;

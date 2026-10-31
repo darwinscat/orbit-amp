@@ -134,8 +134,19 @@ FaceplateView::FaceplateView (AmpProcessor& processor)
         gear (spaceDelay.get(), "DELAY");
         gear (spaceReverb.get(), "REVERB");
         gear (&cabinet, "CAB IR");
-        cabinet.routeRightClickToSettings (cabinet.waveView());   // its waveform takes its own clicks
+        cabinet.pictureMenuOpensSettings();   // its waveform takes its own clicks: its right click is the window
     }
+}
+
+int FaceplateView::bassCabLeast()
+{
+    static const int least = []
+    {
+        const float line = juce::GlyphArrangement::getStringWidth (juce::Font (juce::FontOptions (13.0f)),
+                                                                   "500ms  |  48.0kHz  |  24-bit  |  mono");
+        return juce::jmax (226, CabinetBlock::bassWidthForWave ((int) std::ceil (line) + 16));   // the line's 8 px each side
+    }();
+    return least;
 }
 
 FaceplateView::~FaceplateView()

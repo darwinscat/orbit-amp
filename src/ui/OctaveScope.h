@@ -32,7 +32,8 @@ namespace orbitamp
 
     It reads the processor's tap (core::OctaveTap) on its own timer, and the audio thread writes the tap only while
     this is on screen (isShowing(): its own visibility, every ancestor's, the window's); it repaints only when the tap
-    moved or the lock changed, and the tap writes no silence: in silence the picture stands still. A click on it is
+    moved or the lock changed, and the tap writes no silence: in silence the picture stands still — and standing by or at
+    0, when nothing is written, dimmed with its block (the owner, 31.10). A click on it is
     the block's (its menu). The reading is 13 px. */
 class OctaveScope final : public juce::Component,
                           private juce::Timer

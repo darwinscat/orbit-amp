@@ -16,7 +16,8 @@ namespace orbitamp::core
     squeeze, as COLUMNS — each the peaks of in and out and the deepest squeeze over `hopSeconds` of audio — in a ring
     the picture reads the newest few hundred of.
 
-    The audio thread writes (write), only while the picture is on screen (AmpProcessor::compWatched); the message
+    The audio thread writes (write), only while the picture is on screen (AmpProcessor::compWatched) and COMP is heard —
+    standing by or at BLEND 0 it writes nothing and the picture stands still (BassComp::process); the message
     thread reads (read) on its own timer. No lock and no allocation: fixed arrays of relaxed atomics and one release
     count. SILENCE IS NOT WRITTEN: once in and out have stood under -80 dBFS, with no squeeze, for `holdColumns`
     columns, nothing more goes in until the playing comes back — the picture stops scrolling rather than scroll
@@ -51,7 +52,7 @@ public:
     }
 
     /** The audio thread: one block of what COMP's detector hears (its key) and of its output, the same instant, and its
-        squeeze per sample in dB (null for none — the link standing by, the knob at zero). The input column is the
+        squeeze per sample in dB (null for none). The input column is the
         DETECTOR'S level — its RMS over 10 ms in SMOOTH (`rms`), its peak in PUNCHY — so a trace over the threshold is a
         trace being squeezed. */
     void write (const float* in, const float* out, const float* grDb, int n, bool rms) noexcept

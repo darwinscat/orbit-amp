@@ -31,8 +31,8 @@ namespace orbitamp
 
     The phase is the processor's tap (core::ChorusTap): read on its own timer only while it is on screen — the timer
     asks every tick, so a hidden ancestor stops it too, and the audio thread writes it only then — and it moves only
-    while the stage runs: an idle chorus stands still. Every word on
-    it is 13 px. */
+    while the stage runs: an idle chorus stands still, and so does one standing by or at 0 — nothing is written then, and
+    it dims with its block (the owner, 31.10). Every word on it is 13 px. */
 class ChorusPicture final : public juce::Component,
                             private juce::Timer
 {

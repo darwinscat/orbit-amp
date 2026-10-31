@@ -17,7 +17,8 @@ namespace orbitamp::core
     newest few hundred of: the repeats as they come round, the tail as it falls.
 
     The audio thread counts every sample the stage ran (take); the RING is written only while the picture is on screen
-    (`write`), and nothing at all while the stage is out of the chain: the picture stands still. A hop not written
+    (`write`) and the stage is at work (switched on, its MIX up), and nothing at all while it is out of the chain: the
+    picture stands still. A hop not written
     breaks the trace — the next one written starts a new one.
 
     The audio thread writes; the message thread reads on its own timer. No lock and no allocation: fixed arrays of

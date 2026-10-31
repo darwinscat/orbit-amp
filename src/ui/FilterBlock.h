@@ -34,7 +34,8 @@ namespace orbitamp
 
     It reads the tap on its own timer, and only while it is on screen — the audio thread writes it only then. The timer
     asks isShowing() on every tick, so a parent hidden (which tells no child) or a window put away stops the writing
-    too; a still sweep writes nothing, and the picture stands still. */
+    too; a still sweep writes nothing, and the picture stands still — as it does standing by or at 0, dimmed with its block
+    (the owner, 31.10). */
 class FilterCurve final : public juce::Component,
                           private juce::Timer
 {

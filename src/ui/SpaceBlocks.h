@@ -24,7 +24,8 @@ namespace orbitamp
 
     The tap is read on its own timer only while the picture is on screen — the timer asks every tick, so a hidden
     ancestor stops it too, and the audio thread writes it only then; out of the strip the stage is not run and the
-    picture stands still. A click anywhere is the block's window. */
+    picture stands still — standing by (its tail ringing out or not) or at MIX 0 nothing is written either, and it dims
+    with its block (the owner, 31.10). A click anywhere is the block's window. */
 class SpacePicture final : public juce::Component,
                            private juce::Timer
 {

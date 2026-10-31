@@ -8,6 +8,7 @@
 #include "CompTap.h"
 
 #include <felitronics/dynamics/Compressor.h>
+#include <felitronics/dynamics/GainComputer.h>
 
 #include <algorithm>
 #include <array>
@@ -25,13 +26,17 @@ namespace orbitamp::core
       - THE KNOB IS BLEND — parallel compression: 0 is no compressor at all (once glided there nothing is computed and
         the signal passes bit for bit), 1 all of the signal compressed, between the compressed signal over the clean one,
         sample-aligned (no lookahead, no latency).
-      - MAKE-UP is automatic: core's static make-up from the threshold and the ratio (half what the curve takes from 0
-        dBFS), gliding as the squeeze does — up at the attack's pace, down at the release's.
+      - MAKE-UP is automatic and LEVEL-NEUTRAL (the owner, 31.10: BLEND changes evenness, not loudness): it gives back
+        exactly what the curve takes from a note at the REFERENCE — a steady note at -18 dBFS RMS (`referenceDb`), which
+        SMOOTH's detector reads at -18 dB and PUNCHY's `punchyReadsDb` higher (its peaks, as its squeeze settles). A
+        note there keeps its level at any BLEND; a quieter one comes up a little, a louder one goes down a little. It
+        glides as the squeeze does — up at the attack's pace, down at the release's.
       - Every move GLIDES: the blend over 20 ms for its whole travel, the threshold over 20 ms for its 48 dB, the ratio
         over 20 ms for 2:1..10:1 — a drag, a recall or automation is never a step.
       - CHARACTER chooses the detector: SMOOTH hears the level's RMS over 10 ms, PUNCHY its peaks. (The old law raised
         PUNCHY's threshold 4 dB so the two played about as loud; with a threshold of its own the line says where it works,
-        and PUNCHY at the same line squeezes harder — the player sets the line.)
+        and PUNCHY at the same line squeezes harder — the player sets the line; the make-up reads the reference note as
+        each detector does, so the two play it as loud.)
 
     STANDBY (the strip's arrow) is the house's crossfade (BypassFade, 15 ms), handed in per block. While the link stands
     by with BLEND up the compressor is still FED, so switching it in fades to a compressor already settled. Only with
@@ -77,6 +82,27 @@ public:
         from the threshold and the ratio. */
     static constexpr double thresholdMinDb = -48.0, thresholdMaxDb = 0.0, defaultThresholdDb = -24.0;
     static constexpr double ratioMin = 2.0, ratioMax = 10.0, defaultRatio = 4.0;
+
+    /** THE MAKE-UP'S REFERENCE: a steady note at this RMS, dBFS, comes out at its own level at any BLEND. PUNCHY's
+        detector reads the same note `punchyReadsDb` higher: its peaks, a steady tone's crest (3 dB) less what its
+        squeeze lets go between them — measured, settled at the MED attack on A1..A4 (0.75 dB at 82..440 Hz); SLOW
+        reads it 0.4 dB lower, FAST 0.4 higher, within the gate's half a decibel either way. */
+    static constexpr double referenceDb   = -18.0;
+    static constexpr double punchyReadsDb = 2.25;
+
+    /** The make-up, dB, at a threshold and a ratio in a character: what core's curve (the compressor's own, its knee
+        and range) takes from the reference note as that character's detector reads it — so the note at the reference
+        keeps its level. 0 where the reference lies under the knee. */
+    static double makeupDbFor (double thresholdDb, double ratio, Character character) noexcept
+    {
+        felitronics::dynamics::GainComputer curve;
+        curve.setMode (felitronics::dynamics::Mode::DownCompress);
+        curve.setThresholdDb (thresholdDb);
+        curve.setRatio (ratio);
+        curve.setKneeDb (kneeDb);
+        curve.setRangeDb (felitronics::dynamics::CompressorParams {}.rangeDb);   // the compressor's, as apply() leaves it
+        return -curve.deltaDb (referenceDb + (character == Character::punchy ? punchyReadsDb : 0.0));
+    }
 
     static double attackMsOf (Attack a) noexcept
     {
@@ -137,8 +163,8 @@ public:
             sinceStart = 1LL << 40;   // past the warm: what a prepare finds up plays at once
     }
 
-    /** One block of the mono chain, in place. `link` is the strip's STANDBY crossfade for this block; `heldRatio` the
-        ratio the hand holds, or 0 or below for the law's. */
+    /** One block of the mono chain, in place. `link` is the strip's STANDBY crossfade for this block; the threshold
+        (dB) and the ratio are the hand's, glided to (apply). */
     void process (float* x, int n, double amountTarget, const BypassFade::Span& link,
                   Attack attack, Release release, Character character,
                   double thresholdDb = defaultThresholdDb, double ratio = defaultRatio) noexcept
@@ -148,14 +174,12 @@ public:
         ratioWant = std::isfinite (ratio) ? std::clamp (ratio, ratioMin, ratioMax) : ratioWant;
 
         // The knob at zero and glided there: nothing at all — and the memory cleared, now that nothing of it
-        // is in the sound.
+        // is in the sound. NOTHING WRITTEN for the picture either: a COMP that does nothing stands still (the owner, 31.10).
         if (! (target > 0.0) && ! (amt > 0.0))
         {
             if (running)
                 reset();
             grDb.store (0.0f, std::memory_order_relaxed);
-            if (tap != nullptr && x != nullptr && n > 0)
-                tap->write (x, x, nullptr, n, character == Character::smooth);   // the signal through, untouched
             return;
         }
         if (! ready || x == nullptr || n <= 0 || n > block)
@@ -202,10 +226,7 @@ public:
                 work[(size_t) k] *= (float) std::exp (makeupNowDb * 0.11512925464970228);   // ln 10 / 20
 
                 if (! heard)
-                {
-                    shown[(size_t) k] = path[(size_t) k] = dry[(size_t) k];   // standing by: nothing of it, in the sound or the picture
-                    continue;
-                }
+                    continue;   // standing by: nothing of it in the sound, and the picture is not written (below)
 
                 // BLEND — parallel compression: the compressed signal over the clean one, sample-aligned (no lookahead),
                 // in the share the knob has glided to; continuous from its zero by construction. A JUMP to zero is the
@@ -230,16 +251,24 @@ public:
 
         // The indicator shows the squeeze that is heard: none while the link stands by, fed or not.
         grDb.store (heard ? gr[(size_t) n - 1] : 0.0f, std::memory_order_relaxed);
-        if (tap != nullptr)
-            tap->write (heard ? key.data() : dry.data(), heard ? path.data() : dry.data(), shown.data(), heard ? gr.data() : nullptr, n,
-                        character == Character::smooth);   // IN the detector's; standing by, the signal as all three
+
+        // THE PICTURE only while COMP is heard (the owner, 31.10): standing by — its strip arrow off, its fade done — it
+        // writes nothing, and the picture stands still, dimmed with its block; switched in again, it is alive.
+        if (tap != nullptr && heard)
+            tap->write (key.data(), path.data(), shown.data(), gr.data(), n, character == Character::smooth);   // IN the detector's
     }
 
     /** Where the picture's columns go, while it is on screen — null otherwise (the processor sets it per block). */
     CompTap* tap = nullptr;
 
-    /** The ratio the compressor works at now — the law's, or gliding to or holding the hand's (a gate reads it). */
+    /** The ratio the compressor works at now, gliding to or holding the hand's (a gate reads it). */
     double ratioNow() const noexcept { return ratioAt; }
+
+    /** The make-up applied now, dB, as it has glided (a gate reads it). */
+    double makeupNow() const noexcept { return makeupNowDb; }
+
+    /** The last block's squeeze, dB per sample (0 or below) — core's own, before the make-up (a gate reads it). */
+    const float* squeezeDb() const noexcept { return gr.data(); }
 
     /** The squeeze now, in dB (0 or below) — for the indicator beside the knob. */
     std::atomic<float> grDb { 0.0f };
@@ -270,9 +299,9 @@ private:
         felitronics::dynamics::CompressorParams p;
         p.thresholdDb = thrAt;   // the line is where the detector works, in either character (no offset any more)
 
-        // The make-up's number — core's static auto make-up, half what the curve takes from 0 dBFS, which lies past
-        // the knee for every threshold the law reaches — and the paces it glides at (see the class comment).
-        makeupTargetDb = 0.5 * (-p.thresholdDb) * (1.0 - 1.0 / ratioAt);
+        // The make-up's number — what the curve takes from the reference note, as this character's detector reads it
+        // (level-neutral: see the class comment) — and the paces it glides at.
+        makeupTargetDb = makeupDbFor (thrAt, ratioAt, character);
         makeupUpK      = 1.0 - std::exp (-1.0 / (attackMsOf (attack) * 0.001 * fs));
         makeupDownK    = 1.0 - std::exp (-1.0 / (releaseMs * 0.001 * fs));
         warmSamples    = (3.0 * attackMsOf (attack) + warmMs) * 0.001 * fs;

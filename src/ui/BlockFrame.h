@@ -211,13 +211,8 @@ public:
 
     bool hasGear() const noexcept { return gear != nullptr; }
 
-    /** ...and a right click on one of the block's own pictures (a child that would take its clicks) opens it too. */
-    void routeRightClickToSettings (juce::Component& c)
-    {
-        if (rightClicks == nullptr)
-            rightClicks = std::make_unique<RightClicks> (*this);
-        c.addMouseListener (rightClicks.get(), false);
-    }
+    /** How far the content stands in from each side of the box. */
+    static constexpr int contentInsetX() noexcept { return padX; }
 
     /** WHERE THE GEAR STANDS: on the border at the top right, opposite the name — or, where the line is too short for
         the name and the gear both (GATE's and LIMIT's 80), INSIDE the box under that corner, and the block's content
@@ -588,13 +583,6 @@ protected:
         void mouseDown (const juce::MouseEvent&) override  { if (onClick != nullptr) onClick(); }
     };
     std::unique_ptr<Gear> gear;
-    struct RightClicks final : public juce::MouseListener
-    {
-        explicit RightClicks (BlockFrame& f) : frame (f) {}
-        void mouseDown (const juce::MouseEvent& e) override { if (e.mods.isPopupMenu() && frame.onSettings != nullptr) frame.onSettings(); }
-        BlockFrame& frame;
-    };
-    std::unique_ptr<RightClicks> rightClicks;
     std::function<void()> onSettings;
     static constexpr int gearSize = 18;
     static constexpr int gearInsideInset = 5;   // the gear inside the box: this far from its right...

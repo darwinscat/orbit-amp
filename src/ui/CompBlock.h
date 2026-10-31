@@ -28,7 +28,8 @@ namespace orbitamp
     moved, the line follows. A right click is COMP's menu.
 
     It reads the processor's taps (core::CompTap) on its own timer, and only while it is on screen — the audio thread
-    writes them only then — and it freezes in silence: the tap writes no column of it. Every number on it is 13 px. */
+    writes them only then — and it freezes in silence: the tap writes no column of it. Standing by or at BLEND 0 COMP writes
+    nothing either: the picture stands still, dimmed with its block (the owner, 31.10). Every number on it is 13 px. */
 class CompGraph final : public juce::Component,
                         private juce::Timer
 {

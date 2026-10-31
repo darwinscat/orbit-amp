@@ -1057,7 +1057,8 @@ void AmpProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 
     // Over the channels the bus carries — one or two, by the layouts this plugin accepts. A prepare
     // either refuses keeps that link out of the sound (see delayReady), the way the limiter's does.
-    // A chain with no place for them (the bass's) never prepares them: they hold no memory and never run.
+    // A chain with no place for them never prepares them: they hold no memory and never run. (The bass's has them, out of
+    // its strip until the player adds them: runSpaceStage.)
     delayReady  = chainHolds (params::rowDelay)  && delay.prepare (sampleRate, block, channels);
     reverbReady = chainHolds (params::rowReverb) && reverb.prepare (sampleRate, block, channels);
     preamp.prepare (sampleRate, block, channels);
@@ -1246,63 +1247,89 @@ void AmpProcessor::updateReverbSettings() noexcept
 
 template <typename Stage>
 void AmpProcessor::runSpaceStage (Stage& stage, bool ready, params::ChainRow row, int which, core::SpaceTap& tap,
-                                  const std::atomic<bool>& watched, float* const* channels, int numChannels,
+                                  const std::atomic<bool>& watched, bool adds, float* const* channels, int numChannels,
                                   int numSamples) noexcept
 {
+    // PRESENCE ALONE decides whether it runs — a call that carries no channel (a gap, law 11c) included.
     const bool inRig = linkInRig (row);
     const auto span  = blockFade[(size_t) row].advance (numSamples, inRig);
-    const bool run   = ready && core::BypassFade::runs (span, inRig) && numChannels > 0;
+    const bool run   = ready && core::BypassFade::runs (span, inRig);
+
+    // OUT OF THE STRIP: cleared once its fade is done, and not run at all — a stage added again starts silent.
+    const auto clear = [&]
+    {
+        stage.reset();
+        for (auto& c : wetCuts[(size_t) which])
+            c.reset();
+        tap.breakTrace();
+        spaceRunning[(size_t) which] = false;
+    };
 
     if (! run)
     {
-        // OUT OF THE STRIP: cleared once its fade is done, and not run at all — a stage added again starts silent.
         if (spaceRunning[(size_t) which])
-        {
-            stage.reset();
-            for (auto& c : wetCuts[(size_t) which])
-                c.reset();
-            tap.breakTrace();
-        }
-        spaceRunning[(size_t) which] = false;
+            clear();
         return;
     }
     spaceRunning[(size_t) which] = true;
 
+    // Its picture written only while on screen AND at work — in the chain, switched on, its MIX up: standing by (its
+    // tail ringing out or not) or at 0, it stands still (the owner, 31.10).
     const bool fed   = linkWorks (row);
-    const bool write = watched.load (std::memory_order_relaxed);
-    const int  nch   = juce::jmin (numChannels, 2);
-    const int  chunk = juce::jmax (1, spaceDry.getNumSamples());
+    const bool write = watched.load (std::memory_order_relaxed) && fed && adds;
 
-    // In pieces of the kept input's length: a host's longer call is played as several, the same samples.
-    const int   ramp = juce::jlimit (0, numSamples, span.ramp);
-    const float step = span.moving && ramp > 0 ? (span.to - span.from) / (float) ramp : 0.0f;
-
-    for (int done = 0; done < numSamples;)
+    if (numChannels <= 0 || channels == nullptr)
     {
-        const int n = juce::jmin (chunk, numSamples - done);
-        float* part[2] = { channels[0] + done, nch > 1 ? channels[1] + done : nullptr };
-
-        for (int ch = 0; ch < nch; ++ch)
-            juce::FloatVectorOperations::copy (spaceDry.getWritePointer (ch), part[ch], n);
-
-        (void) stage.process (part, nch, n, fed);   // prepared for the bus's planes and its block: it cannot refuse
-
-        for (int i = 0; i < n; ++i)
-        {
-            const int   at   = done + i;
-            const float gain = ! span.moving ? span.to : (at < ramp ? span.from + step * (float) (at + 1) : span.to);
-            float loudest = 0.0f;
-            for (int ch = 0; ch < nch; ++ch)
-            {
-                const float dry = spaceDry.getReadPointer (ch)[i];
-                const float wet = wetCuts[(size_t) which][(size_t) ch].process (part[ch][i] - dry) * gain;
-                part[ch][i] = dry + wet;
-                loudest = juce::jmax (loudest, std::abs (wet));
-            }
-            tap.take (loudest, write);
-        }
-        done += n;
+        // A GAP: the stage takes it as its own (its channels stop, its clocks go on); the wet's cuts and the picture's
+        // hops run over the silence it adds there.
+        (void) stage.process (nullptr, 0, numSamples, fed);
+        for (auto& c : wetCuts[(size_t) which])
+            for (int i = 0; i < numSamples; ++i)
+                (void) c.process (0.0f);
+        for (int i = 0; i < numSamples; ++i)
+            tap.take (0.0f, write);
     }
+    else
+    {
+        const int nch   = juce::jmin (numChannels, 2);
+        const int chunk = juce::jmax (1, spaceDry.getNumSamples());
+
+        // In pieces of the kept input's length: a host's longer call is played as several, the same samples.
+        const int   ramp = juce::jlimit (0, numSamples, span.ramp);
+        const float step = span.moving && ramp > 0 ? (span.to - span.from) / (float) ramp : 0.0f;
+
+        for (int done = 0; done < numSamples;)
+        {
+            const int n = juce::jmin (chunk, numSamples - done);
+            float* part[2] = { channels[0] + done, nch > 1 ? channels[1] + done : nullptr };
+
+            for (int ch = 0; ch < nch; ++ch)
+                juce::FloatVectorOperations::copy (spaceDry.getWritePointer (ch), part[ch], n);
+
+            (void) stage.process (part, nch, n, fed);   // prepared for the bus's planes and its block: it cannot refuse
+
+            for (int i = 0; i < n; ++i)
+            {
+                const int   at   = done + i;
+                const float gain = ! span.moving ? span.to : (at < ramp ? span.from + step * (float) (at + 1) : span.to);
+                float loudest = 0.0f;
+                for (int ch = 0; ch < nch; ++ch)
+                {
+                    const float dry = spaceDry.getReadPointer (ch)[i];
+                    const float wet = wetCuts[(size_t) which][(size_t) ch].process (part[ch][i] - dry) * gain;
+                    part[ch][i] = dry + wet;
+                    loudest = juce::jmax (loudest, std::abs (wet));
+                }
+                tap.take (loudest, write);
+            }
+            done += n;
+        }
+    }
+
+    // ITS FADE OUT OF THE STRIP ENDED IN THIS CALL: cleared now, not a call later — added again in the very next call, it
+    // starts silent, its old tail gone.
+    if (! inRig && ! (span.to > 0.0f))
+        clear();
 }
 
 void AmpProcessor::tellBlend()
@@ -1336,6 +1363,7 @@ void AmpProcessor::tellOctave() noexcept
     menu.subHpHz = bass.octaveSubHpHz->load();
     menu.gateDb  = bass.octaveGateDb->load();
     const float amount = linkWorks (params::rowOctave) ? bass.octave->load() : 0.0f;
+    octaveLive = amount > 0.0f;   // at work: its picture written (runOctave)
     const auto  p = felitronics::octave::paramsForAmount (amount, menu);
     if (! octaveToldValid || ! sameKnobs (p, octaveTold))
     {
@@ -1369,6 +1397,7 @@ felitronics::envfilter::EnvelopeFilterParams AmpProcessor::filterKnobsNow (felit
 void AmpProcessor::tellFilter() noexcept
 {
     const auto p = filterKnobsNow (filterToldValid ? filterTold : felitronics::envfilter::EnvelopeFilterParams {});
+    filterLive = bass.filter != nullptr && linkWorks (params::rowFilter) && bass.filter->load() > 0.0f;   // its picture written
     if (! filterToldValid || ! sameKnobs (p, filterTold))
     {
         envFilter.setParams (p);
@@ -1385,6 +1414,7 @@ void AmpProcessor::tellChorus() noexcept
     menu.crossoverHz = bass.chorusCrossoverHz->load();
     menu.delayMs     = bass.chorusCentreMs->load();
     const float amount = linkWorks (params::rowChorus) ? bass.chorus->load() : 0.0f;
+    chorusLive = amount > 0.0f;   // at work: its picture written (runChorus)
     const auto  p = felitronics::chorus::paramsForAmount (amount, menu);
     if (! chorusToldValid || ! sameKnobs (p, chorusTold))
     {
@@ -1400,7 +1430,8 @@ void AmpProcessor::runOctave (float* const* channels, int numChannels, int numSa
     if (! octaverReady)
         return;
     tellOctave();
-    if (numChannels < 1 || numChannels > 2 || ! octaveWatched.load (std::memory_order_relaxed))
+    // Its picture written only while on screen AND at work: standing by or at 0 it stands still (the owner, 31.10).
+    if (numChannels < 1 || numChannels > 2 || ! octaveWatched.load (std::memory_order_relaxed) || ! octaveLive)
     {
         (void) octaver.process (channels, numChannels, numSamples);
         return;
@@ -1430,8 +1461,9 @@ void AmpProcessor::runFilter (float* const* channels, int numChannels, int numSa
     // ITS PICTURE ON SCREEN: the stage run a COLUMN at a time, each piece ending where the tap closes a column, so the trail
     // carries a cutoff per column, not a block's. Its output does not depend on how its calls are sliced (law 8: the
     // audio-time grid), so the pieces play bit for bit what one call would. A fresh look takes the next column whatever
-    // it holds.
-    const bool watched = filterWatched.load (std::memory_order_relaxed);
+    // it holds. Standing by or at 0 it is not written: the picture stands still (the owner, 31.10); at work again, a fresh
+    // look.
+    const bool watched = filterWatched.load (std::memory_order_relaxed) && filterLive;
     if (watched && ! filterTapLive)
         filterTap.wake();
     filterTapLive = watched;
@@ -1462,7 +1494,8 @@ void AmpProcessor::runChorus (float* const* channels, int numChannels, int numSa
     tellChorus();
     const bool wasIdle = chorus.isIdle();
     const bool ran     = chorus.process (channels, numChannels, numSamples);
-    chorusTap.follow (chorus, wasIdle, ran ? numSamples : 0, chorusWatched.load (std::memory_order_relaxed));
+    chorusTap.follow (chorus, wasIdle, ran ? numSamples : 0,
+                      chorusWatched.load (std::memory_order_relaxed) && chorusLive);   // at work only: standing by, still
     effectWorking[2].store (! chorus.isIdle(), std::memory_order_relaxed);
 }
 
@@ -1497,7 +1530,7 @@ void AmpProcessor::passGap (int numSamples) noexcept
             // The key is consumed through a gap (envfilter's contract) — a column at a time while ENVELOPE's picture is on
             // screen, so it follows the sweep falling through the gap as through silence.
             tellFilter();
-            const bool watched = filterWatched.load (std::memory_order_relaxed);
+            const bool watched = filterWatched.load (std::memory_order_relaxed) && filterLive;
             if (watched && ! filterTapLive)
                 filterTap.wake();
             filterTapLive = watched;
@@ -1513,6 +1546,11 @@ void AmpProcessor::passGap (int numSamples) noexcept
             effectWorking[1].store (! envFilter.isIdle(), std::memory_order_relaxed);
         }
         runChorus (nullptr, 0, len);
+
+        // ...and DELAY and REVERB, present and running: theirs too — their channels stop (core's law 11a), their clocks,
+        // their doors and their presence fades go on.
+        runSpaceStage (delay, delayReady, params::rowDelay, 0, delayTap, delayWatched, delayAdds(), nullptr, 0, len);
+        runSpaceStage (reverb, reverbReady, params::rowReverb, 1, reverbTap, reverbWatched, reverbAdds(), nullptr, 0, len);
     }
 }
 
@@ -2274,11 +2312,11 @@ void AmpProcessor::processChunk (juce::AudioBuffer<float>& buffer)
     {
         // Its own (runSpaceStage): the wet's lows cut; out of the strip, faded and then cleared and not run.
         const auto a = PerfClock::now();
-        runSpaceStage (delay, delayReady, params::rowDelay, 0, delayTap, delayWatched, channels, nchBack, numSamples);
+        runSpaceStage (delay, delayReady, params::rowDelay, 0, delayTap, delayWatched, delayAdds(), channels, nchBack, numSamples);
         if (spaceRunning[0])
             nsStage[stDelay] = elapsedNs (a);
         const auto b = PerfClock::now();
-        runSpaceStage (reverb, reverbReady, params::rowReverb, 1, reverbTap, reverbWatched, channels, nchBack, numSamples);
+        runSpaceStage (reverb, reverbReady, params::rowReverb, 1, reverbTap, reverbWatched, reverbAdds(), channels, nchBack, numSamples);
         if (spaceRunning[1])
             nsStage[stReverb] = elapsedNs (b);
     }
