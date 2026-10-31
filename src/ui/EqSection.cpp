@@ -2,6 +2,7 @@
 // Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of OrbitAmp — see LICENSE.
 
 #include "EqSection.h"
+#include "BassControls.h"
 
 #include "EqDisplay.h"
 
@@ -404,7 +405,9 @@ void EqSection::setRowVisible (bool v)
 
 void EqSection::refreshCurve()
 {
-    const auto s = eqSettingsFor (state, link);   // the one reading every face shares
+    auto s = eqSettingsFor (state, link);   // the one reading every face shares
+    if (bassCuts)
+        s.hpfOn = s.lpfOn = false;           // the guitar's cuts are not in the bass's sound
 
     display.setSettings (s);
     refreshHandles();
@@ -414,9 +417,27 @@ void EqSection::refreshCurve()
     curve.repaint();
 }
 
+void EqSection::useBassCuts()
+{
+    bassCuts = true;
+    hpfSw.attach (*state.getParameter (params::bassHpfOn));
+    lpfSw.attach (*state.getParameter (params::bassLpfOn));
+    for (const char* id : { params::bassHpf, params::bassLpf })
+        refreshAtts.push_back (attach (id));
+    hpfSlopeBox.getText  = [this] { return bass::hpfWord (juce::roundToInt (raw (params::bassHpf))); };
+    lpfSlopeBox.getText  = [this] { return bass::lpfWord (juce::roundToInt (raw (params::bassLpf))); };
+    hpfSlopeBox.openMenu = [this] { bass::showHpfMenu (state, &hpfSlopeBox); };
+    // FINGERS is a wider word than a slope's "12 DB": the choices write it up to their chevron and may run left of their
+    // cell, into the room the console leaves there.
+    hpfSlopeBox.setPaintingIsUnclipped (true);
+    lpfSlopeBox.setPaintingIsUnclipped (true);
+    lpfSlopeBox.openMenu = [this] { bass::showLpfMenu (state, &lpfSlopeBox); };
+    refreshCurve();
+}
+
 void EqSection::SlopeCombo::paint (juce::Graphics& g)
 {
-    if (getIndex == nullptr)
+    if (getIndex == nullptr && getText == nullptr)
         return;
 
     const auto r = getLocalBounds().toFloat();
@@ -425,12 +446,22 @@ void EqSection::SlopeCombo::paint (juce::Graphics& g)
     // wide, and the per-octave part was clipping its own first digit off — a slope that reads "2"
     // when it is twelve is worse than one that does not say the unit. Everyone reading a filter
     // slope knows what it is per.
-    const auto text = params::eqSlopes[juce::jlimit (0, params::eqSlopes.size() - 1, getIndex())]
-                          + juce::String (" DB");
+    const auto text = getText != nullptr ? getText()
+                                         : params::eqSlopes[juce::jlimit (0, params::eqSlopes.size() - 1, getIndex())]
+                                               + juce::String (" DB");
 
     g.setColour (theme::txDim);
-    theme::drawTracked (g, text, r.withTrimmedRight (11.0f), theme::displayFont (13.0f), 0.04f,
-                        juce::Justification::centred);
+    if (getText != nullptr)
+    {
+        const auto font = theme::displayFont (13.0f);
+        const float w   = theme::trackedWidth (text, font, 0.04f) + 2.0f;
+        const auto  box = juce::Rectangle<float> (w, r.getHeight()).withRightX (r.getRight() - 12.0f).withY (r.getY());
+        theme::drawTracked (g, text, box.getWidth() < r.getWidth() - 12.0f ? r.withTrimmedRight (11.0f) : box, font, 0.04f,
+                            juce::Justification::centred);
+    }
+    else
+        theme::drawTracked (g, text, r.withTrimmedRight (11.0f), theme::displayFont (13.0f), 0.04f,
+                            juce::Justification::centred);
 
     // The chevron that says "this opens".
     juce::Path v;
@@ -443,6 +474,11 @@ void EqSection::SlopeCombo::paint (juce::Graphics& g)
 
 void EqSection::SlopeCombo::mouseDown (const juce::MouseEvent& e)
 {
+    if (openMenu != nullptr)
+    {
+        openMenu();
+        return;
+    }
     if (getIndex == nullptr || setIndex == nullptr)
         return;
 
@@ -661,6 +697,14 @@ void EqSection::layOutRow (juce::Rectangle<int> row)
 
     switchCell (hpfCell, hpfSw, hpfLabel, hpfSlopeBox);
     switchCell (lpfCell, lpfSw, lpfLabel, lpfSlopeBox);
+
+    // The bass's choices may run left of their cells (FINGERS): over the knob beside them, not under it.
+    if (bassCuts)
+    {
+        hpfSlopeBox.toFront (false);
+        lpfSlopeBox.toFront (false);
+    }
+
 }
 
 void EqSection::layOutCurve (juce::Rectangle<int> area, int cornerReserve)

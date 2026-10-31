@@ -873,6 +873,14 @@ public:
     core::CompTap compTap;
     std::atomic<bool> compWatched { false };
 
+    /** FOR A GATE — what the inner cuts do: `innerCutsOut` plays the bass's HPF at the END alone; with `probing` on, the
+        audio thread keeps the loudest sample going INTO the AMP and the sum of what comes OUT of it (after its cut), so a
+        gate reads a thump and an offset at those points. Off, nothing is written. */
+    std::atomic<bool> innerCutsOut { false }, probing { false };
+    float probeAmpInPeak = 0.0f;
+    double probeAmpOutSum = 0.0;
+    long long probeAmpOutCount = 0;
+
     /** The ratio COMP works at now — the law's, or the hand's (the audio thread's; a gate reads it between blocks). */
     double compRatioNow() const noexcept { return bassComp.ratioNow(); }
 
@@ -1333,6 +1341,15 @@ private:
         DI's copy beside the cabinet, its own cuts after DI/CAB. */
     core::BassComp bassComp;
     core::BassCuts bassCuts;
+
+    /** THE BASS'S HPF ACROSS THE CHAIN (the owner, 31.10): besides the main cut at the END (bassCuts), gentle ones —
+        2nd order, an octave under the chosen frequency — at the input (before the gate and the keys), after COMP, after
+        OCTAVE and after the AMP (after BLEND's sum: both legs the same phase). They clear DC, sub thumps and the subs a
+        nonlinear stage makes before the next one hears them, and cost the lowest string a fraction of a decibel. The
+        one switch and the one choice drive them all, each gliding and fading as the main cut does. Mono, as the front
+        half is. */
+    std::array<core::BassCuts, 4> innerCuts;
+    core::BassCuts::Settings innerCutSettings() const noexcept;
     juce::AudioBuffer<float> diDry;
     float diNow  = 0.3f;     // DI/CAB's share as the audio thread has glided it — see processChunk
     float diStep = 0.001f;   // ...and its glide per sample, 20 ms for the whole travel at the prepared rate
@@ -1375,6 +1392,8 @@ private:
         std::atomic<float>* chorusCentreMs = nullptr;
         std::atomic<float>* compRatio = nullptr;
         std::atomic<float>* compRatioHeld = nullptr;
+        std::atomic<float>* hpfOn = nullptr;
+        std::atomic<float>* lpfOn = nullptr;
     } bass;
 
     /** THE BASS'S THREE EFFECTS (felitronics-core's octave, envfilter, chorus), on its chain alone: each fed its slider

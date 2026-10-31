@@ -177,6 +177,8 @@ private:
     {
         std::function<int()> getIndex;
         std::function<void (int)> setIndex;
+        std::function<juce::String()> getText;   // a combo that says its own word (the bass's cuts)...
+        std::function<void()> openMenu;          // ...and opens its own menu
         void paint (juce::Graphics&) override;
         void mouseDown (const juce::MouseEvent&) override;
     };
@@ -186,6 +188,14 @@ private:
     std::vector<Band> ourBands() const;
 
 public:
+    /** Whether its HPF and LPF switches are the bass's cuts (useBassCuts) — a gate reads it. */
+    bool cutsAreBass() const noexcept { return bassCuts; }
+
+    /** ORBITBASS: the HPF and LPF switches become the bass's own cuts (params::bassHpfOn, bassLpfOn) and the combos
+        under them their choices, 5 STR / 4 STR and FINGERS / SLAP, the frequencies in their menus; the console's own
+        guitar cuts are out of the bass's sound (PluginProcessor::updateEqSettings) and off its curve. */
+    void useBassCuts();
+
     /** Put a set of bands on the row. Ours by default; a captured block hands it the device's own.
 
         The two are alternatives and the console shows one at a time, because a device wearing its
@@ -253,6 +263,7 @@ private:
     bool              nativeOffered = false;
 
     ZoneSwitch  hpfSw, lpfSw;
+    bool        bassCuts = false;
     juce::Label hpfLabel { {}, "HPF" }, lpfLabel { {}, "LPF" };
     SlopeCombo  hpfSlopeBox, lpfSlopeBox;
 

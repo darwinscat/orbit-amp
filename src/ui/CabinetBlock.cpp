@@ -16,44 +16,15 @@ struct CabinetBlock::BassRow
     explicit BassRow (AmpProcessor& p) : state (p.apvts) {}
 
     juce::AudioProcessorValueTreeState& state;
-    bass::WordSwitch hpf, lpf;
     bass::MenuKnob   di { "DI/CAB", theme::orange, 0 };
-    std::unique_ptr<juce::ParameterAttachment> hpfAtt, lpfAtt;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> diAtt;
 
     void addTo (BlockFrame& owner)
     {
-        owner.addAndMakeVisible (hpf);
-        owner.addAndMakeVisible (lpf);
+        // The cuts are not here: the bass has ONE pair, on the AMP's switches (EqSection::useBassCuts). DI/CAB is the
+        // cabinet's — with the cabinet out there is nothing to mix — and stands by with it.
         owner.addAndMakeVisible (di);
 
-        // The cuts are not the cabinet's: they cut whether it plays or stands by. DI/CAB is its — with the
-        // cabinet out there is nothing to mix — and stands by with it.
-        owner.keepOutsideStandby (hpf);
-        owner.keepOutsideStandby (lpf);
-
-        // HPF walks 5 <-> 4 (from off, to 5); LPF walks off -> FINGERS -> SLAP -> off.
-        hpf.onClick = [this]
-        {
-            const int now = juce::roundToInt (bass::plain (state, params::bassHpf));
-            bass::setPlain (state, params::bassHpf, (float) (now == (int) params::BassHpf::five ? params::BassHpf::four : params::BassHpf::five));
-        };
-        lpf.onClick = [this]
-        {
-            const int now = juce::roundToInt (bass::plain (state, params::bassLpf));
-            bass::setPlain (state, params::bassLpf, (float) ((now + 1) % params::bassLpfPositions.size()));
-        };
-        hpf.onMenu = [this] { bass::showHpfMenu (state, &hpf); };
-        lpf.onMenu = [this] { bass::showLpfMenu (state, &lpf); };
-        hpf.setTooltip ("HPF:   by the strings, 5 or 4. Right click: the frequency, or off");
-        lpf.setTooltip ("LPF:   by the hand, FINGERS or SLAP, or off. Right click: the frequency");
-
-        hpfAtt = std::make_unique<juce::ParameterAttachment> (*state.getParameter (params::bassHpf),
-            [this] (float v) { hpf.setButtonText (bass::hpfWord (juce::roundToInt (v))); });
-        lpfAtt = std::make_unique<juce::ParameterAttachment> (*state.getParameter (params::bassLpf),
-            [this] (float v) { lpf.setButtonText (bass::lpfWord (juce::roundToInt (v))); });
-        hpfAtt->sendInitialUpdate();
-        lpfAtt->sendInitialUpdate();
 
         di.labelFontHeight = Knob::fxLabelH;
         di.labelTracking   = Knob::fxLabelTracking;
@@ -715,7 +686,7 @@ void CabinetBlock::layOutContent (juce::Rectangle<int> area)
         place (switches[1], row.removeFromRight (70));   // LPF
     }
 
-    // The bass's words in the cuts' places, and DI/CAB's knob at the picture's right edge.
+    // The bass: no cut words (its one pair is the AMP's), DI/CAB's knob at the picture's right edge.
     if (bassRow != nullptr)
     {
         for (int i = 0; i < 2; ++i)
@@ -723,14 +694,6 @@ void CabinetBlock::layOutContent (juce::Rectangle<int> area)
             switches[(size_t) i].sw.setVisible (false);
             switches[(size_t) i].label.setVisible (false);
         }
-
-        const auto cell = [&] (bool left)
-        {
-            auto r = row;
-            return left ? r.removeFromLeft (juce::jmin (90, r.getWidth() / 3)) : r.removeFromRight (juce::jmin (90, r.getWidth() / 3));
-        };
-        bassRow->hpf.setBounds (cell (true));
-        bassRow->lpf.setBounds (cell (false));
 
         auto knob = area.removeFromRight (bassDiW);
         area.removeFromRight (4);

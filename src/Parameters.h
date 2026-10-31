@@ -511,19 +511,23 @@ inline constexpr float ampBlendMinHz = 80.0f, ampBlendMaxHz = 250.0f, ampBlendDe
 inline constexpr const char* diMix = "di_mix";
 inline constexpr float diMixDefault = 30.0f;
 
-/** The bass's own cuts, a stage of their own after DI/CAB (not baked into the cabinet's IR): the HPF by
-    the strings — 5 (a low B whole) or 4 — or off from its menu; the LPF by the hand — FINGERS or SLAP —
-    or off, as the family's are. Each position's frequency is its own, set from the menu. */
+/** The bass's own cuts (the owner, 31.10: ONE pair, on the AMP's switches): the HPF by the strings — 5 STR (a low B
+    whole) or 4 STR — switched on and off apart from that choice, so it comes back where it was; ONE control across the
+    whole chain (PluginProcessor: the main cut at the END, gentle inner ones at the input and after COMP, OCTAVE and
+    the AMP). The LPF by the hand — FINGERS or SLAP — at the END only, its switch apart likewise. Each position's
+    frequency is its own, set from the choice's menu. */
+inline constexpr const char* bassHpfOn        = "bass_hpf_on";
+inline constexpr const char* bassLpfOn        = "bass_lpf_on";
 inline constexpr const char* bassHpf          = "bass_hpf";
 inline constexpr const char* bassHpfHz4       = "bass_hpf_hz_4";
 inline constexpr const char* bassHpfHz5       = "bass_hpf_hz_5";
 inline constexpr const char* bassLpf          = "bass_lpf";
 inline constexpr const char* bassLpfHzFingers = "bass_lpf_hz_fingers";
 inline constexpr const char* bassLpfHzSlap    = "bass_lpf_hz_slap";
-inline const juce::StringArray bassHpfPositions { "Off", "4", "5" };
-inline const juce::StringArray bassLpfPositions { "Off", "Fingers", "Slap" };
-enum class BassHpf { off, four, five };
-enum class BassLpf { off, fingers, slap };
+inline const juce::StringArray bassHpfPositions { "5 Str", "4 Str" };
+inline const juce::StringArray bassLpfPositions { "Fingers", "Slap" };
+enum class BassHpf { five, four };
+enum class BassLpf { fingers, slap };
 inline constexpr float bassHpfDefaultHz4 = 32.0f, bassHpfDefaultHz5 = 22.0f;
 inline constexpr float bassLpfDefaultHzFingers = 4500.0f, bassLpfDefaultHzSlap = 9500.0f;
 

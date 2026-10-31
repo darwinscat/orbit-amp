@@ -118,12 +118,14 @@ void addBassParameters (juce::AudioProcessorValueTreeState::ParameterLayout& lay
     layout.add (std::make_unique<Float> (juce::ParameterID { diMix, 1 }, "DI/Cab",
                                          juce::NormalisableRange<float> (0.0f, 100.0f, 0.1f), diMixDefault));
 
-    layout.add (std::make_unique<Choice> (juce::ParameterID { bassHpf, 1 },          "Bass HPF", bassHpfPositions, (int) BassHpf::five),
+    layout.add (std::make_unique<Bool>   (juce::ParameterID { bassHpfOn, 1 },        "Bass HPF On", true),
+                std::make_unique<Choice> (juce::ParameterID { bassHpf, 1 },          "Bass HPF", bassHpfPositions, (int) BassHpf::five),
                 std::make_unique<Float>  (juce::ParameterID { bassHpfHz4, 1 },       "Bass HPF 4 Hz",
                                           juce::NormalisableRange<float> (20.0f, 60.0f, 0.1f), bassHpfDefaultHz4),
                 std::make_unique<Float>  (juce::ParameterID { bassHpfHz5, 1 },       "Bass HPF 5 Hz",
                                           juce::NormalisableRange<float> (15.0f, 45.0f, 0.1f), bassHpfDefaultHz5),
-                std::make_unique<Choice> (juce::ParameterID { bassLpf, 1 },          "Bass LPF", bassLpfPositions, (int) BassLpf::off),
+                std::make_unique<Bool>   (juce::ParameterID { bassLpfOn, 1 },        "Bass LPF On", false),
+                std::make_unique<Choice> (juce::ParameterID { bassLpf, 1 },          "Bass LPF", bassLpfPositions, (int) BassLpf::fingers),
                 std::make_unique<Float>  (juce::ParameterID { bassLpfHzFingers, 1 }, "Bass LPF Fingers Hz",
                                           hz (2000.0f, 8000.0f, 4500.0f), bassLpfDefaultHzFingers),
                 std::make_unique<Float>  (juce::ParameterID { bassLpfHzSlap, 1 },    "Bass LPF Slap Hz",
