@@ -45,6 +45,14 @@ struct LoadBreakdown final : public juce::Component,
 
     /** A link STANDING BY keeps its row and its real number — a bypassed insert costs what it
         costs in any DAW — but reads faint: the bypass bought you nothing. */
+    /** Whether the product's chain has the stage at all — the bass's has no delay and no reverb, a guitar
+        amp's no COMP: a stage it does not hold has no row here. */
+    bool stageHeld (int stage) const
+    {
+        const int row = params::rowForStage ((params::Stage) stage);
+        return row >= params::numChainRows || amp.chainHolds ((params::ChainRow) row);
+    }
+
     bool stageWorking (int stage) const
     {
         const int row = params::rowForStage ((params::Stage) stage);
@@ -96,6 +104,8 @@ struct LoadBreakdown final : public juce::Component,
 
         for (int i = 0; i < AmpProcessor::numStages; ++i)
         {
+            if (! stageHeld (i))
+                continue;
             t << juce::String::formatted ("%-8s %7.1f%% %7.0f%%\n", stageName (i, true).toRawUTF8(),
                                           amp.stageLoad[i].load(), amp.stageWorst[i].load());
         }
@@ -153,6 +163,8 @@ struct LoadBreakdown final : public juce::Component,
 
         for (int i = 0; i < AmpProcessor::numStages; ++i)
         {
+            if (! stageHeld (i))
+                continue;
             auto row = r.removeFromTop (rowH);
             const float v = amp.stageLoad[i].load();
             const bool total   = i == AmpProcessor::stTotal;
