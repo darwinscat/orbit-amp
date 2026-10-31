@@ -116,15 +116,17 @@ inline void paintScale (juce::Graphics& g, juce::Rectangle<float> t, const core:
     g.fillRoundedRectangle (juce::Rectangle<float> (ink.needle, t.getHeight()).withCentre ({ x, cy }), ink.needle * 0.5f);
 }
 
-/** One lane in a line: the name in its slot `nameW`, the scale in the rest — FAR across all of it where the
-    scale is too narrow for the word. */
+/** One lane in a line: the name in its slot `nameW`, the scale in the rest. Where the scale is too narrow
+    for FAR, the NAME stays — which string is far is the point — drawn warm, and the scale's slot says which
+    way: "+" sharp, "-" flat. (FAR across the whole lane once hid the name: a dial read "E FAR D".) */
 inline void paintLane (juce::Graphics& g, juce::Rectangle<float> a, const core::PolyLane& l, const Ink& ink, float nameW)
 {
     g.setFont (ink.font);
     if (l.mark == core::PolyLane::Mark::far && a.getWidth() - nameW < widthOf (ink.font, "FAR"))
     {
         g.setColour (ink.warm);
-        g.drawText ("FAR", a, juce::Justification::centred, false);
+        g.drawText (nameOf (l), a.removeFromLeft (nameW), juce::Justification::centredLeft, false);
+        g.drawText (l.sharp ? "+" : "-", a, juce::Justification::centred, false);
         return;
     }
     g.setColour (nameInk (ink, l));
