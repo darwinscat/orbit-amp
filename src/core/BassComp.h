@@ -37,9 +37,14 @@ namespace orbitamp::core
     playing has put them — so switching it in fades to a compressor already settled, not to a fresh one that
     lets the first 15 ms through at the whole make-up. Only with the knob at zero does it stop, and its memory
     is cleared then, when nothing of it is in the sound. A knob recalled up from zero starts a FRESH
-    compressor, and a fresh one has heard nothing yet: its make-up is there at once and its squeeze is not. So
-    it is fed and not heard for `warmMs`, the detector and the attack catching up with the playing, and only
-    then faded in.
+    compressor, which has heard nothing yet: it is fed and not heard for three of its attacks and `warmMs` — the
+    detector's window, the squeeze and the make-up catching up with the playing — and only then faded in. A
+    PREPARE is not a recall: a chain that arrives with COMP up plays it from its first sample (snapAmount).
+
+    ITS MAKE-UP IS ITS OWN, not core's: the static auto make-up's number (half what the curve takes from 0 dBFS),
+    gliding toward it as the squeeze does — up at the attack's pace, down at the release's — so a knob turned
+    down mid-note does not drop the make-up in 30 ms while the squeeze lets go over 400, a duck of the whole
+    note for half a second; and a fresh start's make-up rises with its squeeze, not ahead of it.
 
     The detector hears the bass through a 30 Hz high-pass, 12 dB/oct (the key; core gives the input, the
     product the filter): the lowest fundamentals do not pump the rest. It was 40 Hz at 24 dB/oct, and the
@@ -75,7 +80,7 @@ public:
     static constexpr double holdMs            = 500.0;  // AUTO's memory of the squeeze
     static constexpr double holdFullDb        = 6.0;    // ...held this deep, the release is at its slowest
     static constexpr double cadenceMs         = 1.0;    // how often the knob and the release reach the compressor
-    static constexpr double warmMs            = 20.0;   // a fresh start is fed, not heard, this long...
+    static constexpr double warmMs            = 30.0;   // a fresh start is fed, not heard, three attacks and this long...
     static constexpr double warmFadeMs        = 15.0;   // ...then fades in over BypassFade's length
 
     /** PUNCHY's threshold over SMOOTH's. A peak detector reads a sine 3 dB over its 10 ms RMS and a plucked
@@ -122,7 +127,7 @@ public:
         block     = std::max (1, maxBlock);
         cadence   = std::max (1, (int) std::lround (fs * cadenceMs * 0.001));
         glideStep = 1.0 / (amountGlideMs * 0.001 * fs);
-        warmSamples = warmMs * 0.001 * fs;
+        warmSamples = (3.0 * attackMedMs + warmMs) * 0.001 * fs;   // the attack's own, from the first apply
         warmFade    = warmFadeMs * 0.001 * fs;
         holdK     = 1.0 - std::exp (-1.0 / (holdMs * 0.001 * fs));
         key.assign ((size_t) block, 0.0f);
@@ -148,13 +153,22 @@ public:
         heldDb      = 0.0;
         clock       = 0;
         sinceStart  = 0;
+        makeupNowDb = 0.0;
+        parallelNow = 0.0;
+        snapMakeup  = false;
         running     = false;
         paramsValid = false;
         grDb.store (0.0f, std::memory_order_relaxed);
     }
 
     /** The knob lands at `amount` without a glide — a prepare's first block. */
-    void snapAmount (double amount) noexcept { amt = std::clamp (amount, 0.0, 1.0); }
+    void snapAmount (double amount) noexcept
+    {
+        amt        = std::clamp (amount, 0.0, 1.0);
+        snapMakeup = amt > 0.0;
+        if (amt > 0.0)
+            sinceStart = 1LL << 40;   // past the warm: what a prepare finds up plays at once
+    }
 
     /** One block of the mono chain, in place. `link` is the strip's STANDBY crossfade for this block. */
     void process (float* x, int n, double amountTarget, const BypassFade::Span& link,
@@ -210,10 +224,20 @@ public:
                 heldDb += holdK * (std::max (0.0, -(double) gr[(size_t) k]) - heldDb);
                 amt = target > amt ? std::min (target, amt + glideStep) : std::max (target, amt - glideStep);
 
+                makeupNowDb += (makeupTargetDb - makeupNowDb) * (makeupTargetDb > makeupNowDb ? makeupUpK : makeupDownK);
+                work[(size_t) k] *= (float) std::exp (makeupNowDb * 0.11512925464970228);   // ln 10 / 20
+
                 if (! heard)
                     continue;
 
-                const double p     = uncompressedAtTop * amt;
+                // The knob's first 5 % is a crossfade of the compressor against the signal, so the knob is continuous
+                // from its zero. A JUMP to zero is the link's own fade's (the processor fades the link toward
+                // "on AND up"), which takes it out in 15 ms, before this glide lands and the stage stops.
+                // The parallel share follows the knob at the make-up's paces too: down as the squeeze lets go, or a knob
+                // turned down would take the uncompressed attack away before the compressed note came back up.
+                const double pWant = uncompressedAtTop * amt;
+                parallelNow += (pWant - parallelNow) * (pWant > parallelNow ? makeupUpK : makeupDownK);
+                const double p     = parallelNow;
                 const double fresh = std::clamp (((double) (sinceStart + (k - i)) - warmSamples) / warmFade, 0.0, 1.0);
                 const double knob  = std::min (1.0, amt / knobFadeTop) * fresh;
                 const float  g    = link.moving ? (k < ramp ? link.from + linkStep * (float) k : link.to) : link.to;
@@ -227,7 +251,8 @@ public:
             sinceStart += len;
         }
 
-        grDb.store (gr[(size_t) n - 1], std::memory_order_relaxed);
+        // The indicator shows the squeeze that is heard: none while the link stands by, fed or not.
+        grDb.store (heard ? gr[(size_t) n - 1] : 0.0f, std::memory_order_relaxed);
     }
 
     /** The squeeze now, in dB (0 or below) — for the indicator beside the knob. */
@@ -247,6 +272,19 @@ private:
 
         felitronics::dynamics::CompressorParams p;
         p.thresholdDb = law.thresholdDb + (character == Character::punchy ? punchyOffsetDb : 0.0);
+
+        // The make-up's number — core's static auto make-up, half what the curve takes from 0 dBFS, which lies past
+        // the knee for every threshold the law reaches — and the paces it glides at (see the class comment).
+        makeupTargetDb = 0.5 * (-p.thresholdDb) * (1.0 - 1.0 / law.ratio);
+        makeupUpK      = 1.0 - std::exp (-1.0 / (attackMsOf (attack) * 0.001 * fs));
+        makeupDownK    = 1.0 - std::exp (-1.0 / (releaseMs * 0.001 * fs));
+        warmSamples    = (3.0 * attackMsOf (attack) + warmMs) * 0.001 * fs;
+        if (snapMakeup)
+        {
+            makeupNowDb = makeupTargetDb;
+            parallelNow = law.uncompressed;
+            snapMakeup  = false;
+        }
         p.ratio       = law.ratio;
         p.kneeDb      = kneeDb;
         p.attackMs    = attackMsOf (attack);
@@ -254,7 +292,8 @@ private:
         p.detector    = character == Character::smooth ? felitronics::dynamics::Detector::Rms
                                                        : felitronics::dynamics::Detector::Peak;
         p.rmsWindowMs = 10.0;
-        p.autoMakeup  = true;
+        p.autoMakeup  = false;   // the make-up is ours (above)
+        p.makeupDb    = 0.0;
         p.lookaheadMs = 0.0;
 
         if (! paramsValid || ! same (p, set))
@@ -281,6 +320,8 @@ private:
     double fs = 48000.0, heldDb = 0.0, amt = 0.0, glideStep = 0.001, holdK = 0.001;
     long long clock = 0, sinceStart = 0;
     double warmSamples = 960.0, warmFade = 720.0;
+    double makeupNowDb = 0.0, makeupTargetDb = 0.0, makeupUpK = 0.001, makeupDownK = 0.001, parallelNow = 0.0;
+    bool   snapMakeup = false;
     int    block = 0, cadence = 48;
     bool   ready = false, running = false, paramsValid = false;
 };
