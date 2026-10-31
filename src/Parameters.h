@@ -529,6 +529,9 @@ inline const juce::StringArray bassLpfPositions { "Fingers", "Slap" };
 enum class BassHpf { five, four };
 enum class BassLpf { fingers, slap };
 inline constexpr float bassHpfDefaultHz4 = 32.0f, bassHpfDefaultHz5 = 22.0f;
+/** The frequencies each choice's menu offers — every one the HPF can be set to from the face. */
+inline constexpr float bassHpfMenuHz5[] { 18.0f, 20.0f, 22.0f, 25.0f, 28.0f };
+inline constexpr float bassHpfMenuHz4[] { 28.0f, 30.0f, 32.0f, 35.0f, 40.0f };
 inline constexpr float bassLpfDefaultHzFingers = 4500.0f, bassLpfDefaultHzSlap = 9500.0f;
 
 /** OrbitBass's own parameters, after the engine's. */

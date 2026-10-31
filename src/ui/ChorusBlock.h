@@ -327,6 +327,7 @@ public:
     {
         shieldsWhenOff = false;
         bass::asBassRail (rail);   // the amount in percent, a field too
+        rail.onGesture = [&processor] (bool begin) { if (begin) processor.history.beginGesture(); else processor.history.endGesture(); };   // one undo step a drag, as COMP's
         addAndMakeVisible (rail);
         addAndMakeVisible (circle);
         const auto menu = [this] (juce::Point<int>) { bass::showChorusMenu (state, this); };

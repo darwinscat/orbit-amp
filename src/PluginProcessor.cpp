@@ -1346,18 +1346,34 @@ void AmpProcessor::runFilter (float* const* channels, int numChannels, int numSa
     if (! envFilterReady)
         return;
     tellFilter();
-    const float* key[] = { filterKey.getReadPointer (0) };
     const bool keyed = numChannels > 0 && numSamples <= filterKey.getNumSamples();
-    (void) envFilter.process (channels, numChannels, numSamples, keyed ? key : nullptr, keyed ? 1 : 0);
-    effectWorking[1].store (! envFilter.isIdle(), std::memory_order_relaxed);
 
-    // ITS PICTURE ON SCREEN: where the sweep stands, into the tap — a fresh look takes the next column whatever it holds.
+    // ITS PICTURE ON SCREEN: the stage run a COLUMN at a time, each piece ending where the tap closes a column, so the trail
+    // carries a cutoff per column, not a block's. Its output does not depend on how its calls are sliced (law 8: the
+    // audio-time grid), so the pieces play bit for bit what one call would. A fresh look takes the next column whatever
+    // it holds.
     const bool watched = filterWatched.load (std::memory_order_relaxed);
     if (watched && ! filterTapLive)
         filterTap.wake();
     filterTapLive = watched;
-    if (watched)
-        filterTap.write (envFilter.shownCutoffHz(), numSamples);
+    if (! watched || numChannels < 1)
+    {
+        const float* key[] = { filterKey.getReadPointer (0) };
+        (void) envFilter.process (channels, numChannels, numSamples, keyed ? key : nullptr, keyed ? 1 : 0);
+        if (watched)
+            filterTap.write (envFilter.shownCutoffHz(), numSamples);
+    }
+    else
+        for (int done = 0; done < numSamples; )
+        {
+            const int n = juce::jmin (numSamples - done, filterTap.untilColumn());
+            float* piece[2] = { channels[0] + done, numChannels > 1 ? channels[1] + done : nullptr };
+            const float* key[] = { filterKey.getReadPointer (0) + done };
+            (void) envFilter.process (piece, numChannels, n, keyed ? key : nullptr, keyed ? 1 : 0);
+            filterTap.write (envFilter.shownCutoffHz(), n);
+            done += n;
+        }
+    effectWorking[1].store (! envFilter.isIdle(), std::memory_order_relaxed);
 }
 
 void AmpProcessor::runChorus (float* const* channels, int numChannels, int numSamples) noexcept
@@ -1373,16 +1389,45 @@ void AmpProcessor::runChorus (float* const* channels, int numChannels, int numSa
 
 void AmpProcessor::passGap (int numSamples) noexcept
 {
+    // A GAP IS TIME WITH SILENCE: the five cuts run over silence of its length — their memories decaying, their glides and
+    // fades going on — a block at a time on the scratch bus (no allocation); the input's cut makes FILTER's key of it, as
+    // it would of a silent input; the three effects take the gap as theirs (law 11c).
     sanitiseParameters();
-    runOctave (nullptr, 0, numSamples);
-    runFilter (nullptr, 0, numSamples);
-    runChorus (nullptr, 0, numSamples);
+    const int most = juce::jmax (1, juce::jmin (preparedBlock.load (std::memory_order_relaxed), narrowBus.getNumSamples(),
+                                                filterKey.getNumSamples()));
+    const int wide = juce::jlimit (1, juce::jmin (2, narrowBus.getNumChannels()), bassWide.load (std::memory_order_relaxed));
+    const auto inner = innerCutSettings();
+    const auto end   = bassCutSettings();
+    for (int start = 0; start < numSamples; start += most)
+    {
+        const int len = juce::jmin (most, numSamples - start);
+        float* plane[] = { narrowBus.getWritePointer (0) };
+        for (int k = 0; k < (int) innerCuts.size(); ++k)
+        {
+            narrowBus.clear (0, 0, len);
+            innerCuts[(size_t) k].process (plane, 1, len, inner);
+            if (k == 0)
+                filterKey.copyFrom (0, 0, narrowBus, 0, 0, len);
+        }
+        narrowBus.clear (0, len);
+        bassCuts.process (narrowBus.getArrayOfWritePointers(), wide, len, end);
+
+        runOctave (nullptr, 0, len);
+        if (envFilterReady)
+        {
+            tellFilter();
+            const float* key[] = { filterKey.getReadPointer (0) };
+            (void) envFilter.process (nullptr, 0, len, key, 1);   // the key is consumed through a gap (envfilter's contract)
+            effectWorking[1].store (! envFilter.isIdle(), std::memory_order_relaxed);
+        }
+        runChorus (nullptr, 0, len);
+    }
 }
 
 core::BassCuts::Settings AmpProcessor::innerCutSettings() const noexcept
 {
     auto s  = bassCutSettings();
-    s.hpfHz *= 0.5;                                                     // an octave under the chosen
+    s.hpfHz /= 3.0;                                                     // a third of the chosen: a tenth of a decibel of the lowest string
     s.hpfOn  = s.hpfOn && ! innerCutsOut.load (std::memory_order_relaxed);
     s.lpfOn  = false;                                                   // the LPF is the END's alone
     return s;
@@ -1863,8 +1908,6 @@ void AmpProcessor::processChunk (juce::AudioBuffer<float>& buffer)
         if (bass.hpf != nullptr && nch > 0)
             innerCuts[(size_t) at].process (channels, 1, numSamples, innerSettings);
     };
-    innerCut (0);   // at the input: before the gate and before FILTER's key — no detector pumps on sub rumble
-
     const auto tGate = PerfClock::now();
     {
         // Of the channels the chain WORKS, not of everything that was handed in: in MONO and in STEREO
@@ -1897,6 +1940,10 @@ void AmpProcessor::processChunk (juce::AudioBuffer<float>& buffer)
     // The gate KEYS here whatever it ends up muting — dual detection: the decision is made on the
     // raw input, the attenuation lands where the parameter says. The enable crossfade makes the
     // toggle pop-free, so analyse runs unconditionally and the switch is an argument.
+    // THE BASS'S INPUT CUT (innerCuts) — after the IN meter, which reads the jack (a DI's rumble that clips shows there),
+    // and before the gate's key and FILTER's: no detector pumps on sub rumble.
+    innerCut (0);
+
     gate.analyse (channels, nch, numSamples,
                   linkWorks (params::rowGate), gateThresholdParam->load());
     gateMeterDb.store (juce::Decibels::gainToDecibels (gate.currentGain(), -90.0f));

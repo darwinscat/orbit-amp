@@ -374,6 +374,7 @@ public:
     {
         shieldsWhenOff = false;
         bass::asBassRail (rail);   // the amount in percent, a field too
+        rail.onGesture = [&processor] (bool begin) { if (begin) processor.history.beginGesture(); else processor.history.endGesture(); };   // one undo step a drag, as COMP's
         for (auto* c : { (juce::Component*) &rail, (juce::Component*) &curve })
             addAndMakeVisible (*c);
         setMouseCursor (juce::MouseCursor::PointingHandCursor);

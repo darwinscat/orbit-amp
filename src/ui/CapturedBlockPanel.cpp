@@ -149,7 +149,8 @@ CapturedBlockPanel::CapturedBlockPanel (AmpProcessor& processor, Block& b,
     {
         bassKnobs = std::make_unique<BassKnobs> (processor);
         bassKnobs->addTo (*this);
-        eq.useBassCuts();   // the AMP's HPF and LPF are the bass's one pair
+        eq.useBassCuts();   // the AMP's HPF and LPF are the bass's one pair...
+        eq.keepCutsOutsideStandby (*this);   // ...working across the chain, so live with the AMP standing by
     }
 
     device.fontHeight = 16.0f;   // the device's NAME, set exactly like the block's own beside it

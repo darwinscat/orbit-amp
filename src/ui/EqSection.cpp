@@ -435,6 +435,13 @@ void EqSection::useBassCuts()
     refreshCurve();
 }
 
+void EqSection::keepCutsOutsideStandby (BlockFrame& owner)
+{
+    for (auto* c : { (juce::Component*) &hpfSw, (juce::Component*) &lpfSw, (juce::Component*) &hpfLabel, (juce::Component*) &lpfLabel,
+                     (juce::Component*) &hpfSlopeBox, (juce::Component*) &lpfSlopeBox })
+        owner.keepOutsideStandby (*c);
+}
+
 void EqSection::SlopeCombo::paint (juce::Graphics& g)
 {
     if (getIndex == nullptr && getText == nullptr)

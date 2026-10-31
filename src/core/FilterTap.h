@@ -57,6 +57,10 @@ public:
         sweep that stood still while nobody looked is still news to a picture that was not there. */
     void wake() noexcept { quiet = 0; }
 
+    /** The audio thread: how many samples are left before the next column closes — a stage run a column at a time ends
+        its pieces there, so each column carries its own cutoff. */
+    int untilColumn() const noexcept { return std::max (1, hop - filled); }
+
     /** The audio thread: one block of `n` samples has played, the cutoff standing at `cutoffHz` at its end. */
     void write (float cutoffHz, int n) noexcept
     {
@@ -98,11 +102,13 @@ public:
 private:
     void close (float hz) noexcept
     {
+        // Still against the last column PUBLISHED, not the last seen: a slow sweep that never moves a column's worth at
+        // once still adds up past `stillOctaves`, and the picture follows it.
         const bool still = lastHz > 0.0f && std::abs (std::log2 ((double) hz / (double) lastHz)) < stillOctaves;
         quiet  = still ? std::min (quiet + 1, holdColumns + 1) : 0;
-        lastHz = hz;
         if (quiet > holdColumns)
             return;
+        lastHz = hz;
 
         const auto j  = count.load (std::memory_order_relaxed);
         const auto at = (size_t) (j % (std::uint32_t) columns);

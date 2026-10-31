@@ -20,6 +20,7 @@
 #include "PluginProcessor.h"
 #include "Parameters.h"
 #include "core/BassComp.h"
+#include "core/FilterTap.h"
 #include "device/DeviceLibrary.h"
 #include "ui/LoadBreakdown.h"
 #include "ui/GuardBlock.h"
@@ -1758,6 +1759,17 @@ int ORBITAMP_GATE_MAIN()
                 for (int v = 0; v < 2; ++v)
                 {
                     const auto& y = v == 0 ? l : r;
+                    // A voice that is there, and numbers: NaN compares false everywhere and a muted voice has no peak to find
+                    // — either is a miss, not a pass.
+                    double energy = 0.0;
+                    for (int i = 16; i < 1000; ++i)
+                    {
+                        if (! std::isfinite (y[(size_t) i]))
+                            return 1.0e9;
+                        energy += (double) y[(size_t) i] * (double) y[(size_t) i];
+                    }
+                    if (! (energy > 1.0e-6))
+                        return 1.0e9;
                     int at = 16;
                     for (int i = 16; i < 1000; ++i)
                         if (y[(size_t) i] > y[(size_t) at])
@@ -2591,9 +2603,6 @@ int ORBITAMP_GATE_MAIN()
             {
                 auto t = make (bass);
                 set (*t, params::filterAmount, 0.5f);
-                // The key as the mark's law reads it: the input's gentle HPF tilts a square's tops and overshoots its
-                // edges, which lifts this test signal's |x| by about 7 % — the signal's, not the mark's.
-                t->innerCutsOut.store (true);
                 std::unique_ptr<juce::AudioProcessorEditor> ed (t->createEditor());
                 auto& pic = findIn (*ed, (FilterBlock*) nullptr)->picture();
                 juce::AudioBuffer<float> buf (2, blockSize);
@@ -2604,7 +2613,7 @@ int ORBITAMP_GATE_MAIN()
                 {
                     for (int i = 0; i < blockSize; ++i, ++n)
                         for (int ch = 0; ch < 2; ++ch)
-                            buf.setSample (ch, i, (n / 109) % 2 == 0 ? a : -a);   // a 220 Hz square: |x| steady at the hit
+                            buf.setSample (ch, i, (n / 109) % 2 == 0 ? a : -a);   // a 220 Hz square: |x| steady at the hit; the cuts in
                     t->processBlock (buf, midi);
                 }
                 played = (double) t->filterShownCutoffHz();
@@ -2747,11 +2756,31 @@ int ORBITAMP_GATE_MAIN()
                 t->innerCutsOut.store (! inner);
                 return levelAt (tone (*t, hz, -12.0f, 150), hz);
             };
-            lostB = level (30.9, (int) params::BassHpf::five, false) - level (30.9, (int) params::BassHpf::five, true);
-            lostE = level (41.2, (int) params::BassHpf::four, false) - level (41.2, (int) params::BassHpf::four, true);
+            // EVERY frequency the menus offer, each choice's low string against the END cut alone.
+            juce::String worstAt;
+            lostB = lostE = 0.0;
+            for (const bool five : { true, false })
+                for (const float hz : five ? std::vector<float> (std::begin (params::bassHpfMenuHz5), std::end (params::bassHpfMenuHz5))
+                                           : std::vector<float> (std::begin (params::bassHpfMenuHz4), std::end (params::bassHpfMenuHz4)))
+                {
+                    const auto at = [&] (bool inner)
+                    {
+                        auto t = make (bass);
+                        set (*t, params::cabOn, 0.0f);
+                        put (*t, "bass_hpf_on", 1.0f);
+                        put (*t, params::bassHpf, (float) (five ? params::BassHpf::five : params::BassHpf::four));
+                        put (*t, five ? params::bassHpfHz5 : params::bassHpfHz4, hz);
+                        t->innerCutsOut.store (! inner);
+                        const double note = five ? 30.9 : 41.2;
+                        return levelAt (tone (*t, note, -12.0f, 150), note);
+                    };
+                    const double lost = at (false) - at (true);
+                    (five ? lostB : lostE) = std::max (five ? lostB : lostE, lost);
+                    worstAt << (five ? " 5@" : " 4@") << juce::String (hz, 0) << ":" << juce::String (lost, 2);
+                }
             check (structured && lostB <= 0.5 && lostE <= 0.5 && lostB >= 0.0 && lostE >= 0.0,
-                   "the inner cuts cost the low B at 5 STR " + juce::String (lostB, 2) + " dB and the low E at 4 STR "
-                       + juce::String (lostE, 2) + " dB against the END cut alone (0.5 at most)");
+                   "the inner cuts cost the low B at 5 STR at most " + juce::String (lostB, 2) + " dB and the low E at 4 STR at most "
+                       + juce::String (lostE, 2) + " dB against the END cut alone, every frequency of the menus (0.5 at most):" + worstAt);
         }
 
         // ...AND THEY WORK: a sub thump (a 4 Hz half-sine) reaches the AMP far lower, and a DC offset on the string comes
@@ -2766,7 +2795,7 @@ int ORBITAMP_GATE_MAIN()
                 juce::AudioBuffer<float> buf (2, blockSize);
                 juce::MidiBuffer midi;
                 long long n = 0;
-                for (int b = 0; b < 120; ++b)
+                for (int b = 0; b < 135; ++b)   // the window: blocks 60..134, 38400 samples — 48 whole cycles of a 60 Hz note
                 {
                     if (b == 60)
                     {
@@ -2777,7 +2806,7 @@ int ORBITAMP_GATE_MAIN()
                     for (int i = 0; i < blockSize; ++i, ++n)
                     {
                         const double tt = (double) n / sampleRate;
-                        const double note = 0.3 * std::sin (juce::MathConstants<double>::twoPi * 55.0 * tt);
+                        const double note = 0.3 * std::sin (juce::MathConstants<double>::twoPi * 60.0 * tt);
                         const double bump = (tt >= 0.7 && tt < 0.825) ? 0.5 * std::sin (juce::MathConstants<double>::twoPi * 4.0 * (tt - 0.7)) : 0.0;
                         const auto v = (float) (thump ? bump : note + 0.2);
                         buf.setSample (0, i, v);
@@ -2789,9 +2818,11 @@ int ORBITAMP_GATE_MAIN()
                 return thump ? (double) t->probeAmpInPeak : std::abs (t->probeAmpOutSum / (double) juce::jmax (1LL, t->probeAmpOutCount));
             };
             const double thumpDb = juce::Decibels::gainToDecibels (measure (true, true) / juce::jmax (1.0e-9, measure (false, true)));
-            const double dcDb    = juce::Decibels::gainToDecibels (measure (true, false) / juce::jmax (1.0e-9, measure (false, false)));
+            const double dcIn = measure (true, false), dcOut = measure (false, false);
+            const double dcDb = juce::Decibels::gainToDecibels (dcIn / juce::jmax (1.0e-9, dcOut));
             check (thumpDb < -12.0 && dcDb < -12.0, "the inner cuts at work: a 4 Hz thump into the AMP " + juce::String (thumpDb, 1)
-                                                        + " dB, a string's DC offset out of the AMP " + juce::String (dcDb, 1) + " dB, against the END cut alone");
+                                                        + " dB, a string's DC offset out of the AMP " + juce::String (dcDb, 1) + " dB (" + juce::String (dcIn, 6) + " against "
+                                                        + juce::String (dcOut, 6) + "), against the END cut alone");
         }
 
         // THE GUITAR'S CUTS ARE OUT OF THE BASS: the AMP EQ's HPF switched on at 200 Hz and its LPF at 1 kHz change
@@ -2839,6 +2870,144 @@ int ORBITAMP_GATE_MAIN()
             walk (*ed);
             check (bassPair && cabWords == 0, "one pair on the face: the AMP's HPF and LPF are the bass's cuts ("
                                                   + juce::String (bassPair ? "yes" : "no") + "), no cut words on the cabinet (" + juce::String (cabWords) + ")");
+        }
+    }
+
+    // ---- REVIEW ROUND 6 (of b45e462) -----------------------------------------------------------------------
+    {
+        const auto findAll = [] (juce::Component& root, auto* none)
+        {
+            using T = std::remove_pointer_t<decltype (none)>;
+            std::vector<T*> found;
+            std::function<void (juce::Component&)> walk = [&] (juce::Component& c)
+            {
+                if (auto* t = dynamic_cast<T*> (&c))
+                    found.push_back (t);
+                for (auto* child : c.getChildren())
+                    walk (*child);
+            };
+            walk (root);
+            return found;
+        };
+        const auto mouse = [] (juce::Component& c, juce::Point<float> at, juce::Point<float> down)
+        {
+            const auto now = juce::Time::getCurrentTime();
+            return juce::MouseEvent (juce::Desktop::getInstance().getMainMouseSource(), at, juce::ModifierKeys(), 0.0f,
+                                     juce::MouseInputSource::defaultOrientation, juce::MouseInputSource::defaultRotation,
+                                     juce::MouseInputSource::defaultTiltX, juce::MouseInputSource::defaultTiltY,
+                                     &c, &c, now, down, now, 1, at != down);
+        };
+        const auto settle = [] (AmpProcessor& a) { for (int i = 0; i < 40; ++i) a.history.tick(); };
+
+        // THE EFFECTS' RAILS UNDO AS COMP'S DOES: a drag paused longer than the history settles is ONE step; two typed
+        // numbers in quick succession are TWO.
+        {
+            auto t = make (bass);
+            settle (*t);
+            std::unique_ptr<juce::AudioProcessorEditor> ed (t->createEditor());
+            juce::StringArray said;
+            bool ok = true;
+            for (const char* id : { params::octaveAmount, params::filterAmount, params::chorusAmount })
+            {
+                GuardRail* rail = nullptr;
+                for (auto* r : findAll (*ed, (GuardRail*) nullptr))
+                    if (r->paramId() == id)
+                        rail = r;
+                if (rail == nullptr)
+                {
+                    ok = false;
+                    said.add (juce::String (id) + " no rail");
+                    continue;
+                }
+                const float before = value (*t, id);
+                const auto from = juce::Point<float> (rail->getWidth() * 0.5f, rail->getHeight() - 20.0f);
+                rail->mouseDown (mouse (*rail, from, from));
+                rail->mouseDrag (mouse (*rail, from.translated (0.0f, -30.0f), from));
+                settle (*t);
+                rail->mouseDrag (mouse (*rail, from.translated (0.0f, -60.0f), from));
+                rail->mouseUp (mouse (*rail, from.translated (0.0f, -60.0f), from));
+                settle (*t);
+                const float dragged = value (*t, id);
+                t->history.undo();
+                const bool drag = std::abs (dragged - before) > 0.05f && std::abs (value (*t, id) - before) < 1.0e-3f;
+
+                rail->typeValue (0.3f);
+                rail->typeValue (0.6f);
+                settle (*t);
+                t->history.undo();
+                const bool firstKept = std::abs (value (*t, id) - 0.3f) < 1.0e-3f;
+                t->history.undo();
+                const bool typed = firstKept && std::abs (value (*t, id) - before) < 1.0e-3f;
+                ok = ok && drag && typed;
+                said.add (juce::String (id) + (drag ? " drag 1 step" : " drag not 1 step") + (typed ? ", typed 2" : ", typed not 2"));
+            }
+            check (ok, "the effects' rails: a paused drag one undo step, two typed numbers two — " + said.joinIntoString ("; "));
+        }
+
+        // THE CUTS LIVE WITH THE AMP STANDING BY: they work across the whole chain, so their switches, words and choices do not
+        // dim with the AMP.
+        {
+            auto t = make (bass);
+            std::unique_ptr<juce::AudioProcessorEditor> ed (t->createEditor());
+            set (*t, params::preampOn, 0.0f);
+            auto panels = findAll (*ed, (CapturedBlockPanel*) nullptr);
+            const bool live = panels.size() == 1 && panels[0]->console().cutsLive();
+            check (live, "the HPF and LPF stay live on the AMP's block with the AMP standing by");
+        }
+
+        // THE IN METER READS THE JACK: a DI's rumble over full scale — 4 Hz at 1.2 — latches IN's clip, the input's gentle cut
+        // after the meter, not before it.
+        {
+            auto t = make (bass);
+            t->inClip.store (false);
+            (void) tone (*t, 4.0, juce::Decibels::gainToDecibels (1.2f), 60);
+            check (t->inClip.load(), "a 4 Hz rumble at 1.2 latches IN's clip: the meter reads the jack, before the input's HPF");
+        }
+
+        // ENVELOPE'S PICTURE ON A SLOW SWEEP: 1 kHz to 2 kHz over 20 s at 512-sample blocks keeps writing — stillness is judged
+        // against the last column PUBLISHED, so a slow climb that never moves a column's worth at once still gets there.
+        {
+            core::FilterTap tap;
+            tap.prepare (sampleRate);
+            const int blocksIn20s = (int) (20.0 * sampleRate / blockSize);
+            for (int b = 0; b < blocksIn20s; ++b)
+                tap.write ((float) (1000.0 * std::pow (2.0, (double) b / blocksIn20s)), blockSize);
+            std::vector<core::FilterTap::Column> cols (4);
+            const int got = tap.read (cols.data(), 4);
+            const double last = got > 0 ? (double) cols[(size_t) got - 1].hz : 0.0;
+            check (got > 0 && std::abs (std::log2 (last / 2000.0)) < 0.01,
+                   "ENVELOPE's picture follows a 20 s sweep from 1 to 2 kHz: its newest column at " + juce::String (last, 0) + " Hz");
+        }
+
+        // ENVELOPE'S TRAIL, A COLUMN EACH: while watched the stage runs a column at a time, so a moving sweep's columns each
+        // carry their own cutoff (not a block's two or three the same) — and the sound is the same, bit for bit.
+        {
+            const auto run = [&] (bool watched, std::vector<core::FilterTap::Column>* cols)
+            {
+                auto t = make (bass);
+                set (*t, params::filterAmount, 0.8f);
+                t->filterWatched.store (watched);
+                const auto out = tone (*t, 110.0, -6.0f, 30, -1, {}, 12);   // a note, then its fall: the sweep moves
+                if (cols != nullptr)
+                {
+                    cols->resize (core::FilterTap::columns);
+                    cols->resize ((size_t) t->filterTap.read (cols->data(), core::FilterTap::columns));
+                }
+                return out;
+            };
+            std::vector<core::FilterTap::Column> cols;
+            const auto seen = run (true, &cols), unseen = run (false, nullptr);
+            int pairs = 0, same = 0;
+            for (size_t i = 1; i + 1 < cols.size(); ++i)
+                if (cols[i].index == cols[i - 1].index + 1 && cols[i + 1].index == cols[i].index + 1
+                    && cols[i + 1].hz != cols[i - 1].hz)   // the sweep moving across these three columns
+                {
+                    ++pairs;
+                    same += cols[i].hz == cols[i - 1].hz ? 1 : 0;
+                }
+            check (pairs > 20 && same * 10 < pairs && worstApart (seen, unseen) == 0.0f,
+                   "ENVELOPE's trail a column each: " + juce::String (same) + " of " + juce::String (pairs) + " neighbouring columns the same; watched or not, the sound bit for bit (worst "
+                       + juce::String (worstApart (seen, unseen), 9) + ")");
         }
     }
 
@@ -2906,7 +3075,6 @@ int ORBITAMP_GATE_MAIN()
         const auto after = [&] (bool gap)
         {
             auto t = make (bass);
-            t->innerCutsOut.store (true);   // the key as the effect's own: the input's HPF has a tail a gap has not
             set (*t, params::cabOn, 0.0f);
             set (*t, params::filterAmount, 0.8f);
             (void) tone (*t, 110.0, -6.0f, 60);

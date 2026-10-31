@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include "BlockFrame.h"
+
 #include "../Parameters.h"
 #include "../core/EqLink.h"
 #include "EqCurve.h"
@@ -191,10 +193,24 @@ public:
     /** Whether its HPF and LPF switches are the bass's cuts (useBassCuts) — a gate reads it. */
     bool cutsAreBass() const noexcept { return bassCuts; }
 
+    /** Whether the cuts' switches, words and choices stand undimmed — a gate reads it with the AMP standing by. */
+    bool cutsLive() const noexcept
+    {
+        for (const juce::Component* c : { (const juce::Component*) &hpfSw, (const juce::Component*) &lpfSw, (const juce::Component*) &hpfSlopeBox,
+                                          (const juce::Component*) &lpfSlopeBox, (const juce::Component*) &hpfLabel, (const juce::Component*) &lpfLabel })
+            if (c->getAlpha() < 1.0f)
+                return false;
+        return true;
+    }
+
     /** ORBITBASS: the HPF and LPF switches become the bass's own cuts (params::bassHpfOn, bassLpfOn) and the combos
         under them their choices, 5 STR / 4 STR and FINGERS / SLAP, the frequencies in their menus; the console's own
         guitar cuts are out of the bass's sound (PluginProcessor::updateEqSettings) and off its curve. */
     void useBassCuts();
+
+    /** ...and they work across the whole chain, not the AMP's alone: their switches, words and choices stay live while
+        the block they stand on stands by. */
+    void keepCutsOutsideStandby (BlockFrame& owner);
 
     /** Put a set of bands on the row. Ours by default; a captured block hands it the device's own.
 

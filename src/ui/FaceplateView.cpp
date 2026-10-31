@@ -67,6 +67,7 @@ FaceplateView::FaceplateView (AmpProcessor& processor)
             octave->marks.push_back ({ (float) k * 0.1f, k % 5 == 0 });
         octave->numbered = false;
         bass::asBassRail (octave->valueRail());
+        octave->valueRail().onGesture = [&processor] (bool begin) { if (begin) processor.history.beginGesture(); else processor.history.endGesture(); };
         octave->onMenu = [&state, raw = octave.get()] (juce::Point<int>) { bass::showOctaveMenu (state, raw); };
         octave->setPicture (std::make_unique<OctaveScope> (processor));   // the note and its sub, right of the rail
         addAndMakeVisible (*octave);

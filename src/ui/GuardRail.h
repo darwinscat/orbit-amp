@@ -61,10 +61,15 @@ public:
     /** A number typed: the value and the switch, one gesture each — what a drag does. */
     void typeValue (float v)
     {
+        // A typed number is a gesture of its own — two typed in quick succession are two undo steps, not one burst.
+        if (onGesture != nullptr)
+            onGesture (true);
         const auto range = valueP.getNormalisableRange();
         valueAtt->setValueAsCompleteGesture (juce::jlimit (juce::jmax (range.start, lo), juce::jmin (range.end, hi), v));
         if (onAtt != nullptr)
             onAtt->setValueAsCompleteGesture (1.0f);
+        if (onGesture != nullptr)
+            onGesture (false);
     }
 
     void openTyping()
