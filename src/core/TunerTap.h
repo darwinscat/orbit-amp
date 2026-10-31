@@ -17,9 +17,10 @@ namespace orbitamp::core
     the panel's median swallows, and a lock on the audio thread costs a dropout. The generation
     counter is only there to say "never written yet".
 
-    The STROBE reads it the other way (readSince): not a window, but every sample that arrived since
-    it last looked, in order — the count of samples ever written says which those are. It must never
-    integrate a sample overwritten under its copy as if it were the next one in time, so the writer
+    The STROBE and the POLYPHONIC tuner read it the other way (readSince): not a window, but every
+    sample that arrived since they last looked, in order — the count of samples ever written says
+    which those are. Neither may take a sample overwritten under its copy for the next one in time —
+    the strobe integrates it, the polyphonic tuner keeps it in a history of its own — so the writer
     CLAIMS a block before writing it, and the reader, having copied, drops whatever a claim has reached
     (the samples are atomics, relaxed — plain loads and stores — so the claim and the copy are ordered by
     a fence on either side, and nothing waits on anything).
