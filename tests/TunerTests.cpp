@@ -433,6 +433,7 @@ int main()
             double mains;
             std::vector<std::pair<int, double>> partials;
             double rmsDb, swingDb = 0.0, swingHz = 0.0;
+            double phase = -1.0;   // of the mains, radians; from the seed when negative
         };
         const auto room = [] (double sr, double seconds, const Hum& h, double from, std::uint32_t seed)
         {
@@ -441,7 +442,7 @@ int main()
             for (const auto& p : h.partials)
                 power += 0.5 * std::pow (10.0, p.second / 10.0);
             const double g  = std::pow (10.0, h.rmsDb / 20.0) / std::sqrt (power);
-            const double ph = 0.37 * seed;
+            const double ph = h.phase >= 0.0 ? h.phase : 0.37 * seed;
             for (size_t n = 0; n < y.size(); ++n)
             {
                 const double t = (double) n / sr;
@@ -564,9 +565,11 @@ int main()
         //    the hum's mains (100 Hz over 50, 120 over 60), one beating against it (49 Hz over 50) and
         //    one clear of it (110 over 60), the hum 20 and 40 dB under the note, the string falling 9 dB/s.
         //    While the string stands 6 dB over the hum, every tick that reads it (within 5 cents) reads
-        //    its NOTE; once it has sunk 10 dB under, what stands on a line is HUM again, and in the last
-        //    second the reading stands on the line, as HUM. (Between, the tracker reads string and hum
-        //    together, off the line; that is shown as it is read.)
+        //    its NOTE; once it has sunk 25 dB under — the level flat again, the hum's own — what stands on
+        //    a line is HUM again, and in the last second the reading stands on the line, as HUM. (Between,
+        //    the tracker reads string and hum together; no label is put on that until the level is flat:
+        //    the hum after a passage comes back late, the safe way — later still where the string beats
+        //    against it.)
         {
             struct Case { double hz, mains; };
             const Case cases[] = { { 100.0, 50.0 }, { 120.0, 60.0 }, { 48.999, 50.0 }, { 110.0, 60.0 } };
@@ -581,7 +584,7 @@ int main()
                             continue;
                         ++runs;
                         const std::uint32_t sd = seed++;
-                        auto y = room (sr, 9.0, Hum { c.mains, { { 1, 0.0 } }, -15.0 - under }, 0.0, sd);
+                        auto y = room (sr, 11.0, Hum { c.mains, { { 1, 0.0 } }, -15.0 - under }, 0.0, sd);
                         pluckInto (y, sr, c.hz, 1.5, 9.0, -15.0, sd);
 
                         double first = -1.0, unlabelledOnLine = 0.0;
@@ -597,9 +600,9 @@ int main()
                                 ++stringTicks;
                                 labelledString += k.hum != 0 ? 1 : 0;
                             }
-                            if (k.t > (under + 10.0) / 9.0 && k.live && onLine (k.hz) && k.hum == 0)
+                            if (k.t > (under + 25.0) / 9.0 && k.live && onLine (k.hz) && k.hum == 0)
                                 unlabelledOnLine += 1.0 / 30.0;
-                            if (k.t >= 6.5 && k.live && onLine (k.hz))
+                            if (k.t >= 8.5 && k.live && onLine (k.hz))
                             {
                                 endsOnHum = endsOnHum && k.hum == (int) c.mains;
                                 ++endOnLine;
@@ -617,8 +620,8 @@ int main()
             std::snprintf (name, sizeof (name), "string over hum: its ticks labelled (of %d)", stringTicks);
             check (name, labelledString, 0.0, 0.0);
             checkTrue ("...and those ticks are there to count", stringTicks > 20 * runs);
-            check ("string over hum: runs not on HUM 5 s after it", notBack, 0.0, 0.0);
-            check ("string over hum: on a line unlabelled once it died, s", longestOnLine, 0.0, 0.5);
+            check ("string over hum: runs not on HUM at the end", notBack, 0.0, 0.0);
+            check ("string over hum: on a line unlabelled 25 dB under it, s", longestOnLine, 0.0, 1.0);
         }
 
         // 4. A STRING ON A MAINS LINE, no hum anywhere: plucked strings at the centre of every line,
@@ -842,28 +845,47 @@ int main()
         //     falling 4 dB/s; plucked over the hum, which a hand on the strings then silences; plucked
         //     0.2 s after a -25 dBFS hum went, at -15, falling 2 dB/s, and at -19 a second after; and
         //     plucked with a finger (its attack 60 ms) at -15 over a hum of its own pitch 4 dB under it,
-        //     falling 2 dB/s — its own attack must not raise the hum's level. No tick that reads the string — while it stands over the hum
-        //     when there is one, from the tick after the attack begins — is labelled HUM.
+        //     falling 2 dB/s — its own attack must not raise the hum's level — and the same with the hum's
+        //     phase set so the string lifts it or cancels it. And strings AT the pitch of a hum (one that
+        //     reads 100 Hz) that has gone, plucked near its level (-47 to -41 dBFS, the hum was -45),
+        //     falling 4 and 1 dB/s; the hum gone under a string of its pitch. Coming back to a hum's level
+        //     at its pitch is not the hum coming back: only a flat level is. (Over hum that swings, never
+        //     flat, only a change of 3 dB in 100 ms gives such a pluck away — the limit in TunerEar.)
         {
-            struct Case { const char* what; double humDb, opened, goneAt, pluckAt, pluckDb, decay; bool humOnString; };
+            struct Case { const char* what; double humDb, opened, goneAt, pluckAt, pluckDb, decay; bool humOnString; double humPhase = -1.0;
+                          bool allRates = false; };
             const Case cases[] = { { "gone, then -43", -45.0, 1.0, 3.0, 4.0, -43.0, 4.0, false },
                                    { "gone, then -40", -45.0, 1.0, 3.0, 4.0, -40.0, 4.0, false },
                                    { "gone, then -30", -45.0, 1.0, 3.0, 4.0, -30.0, 4.0, false },
                                    { "silenced under the string", -45.0, 1.0, 4.0, 2.0, -20.0, 6.0, false },
-                                   { "gone 0.2 s before, -15", -25.0, 0.3, 1.3, 1.5, -15.0, 2.0, false },
+                                   { "gone 0.2 s before, -15", -25.0, 0.3, 1.3, 1.5, -15.0, 2.0, false, -1.0, true },
                                    { "gone 1 s before, -19", -25.0, 0.3, 2.0, 3.0, -19.0, 2.0, false },
-                                   { "over a hum of its pitch", -19.0, 0.3, -1.0, 1.5, -15.0, 2.0, true } };
+                                   { "over a hum of its pitch", -19.0, 0.3, -1.0, 1.5, -15.0, 2.0, true },
+                                   // round 4: a string AT a gone hum's pitch, near its level; the hum gone under a string
+                                   // of its pitch; a pluck in and out of step with a hum of its pitch
+                                   { "its pitch, gone, then -47 at 4 dB/s", -45.0, 1.0, 3.0, 4.0, -47.0, 4.0, true },
+                                   { "its pitch, gone, then -42.5 at 4 dB/s", -45.0, 1.0, 3.0, 4.0, -42.5, 4.0, true },
+                                   { "its pitch, gone, then -44 at 1 dB/s", -45.0, 1.0, 3.0, 4.0, -44.0, 1.0, true },
+                                   { "its pitch, gone, then -41 at 1 dB/s", -45.0, 1.0, 3.0, 4.0, -41.0, 1.0, true },
+                                   { "its pitch, gone under it, 6 dB/s", -45.0, 1.0, 4.0, 2.0, -20.0, 6.0, true },
+                                   { "its pitch, gone under it, 4 dB/s", -45.0, 1.0, 4.0, 2.0, -20.0, 4.0, true },
+                                   { "its pitch, hum at phase 0", -19.0, 0.3, -1.0, 1.5, -15.0, 2.0, true, 0.0 },
+                                   { "its pitch, hum at phase 4", -19.0, 0.3, -1.0, 1.5, -15.0, 2.0, true, 4.0, true },
+                                   { "its pitch, hum at phase 1.6", -19.0, 0.3, -1.0, 1.5, -15.0, 2.0, true, 1.6 },
+                                   { "its pitch, hum at phase 4.8", -19.0, 0.3, -1.0, 1.5, -15.0, 2.0, true, 4.8 },
+                                   { "its pitch, hum at phase 5.6", -19.0, 0.3, -1.0, 1.5, -15.0, 2.0, true, 5.6 } };
             int worst = 0, unread = 0, runs = 0;
             for (const auto& c : cases)
                 for (const double sr : { 44100.0, 48000.0, 96000.0 })
                 {
-                    if (sr != 48000.0 && std::strncmp (c.what, "gone 0.2", 8) != 0)
+                    if (sr != 48000.0 && ! c.allRates)
                         continue;
                     ++runs;
                     Hum h { 50.0, { { 1, 0.0 } }, c.humDb };
                     if (c.humOnString)
                         h.partials = { { 2, 0.0 } };   // hum that reads 100 Hz
-                    const double seconds = c.pluckAt + 5.0;
+                    h.phase = c.humPhase >= 0.0 ? c.humPhase / 2.0 : -1.0;   // the 100 Hz component's phase
+                    const double seconds = c.pluckAt + 3.5;
                     auto y = room (sr, seconds, h, 0.0, 29);
                     if (c.goneAt > 0.0)
                         shape (y, sr, { { c.goneAt, 0.0 }, { c.goneAt + 0.02, -100.0 } });
@@ -887,8 +909,10 @@ int main()
                     for (const auto& k : listenTo (y, sr, c.opened, 0.0))
                     {
                         const double above = c.pluckDb - c.decay * (k.t - c.pluckAt) - c.humDb;
-                        if (k.t >= c.pluckAt + 0.07 && k.live && std::fabs (1200.0 * std::log2 (k.hz / 100.0)) <= 5.0
-                            && (! c.humOnString || above > 0.0))
+                        const bool humThere = c.goneAt < 0.0 || k.t < c.goneAt;
+                        const double seen = c.humOnString && humThere ? 0.15 : 0.07;   // a finger's attack in step with the hum takes a while to tell
+                        if (k.t >= c.pluckAt + seen && k.live && std::fabs (1200.0 * std::log2 (k.hz / 100.0)) <= 5.0
+                            && (! c.humOnString || ! humThere || above > 0.0))
                         {
                             ++onString;
                             labelled += k.hum != 0 ? 1 : 0;
@@ -946,45 +970,41 @@ int main()
         }
 
         // 8. HUM THAT DIPS AND COMES BACK — a hand on the strings grounds the player and takes the hum down;
-        //    off, it is back. -45 dBFS hum, dips of 6, 12 and 20 dB for 0.2, 0.5, 1 and 2 s: back, it reads
-        //    HUM again within 0.35 s — the hum returning at its own pitch and level is no pluck — and once
-        //    HUM has been read, no tick standing on the line names a note but in the 0.15 s the return takes
-        //    to show its pitch and level. (Out of a dip under the floor the tracker's first readings are
-        //    off the line for a tick or four; those it shows as it reads them.)
+        //    off, it is back. -45 dBFS hum, dips of 6, 12 and 20 dB for 0.2, 0.5, 1 and 2 s: the dip and the
+        //    return are sudden changes, no label until the level is flat again — back, within 1.1 s every
+        //    tick standing on the line reads HUM, to the end.
         {
             double slowest = 0.0;
-            int notes = 0, runs = 0, never = 0;
+            int runs = 0, never = 0;
             for (const double depth : { 6.0, 12.0, 20.0 })
                 for (const double length : { 0.2, 0.5, 1.0, 2.0 })
                 {
                     ++runs;
                     const double from = 2.0, to = 2.0 + length, ramp = 0.02;
-                    auto y = room (48000.0, to + 1.0, Hum { 50.0, { { 1, 0.0 } }, -45.0 }, 0.0, 17);
+                    auto y = room (48000.0, to + 2.5, Hum { 50.0, { { 1, 0.0 } }, -45.0 }, 0.0, 17);
                     for (size_t n = 0; n < y.size(); ++n)
                     {
                         const double t = (double) n / 48000.0;
                         const double in = std::clamp ((t - from) / ramp, 0.0, 1.0) * std::clamp ((to + ramp - t) / ramp, 0.0, 1.0);
                         y[n] *= (float) std::pow (10.0, -depth * in / 20.0);
                     }
-                    double first = -1.0, back = -1.0;
+                    // Back for good: the last tick after the return that stands on the line and is not HUM.
+                    double lastNote = to + ramp;
+                    bool endsOnHum = false;
                     for (const auto& k : listenTo (y, 48000.0, 1.0, 0.0))
-                    {
-                        if (first < 0.0 && k.hum == 50)
-                            first = k.t;
-                        else if (first >= 0.0 && k.live && onLine (k.hz) && k.hum == 0
-                                 && ! (k.t >= to + ramp && k.t < to + ramp + 0.15))
-                            ++notes;
-                        if (k.t >= to + ramp && back < 0.0 && k.hum == 50)
-                            back = k.t - (to + ramp);
-                    }
-                    never += back < 0.0 ? 1 : 0;
-                    slowest = std::max (slowest, back);
+                        if (k.t >= to + ramp && k.live && onLine (k.hz))
+                        {
+                            if (k.hum == 0)
+                                lastNote = k.t;
+                            endsOnHum = k.hum == 50;
+                        }
+                    never += endsOnHum ? 0 : 1;
+                    slowest = std::max (slowest, lastNote - (to + ramp));
                 }
             char name[96];
-            std::snprintf (name, sizeof (name), "hum that dips: runs never back on HUM (of %d)", runs);
+            std::snprintf (name, sizeof (name), "hum that dips: runs not back on HUM (of %d)", runs);
             check (name, never, 0.0, 0.0);
-            check ("hum that dips: slowest back on HUM, s", slowest, 0.0, 0.35);
-            check ("hum that dips: ticks on the line naming a note", notes, 0.0, 0.0);
+            check ("hum that dips: slowest back on HUM for good, s", slowest, 0.0, 1.1);
         }
     }
 
