@@ -192,6 +192,21 @@ void Chrome::showPresetMenu()
             if (! tree.isValid())
                 return;
 
+            // Another chain's preset — a guitar amp's on the bass, the bass's on a guitar amp — is not loaded.
+            if (! amp.belongs (tree))
+            {
+                juce::AlertWindow::showAsync (juce::MessageBoxOptions()
+                                                  .withIconType (juce::MessageBoxIconType::WarningIcon)
+                                                  .withTitle ("Not loaded")
+                                                  .withMessage (n + "\n\nThis preset is another amp's: "
+                                                                + (amp.product().chain == Chain::bass ? juce::String ("a guitar amp's.")
+                                                                                                      : juce::String ("a bass amp's.")))
+                                                  .withButton ("OK"),
+                                              nullptr);
+                return;
+            }
+            AmpProcessor::unstamp (tree);
+
             amp.takeEmbeddedIrs (tree);   // a cabinet IR it carries goes to the store, not the history
             amp.takeFormerCabinet (tree); // one saved while every amp opened on DARK MATTER, on RED GIANT
 

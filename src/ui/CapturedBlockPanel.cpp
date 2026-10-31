@@ -27,16 +27,26 @@ struct CapturedBlockPanel::BassKnobs
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> compAtt, blendAtt;
     std::unique_ptr<juce::ParameterAttachment> compOnAtt;
 
-    void addTo (juce::Component& owner)
+    void addTo (BlockFrame& owner)
     {
         for (auto* k : { &comp, &blend })
         {
             owner.addAndMakeVisible (*k);
+            // Read at the family's fx knobs' sizes (Knob::fx*): the name at its floor, the number under the
+            // dial in the 13 px row, and not a second time inside it.
+            k->labelFontHeight = Knob::fxLabelH;
+            k->labelTracking   = Knob::fxLabelTracking;
+            k->labelRowHeight  = Knob::fxLabelRowH;
+            k->valueInDial     = false;
             k->setValueRowShown (true);
             k->valueForText = [] (const juce::String& t) { return t.getDoubleValue() / 100.0; };
             k->textForValue = [] (double v) { return juce::String (juce::roundToInt (v * 100.0)) + "%"; };
         }
         owner.addAndMakeVisible (gr);
+
+        // COMP is not the AMP's: it works while the AMP stands by, and its own arrow dims it (below).
+        owner.keepOutsideStandby (comp);
+        owner.keepOutsideStandby (gr);
 
         compAtt  = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (state, params::compAmount, comp);
         blendAtt = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (state, params::ampBlend, blend);
@@ -54,10 +64,11 @@ struct CapturedBlockPanel::BassKnobs
     /** The two columns beside the dial: each knob in the middle of its own, COMP's squeeze at its outer edge. */
     void layOut (juce::Rectangle<int> left, juce::Rectangle<int> right)
     {
-        const int side = juce::jmin (52, left.getWidth() - 10);
-        const int h    = side + Knob::valueRowH + 18;
-        comp.setBounds (left.withSizeKeepingCentre (side, h).translated (4, 0));
-        gr.setBounds (juce::Rectangle<int> (left.getX(), comp.getY() + 18, 4, side));
+        const int side = juce::jmin (52, left.getWidth() - 14);
+        const int h    = side + Knob::valueRowH + Knob::fxLabelRowH;
+        comp.setBounds (left.withSizeKeepingCentre (side, h).translated (5, 0));
+        // The squeeze stands clear of the frame's line, between it and the knob's dial.
+        gr.setBounds (juce::Rectangle<int> (comp.getX() - 9, comp.getY() + Knob::fxLabelRowH + 4, 4, side - 8));
         blend.setBounds (right.withSizeKeepingCentre (side, h));
     }
 
@@ -856,7 +867,8 @@ void CapturedBlockPanel::buildSelectors()
 
     // ...and none: the key throws preamp_boost instead, on any pack that plays.
     boostAttachment.reset();
-    boostShown = boostIndex >= 0 || block.selectedName().isNotEmpty();
+    boostShown = (boostIndex >= 0 || block.selectedName().isNotEmpty())
+              && bassKnobs == nullptr;   // no BOOST on the bass (the owner, 31.10)
     if (boostIndex < 0 && boostShown)
     {
         boostKey.setTooltip (juce::String ("BOOST:   two captures up the GAIN dial, past its top 3 dB harder a step"));

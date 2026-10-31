@@ -325,6 +325,11 @@ public:
         if (invert != crossoverInvertSet) { crossoverInvertSet = invert; player.setCrossoverInvert (invert); }
     }
 
+    /** What the player was last told of its crossover: the amount, the frequency and the polarity. */
+    float crossoverAmountTold() const noexcept { return crossoverSet[0]; }
+    float crossoverHzTold() const noexcept     { return crossoverSet[1]; }
+    bool  crossoverInvertTold() const noexcept { return crossoverInvertSet; }
+
     /** THE PACK'S OWN TWO LEVELS, as it states them — `chain[].input_db` and `chain[].output_db`.
         The player applies both itself, always, with no switch anywhere (setInputTrims above gates
         the per-FILE alias trims and nothing else). They are readable here because both land where

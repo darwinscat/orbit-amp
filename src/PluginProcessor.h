@@ -17,6 +17,7 @@
 #include "core/EqLink.h"
 #include "core/HumLearnLink.h"
 #include "core/BassComp.h"
+#include "core/BassCuts.h"
 #include "core/BypassFade.h"
 #include "core/BypassWire.h"
 #include "core/CabinetIr.h"
@@ -172,8 +173,9 @@ public:
         // no longer cut at eight, and the one case that stays wrong in a caching host is one where
         // the old constant was exactly as wrong. Lifting the floor is a thing to do after watching
         // a real session in Cubase and Logic, not before.
-        if (echoes)
-            tail = juce::jmax (tail, 8.0);
+        // The bass's has no echo and no room, and a floor of its own: the longest IR the cabinet takes, so a
+        // host that asks once never cuts one that is loaded later.
+        tail = juce::jmax (tail, echoes ? 8.0 : 5.0);
 
         return juce::jmin (tail, 30.0);
     }
@@ -296,8 +298,34 @@ public:
     {
         auto tree = stateForSaving();
         embedCabIrs (tree);
+        stamp (tree);
         return tree;
     }
+
+    /** WHOSE STATE IT IS. A session and a preset carry the product that wrote them and its chain; a guitar amp's
+        never fits the bass's chain, nor the bass's a guitar amp's, and one that does not fit is not loaded. A
+        state with no stamp was written before there was a bass — a guitar amp's: the guitar amps load it as
+        they always have, OrbitBass refuses it. */
+    void stamp (juce::ValueTree& tree) const
+    {
+        tree.setProperty (stampProduct, juce::String (ownProduct.name), nullptr);
+        tree.setProperty (stampChain, ownProduct.chain == Chain::bass ? "bass" : "guitar", nullptr);
+    }
+
+    bool belongs (const juce::ValueTree& tree) const
+    {
+        const bool bassState = tree.getProperty (stampChain).toString() == "bass";
+        return bassState == (ownProduct.chain == Chain::bass);
+    }
+
+    static void unstamp (juce::ValueTree& tree)
+    {
+        tree.removeProperty (stampProduct, nullptr);
+        tree.removeProperty (stampChain, nullptr);
+    }
+
+    static constexpr const char* stampProduct = "product";
+    static constexpr const char* stampChain   = "chain";
 
     /** The other half: a tree read from disk gives its embedded IRs to the store and comes back a
         plain state, before anything applies it. Message thread only. */
@@ -900,9 +928,9 @@ private:
         a stack only redesigns when something actually moved. */
     void updateEqSettings() noexcept;
 
-    /** The bass's own cuts (params::bassHpf, bassLpf) into their stage — per block, audio thread; a stage
-        redesigns only when something moved. */
-    void updateBassCuts() noexcept;
+    /** The bass's own cuts as its parameters stand (params::bassHpf, bassLpf) — what its stage glides and fades
+        to (core::BassCuts). Audio thread, per block. */
+    core::BassCuts::Settings bassCutSettings() const noexcept;
 
     /** Same, for the reverb: character and mix, applied only when they move. */
     void updateReverbSettings() noexcept;
@@ -1265,8 +1293,10 @@ private:
     /** THE BASS'S OWN LINKS (Chain::bass) — prepared and run on its chain alone: its COMP after the gate, the
         DI's copy beside the cabinet, its own cuts after DI/CAB. */
     core::BassComp bassComp;
-    core::EqLink   bassCuts;
+    core::BassCuts bassCuts;
     juce::AudioBuffer<float> diDry;
+    float diNow  = 0.3f;     // DI/CAB's share as the audio thread has glided it — see processChunk
+    float diStep = 0.001f;   // ...and its glide per sample, 20 ms for the whole travel at the prepared rate
 
     /** OrbitBass's own parameters (params::addBassParameters), read where it has them; null on every guitar
         amp, which has none. */

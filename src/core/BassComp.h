@@ -3,11 +3,13 @@
 
 #pragma once
 
-#include "EqLink.h"
+#include "BassCuts.h"
+#include "BypassFade.h"
 
 #include <felitronics/dynamics/Compressor.h>
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <cmath>
 #include <vector>
@@ -18,19 +20,41 @@ namespace orbitamp::core
 /** OrbitBass's COMP: felitronics-core's compressor under ONE KNOB, the law agreed with the owner.
 
     The knob, 0..1:
-      - 0 is no compressor — nothing is computed and the signal passes bit for bit;
+      - 0 is no compressor — once the knob has glided there, nothing is computed and the signal passes bit
+        for bit;
       - up the knob the threshold falls from -12 to -36 dB and the ratio rises from 2:1 to 6:1, over a soft
         knee of 8 dB, with core's static auto make-up;
+      - over the knob's FIRST 5 % the compressor is crossfaded in against the signal, so the knob is
+        continuous from its zero: 0+ is not already the make-up's +3 dB;
       - up the knob a share of the signal passes UNCOMPRESSED beside it, parallel — a quarter at the top —
         so a note's attack survives the squeeze;
+      - the knob GLIDES (20 ms for its whole travel): a recall, a register or automation moves the threshold,
+        the ratio and the parallel share as a hand would, never as a step;
       - no lookahead: no latency, and the uncompressed share lines up with the compressed one sample for sample.
 
-    The detector hears the bass through a 40 Hz high-pass (the key; core gives the input, the product the
-    filter): the lowest strings' fundamentals do not pump the rest.
+    STANDBY (the strip's arrow) is the house's crossfade (BypassFade, 15 ms), handed in per block. While the
+    link stands by with the knob up the compressor is still FED — its detector and its make-up stay where the
+    playing has put them — so switching it in fades to a compressor already settled, not to a fresh one that
+    lets the first 15 ms through at the whole make-up. Only with the knob at zero does it stop, and its memory
+    is cleared then, when nothing of it is in the sound. A knob recalled up from zero starts a FRESH
+    compressor, and a fresh one has heard nothing yet: its make-up is there at once and its squeeze is not. So
+    it is fed and not heard for `warmMs`, the detector and the attack catching up with the playing, and only
+    then faded in.
+
+    The detector hears the bass through a 30 Hz high-pass, 12 dB/oct (the key; core gives the input, the
+    product the filter): the lowest fundamentals do not pump the rest. It was 40 Hz at 24 dB/oct, and the
+    harder it squeezed the louder the low B came out against the strings above it — a key deaf to a note is a
+    compressor that leaves that note alone.
 
     The menu: ATTACK slow 30 / MED 15 / fast 5 ms; RELEASE AUTO — program-dependent, 80 ms after a short peak
     and growing toward 400 ms as the squeeze is held, the smooth, optical way — or FAST 80 / SLOW 400 ms;
-    CHARACTER SMOOTH hears the level's average (RMS over 10 ms), PUNCHY its peaks.
+    CHARACTER SMOOTH hears the level's average (RMS over 10 ms), PUNCHY its peaks, its threshold
+    `punchyOffsetDb` higher, so the two play about as loud on a bass.
+
+    ITS TIME IS ITS OWN, NOT THE HOST'S BLOCKS: the knob and the release reach the compressor on a fixed
+    cadence counted in samples from the prepare, and the hold behind AUTO is read sample by sample from the
+    compressor's own gain-reduction tap — the same playing gives the same samples whether a host hands 32
+    samples a block or 4096.
 
     Mono, as the bass's chain is. Real-time safe: prepare() allocates, process() does not. */
 class BassComp
@@ -46,8 +70,28 @@ public:
     static constexpr double attackSlowMs      = 30.0,  attackMedMs = 15.0, attackFastMs = 5.0;
     static constexpr double releaseFastMs     = 80.0,  releaseSlowMs = 400.0;
     static constexpr double uncompressedAtTop = 0.25;
-    static constexpr double keyCutHz          = 40.0;
-    static constexpr int    keyCutSlope       = 24;   // dB/oct
+    static constexpr double knobFadeTop       = 0.05;   // the knob's share the compressor fades in over
+    static constexpr double amountGlideMs     = 20.0;   // the knob's whole travel
+    static constexpr double holdMs            = 500.0;  // AUTO's memory of the squeeze
+    static constexpr double holdFullDb        = 6.0;    // ...held this deep, the release is at its slowest
+    static constexpr double cadenceMs         = 1.0;    // how often the knob and the release reach the compressor
+    static constexpr double warmMs            = 20.0;   // a fresh start is fed, not heard, this long...
+    static constexpr double warmFadeMs        = 15.0;   // ...then fades in over BypassFade's length
+
+    /** PUNCHY's threshold over SMOOTH's. A peak detector reads a sine 3 dB over its 10 ms RMS and a plucked
+        bass more — a real DI 8 to 12 dB (reviewed 31.10) — so PUNCHY, at SMOOTH's threshold, squeezed the
+        same playing harder and played it quieter. The offset is measured on the gate's plucked bass line,
+        whose attack puts its peaks about as far over its RMS as a finger on a DI (tests/OrbitBassTests.cpp
+        prints both); the owner sets the rest by ear. */
+    static constexpr double punchyOffsetDb = 4.0;
+
+    /** The key's high-pass: this one, or another for a comparison — the first version's was 40 Hz, two
+        sections (24 dB/oct). */
+    struct KeyCut
+    {
+        double hz       = 30.0;
+        int    sections = 1;    // 12 dB/oct each
+    };
 
     /** Where the knob puts the curve. */
     struct Law
@@ -70,58 +114,139 @@ public:
         return a == Attack::slow ? attackSlowMs : a == Attack::fast ? attackFastMs : attackMedMs;
     }
 
-    [[nodiscard]] bool prepare (double sampleRate, int maxBlock)
+    [[nodiscard]] bool prepare (double sampleRate, int maxBlock) { return prepare (sampleRate, maxBlock, KeyCut {}); }
+
+    [[nodiscard]] bool prepare (double sampleRate, int maxBlock, KeyCut cut)
     {
-        fs    = sampleRate > 0.0 ? sampleRate : 48000.0;
-        block = std::max (1, maxBlock);
+        fs        = sampleRate > 0.0 ? sampleRate : 48000.0;
+        block     = std::max (1, maxBlock);
+        cadence   = std::max (1, (int) std::lround (fs * cadenceMs * 0.001));
+        glideStep = 1.0 / (amountGlideMs * 0.001 * fs);
+        warmSamples = warmMs * 0.001 * fs;
+        warmFade    = warmFadeMs * 0.001 * fs;
+        holdK     = 1.0 - std::exp (-1.0 / (holdMs * 0.001 * fs));
         key.assign ((size_t) block, 0.0f);
         dry.assign ((size_t) block, 0.0f);
+        work.assign ((size_t) block, 0.0f);
+        gr.assign ((size_t) block, 0.0f);
 
-        keyCut.prepare (fs, 1);
-        EqLink::Settings cut;
-        cut.hpfOn    = true;
-        cut.hpfHz    = keyCutHz;
-        cut.hpfSlope = keyCutSlope;
-        keyCut.setSettings (cut);
+        keySections = std::clamp (cut.sections, 1, (int) keyCut.size());
+        for (auto& b : keyCut)
+            b.design (true, cut.hz, fs);
 
         ready = comp.prepare (fs, block, 1, 0.0);
         reset();
         return ready;
     }
 
+    /** Silence: no squeeze held, the cadence started again. */
     void reset() noexcept
     {
         comp.reset();
-        keyCut.reset();
-        heldDb  = 0.0;
-        running = false;
+        for (auto& b : keyCut)
+            b.reset();
+        heldDb      = 0.0;
+        clock       = 0;
+        sinceStart  = 0;
+        running     = false;
+        paramsValid = false;
         grDb.store (0.0f, std::memory_order_relaxed);
     }
 
-    /** One block of the mono chain, in place. Amount 0 touches nothing: the block is the input. */
-    void process (float* x, int n, double amount, Attack attack, Release release, Character character) noexcept
+    /** The knob lands at `amount` without a glide — a prepare's first block. */
+    void snapAmount (double amount) noexcept { amt = std::clamp (amount, 0.0, 1.0); }
+
+    /** One block of the mono chain, in place. `link` is the strip's STANDBY crossfade for this block. */
+    void process (float* x, int n, double amountTarget, const BypassFade::Span& link,
+                  Attack attack, Release release, Character character) noexcept
     {
-        if (! (amount > 0.0) || ! ready || x == nullptr || n <= 0 || n > block)
+        const double target = std::clamp (amountTarget, 0.0, 1.0);
+
+        // The knob at zero and glided there: nothing at all — and the memory cleared, now that nothing of it
+        // is in the sound.
+        if (! (target > 0.0) && ! (amt > 0.0))
         {
             if (running)
-                reset();   // the next time it is turned up it starts from no squeeze, not from a held one
+                reset();
+            grDb.store (0.0f, std::memory_order_relaxed);
             return;
         }
+        if (! ready || x == nullptr || n <= 0 || n > block)
+            return;
 
         running = true;
-        const auto law = lawAt (amount);
+        const bool heard = link.moving || link.to > 0.0f;   // standing by and settled: fed, not heard
 
-        // The release: AUTO follows how long the squeeze has been held — a one-pole over ~0.5 s of the
-        // reduction, 6 dB of it held reaching the slow end.
-        double releaseMs = release == Release::fast ? releaseFastMs : releaseSlowMs;
-        if (release == Release::automatic)
+        std::copy (x, x + n, dry.data());
+        std::copy (x, x + n, work.data());
+
+        const int   ramp     = std::clamp (link.ramp, 1, n);
+        const float linkStep = (link.to - link.from) / (float) ramp;
+
+        for (int i = 0; i < n;)
         {
-            const double held = std::clamp (heldDb / 6.0, 0.0, 1.0);
-            releaseMs = releaseFastMs + (releaseSlowMs - releaseFastMs) * held;
+            // On the cadence, counted from the prepare: the knob as it has glided and the release as AUTO reads
+            // the hold, handed to the compressor.
+            const int phase = (int) (clock % (long long) cadence);
+            if (phase == 0)
+                apply (attack, release, character);
+
+            const int len = std::min (n - i, cadence - phase);
+
+            for (int k = i; k < i + len; ++k)
+            {
+                float v = work[(size_t) k];
+                for (int s = 0; s < keySections; ++s)
+                    v = keyCut[(size_t) s].process (v);
+                key[(size_t) k] = v;
+            }
+
+            float* io[] = { work.data() + i };
+            const float* keyIn[] = { key.data() + i };
+            (void) comp.process (io, 1, len, keyIn, 1, felitronics::dynamics::GainReductionTap { gr.data() + i, len });
+
+            for (int k = i; k < i + len; ++k)
+            {
+                heldDb += holdK * (std::max (0.0, -(double) gr[(size_t) k]) - heldDb);
+                amt = target > amt ? std::min (target, amt + glideStep) : std::max (target, amt - glideStep);
+
+                if (! heard)
+                    continue;
+
+                const double p     = uncompressedAtTop * amt;
+                const double fresh = std::clamp (((double) (sinceStart + (k - i)) - warmSamples) / warmFade, 0.0, 1.0);
+                const double knob  = std::min (1.0, amt / knobFadeTop) * fresh;
+                const float  g    = link.moving ? (k < ramp ? link.from + linkStep * (float) k : link.to) : link.to;
+                const float  d    = dry[(size_t) k];
+                const float  wet  = (float) ((1.0 - p) * (double) work[(size_t) k] + p * (double) d);
+                x[k] = d + (wet - d) * (float) (knob * (double) g);
+            }
+
+            i          += len;
+            clock      += len;
+            sinceStart += len;
         }
 
+        grDb.store (gr[(size_t) n - 1], std::memory_order_relaxed);
+    }
+
+    /** The squeeze now, in dB (0 or below) — for the indicator beside the knob. */
+    std::atomic<float> grDb { 0.0f };
+
+    /** Where the knob has glided to — for a gate. */
+    double amountNow() const noexcept { return amt; }
+
+private:
+    void apply (Attack attack, Release release, Character character) noexcept
+    {
+        const auto law = lawAt (amt);
+
+        double releaseMs = release == Release::fast ? releaseFastMs : releaseSlowMs;
+        if (release == Release::automatic)
+            releaseMs = releaseFastMs + (releaseSlowMs - releaseFastMs) * std::clamp (heldDb / holdFullDb, 0.0, 1.0);
+
         felitronics::dynamics::CompressorParams p;
-        p.thresholdDb = law.thresholdDb;
+        p.thresholdDb = law.thresholdDb + (character == Character::punchy ? punchyOffsetDb : 0.0);
         p.ratio       = law.ratio;
         p.kneeDb      = kneeDb;
         p.attackMs    = attackMsOf (attack);
@@ -131,56 +256,33 @@ public:
         p.rmsWindowMs = 10.0;
         p.autoMakeup  = true;
         p.lookaheadMs = 0.0;
-        if (! same (p, set))
+
+        if (! paramsValid || ! same (p, set))
         {
             comp.setParams (p);
             set = p;
+            paramsValid = true;
         }
-
-        // The key: the same signal, its lowest strings' fundamentals cut away.
-        std::copy (x, x + n, key.data());
-        float* keyCh[] = { key.data() };
-        keyCut.process (keyCh, 1, n);
-
-        if (law.uncompressed > 0.0)
-            std::copy (x, x + n, dry.data());
-
-        float* io[] = { x };
-        const float* keyIn[] = { key.data() };
-        (void) comp.process (io, 1, n, keyIn, 1);
-
-        if (law.uncompressed > 0.0)
-        {
-            const auto wet = (float) (1.0 - law.uncompressed), par = (float) law.uncompressed;
-            for (int i = 0; i < n; ++i)
-                x[i] = wet * x[i] + par * dry[(size_t) i];
-        }
-
-        const double gr = -comp.gainReductionDb();   // positive dB of squeeze
-        const double k  = 1.0 - std::exp (-(double) n / (0.5 * fs));
-        heldDb += k * (std::max (0.0, gr) - heldDb);
-        grDb.store ((float) comp.gainReductionDb(), std::memory_order_relaxed);
     }
 
-    /** The squeeze now, in dB (0 or below) — for the indicator beside the knob. */
-    std::atomic<float> grDb { 0.0f };
-
-private:
     static bool same (const felitronics::dynamics::CompressorParams& a,
                       const felitronics::dynamics::CompressorParams& b) noexcept
     {
-        const auto near = [] (double x, double y, double within) { return std::abs (x - y) < within; };
+        const auto near = [] (double u, double v, double within) { return std::abs (u - v) < within; };
         return near (a.thresholdDb, b.thresholdDb, 1.0e-9) && near (a.ratio, b.ratio, 1.0e-9)
             && near (a.attackMs, b.attackMs, 1.0e-9) && near (a.releaseMs, b.releaseMs, 1.0) && a.detector == b.detector;
     }
 
     felitronics::dynamics::Compressor       comp;
-    felitronics::dynamics::CompressorParams set { [] { felitronics::dynamics::CompressorParams p; p.ratio = 0.0; return p; }() };
-    EqLink             keyCut;
-    std::vector<float> key, dry;
-    double fs = 48000.0, heldDb = 0.0;
-    int    block = 0;
-    bool   ready = false, running = false;
+    felitronics::dynamics::CompressorParams set;
+    std::array<CutBiquad, 2> keyCut;
+    int    keySections = 1;
+    std::vector<float> key, dry, work, gr;
+    double fs = 48000.0, heldDb = 0.0, amt = 0.0, glideStep = 0.001, holdK = 0.001;
+    long long clock = 0, sinceStart = 0;
+    double warmSamples = 960.0, warmFade = 720.0;
+    int    block = 0, cadence = 48;
+    bool   ready = false, running = false, paramsValid = false;
 };
 
 } // namespace orbitamp::core

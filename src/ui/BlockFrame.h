@@ -7,6 +7,9 @@
 
 #include <juce_audio_processors/juce_audio_processors.h>
 
+#include <algorithm>
+#include <vector>
+
 namespace orbitamp
 {
 
@@ -284,6 +287,17 @@ protected:
         indicating), not merely dim. */
     virtual void blockOnChanged (bool) {}
 
+public:
+    /** A CHILD THAT IS NOT THE BLOCK'S, though it stands on its face — the bass's COMP beside the AMP's dial, its
+        cuts on the cabinet: it works whether the block works or not, so the block's STANDBY neither dims it nor
+        shields it. Its own switch, if it has one, is its own business. */
+    void keepOutsideStandby (juce::Component& c)
+    {
+        independent.push_back (&c);
+        c.setAlpha (1.0f);
+    }
+
+protected:
     /** Blocks rebuild their faces (a device change makes new knobs mid-life) — every child that
         arrives inherits the block's dimming, and the shield stays on top of all of them. */
     void childrenChanged() override
@@ -304,13 +318,22 @@ private:
             frame.mouseDown (e.getEventRelativeTo (&frame));
         }
 
+        /** Not over a child that is not the block's (keepOutsideStandby): there the click goes through. */
+        bool hitTest (int x, int y) override
+        {
+            for (const auto* c : frame.independent)
+                if (c->isVisible() && c->getBounds().contains (x, y))
+                    return false;
+            return true;
+        }
+
         BlockFrame& frame;
     };
 
     void dimChildren()
     {
         for (auto* c : getChildren())
-            if (c != &shield)
+            if (c != &shield && std::find (independent.begin(), independent.end(), c) == independent.end())
                 c->setAlpha (on ? 1.0f : theme::offAlpha);
     }
 
@@ -481,6 +504,7 @@ private:
     bool hasSwitch = true;
     bool on = true;
     bool shieldRaising = false;
+    std::vector<juce::Component*> independent;   // keepOutsideStandby — declared before the shield, which reads it
     OffShield shield { *this };
     juce::RangedAudioParameter* powerParam = nullptr;
     std::unique_ptr<juce::ParameterAttachment> power;

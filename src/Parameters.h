@@ -481,7 +481,6 @@ enum class BassHpf { off, four, five };
 enum class BassLpf { off, fingers, slap };
 inline constexpr float bassHpfDefaultHz4 = 32.0f, bassHpfDefaultHz5 = 22.0f;
 inline constexpr float bassLpfDefaultHzFingers = 4500.0f, bassLpfDefaultHzSlap = 9500.0f;
-inline constexpr int   bassCutSlope = 12;   // dB/oct, the family's cuts' own default
 
 /** OrbitBass's own parameters, after the engine's. */
 void addBassParameters (juce::AudioProcessorValueTreeState::ParameterLayout&);

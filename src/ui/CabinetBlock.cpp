@@ -21,11 +21,16 @@ struct CabinetBlock::BassRow
     std::unique_ptr<juce::ParameterAttachment> hpfAtt, lpfAtt;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> diAtt;
 
-    void addTo (juce::Component& owner)
+    void addTo (BlockFrame& owner)
     {
         owner.addAndMakeVisible (hpf);
         owner.addAndMakeVisible (lpf);
         owner.addAndMakeVisible (di);
+
+        // The cuts are not the cabinet's: they cut whether it plays or stands by. DI/CAB is its — with the
+        // cabinet out there is nothing to mix — and stands by with it.
+        owner.keepOutsideStandby (hpf);
+        owner.keepOutsideStandby (lpf);
 
         // HPF walks 5 <-> 4 (from off, to 5); LPF walks off -> FINGERS -> SLAP -> off.
         hpf.onClick = [this]
@@ -50,6 +55,10 @@ struct CabinetBlock::BassRow
         hpfAtt->sendInitialUpdate();
         lpfAtt->sendInitialUpdate();
 
+        di.labelFontHeight = Knob::fxLabelH;
+        di.labelTracking   = Knob::fxLabelTracking;
+        di.labelRowHeight  = Knob::fxLabelRowH;
+        di.valueInDial     = false;
         di.setValueRowShown (true);
         di.textForValue = [] (double v) { return juce::String (juce::roundToInt (v)) + "%"; };
         di.valueForText = [] (const juce::String& t) { return t.getDoubleValue(); };
@@ -725,7 +734,7 @@ void CabinetBlock::layOutContent (juce::Rectangle<int> area)
 
         auto knob = area.removeFromRight (bassDiW);
         area.removeFromRight (4);
-        bassRow->di.setBounds (knob.withSizeKeepingCentre (juce::jmin (52, knob.getWidth()), 52 + Knob::valueRowH + 18));
+        bassRow->di.setBounds (knob.withSizeKeepingCentre (juce::jmin (52, knob.getWidth()), 52 + Knob::valueRowH + Knob::fxLabelRowH));
     }
 
     trimCombo.setBounds (row.withSizeKeepingCentre (juce::jmin (90, row.getWidth() - 12),

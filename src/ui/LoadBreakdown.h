@@ -39,7 +39,11 @@ struct LoadBreakdown final : public juce::Component,
         // Sized for EVERY stage, not for the ones standing when it opened: presence can be
         // switched while this callout is up, and a panel that grew a row would spill into its
         // own buttons. The unused rows cost a little air and nothing else.
-        setSize (360, 26 + graphH + 6 + AmpProcessor::numStages * rowH + 34 + 34);
+        // ...the stages its product's chain holds, that is: a stage it has no link for has no row at all.
+        int held = 0;
+        for (int i = 0; i < AmpProcessor::numStages; ++i)
+            held += stageHeld (i) ? 1 : 0;
+        setSize (360, 26 + graphH + 6 + held * rowH + 34 + 34);
         startTimerHz (15);
     }
 
