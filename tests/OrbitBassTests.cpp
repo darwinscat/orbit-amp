@@ -4060,7 +4060,8 @@ int ORBITAMP_GATE_MAIN()
         // -18 dBFS RMS, comes out at its own level at BLEND 0, 50 and 100 % in either character (PUNCHY's detector reading it
         // at its peak); a quieter one (-36) comes up, a louder one (-6) goes down — toward each other.
         {
-            const auto gainDb = [] (double rmsDb, double blend, BassComp::Character ch, BassComp::Attack at, BassComp::Release rel, double hz)
+            const auto gainDb = [] (double rmsDb, double blend, BassComp::Character ch, BassComp::Attack at, BassComp::Release rel, double hz,
+                                    double thr = BassComp::defaultThresholdDb, double ratio = BassComp::defaultRatio)
             {
                 BassComp c;
                 (void) c.prepare (sampleRate, blockSize);
@@ -4077,7 +4078,7 @@ int ORBITAMP_GATE_MAIN()
                         x[(size_t) i] = (float) (a * std::sin (juce::MathConstants<double>::twoPi * hz * (double) n / sampleRate));
                         sumIn += (double) x[(size_t) i] * (double) x[(size_t) i];
                     }
-                    c.process (x.data(), blockSize, blend, core::BypassFade::Span { 1.0f, 1.0f, false, 0 }, at, rel, ch);
+                    c.process (x.data(), blockSize, blend, core::BypassFade::Span { 1.0f, 1.0f, false, 0 }, at, rel, ch, thr, ratio);
                     if (b >= 100)
                     {
                         in2 += sumIn;
@@ -4138,6 +4139,45 @@ int ORBITAMP_GATE_MAIN()
                        "CHARACTER x ATTACK x RELEASE (worst " + juce::String (worst, 2) + " dB, " + worstAt + "); B0 off by up to "
                        + juce::String (lowB, 2) + " dB and E1 by " + juce::String (lowE, 2) + " (the key's 30 Hz high-pass, not judged); "
                        "a quiet note up, a loud one down");
+
+            // ...AND ITS KNOWN LIMIT (BassComp::readsDb): the table is the defaults'; at the threshold and ratio's corners the
+            // reference note drifts — printed, and held within 1.2 dB so a regression past that shows.
+            {
+                bool held = true;
+                double worstCorner = 0.0;
+                juce::String worstCornerAt;
+                for (const auto [thr, ratio] : { std::pair { -12.0, 2.0 }, std::pair { -24.0, 4.0 }, std::pair { -48.0, 10.0 } })
+                {
+                    std::printf ("      COMP at %g dB, %g:1 — the reference note's worst at 55..440 Hz, BLEND 100 / 50, dB:\n", thr, ratio);
+                    for (const auto ch : { C::smooth, C::punchy })
+                    {
+                        std::printf ("        %s", ch == C::smooth ? "SMOOTH" : "PUNCHY");
+                        for (const auto at : { A::slow, A::med, A::fast })
+                            for (const auto rel : { R::automatic, R::fast, R::slow })
+                            {
+                                double full = 0.0, half = 0.0;
+                                for (const double hz : { 55.0, 110.0, 440.0 })
+                                {
+                                    const double f = gainDb (-18.0, 1.0, ch, at, rel, hz, thr, ratio), h = gainDb (-18.0, 0.5, ch, at, rel, hz, thr, ratio);
+                                    full = std::isfinite (f) && std::abs (f) > std::abs (full) ? f : (std::isfinite (f) ? full : 99.0);
+                                    half = std::isfinite (h) && std::abs (h) > std::abs (half) ? h : (std::isfinite (h) ? half : 99.0);
+                                }
+                                std::printf ("  %c%c %+5.2f %+5.2f", "SMF"[(int) at], "AFS"[(int) rel], full, half);
+                                const double off = std::max (std::abs (full), std::abs (half));
+                                held = held && off <= 1.2;
+                                if (off > worstCorner)
+                                {
+                                    worstCorner   = off;
+                                    worstCornerAt = juce::String (thr, 0) + " dB " + juce::String (ratio, 0) + ":1 "
+                                                  + (ch == C::smooth ? "SMOOTH" : "PUNCHY");
+                                }
+                            }
+                        std::printf ("\n");
+                    }
+                }
+                check (held, "COMP's BLEND at the threshold and ratio's corners (-12/2, -24/4, -48/10): the reference note within 1.2 dB "
+                             "(worst " + juce::String (worstCorner, 2) + " dB, " + worstCornerAt + "; the table is the defaults')");
+            }
         }
 
         // RE-ADDED ONE CALL AFTER ITS REMOVAL (review 2): a ringing DELAY, and a ringing REVERB, taken out of the strip in a
@@ -4332,6 +4372,19 @@ int ORBITAMP_GATE_MAIN()
             }
             load->detach();
             t.reset();   // the processor gone
+
+            // THE LATE DELIVERY, really made: what the message loop does with the queued click — the button's own command
+            // message (juce::Button's click id, proven first on a live button) — delivered now, the processor gone.
+            constexpr int clickMessage = 0x2f3f4f99;   // juce_Button.cpp: triggerClick posts it, handleCommandMessage clicks
+            bool proven = false;
+            {
+                juce::TextButton live;
+                live.onClick = [&proven] { proven = true; };
+                static_cast<juce::Component&> (live).handleCommandMessage (clickMessage);
+            }
+            if (toggle != nullptr)
+                static_cast<juce::Component&> (*toggle).handleCommandMessage (clickMessage);
+            cleared = cleared && proven;
             juce::Image img (juce::Image::ARGB, 420, 420, true);
             {
                 juce::Graphics g (img);

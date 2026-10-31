@@ -93,7 +93,11 @@ public:
         itself, within a fifth of a decibel; PUNCHY's peaks a steady tone's crest (3 dB) less what its squeeze lets go
         between them — much with a fast release, little with a fast attack. AUTO's release lies between, by the same
         fraction of its hold that apply() gives its time. The key's 30 Hz high-pass reads B0 and E1 low: those notes come
-        up 1.5..3 dB at the full BLEND (the gate says how much). */
+        up 1.5..3 dB at the full BLEND (the gate says how much).
+        A LIMIT, KNOWN: the table is calibrated at the defaults (-24 dB, 4:1). How far a detector's squeeze lets go between
+        peaks scales with how deep it squeezes, so away from them the reference note drifts — at the deep corner (-48 dB,
+        10:1) PUNCHY with a fast release comes up about 1 dB at the full BLEND, half that at half; under the knee (-12 dB,
+        2:1) there is no make-up and nothing to drift. The gate prints the corners and holds them within 1.2 dB. */
     static constexpr double readsDb[2][3][2] = { { { -0.07, 0.11 }, { 0.01, 0.15 }, { 0.12, 0.17 } },
                                                  { {  0.29, 1.74 }, { 1.05, 2.11 }, { 1.88, 2.47 } } };
 
