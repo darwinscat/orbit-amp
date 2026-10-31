@@ -24,6 +24,8 @@
 #include "ui/LoadBreakdown.h"
 #include "ui/GuardBlock.h"
 #include "ui/CompBlock.h"
+#include "ui/ChorusBlock.h"
+#include "core/ChorusTap.h"
 #include "ui/FaceplateView.h"
 #include "channels/Engine.h"
 #include "channels/Presets.h"
@@ -33,6 +35,9 @@
 #include <cstring>
 #include <functional>
 #include <thread>
+#include <atomic>
+#include <chrono>
+#include <tuple>
 #include <limits>
 #include <map>
 #include <string>
@@ -1601,6 +1606,225 @@ int ORBITAMP_GATE_MAIN()
                    "COMP's taps: nothing written with the picture off screen (" + juce::String ((int) hidden) + "), "
                        + juce::String ((int) playing) + " columns while it shows, " + juce::String ((int) (tail - playing))
                        + " of the tail, then none in silence (" + juce::String ((int) (still - tail)) + ")");
+        }
+
+        // ---- CHORUS, A BLOCK WITH ITS PICTURE: its two voices on a circle, where the stage's LFO is ---------------------
+        // THE PHASE IS THE STAGE'S: the tap derives it (the stage keeps its LFO to itself), so it is checked against the
+        // stage's own output — a click into a stage that has run a while, whose voice comes back where its heads stand
+        // (head = centre + swing · sin 2π·phase on the left, · cos on the right). Where the tap's phase puts the echo and
+        // where it comes, in samples: a phase a hundredth of a turn off misses by up to 9.
+        {
+            using felitronics::chorus::BassChorus;
+            using felitronics::chorus::BassChorusParams;
+            struct Call { int n; float rate; float mix; bool gap; };
+            const auto echoMiss = [] (const std::vector<Call>& calls) -> double
+            {
+                constexpr double fs = 48000.0;
+                const auto knobs = [] (const Call& c) { return BassChorusParams { 3.0f, c.mix, c.rate, 100.0f, 8.0f }; };
+                BassChorus st;
+                core::ChorusTap tap;
+                st.setParams (knobs (calls.front()));
+                if (! st.prepare (fs, 2048, 2))
+                    return 1.0e9;
+                tap.prepare (fs, st);
+                std::vector<float> l (2048), r (2048);
+                float* io[] { l.data(), r.data() };
+                for (const auto& c : calls)
+                {
+                    std::fill (l.begin(), l.end(), 0.0f);
+                    std::fill (r.begin(), r.end(), 0.0f);
+                    st.setParams (knobs (c));
+                    const bool was = st.isIdle();
+                    const bool ok  = st.process (c.gap ? nullptr : io, c.gap ? 0 : 2, c.n);
+                    tap.follow (st, was, ok ? c.n : 0, false);
+                }
+                const double phi0 = tap.phase(), rate = (double) calls.back().rate;
+                std::fill (l.begin(), l.end(), 0.0f);
+                std::fill (r.begin(), r.end(), 0.0f);
+                l[0] = r[0] = 1.0f;
+                (void) st.process (io, 2, 1024);
+                l[0] -= 1.0f;   // the dry is the input's own, bit for bit: what is left is the voice
+                r[0] -= 1.0f;
+                const double centre = 8.0 * fs / 1000.0;
+                const double swing  = felitronics::chorus::detail::smoothMin (3.0 * fs / 1000.0, centre - fs / 1000.0, fs / 1000.0);
+                double worst = 0.0;
+                for (int v = 0; v < 2; ++v)
+                {
+                    const auto& y = v == 0 ? l : r;
+                    int at = 16;
+                    for (int i = 16; i < 1000; ++i)
+                        if (y[(size_t) i] > y[(size_t) at])
+                            at = i;
+                    double m = 0.0, w = 0.0;
+                    for (int i = at - 2; i <= at + 2; ++i)
+                    {
+                        m += (double) i * (double) y[(size_t) i];
+                        w += (double) y[(size_t) i];
+                    }
+                    // Sample i's phase is phi0 + (i + 1)·rate/fs (the stage steps its clock, then reads); the echo comes
+                    // where i is its own head.
+                    double p = centre;
+                    for (int k = 0; k < 30; ++k)
+                    {
+                        const double a = juce::MathConstants<double>::twoPi * (phi0 + (p + 1.0) * rate / fs);
+                        p = centre + swing * (v == 0 ? std::sin (a) : std::cos (a));
+                    }
+                    worst = std::max (worst, std::abs (m / w - p));
+                }
+                return worst;
+            };
+            std::vector<Call> steady (140, Call { 512, 0.7f, 1.0f, false });
+            std::vector<Call> moved (30, Call { 333, 0.3f, 1.0f, false });   // the rate moved: the stage's glide, odd blocks, gaps
+            for (int k = 0; k < 60; ++k)
+                moved.push_back ({ std::array<int, 4> { 37, 480, 1024, 7 }[(size_t) k % 4], 2.5f, 1.0f, k < 20 && k % 7 == 3 });
+            std::vector<Call> woken (50, Call { 480, 1.5f, 1.0f, false });   // playing, then idle, then woken: a restart
+            for (int k = 0; k < 50; ++k)
+                woken.push_back ({ 480, 1.5f, 0.0f, false });
+            for (int k = 0; k < 37; ++k)
+                woken.push_back ({ 480, 1.5f, 1.0f, false });
+            const double a = echoMiss (steady), b = echoMiss (moved), c = echoMiss (woken);
+            check (a < 0.5 && b < 0.5 && c < 0.5, "CHORUS's dots where the stage's heads are: the echo of a click where the tap's phase "
+                                                  "puts it — steady " + juce::String (a, 3) + " samples, the rate moved mid-way "
+                                                  + juce::String (b, 3) + ", woken from idle " + juce::String (c, 3));
+        }
+
+        // ...AND THE PICTURE DRAWS THE TAP: its dots at the newest phase — the left at 2π·phase, the right a quarter turn on —
+        // on the radius the slider gives (the law's swing over its swing at the top), in its block 200 wide; and nothing
+        // is written while it is off screen, a hidden block included, nor while the stage idles — yet it runs in silence.
+        {
+            auto t = make (bass);
+            set (*t, params::chorusAmount, 0.6f);
+            set (*t, params::chorusRateHz, 1.37f);
+            std::unique_ptr<juce::AudioProcessorEditor> ed (t->createEditor());
+            auto* block = findIn (*ed, (ChorusBlock*) nullptr);
+            juce::AudioBuffer<float> buf (2, 480);   // two hops a call: the newest entry is the call's end
+            juce::MidiBuffer midi;
+            const auto run = [&] (int calls)
+            {
+                for (int k = 0; k < calls; ++k)
+                {
+                    buf.clear();   // silence: a chorus runs on without a note
+                    t->processBlock (buf, midi);
+                }
+            };
+            run (40);
+            const auto hidden = t->chorusTap.written();
+            bool drawn = false;
+            juce::String said = "no CHORUS block";
+            if (block != nullptr)
+            {
+                auto& pic = block->picture();
+                t->chorusWatched.store (true);   // as on screen
+                run (60);
+                pic.pull();
+                const float want = (float) t->chorusTap.phase();
+                const auto  o = pic.centre();
+                const float rr = pic.reach() * pic.radiusFraction();
+                const auto angle = [&] (juce::Point<float> d) { return std::atan2 ((double) (o.y - d.y), (double) (d.x - o.x)); };
+                const auto turn  = [] (double x) { x = std::fmod (x, juce::MathConstants<double>::twoPi); return std::min (std::abs (x), juce::MathConstants<double>::twoPi - std::abs (x)); };
+                const double offL = turn (angle (pic.dotAt (0)) - juce::MathConstants<double>::twoPi * (double) want);
+                const double offR = turn (angle (pic.dotAt (1)) - angle (pic.dotAt (0)) - juce::MathConstants<double>::halfPi);
+                const float  lawFrac = felitronics::chorus::paramsForAmount (0.6f).depthMs / felitronics::chorus::kDepthMsAtFull;
+                drawn = block->getWidth() == FaceplateView::chorusWidth && pic.voices() == t->bassBackPlanes()
+                        && std::abs (pic.shownPhase() - want) < 1.0e-6f && offL < 1.0e-4 && offR < 1.0e-4
+                        && std::abs (pic.radiusFraction() - lawFrac) < 1.0e-6f && std::abs (lawFrac - 0.6f) < 1.0e-6f
+                        && std::abs (pic.dotAt (0).getDistanceFrom (o) - rr) < 0.01f && rr > 10.0f;
+                said = "block " + juce::String (block->getWidth()) + " px, " + juce::String (pic.voices()) + " voices, phase "
+                       + juce::String (pic.shownPhase(), 4) + " (the tap's " + juce::String (want, 4) + "), off " + juce::String (offL, 6)
+                       + " and a quarter turn off by " + juce::String (offR, 6) + " rad, radius " + juce::String (pic.radiusFraction(), 3)
+                       + " of the reach (" + juce::String (rr, 1) + " px)";
+            }
+            check (drawn, "CHORUS's picture draws the tap: " + said);
+
+            const auto shownW = t->chorusTap.written();
+            set (*t, params::chorusAmount, 0.0f);
+            run (20);   // the voice fades, the stage idles
+            const auto idleW = t->chorusTap.written();
+            run (60);
+            const auto stillW = t->chorusTap.written();
+            set (*t, params::chorusAmount, 0.6f);
+            if (block != nullptr)
+            {
+                block->setVisible (false);    // its block hidden: the picture is not on screen, whatever its own flag says
+                block->picture().look();      // ...as its timer's next tick finds
+            }
+            run (60);
+            const auto hiddenW = t->chorusTap.written();
+            check (hidden == 0 && shownW > 100 && stillW == idleW && hiddenW == stillW && ! t->chorusWatched.load(),
+                   "CHORUS's taps: nothing written off screen (" + juce::String ((int) hidden) + "), " + juce::String ((int) shownW)
+                       + " hops shown in silence, none more once idle (" + juce::String ((int) (stillW - idleW)) + ") and none with its block hidden ("
+                       + juce::String ((int) (hiddenW - stillW)) + ")");
+        }
+
+        // ITS RING READ WHOLE OR NOT AT ALL: a writer lapping the reader as fast as it can, the reader taking the whole
+        // ring — every entry it takes whole is its own number's, never its successor's: two in a row differ by one.
+        {
+            core::ChorusTap tap;
+            std::atomic<bool> stop { false };
+            std::thread writer ([&]
+            {
+                for (std::uint32_t k = 0; ! stop.load (std::memory_order_relaxed); ++k)
+                    tap.pushForTest ((float) (k & 0xFFFFFu), true);
+            });
+            std::array<core::ChorusTap::Entry, core::ChorusTap::slots> got {};
+            long long whole = 0, dropped = 0, mixed = 0;
+            const auto until = std::chrono::steady_clock::now() + std::chrono::milliseconds (150);
+            while (std::chrono::steady_clock::now() < until)
+            {
+                const int have = tap.read (got.data(), (int) got.size());
+                for (int i = 0; i < have; ++i)
+                {
+                    (got[(size_t) i].ok ? whole : dropped)++;
+                    if (i > 0 && got[(size_t) i].ok && got[(size_t) i - 1].ok)
+                    {
+                        const auto a = (std::uint32_t) got[(size_t) i - 1].phase, b = (std::uint32_t) got[(size_t) i].phase;
+                        mixed += ((a + 1u) & 0xFFFFFu) != b ? 1 : 0;
+                    }
+                }
+            }
+            stop.store (true);
+            writer.join();
+            check (mixed == 0 && whole > 1000 && dropped > 0,
+                   "CHORUS's ring under a writer lapping it: " + juce::String (whole) + " entries taken whole, " + juce::String (dropped)
+                       + " lapped and dropped, " + juce::String (mixed) + " mixed with another's");
+        }
+
+        // ITS NUMBERS ARE FIELDS: the RATE and the CROSSOVER typed in land on their parameters, each one step of the
+        // history, undone whole.
+        {
+            auto t = make (bass);
+            std::unique_ptr<juce::AudioProcessorEditor> ed (t->createEditor());
+            auto* block = findIn (*ed, (ChorusBlock*) nullptr);
+            const auto settle = [&] { for (int i = 0; i < 40; ++i) t->history.tick(); };
+            juce::String said = "no CHORUS block";
+            bool ok = false;
+            if (block != nullptr)
+            {
+                auto& pic = block->picture();
+                ok = true;
+                said.clear();
+                for (const auto& [f, id, typed, want] : { std::tuple { ChorusPicture::Field::rate, params::chorusRateHz, "1.35 Hz", 1.35f },
+                                                          std::tuple { ChorusPicture::Field::crossover, params::chorusCrossoverHz, "310", 310.0f } })
+                {
+                    settle();
+                    const float before = value (*t, id);
+                    const int   depth  = t->history.undoDepth();
+                    pic.openField (f);
+                    const bool  opened = pic.fieldEditor().isOpen();
+                    pic.fieldEditor().ed.setText (typed, false);
+                    pic.fieldEditor().takeAndHide();
+                    settle();
+                    const float landed = value (*t, id);
+                    const int   steps  = t->history.undoDepth() - depth;
+                    t->history.undo();
+                    settle();
+                    const float back = value (*t, id);
+                    ok = ok && opened && std::abs (landed - want) < 1.0e-3f && steps == 1 && std::abs (back - before) < 1.0e-3f;
+                    said << id << " " << juce::String (before, 2) << " -> typed " << typed << " -> " << juce::String (landed, 2) << " in "
+                         << steps << " step(s), undone to " << juce::String (back, 2) << "; ";
+                }
+            }
+            check (ok, "CHORUS's numbers are fields: " + said);
         }
     }
 

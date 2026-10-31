@@ -6,6 +6,7 @@
 #include "../Parameters.h"
 #include "../PluginProcessor.h"
 #include "BassControls.h"
+#include "ChorusBlock.h"
 #include "CompBlock.h"
 
 namespace orbitamp
@@ -49,12 +50,12 @@ FaceplateView::FaceplateView (AmpProcessor& processor)
         addAndMakeVisible (*comp);
     }
 
-    // The bass's three effects: a rail each over its amount, the rail's own scale 0..1 by tenths, its menu on a right
-    // click — OCTAVE and FILTER at the head of the AMP's row, CHORUS at the head of the cabinet's, in the signal's order.
+    // The bass's first two effects: a rail each over its amount, the rail's own scale 0..1 by tenths, its menu on a right
+    // click — OCTAVE and FILTER at the head of the AMP's row, in the signal's order (CHORUS heads the cabinet's, below).
     if (processor.chainHolds (params::rowOctave))
     {
         auto& state = processor.apvts;
-        // Each lamp lights while its effect works — OCTAVE while its sub plays, FILTER and CHORUS while not idle — and
+        // Each lamp lights while its effect works — OCTAVE while its sub plays, FILTER while not idle — and
         // the scale is ticks alone: the grip shows the value, and the numbers would read under 13 px.
         const auto make = [&] (const char* name, const char* amountId, const char* onId, int which, std::atomic<bool>& worked,
                                void (*menu) (juce::AudioProcessorValueTreeState&, juce::Component*))
@@ -73,7 +74,14 @@ FaceplateView::FaceplateView (AmpProcessor& processor)
         };
         octave = make ("OCTAVE", params::octaveAmount, params::octaveOn, 0, effectWorked[0], bass::showOctaveMenu);
         filter = make ("FILTER", params::filterAmount, params::filterOn, 1, effectWorked[1], bass::showFilterMenu);
-        chorus = make ("CHORUS", params::chorusAmount, params::chorusOn, 2, effectWorked[2], bass::showChorusMenu);
+    }
+
+    // ...and CHORUS, a block with its picture: its slider and its two voices on a circle (ui/ChorusBlock.h).
+    if (processor.chainHolds (params::rowChorus))
+    {
+        chorus = std::make_unique<ChorusBlock> (processor);
+        chorus->setSwitchShown (false);
+        addAndMakeVisible (*chorus);
     }
 
     addAndMakeVisible (gate);
@@ -197,7 +205,7 @@ void FaceplateView::resized()
 
         if (chorus != nullptr)
         {
-            chorus->setBounds (row2.removeFromLeft (GuardBlock::designWidth));
+            chorus->setBounds (row2.removeFromLeft (chorusWidth));
             row2.removeFromLeft (colGap);
         }
     }

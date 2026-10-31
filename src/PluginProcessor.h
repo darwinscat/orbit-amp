@@ -18,6 +18,7 @@
 #include "core/HumLearnLink.h"
 #include "core/BassComp.h"
 #include "core/BassCuts.h"
+#include "core/ChorusTap.h"
 #include "core/BypassFade.h"
 #include "core/BypassWire.h"
 #include "core/CabinetIr.h"
@@ -872,6 +873,11 @@ public:
         only while `compWatched`, which the picture sets while it is on screen; read on the picture's own timer. */
     core::CompTap compTap;
     std::atomic<bool> compWatched { false };
+
+    /** CHORUS'S PICTURE (ui/ChorusBlock.h): its LFO's phase, derived on every call of the stage and written into the
+        ring only while `chorusWatched`, which the picture sets while it is on screen; read on the picture's own timer. */
+    core::ChorusTap chorusTap;
+    std::atomic<bool> chorusWatched { false };
 
     /** The ratio COMP works at now — the law's, or the hand's (the audio thread's; a gate reads it between blocks). */
     double compRatioNow() const noexcept { return bassComp.ratioNow(); }

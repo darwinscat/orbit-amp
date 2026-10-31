@@ -1077,6 +1077,7 @@ void AmpProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
         octaverReady   = octaver.prepare (sampleRate, block, 1);
         envFilterReady = envFilter.prepare (sampleRate, block, 1);
         chorusReady    = chorus.prepare (sampleRate, block, juce::jlimit (1, 2, channels));
+        chorusTap.prepare (sampleRate, chorus);   // its phase where the stage's restart put it
         for (auto& w : effectWorking)
             w.store (false, std::memory_order_relaxed);
         filterKey.setSize (1, block);
@@ -1326,7 +1327,9 @@ void AmpProcessor::runChorus (float* const* channels, int numChannels, int numSa
     if (! chorusReady)
         return;
     tellChorus();
-    (void) chorus.process (channels, numChannels, numSamples);
+    const bool wasIdle = chorus.isIdle();
+    const bool ran     = chorus.process (channels, numChannels, numSamples);
+    chorusTap.follow (chorus, wasIdle, ran ? numSamples : 0, chorusWatched.load (std::memory_order_relaxed));
     effectWorking[2].store (! chorus.isIdle(), std::memory_order_relaxed);
 }
 
