@@ -76,9 +76,9 @@ private:
 public:
     juce::Component& waveView() noexcept { return wave; }
 
-    /** OrbitBass: a right click on the waveform opens the block's settings window INSTEAD of the trim menu — one door,
-        not two at once (a listener beside the picture's own handler opened both). The guitar's keeps its menu. */
-    void pictureMenuOpensSettings() { wave.onMenuRequested = [this] { if (onSettings != nullptr) onSettings(); }; }
+    /** OrbitBass: a right click on the waveform opens the block's menu (its gear's) INSTEAD of the trim menu — one door,
+        not two at once (a listener beside the picture's own handler opened both). The guitar's keeps its trim menu. */
+    void pictureMenuOpensGear() { wave.onMenuRequested = [this] { if (onGear != nullptr) onGear(); }; }
 
     /** The bass's cabinet's width that leaves `waveWidth` to its waveform: the frame's insets and DI/CAB's column. */
     static int bassWidthForWave (int waveWidth) noexcept { return waveWidth + bassDiW + 4 + 2 * contentInsetX(); }

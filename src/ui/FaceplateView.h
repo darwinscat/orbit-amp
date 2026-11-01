@@ -8,7 +8,7 @@
 #include "CapturedBlockPanel.h"
 #include "DelayBlock.h"
 #include "GuardBlock.h"
-#include "BassSettingsOpener.h"
+#include "BassMenuOpener.h"
 
 #include <memory>
 #include "ReverbBlock.h"
@@ -34,17 +34,17 @@ class AmpProcessor;
     rest of the row. Row two is what happens to it afterwards, in chain order: delay, reverb,
     cabinet in even shares, then the limiter's narrow block. */
 class FaceplateView : public juce::Component,
-                      public bass::SettingsOpener
+                      public bass::MenuOpener
 {
 public:
     explicit FaceplateView (AmpProcessor&);
     ~FaceplateView() override;
 
-    /** ORBITBASS: a block's settings window (ui/BassSettings.h), over the face, pointing at the block — its gear's, its
-        right click's. `lastSettings` says which was asked for last (a gate reads it). */
-    void openSettings (const juce::String& block) override;
-    juce::String lastSettings;
-    bool settingsShown() const noexcept { return settingsBox != nullptr; }
+    /** ORBITBASS: a block's MENU (ui/BassControls.h, bass::blockMenu) at the block — its gear's and its right click's,
+        one place per block (the owner, 01.11: no settings windows). `lastMenu` says which was asked for last (a gate
+        reads it). */
+    void openMenu (const juce::String& block) override;
+    juce::String lastMenu;
 
     /** The loaded device changed — the captured blocks rebuild their faces from their packs. */
     void deviceChanged() { preamp.deviceChanged(); }
@@ -229,9 +229,6 @@ private:
     std::array<bool, 4> shownFlags { true, true, true, true };
 
     bool fillsHeight = true;   // see setFillsHeight
-    juce::Component::SafePointer<juce::CallOutBox> settingsBox;   // the settings window up now — it goes with the face
-    juce::Component::SafePointer<juce::Component>  settingsPanel; // ...and what stands in it (bass::SettingsPanel)
-    void closeSettings();
     bool bassRows    = false;  // OrbitBass's three rows (bassDesignHeight)
     void layOutBassRows();
 

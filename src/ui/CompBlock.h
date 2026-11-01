@@ -19,13 +19,14 @@ namespace orbitamp
 
 /** COMP'S PICTURE: the level running right to left over the last 2.5 s in THREE traces, all before the automatic make-up
     (the owner, 31.10): BEFORE COMP, the AMP's ENVELOPE page's violet fill under its edge; AFTER COMP, the compressed path
-    itself, a dashed lilac line under it by exactly the squeeze; AFTER COMP + BLEND, what goes on, the orange line — and, in a strip of its own along the top, the squeeze
-    itself as a violet LINE with its number now. Across the levels, the THRESHOLD: a lilac line with an orange handle
-    carrying its number.
+    itself, a SOLID GREY line under it by exactly the squeeze (the owner, 01.11); AFTER COMP + BLEND, what goes on, the
+    orange line — and, in a strip of its own along the top, the squeeze itself as a LINE coloured by its depth, light
+    violet at a little, toward fully orange at -12 dB and deeper (grColour), with its number now sitting on the strip's
+    border. Across the levels, the THRESHOLD: a lilac line alone — its number is on the threshold rail's grip.
 
-    THE LINE AND THE SLIDER ARE ONE CONTROL: dragging the line moves COMP's parameter to the knob whose threshold the
-    line is (core::BassComp::amountForThreshold), through the parameter's attachment, one gesture a drag; the slider
-    moved, the line follows. A right click is COMP's menu.
+    THE LINE AND THE THRESHOLD RAIL ARE ONE CONTROL: the line dragged sets `comp_threshold` through its attachment, one
+    gesture and one undo step a drag; the rail moved, the line follows — and the rail's hand travels exactly the levels'
+    scale, so the hand stands at the line's height (CompBlock::layOutContent). A right click is COMP's menu.
 
     It reads the processor's taps (core::CompTap) on its own timer, and only while it is on screen — the audio thread
     writes them only then — and it freezes in silence: the tap writes no column of it. Standing by or at BLEND 0 COMP writes
@@ -56,7 +57,12 @@ public:
     static constexpr double grRangeDb = 24.0;                // the squeeze's, down its strip
     static constexpr double spanSeconds = 2.5;
     static constexpr int    columnsShown = (int) (spanSeconds / core::CompTap::hopSeconds + 0.5);
-    static constexpr float  textHeight = 13.0f, handleW = 64.0f, grStripH = 30.0f, stripGap = 3.0f;
+    static constexpr float  textHeight = 13.0f, grStripH = 30.0f, stripGap = 3.0f;
+
+    /** How far a GuardRail's hand centre stands in from the rail's ends (its box less 2 px, then half a hand): the levels
+        end as far above the picture's foot, less the plot's own 1 px, so a rail of the picture's height under the
+        GR strip carries its hand at the line's height, -48 dB to 0 dB, end to end. */
+    static constexpr float railInset = 2.0f + meterrail::gripH * 0.5f, levelsFoot = railInset - 1.0f;
 
     std::function<void (juce::Point<int> screenPos)> onMenu;
 
@@ -64,7 +70,29 @@ public:
 
     /** The squeeze's strip along the top, and the levels' area under it. */
     juce::Rectangle<float> grStrip() const { return plot().removeFromTop (grStripH); }
-    juce::Rectangle<float> levels() const  { return plot().withTrimmedTop (grStripH + stripGap); }
+    juce::Rectangle<float> levels() const  { return plot().withTrimmedTop (grStripH + stripGap).withTrimmedBottom (levelsFoot); }
+
+    /** The line between the squeeze's strip and the levels — where the squeeze's number sits. */
+    float stripBorderY() const { return grStrip().getBottom() + stripGap * 0.5f; }
+
+    /** THE SQUEEZE'S COLOUR at `grDb` (the owner, 01.11): light violet at none, toward fully orange at -12 dB, orange
+        deeper — every point of the line by its own depth. */
+    static juce::Colour grColour (float grDb)
+    {
+        return theme::violet.brighter (0.3f).interpolatedWith (theme::orange, juce::jlimit (0.0f, 1.0f, -grDb / 12.0f));
+    }
+
+    /** The squeeze now, the newest column's — and the plate its number stands on, at the strip's left, centred on the
+        strip's border. */
+    float grNow() const { return shown > 0 ? cols[(size_t) shown - 1].gr : 0.0f; }
+
+    juce::String grText() const { return dbText (grNow() < -0.05f ? (double) grNow() : 0.0); }
+
+    juce::Rectangle<float> grNumberBox() const
+    {
+        const float w = theme::trackedWidth (grText(), theme::displayFont (textHeight), 0.02f) + 12.0f;
+        return juce::Rectangle<float> (w, textHeight + 5.0f).withPosition (grStrip().getX(), stripBorderY() - (textHeight + 5.0f) * 0.5f);
+    }
 
     float yOfDb (double db) const
     {
@@ -118,34 +146,12 @@ public:
         repaint();
     }
 
-    /** Where the line is drawn, and its handle. */
+    /** Where the line is drawn: at its level, -48 dB at the levels' foot, 0 dB at their head. */
     float lineY() const
     {
         const auto lv = levels();
-        return juce::jlimit (lv.getY() + halfGrip(), lv.getBottom() - halfGrip(), yOfDb (thresholdDb()));
+        return juce::jlimit (lv.getY(), lv.getBottom(), yOfDb (thresholdDb()));
     }
-
-    juce::Rectangle<float> handleBox() const
-    {
-        return { levels().getX() + 3.0f, lineY() - meterrail::gripH * 0.5f, handleW, meterrail::gripH };
-    }
-
-    /** CLICK-TO-TYPE on the handle: a threshold in dB, clamped to its travel — one gesture. */
-    void typeThreshold (double db)
-    {
-        amp.history.beginGesture();
-        thrAtt->setValueAsCompleteGesture ((float) juce::jlimit ((double) params::compThresholdMin, (double) params::compThresholdMax, db));
-        onAtt->setValueAsCompleteGesture (1.0f);
-        amp.history.endGesture();
-    }
-
-    void openTyping()
-    {
-        typing.open (*this, handleBox().toNearestInt(), (float) thresholdDb(), theme::orange,
-                     [this] (float db) { typeThreshold ((double) db); }, 0, textHeight);
-    }
-
-    bool isTyping() const { return typing.isOpen(); }
 
     /** The timer's tick, callable by a gate: the taps are wanted while the picture SHOWS — every ancestor visible, the
         window up — and read only then. */
@@ -184,7 +190,7 @@ public:
         const int w = juce::jmax (1, (int) r.getWidth());
         juce::Path inEdge, midEdge, outEdge, grLine, inFill, inSegment;
         bool started = false;
-        float segmentX = 0.0f, lastX = 0.0f, lastGr = 0.0f;
+        float segmentX = 0.0f, lastX = 0.0f;
 
         // A BROKEN TRACE (the tap not written a while — COMP standing by, at BLEND 0, the picture away) starts afresh: each
         // run of joined columns its own edges and its own fill under IN.
@@ -199,8 +205,6 @@ public:
             inSegment.clear();
         };
         const auto grY = [&] (float gr) { return strip.getY() + 3.0f + juce::jmin (1.0f, (float) (-gr / grRangeDb)) * (strip.getHeight() - 6.0f); };
-        if (shown > 0)
-            lastGr = cols[(size_t) shown - 1].gr;
         for (int x = 0; x < w && shown > 0; ++x)
         {
             const int a = x * columnsShown / w, b = juce::jmax (a + 1, (x + 1) * columnsShown / w);
@@ -256,41 +260,33 @@ public:
             g.fillPath (inFill);   // under its own edge, a run at a time
             g.setColour (Page::inColour());
             g.strokePath (inEdge, juce::PathStrokeType (Page::edgeWidth));
-            // AFTER COMP, the compressed path itself — under BEFORE by exactly the squeeze: the page's lilac, DASHED, so it reads
-            // against the violet fill and beside the orange.
-            {
-                juce::Path dashed;
-                const float dashes[] { 4.0f, 3.0f };
-                juce::PathStrokeType (Page::edgeWidth).createDashedStroke (dashed, midEdge, dashes, 2);
-                g.setColour (theme::lilac);
-                g.fillPath (dashed);
-            }
+            // AFTER COMP, the compressed path itself — under BEFORE by exactly the squeeze: a solid grey line (the owner,
+            // 01.11), apart from the violet fill and the orange.
+            g.setColour (afterGrey);
+            g.strokePath (midEdge, juce::PathStrokeType (Page::edgeWidth));
             // AFTER COMP + BLEND, what goes on down the chain (before the make-up): the orange line.
             g.setColour (Page::outColour());
             g.strokePath (outEdge, juce::PathStrokeType (Page::edgeWidth));
 
-            g.setColour (theme::violet.brighter (0.3f));                                // the squeeze, a line in its strip
+            // The squeeze, a LINE in its strip, never a fill: each point coloured by its own depth — its height in the
+            // strip is its depth, so a gradient down the strip from none to -12 dB colours it so (grColour).
+            g.setGradientFill (juce::ColourGradient (grColour (0.0f), 0.0f, grY (0.0f), grColour (-12.0f), 0.0f, grY (-12.0f), false));
             g.strokePath (grLine, juce::PathStrokeType (1.6f));
         }
 
-        // The squeeze now, at the strip's left, on a plate of its own so the line passes under it.
+        // THE THRESHOLD: the lilac line alone; its number is on the rail's grip.
+        g.setColour (theme::lilac);
+        g.fillRect (lv.getX(), lineY() - 0.75f, lv.getWidth(), 1.5f);
+
+        // The squeeze now, at the strip's left on its border (the owner, 01.11), on a plate of its own so the lines pass
+        // under it.
         {
-            const auto text = dbText (lastGr < -0.05f ? (double) lastGr : 0.0);
-            const auto box  = strip.withWidth (theme::trackedWidth (text, theme::displayFont (textHeight), 0.02f) + 12.0f).reduced (0.0f, 4.0f);
+            const auto box = grNumberBox();
             g.setColour (well);
             g.fillRoundedRectangle (box, 2.5f);
-            g.setColour (theme::violet.brighter (0.6f));
-            theme::drawTracked (g, text, box, theme::displayFont (textHeight), 0.02f, juce::Justification::centred);
+            g.setColour (grColour (grNow()).brighter (0.3f));
+            theme::drawTracked (g, grText(), box, theme::displayFont (textHeight), 0.02f, juce::Justification::centred);
         }
-
-        // THE THRESHOLD: the lilac line, the orange handle at its left end with its number.
-        const float yT = lineY();
-        g.setColour (theme::lilac);
-        g.fillRect (lv.getX(), yT - 0.75f, lv.getWidth(), 1.5f);
-        const juce::Rectangle<float> track (lv.getX() + 3.0f, lv.getY(), handleW, lv.getHeight());
-        g.setColour (well);
-        g.fillRoundedRectangle (juce::Rectangle<float> (track.getX(), yT - meterrail::gripH * 0.5f, handleW, meterrail::gripH), 2.5f);
-        meterrail::paintGrip (g, track, yT, dbText (thresholdDb()), theme::orange, dragging, textHeight);
     }
 
     void mouseDown (const juce::MouseEvent& e) override
@@ -303,7 +299,6 @@ public:
         }
         grab    = lineY() - (float) e.y;   // the line moves with the hand, from where it was taken
         pressed = true;
-        onHandle = handleBox().contains (e.position);
     }
 
     void mouseDrag (const juce::MouseEvent& e) override
@@ -318,8 +313,6 @@ public:
     {
         if (dragging)
             endLineDrag();
-        else if (pressed && onHandle)
-            openTyping();   // a click on the handle types the threshold
         pressed = false;
     }
 
@@ -327,13 +320,12 @@ public:
     void parentHierarchyChanged() override { refresh(); }
 
 private:
-    static float halfGrip() { return meterrail::gripH * 0.5f; }
     static double dbOf (float peak) { return peak > 1.0e-6f ? 20.0 * std::log10 ((double) peak) : -120.0; }
     static juce::String dbText (double db) { return juce::String (juce::roundToInt (db)) + " dB"; }
 
     void timerCallback() override { refresh(); }
 
-    inline static const juce::Colour well { 0xff121218 }, levelIn { 0xff8e8e9c }, levelOut { 0xffeeeef6 };
+    inline static const juce::Colour well { 0xff121218 }, afterGrey { 0xff8e8e9c };
 
     AmpProcessor& amp;
     juce::RangedAudioParameter& amountP;
@@ -344,9 +336,8 @@ private:
     std::vector<core::CompTap::Column> cols;
     int shown = 0;
     std::uint32_t lastWritten = 0;
-    bool  dragging = false, pressed = false, onHandle = false;
+    bool  dragging = false, pressed = false;
     float grab = 0.0f;
-    meterrail::GripEditor typing;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (CompGraph)
 };
@@ -674,16 +665,19 @@ private:
 };
 
 /** THE BASS'S COMP, A BLOCK OF ITS OWN (the owner, 31.10): after the GATE and before OCTAVE on the panel, as in the
-    strip. Inside, left to right: its BLEND (a rail, 0..100 %, parallel compression), its PICTURE with its THRESHOLD
-    line, and its RATIO, a slider over the IN/OUT square — each control one job. ATTACK, RELEASE and CHARACTER are its
-    settings (the gear, a right click). Our own DSP, so violet; its arrow in the strip switches it, and standing by it dims in place, still
-    in reach. */
+    strip. Inside, left to right (the owner, 01.11): its THRESHOLD (a rail in dB, "dB" over it, its number on the grip —
+    one control with the line on the picture), its PICTURE, its RATIO (a slider over the IN/OUT square) and its BLEND (a
+    rail, 0..100 %, parallel compression) — each control one job. ATTACK, RELEASE and CHARACTER are its menu: the gear,
+    or a right click anywhere on it. Our own DSP, so violet; its arrow in the strip switches it, and standing by it dims
+    in place, still in reach. */
 class CompBlock final : public BlockFrame
 {
 public:
     explicit CompBlock (AmpProcessor& processor)
         : BlockFrame ("COMP", Kind::dsp),
           state (processor.apvts),
+          thresholdRail (*processor.apvts.getParameter (params::compThreshold), *processor.apvts.getParameter (params::compOn),
+                         params::compThresholdMin, params::compThresholdMax, false),
           rail (*processor.apvts.getParameter (params::compAmount), *processor.apvts.getParameter (params::compOn), 0.0f, 1.0f, false),
           graph (processor),
           ratioSlider (processor),
@@ -691,13 +685,24 @@ public:
     {
         shieldsWhenOff = false;
         bass::asBassRail (rail);   // the fader's amount in percent, a field too
-        rail.onGesture = [&processor] (bool begin) { if (begin) processor.history.beginGesture(); else processor.history.endGesture(); };
-        for (auto* c : { (juce::Component*) &rail, (juce::Component*) &graph, (juce::Component*) &ratioSlider, (juce::Component*) &transfer })
+        bass::asBassRail (thresholdRail);
+        thresholdRail.textForValue = [] (float db) { return juce::String (juce::roundToInt (db)); };   // dB, as "dB" over it says
+        thresholdRail.typedScale   = 1.0f;
+        const auto undoStep = [&processor] (bool begin) { if (begin) processor.history.beginGesture(); else processor.history.endGesture(); };
+        rail.onGesture = thresholdRail.onGesture = undoStep;
+        unit.setText ("dB", juce::dontSendNotification);
+        unit.setFont (theme::displayFont (CompGraph::textHeight));
+        unit.setColour (juce::Label::textColourId, theme::txDim);
+        unit.setJustificationType (juce::Justification::centred);
+        unit.setBorderSize ({});
+        unit.setInterceptsMouseClicks (false, false);   // a right click there is the block's
+        for (auto* c : { (juce::Component*) &unit, (juce::Component*) &thresholdRail, (juce::Component*) &graph,
+                         (juce::Component*) &ratioSlider, (juce::Component*) &transfer, (juce::Component*) &rail })
             addAndMakeVisible (*c);
         const auto menu = [this] (juce::Point<int>) { bass::showCompMenu (state, this); };
-        rail.onMenu = graph.onMenu = ratioSlider.onMenu = transfer.onMenu = menu;
+        thresholdRail.onMenu = rail.onMenu = graph.onMenu = ratioSlider.onMenu = transfer.onMenu = menu;
         attachPower (*processor.apvts.getParameter (params::compOn));
-        dimWhenIdle (graph, *processor.apvts.getParameter (params::compAmount));   // at BLEND 0 it stands still, dimmed
+        dimWhenIdle (graph, *processor.apvts.getParameter (params::compAmount));   // at BLEND 0 the picture stands still, dimmed
     }
 
     void mouseDown (const juce::MouseEvent& e) override
@@ -706,19 +711,30 @@ public:
             bass::showCompMenu (state, this);
     }
 
-    CompGraph&       picture() noexcept { return graph; }
-    CompTransfer&    square() noexcept  { return transfer; }
-    CompRatioSlider& ratio() noexcept   { return ratioSlider; }
-    GuardRail&       fader() noexcept   { return rail; }
+    CompGraph&       picture() noexcept   { return graph; }
+    CompTransfer&    square() noexcept    { return transfer; }
+    CompRatioSlider& ratio() noexcept     { return ratioSlider; }
+    GuardRail&       fader() noexcept     { return rail; }            // BLEND
+    GuardRail&       threshold() noexcept { return thresholdRail; }
+    juce::Label&     thresholdUnit() noexcept { return unit; }
 
 protected:
     void layOutContent (juce::Rectangle<int> r) override
     {
-        rail.setBounds (r.removeFromLeft (GuardRail::designWidth));
+        auto left = r.removeFromLeft (GuardRail::designWidth);
         r.removeFromLeft (gap);
+        rail.setBounds (r.removeFromRight (GuardRail::designWidth));
+        r.removeFromRight (gap);
         auto column = r.removeFromRight (squareMax);
         r.removeFromRight (gap);
         graph.setBounds (r);
+
+        // The threshold rail, its hand's travel the picture's levels exactly (CompGraph::railInset): it starts where the
+        // levels do less the inset, and ends at the picture's foot; "dB" over it, beside the GR strip.
+        const int top = juce::roundToInt (graph.levels().getY() - CompGraph::railInset);
+        unit.setBounds (left.removeFromTop (top));
+        thresholdRail.setBounds (left);
+
         ratioSlider.setBounds (column.removeFromTop (sliderH));
         column.removeFromTop (4);
         const int side = juce::jmin (column.getHeight(), column.getWidth());
@@ -729,6 +745,8 @@ private:
     static constexpr int gap = 10, squareMax = 118, sliderH = 40;
 
     juce::AudioProcessorValueTreeState& state;
+    juce::Label     unit;
+    GuardRail       thresholdRail;
     GuardRail       rail;
     CompGraph       graph;
     CompRatioSlider ratioSlider;

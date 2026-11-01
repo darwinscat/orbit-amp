@@ -8,7 +8,6 @@
 #include "BassControls.h"
 #include "ChorusBlock.h"
 #include "CompBlock.h"
-#include "BassSettings.h"
 #include "FilterBlock.h"
 #include "OctaveScope.h"
 #include "SpaceBlocks.h"
@@ -121,12 +120,13 @@ FaceplateView::FaceplateView (AmpProcessor& processor)
     limit.labelDecimals = 1;
     limit.railOnLeft    = false;
 
-    // ORBITBASS: every block's GEAR at the top right of its frame, and a right click on it, open its settings window —
-    // all but the guards: GATE and LIMIT keep their full scales and their own menus (the owner, 31.10).
+    // ORBITBASS: every block's GEAR at the top right of its frame, and a right click on it, open its MENU — one place per
+    // block, no settings windows (the owner, 01.11) — all but the guards: GATE and LIMIT keep their full scales and their
+    // own menus (the owner, 31.10).
     if (processor.product().chain == Chain::bass)
     {
         bassRows = true;   // three rows by the signal's way
-        const auto gear = [this] (BlockFrame* b, const char* name) { if (b != nullptr) b->enableSettings ([this, name] { openSettings (name); }); };
+        const auto gear = [this] (BlockFrame* b, const char* name) { if (b != nullptr) b->enableGear ([this, name] { openMenu (name); }); };
         gear (comp.get(), "COMP");
         gear (octave.get(), "OCTAVE");
         gear (filter.get(), "ENVELOPE");
@@ -135,7 +135,7 @@ FaceplateView::FaceplateView (AmpProcessor& processor)
         gear (spaceDelay.get(), "DELAY");
         gear (spaceReverb.get(), "REVERB");
         gear (&cabinet, "CAB IR");
-        cabinet.pictureMenuOpensSettings();   // its waveform takes its own clicks: its right click is the window
+        cabinet.pictureMenuOpensGear();   // its waveform takes its own clicks: its right click is the block's menu
     }
 }
 
@@ -150,43 +150,17 @@ int FaceplateView::bassCabLeast()
     return least;
 }
 
-FaceplateView::~FaceplateView()
-{
-    closeSettings();
-}
+FaceplateView::~FaceplateView() = default;
 
-void FaceplateView::closeSettings()
+void FaceplateView::openMenu (const juce::String& block)
 {
-    // THE SETTINGS WINDOW HOLDS THE PROCESSOR: it never outlives the face (a host closing the editor, removing the
-    // plug-in). Its panel lets go of the processor at once — no more reading, no more writing — and hides; the callout
-    // goes by its own dismissal (the modal manager owns it: deleting it here would free it twice).
-    if (auto* panel = dynamic_cast<bass::SettingsPanel*> (settingsPanel.getComponent()))
-        panel->detach();
-    if (auto* box = settingsBox.getComponent())
-    {
-        box->setVisible (false);
-        box->dismiss();
-    }
-    settingsBox = nullptr;
-    settingsPanel = nullptr;
-}
-
-void FaceplateView::openSettings (const juce::String& block)
-{
-    lastSettings = block;
+    lastMenu = block;
     juce::Component* at = block == "COMP" ? (juce::Component*) comp.get() : block == "OCTAVE" ? (juce::Component*) octave.get()
                         : block == "ENVELOPE" ? (juce::Component*) filter.get() : block == "CHORUS" ? (juce::Component*) chorus.get()
                         : block == "DELAY" ? (juce::Component*) spaceDelay.get() : block == "REVERB" ? (juce::Component*) spaceReverb.get()
-                        : block == "AMP" ? (juce::Component*) &preamp : block == "CAB IR" ? (juce::Component*) &cabinet
-                        : block == "GATE" ? (juce::Component*) &gate : (juce::Component*) &limit;
-    if (at == nullptr || ! at->isShowing())
-        return;
-    if (auto panel = bass::makeSettings (owner, block))
-    {
-        closeSettings();   // one window at a time
-        settingsPanel = panel.get();
-        settingsBox = &juce::CallOutBox::launchAsynchronously (std::move (panel), at->getScreenBounds(), nullptr);
-    }
+                        : block == "AMP" ? (juce::Component*) &preamp : block == "CAB IR" ? (juce::Component*) &cabinet : nullptr;
+    if (at != nullptr && at->isShowing())
+        bass::show (bass::blockMenu (owner.apvts, block), at);
 }
 
 BlockFrame& FaceplateView::frame (Block b)

@@ -31,7 +31,7 @@ struct CapturedBlockPanel::BassKnobs
         // BLEND, a rail as the bass's others are (the owner, 31.10): its amount in percent on its hand, 13 px, typed on
         // a click; its menu on a right click.
         bass::asBassRail (blend);
-        blend.onMenu = [this] (juce::Point<int>) { bass::showBlendMenu (state, &blend); };
+        blend.onMenu = [this] (juce::Point<int>) { bass::showAmpMenu (state, &blend); };   // the AMP's menu, its gear's
         name.setFont (theme::displayFont (13.0f));
         name.setColour (juce::Label::textColourId, theme::txDim);
         name.setJustificationType (juce::Justification::centred);
@@ -1147,8 +1147,8 @@ void CapturedBlockPanel::mouseDown (const juce::MouseEvent& e)
     // is a scope's.
     if (widgetArea.contains (e.getPosition()))
     {
-        if (e.mods.isPopupMenu() && bassKnobs != nullptr && onSettings != nullptr)
-            onSettings();   // OrbitBass: a right click on the AMP is its settings window, the picture's too
+        if (e.mods.isPopupMenu() && bassKnobs != nullptr && onGear != nullptr)
+            onGear();   // OrbitBass: a right click on the AMP is its menu, the picture's too
         else if (e.mods.isPopupMenu())
             showVizMenu (e.getScreenPosition());
         else

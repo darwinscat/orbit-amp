@@ -4,7 +4,6 @@
 #pragma once
 
 #include "BassControls.h"
-#include "BassSettingsOpener.h"
 #include "BlockFrame.h"
 #include "GuardRail.h"
 #include "../PluginProcessor.h"
@@ -25,7 +24,7 @@ namespace orbitamp
     The tap is read on its own timer only while the picture is on screen — the timer asks every tick, so a hidden
     ancestor stops it too, and the audio thread writes it only then; out of the strip the stage is not run and the
     picture stands still — standing by (its tail ringing out or not) or at MIX 0 nothing is written either, and it dims
-    with its block (the owner, 31.10). A click anywhere is the block's window. */
+    with its block (the owner, 31.10). A click anywhere is the block's menu. */
 class SpacePicture final : public juce::Component,
                            private juce::Timer
 {
@@ -262,7 +261,7 @@ private:
 
 /** THE BASS'S DELAY OR REVERB, A COMPACT BLOCK (the owner, 31.10): before the cabinet, after CHORUS, as on the guitar.
     Its RAIL on the left — MIX, the bass's rails' look (an orange hand, its percent at 13 px, a click types it, one undo
-    step a drag) — and its PICTURE beside it. Everything else is in its GEAR's window (ui/BassSettings.h), which a click
+    step a drag) — and its PICTURE beside it. Everything else is in its GEAR's menu (bass::blockMenu), which a click
     anywhere else on it, or a right click, opens too. Out of the strip it is not on the face at all. */
 class SpaceBlock final : public BlockFrame
 {
@@ -272,6 +271,7 @@ public:
           rail (*processor.apvts.getParameter (w == SpacePicture::Which::delay ? params::delayMix : params::reverbMix),
                 *processor.apvts.getParameter (w == SpacePicture::Which::delay ? params::delayOn : params::reverbOn), 0.0f, 100.0f, false),
           picture (processor, w),
+          state (processor.apvts),
           name (w == SpacePicture::Which::delay ? "DELAY" : "REVERB")
     {
         setName (name);
@@ -282,12 +282,12 @@ public:
         rail.onGesture = [&processor] (bool begin) { if (begin) processor.history.beginGesture(); else processor.history.endGesture(); };
         addAndMakeVisible (rail);
         addAndMakeVisible (picture);
-        rail.onMenu = picture.onMenu = [this] (juce::Point<int>) { openWindow(); };
+        rail.onMenu = picture.onMenu = [this] (juce::Point<int>) { openMenu(); };
         attachPower (*processor.apvts.getParameter (w == SpacePicture::Which::delay ? params::delayOn : params::reverbOn));
         dimWhenIdle (picture, *processor.apvts.getParameter (w == SpacePicture::Which::delay ? params::delayMix : params::reverbMix));
     }
 
-    void mouseDown (const juce::MouseEvent&) override { openWindow(); }
+    void mouseDown (const juce::MouseEvent&) override { openMenu(); }
 
     SpacePicture& view() noexcept { return picture; }
     GuardRail&    fader() noexcept { return rail; }
@@ -303,10 +303,11 @@ protected:
     }
 
 private:
-    void openWindow() { (void) bass::openSettingsFrom (this, name); }
+    void openMenu() { bass::showBlockMenu (state, this, name); }
 
     GuardRail    rail;
     SpacePicture picture;
+    juce::AudioProcessorValueTreeState& state;
     const juce::String name;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SpaceBlock)

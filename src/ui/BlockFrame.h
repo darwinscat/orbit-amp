@@ -205,15 +205,15 @@ public:
             paintSwitch (g, sw);
     }
 
-    /** ORBITBASS: a GEAR on the frame's border at the top right, opposite the title, opening the block's settings
-        window — and a right click on the frame opens the same. Off unless asked: the guitar faces have neither. */
-    void enableSettings (std::function<void()> open)
+    /** ORBITBASS: a GEAR on the frame's border at the top right, opposite the title, opening the block's MENU — and a
+        right click on the frame opens the same. Off unless asked: the guitar faces have neither. */
+    void enableGear (std::function<void()> open)
     {
-        onSettings = std::move (open);
+        onGear = std::move (open);
         gear = std::make_unique<Gear>();
-        gear->onClick = [this] { if (onSettings != nullptr) onSettings(); };
+        gear->onClick = [this] { if (onGear != nullptr) onGear(); };
         addAndMakeVisible (*gear);
-        keepOutsideStandby (*gear);   // a block standing by still opens its settings
+        keepOutsideStandby (*gear);   // a block standing by still opens its menu
         if (! getLocalBounds().isEmpty())
             resized();
     }
@@ -261,8 +261,8 @@ public:
         // never need hunting for a target.
         if (e.mods.isPopupMenu())
         {
-            if (onSettings != nullptr)
-                onSettings();
+            if (onGear != nullptr)
+                onGear();
             else
                 showPowerMenu (e.getScreenPosition());
             return;
@@ -572,12 +572,12 @@ protected:
         guards', whose rails switch them on when dragged (GuardBlock.h). */
     bool shieldsWhenOff = true;
 
-    /** The settings gear (enableSettings): a small wheel of lilac lines on a plate of the frame's own top colour, so the
+    /** The gear (enableGear): a small wheel of lilac lines on a plate of the frame's own top colour, so the
         border line stops behind it as it does behind the title. */
     struct Gear final : public juce::Component
     {
         std::function<void()> onClick;
-        Gear() { setMouseCursor (juce::MouseCursor::PointingHandCursor); setTitle ("Settings"); }
+        Gear() { setMouseCursor (juce::MouseCursor::PointingHandCursor); setTitle ("Menu"); }
         void paint (juce::Graphics& g) override
         {
             const auto r = getLocalBounds().toFloat();
@@ -601,7 +601,7 @@ protected:
         void mouseDown (const juce::MouseEvent&) override  { if (onClick != nullptr) onClick(); }
     };
     std::unique_ptr<Gear> gear;
-    std::function<void()> onSettings;
+    std::function<void()> onGear;
     static constexpr int gearSize = 18;
     static constexpr int gearInsideInset = 5;   // the gear inside the box: this far from its right...
     /** ...and below the name riding the line, whose box reaches half its height under it. */

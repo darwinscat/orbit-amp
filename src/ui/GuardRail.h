@@ -18,12 +18,13 @@ namespace orbitamp
     never taken for a column's orange trim.
 
     The value runs linearly from `lo` to `hi` over the span the hand fits in WHOLE: half a hand in
-    from each end, and above the OFF stop where there is one — so the hand never stands half off the
-    rail, and the lowest value sits right over OFF instead of the hand stopping there while the value
-    went on falling (Oleh, 24.10). The block's fixed scale reads the same span (yOfValue).
+    from each end — so the hand never stands half off the rail, and the hand stops where the value
+    does (Oleh, 24.10). The block's fixed scale reads the same span (yOfValue).
 
     A drag switches the guard on: the hand moved is the guard wanted (Oleh, 24.10). `offAtFoot`: the
-    foot of the rail is OFF — the gate's way out — and dragged into it, the guard goes off.
+    rail's END STOP is OFF — the gate's way out — with no zone of its own (the owner, 01.11): the scale
+    runs the whole travel, the hand pushed onto the stop under its lowest value parks the guard there,
+    reading OFF, and lifted off it the guard is on again at the lowest value.
 
     Drag to move; a click without a drag, either button, is the guard's menu (Oleh, 24.10). */
 class GuardRail final : public juce::Component
@@ -117,19 +118,12 @@ public:
         g.setColour (theme::lilac.withAlpha (0.18f));
         g.fillRect (juce::Rectangle<float> (2.0f, s.getHeight()).withCentre (s.getCentre()));
 
-        if (offAtFoot)
-        {
-            const auto foot = s.withTop (s.getBottom() - offH);
-            g.setColour (theme::lilac.withAlpha (0.10f));
-            g.fillRoundedRectangle (foot, 2.0f);
-        }
-
         const float hoverA = isMouseOverOrDragging (true) ? 1.0f : 0.55f;
         const float alpha  = (on || offAtFoot ? 1.0f : theme::offAlpha) * hoverA;
 
         const bool  atFoot = offAtFoot && ! on;
         const float v      = valueP.convertFrom0to1 (valueP.getValue());
-        const float y      = atFoot ? s.getBottom() - offH * 0.5f : yOfValue (v);
+        const float y      = atFoot ? valueSpan().getBottom() : yOfValue (v);   // parked on the stop, under the lowest value
 
         meterrail::paintGrip (g, r, y, atFoot ? juce::String ("OFF") : gripTextOf (v),
                               gripColour.withMultipliedAlpha (alpha), dragging, gripTextHeight);
@@ -203,25 +197,24 @@ public:
     }
 
 private:
-    static constexpr float offH = meterrail::gripH;   // the OFF stop at the foot: one hand tall
-
     juce::Rectangle<float> scaleArea() const { return getLocalBounds().toFloat().reduced (2.0f); }
 
-    /** The span the hand's centre travels: half a hand in from the head, and from the foot — or
-        from the top of the OFF stop. */
+    /** The span the hand's centre travels: half a hand in from the head and from the foot. */
     juce::Rectangle<float> valueSpan() const
     {
         auto s = scaleArea();
         s.removeFromTop (meterrail::gripH * 0.5f);
-        s.removeFromBottom ((offAtFoot ? offH : 0.0f) + meterrail::gripH * 0.5f);
+        s.removeFromBottom (meterrail::gripH * 0.5f);
         return s;
     }
 
     void moveTo (float y)
     {
-        const auto s = scaleArea();
+        const auto span = valueSpan();
 
-        if (offAtFoot && y > s.getBottom() - offH)
+        // THE END STOP IS OFF (offAtFoot): the hand pushed onto it — at or under the lowest value's place — parks the
+        // guard; the threshold stays where it was, for the way back.
+        if (offAtFoot && y >= span.getBottom())
         {
             if (onAtt != nullptr)
                 onAtt->setValueAsPartOfGesture (0.0f);
@@ -230,7 +223,6 @@ private:
 
         // Held to the RAIL's ends, not only the parameter's: the gate's rail stops at -30 while its
         // threshold could go on to -10, and the number ran on past a hand that had stopped (Oleh, 24.10).
-        const auto span  = valueSpan();
         const auto range = valueP.getNormalisableRange();
         const float v    = lo + (span.getBottom() - y) / juce::jmax (1.0f, span.getHeight()) * (hi - lo);
 

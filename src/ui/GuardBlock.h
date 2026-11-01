@@ -25,7 +25,7 @@ namespace orbitamp
     it, between the frame's rounded corners.
 
     A guard's block stays in reach while off: its rail dragged is a way back on — the gate's out of
-    its OFF stop, the limiter's anywhere. */
+    its OFF stop (the rail's end), the limiter's anywhere. */
 class GuardBlock final : public BlockFrame
 {
 public:
