@@ -13,16 +13,23 @@
 //   - the pick: a burst of noise at every string's onset, and the pickup's comb over the partials;
 //   - the pitch glides down after the pluck, by up to 20 cents and as slowly as 0.4 s;
 //   - mains hum to the 12th harmonic, learned in the quiet before the strum, or arriving WITH the strum, or
-//     already learned when a second strum comes over the first one's tail; strings standing on mains lines.
+//     already learned when a second strum comes over the first one's tail; strings standing on mains lines;
+//     and a mains OFF its nominal: the grid wanders 49.9-50.1 Hz every day, further on events.
 //
 // Every reading the tuner's timer produces is judged — not the last one: a MUTED string is never NEAR or FAR,
-// and a published number is within a cent of the truth (the string's first partial at the moment of the
-// reading; between a doublet's planes) — or there is none. Withholding is allowed and counted, under a ceiling.
+// and a published number is within a cent of the truth or there is none. The truth is pointwise: the pitch the
+// string sounds at the moment the reading's span ends — its first partial's instantaneous frequency, as rendered:
+// the glide where it is, and for two planes the phase of their SUM, which swings with their beat around the main
+// plane's pitch. (Not the whole range of that swing: a number from the far side of the beat is a wrong number.)
+// How far the shown numbers of doublet strings stand from the main plane alone is counted and printed: planes a
+// tenth of a hertz apart beat over ten seconds, and no span of 1.7 s tells them apart (its bins are 0.6 Hz).
+// Withholding is allowed and counted, under a ceiling.
 //
 // POLY_HARD_SEEDS=<n> runs n seeds per scene and tuning instead of the gate's two. JUCE-free, links nothing.
 
 #include "core/PolyTuner.h"
 
+#include <chrono>
 #include <cmath>
 #include <complex>
 #include <cstdint>
@@ -56,6 +63,7 @@ namespace
         double split = 0.0;       // Hz: a second plane above the first (0: one plane)
         double pluck = 0.15, pickup = 0.2;
         double ring = 3.0;        // the aftersound's decay of the first partial, s
+        double ph1[2][2] {};      // as rendered: the first partial's phase, per pluck and plane
     };
 
     struct Scene
@@ -71,8 +79,8 @@ namespace
 
     double ratioOf (double cents) { return std::pow (2.0, cents / 1200.0); }
 
-    /** One pluck of one string, added into `y`, struck at `at`. */
-    void pluckInto (std::vector<double>& y, const Scene& sc, const Str& st, double at, Dice& dice)
+    /** One pluck of one string, added into `y`, struck at `at`; the first partial's phases per plane into `ph1`. */
+    void pluckInto (std::vector<double>& y, const Scene& sc, const Str& st, double at, Dice& dice, double* ph1)
     {
         const int n0 = (int) (at * fs), n = (int) y.size();
         const double g = ratioOf (sc.glide) - 1.0;
@@ -93,6 +101,8 @@ namespace
                 const double ap = plane == 0 ? amp : amp * 0.7;
                 const double ts = plane == 0 ? slow : slow * 0.6;
                 const double ph = dice.in (0.0, 2.0 * pi);
+                if (h == 1)
+                    ph1[plane] = ph;
                 std::complex<double> zs, zf;
                 for (int b = n0; b < n; b += 32)
                 {
@@ -117,16 +127,16 @@ namespace
             y[(size_t) k] += st.level * 0.5 * dice.in (-1.0, 1.0) * (1.0 - (k - n0) / (0.004 * fs));
     }
 
-    std::vector<float> render (const Scene& sc)
+    std::vector<float> render (Scene& sc)
     {
         std::vector<double> y ((size_t) (sc.seconds * fs), 0.0);
         Dice dice { sc.seed * 0x9E3779B97F4A7C15ull + 1u };
         for (size_t i = 0; i < sc.strings.size(); ++i)
             if (sc.strings[i].on)
             {
-                pluckInto (y, sc, sc.strings[i], sc.strumAt + sc.spread * (double) i, dice);
+                pluckInto (y, sc, sc.strings[i], sc.strumAt + sc.spread * (double) i, dice, sc.strings[i].ph1[0]);
                 if (sc.restrumAt > 0.0)
-                    pluckInto (y, sc, sc.strings[i], sc.restrumAt + sc.spread * (double) i, dice);
+                    pluckInto (y, sc, sc.strings[i], sc.restrumAt + sc.spread * (double) i, dice, sc.strings[i].ph1[1]);
             }
         if (sc.humHz > 0.0)
             for (int k = 1; k <= 12; ++k)
@@ -167,10 +177,40 @@ namespace
         return sc;
     }
 
-    struct Tally { int readings = 0, wrong = 0, withheld = 0, sounding = 0, mutedShown = 0; };
+    /** The pitch string s sounds at `now`, s into the scene: its first partial's instantaneous frequency — every
+        pluck of it, both planes, the prompt and the aftersound summed as rendered (pluckInto, h = 1). */
+    double soundingHz (const Scene& sc, const Str& st, int s, double now)
+    {
+        const double g = ratioOf (sc.glide) - 1.0;
+        std::complex<double> z, dz;
+        for (int p = 0; p < (sc.restrumAt > 0.0 ? 2 : 1); ++p)
+        {
+            const double t = now - ((p == 0 ? sc.strumAt : sc.restrumAt) + sc.spread * s);
+            if (t < 0.0)
+                continue;
+            for (int plane = 0; plane < (st.split > 0.0 ? 2 : 1); ++plane)
+            {
+                const double fp = st.f1 + plane * st.split, ap = plane == 0 ? st.level : st.level * 0.7;
+                const double slow = st.ring / (1.0 + st.f1 / 500.0), ts = plane == 0 ? slow : slow * 0.6;
+                const double theta = 2.0 * pi * fp * (t + g * sc.glideTau * (1.0 - std::exp (-t / sc.glideTau))) + st.ph1[p][plane];
+                const double w = 2.0 * pi * fp * (1.0 + g * std::exp (-t / sc.glideTau));
+                for (const auto& [a, tau] : { std::pair { 0.6 * ap, ts }, std::pair { 0.4 * ap, 0.12 } })
+                {
+                    const auto zz = std::polar (a * std::exp (-t / tau), theta);
+                    z  += zz;
+                    dz += zz * std::complex<double> (-1.0 / tau, w);
+                }
+            }
+        }
+        return (dz / z).imag() / (2.0 * pi);
+    }
+
+    struct Tally { int readings = 0, wrong = 0, withheld = 0, sounding = 0, mutedShown = 0, doubletShown = 0, doubletOff = 0; };
+
+    double worstTickMs = 0.0;   // the longest maybeAnalyse() of any tick — the message thread's stall
 
     /** Every reading of the tuner's timer (30 Hz ticks) over the scene, judged. */
-    void judge (const char* what, const PolyTuner::Tuning& t, const Scene& sc, Tally& ty, int& printed)
+    void judge (const char* what, const PolyTuner::Tuning& t, Scene sc, Tally& ty, int& printed)
     {
         static PolyTuner tuner;
         tuner.prepare (fs);
@@ -181,9 +221,14 @@ namespace
         {
             const int n = (int) std::min<size_t> (1600, x.size() - k);
             tuner.push (x.data() + k, n);
-            if (! tuner.maybeAnalyse())
+            const auto t0 = std::chrono::steady_clock::now();
+            const bool fresh = tuner.maybeAnalyse();
+            worstTickMs = std::max (worstTickMs, 1000.0 * std::chrono::duration<double> (std::chrono::steady_clock::now() - t0).count());
+            if (! fresh)
                 continue;
-            const double now = (double) (k + (size_t) n) / fs;
+            // The truth at the moment the reading's span ENDS: on the timer the analysis runs a step at a time,
+            // and the reading comes a few ticks later than the audio it rests on.
+            const double now = tuner.reading().endSec;
             if (now < sc.strumAt + 0.2)
                 continue;
             ++ty.readings;
@@ -196,14 +241,12 @@ namespace
                 // a second of ringing), so until then the span is the last strum's.
                 const double at  = (sc.restrumAt > 0.0 && now > sc.restrumAt + 1.0 ? sc.restrumAt : sc.strumAt) + sc.spread * s;
                 const double f   = st.f1 * (1.0 + g * std::exp (-(now - at) / sc.glideTau));
-                double err = 0.0;
-                if (shown)
+                // Pointwise, against what the string sounds at the span's end (two planes: their sum's pitch).
+                const double err = shown && st.on ? 1200.0 * std::log2 (o.hz / soundingHz (sc, st, s, now)) : 0.0;
+                if (shown && st.on && st.split > 0.0)
                 {
-                    // Two planes sound as ONE partial whose pitch wanders with their beat: at its fade the sum
-                    // runs below the stronger plane by 0.7/0.3 of their split (the weaker's share over the
-                    // difference). That range is what the string sounds like — a strobe reads it too.
-                    const double lo = 1200.0 * std::log2 (o.hz / (f - st.split * 0.7 / 0.3)), hi = 1200.0 * std::log2 (o.hz / (f + st.split));
-                    err = lo >= 0.0 && hi <= 0.0 ? 0.0 : (std::abs (lo) < std::abs (hi) ? lo : hi);
+                    ++ty.doubletShown;
+                    ty.doubletOff += std::abs (1200.0 * std::log2 (o.hz / f)) > 1.0 ? 1 : 0;   // against the main plane alone
                 }
                 bool bad = false;
                 if (! st.on)
@@ -223,7 +266,8 @@ namespace
                     if (printed++ < 12)
                         std::printf ("  WRONG %s — %s seed %llu at %.2f s: string %d %s, true %+.2f c, read %+.2f c (err %+.2f, sd %.3f)\n",
                                      what, t.name, (unsigned long long) sc.seed, now, s + 1, st.on ? "sounding" : "MUTED",
-                                     1200.0 * std::log2 (f / noteHz (t, s)), (double) o.cents, err, (double) o.sigmaCents);
+                                     1200.0 * std::log2 ((st.on ? soundingHz (sc, st, s, now) : f) / noteHz (t, s)), (double) o.cents, err,
+                                     (double) o.sigmaCents);
                 }
             }
         }
@@ -238,7 +282,9 @@ int main()
 
     // Withholding is allowed, not free: each scene has its ceiling — a plain strum's lowest (8 % of its
     // readings without the doublets; half the strings here carry a second plane, and those wait), a pitch
-    // still settling or strings on the mains lines high, where waiting IS the right answer.
+    // still settling or strings on the mains lines high, where waiting IS the right answer. A number is published
+    // only where the span's halves can see a cent and agree with the whole to half of one, with their
+    // disagreement in its sigma: the bass's halves (a few periods of a 31-55 Hz string each) often cannot.
     auto scene = [&] (const char* what, double ceiling, auto make, int moreSeeds = 1)
     {
         Tally ty;
@@ -251,17 +297,19 @@ int main()
                 judge (what, t, sc, ty, printed);
             }
         const double share = 100.0 * ty.withheld / std::max (1, ty.sounding);
-        std::printf ("%-52s %5d readings  %3d wrong  %5.1f%% withheld (want <= %.0f%%)\n", what, ty.readings, ty.wrong, share, ceiling);
+        std::printf ("%-52s %5d readings  %3d wrong  %5.1f%% withheld (want <= %.0f%%)  doublets shown %d, >1 c off the main plane %d\n",
+                     what, ty.readings, ty.wrong, share, ceiling, ty.doubletShown, ty.doubletOff);
         if (share > ceiling)
             ++failures;
         all.readings += ty.readings; all.wrong += ty.wrong; all.withheld += ty.withheld; all.sounding += ty.sounding;
+        all.doubletShown += ty.doubletShown; all.doubletOff += ty.doubletOff;
     };
 
     const auto muteOne = [] (Scene& sc, Dice& dice) { sc.strings[(size_t) (dice.next() * (double) sc.strings.size())].on = false; };
 
     scene ("a strum, every string", 40.0, [&] (const PolyTuner::Tuning&, Scene&, Dice&) {});
     scene ("a strum, one string muted", 40.0, [&] (const PolyTuner::Tuning&, Scene& sc, Dice& d) { muteOne (sc, d); });
-    scene ("partials 2.5 c off, a top string muted (on harmonics)", 45.0, [&] (const PolyTuner::Tuning& t, Scene& sc, Dice& d) {
+    scene ("partials 2.5 c off, a top string muted (on harmonics)", 55.0, [&] (const PolyTuner::Tuning& t, Scene& sc, Dice& d) {
         // The top strings stand on the low strings' harmonics (a guitar's B on the low E's 3rd, its high E on
         // the 4th): muted, all that is left there is another string's partial, off its formula — the reading
         // a muted string must never borrow.
@@ -273,8 +321,10 @@ int main()
         sc.humHz = d.next() < 0.5 ? 50.0 : 60.0; sc.humFrom = sc.strumAt; muteOne (sc, d); });
     scene ("hum learned, then a strum over the last one's tail", 50.0, [&] (const PolyTuner::Tuning&, Scene& sc, Dice& d) {
         sc.humHz = d.next() < 0.5 ? 50.0 : 60.0; sc.restrumAt = sc.strumAt + 2.2; sc.seconds = 5.0; muteOne (sc, d); });
-    scene ("the pitch settling slowly: 20 c, 0.4 s", 85.0, [&] (const PolyTuner::Tuning&, Scene& sc, Dice& d) {
+    scene ("the pitch settling slowly: 20 c, 0.4 s", 92.0, [&] (const PolyTuner::Tuning&, Scene& sc, Dice& d) {
         sc.glide = 20.0; sc.glideTau = 0.4; sc.seconds = 4.0; muteOne (sc, d); });
+    scene ("the pitch settling: 20 c, 0.2 s", 85.0, [&] (const PolyTuner::Tuning&, Scene& sc, Dice& d) {
+        sc.glide = 20.0; sc.glideTau = 0.2; sc.seconds = 4.0; muteOne (sc, d); });
     scene ("strings on mains lines, with and without the mains", 65.0, [&] (const PolyTuner::Tuning& t, Scene& sc, Dice& d) {
         // Each string within 40 c of its note that a 50 Hz harmonic can stand on, put there.
         for (int s = 0; s < t.strings; ++s)
@@ -287,8 +337,78 @@ int main()
             sc.humHz = 50.0;
     });
 
+    // The mains off its nominal, to the 12th: every line of it off its nominal multiple by k times the drift,
+    // learned before the strum or arriving with it. The string muted is the one a mains line stands nearest
+    // (within reach of its note, not on it): what is left there is the hum's line.
+    const auto offMains = [] (const PolyTuner::Tuning& t, Scene& sc, Dice& d)
+    {
+        static constexpr double grid[] = { 49.8, 49.85, 50.1, 50.2, 60.1 };
+        sc.humHz = grid[(size_t) (d.next() * 5.0)];
+        sc.stray = 1.5;
+        int muted = 0;
+        double best = 1.0e9;
+        for (int s = 0; s < t.strings; ++s)
+            for (int k = 1; k <= 12; ++k)
+            {
+                const double c = std::abs (1200.0 * std::log2 (k * sc.humHz / noteHz (t, s)));
+                if (c > 5.0 && c < best)
+                {
+                    best = c;
+                    muted = s;
+                }
+            }
+        sc.strings[(size_t) muted].on = false;
+    };
+    scene ("mains off nominal (49.8-60.1 Hz), learned before", 50.0, [&] (const PolyTuner::Tuning& t, Scene& sc, Dice& d) {
+        offMains (t, sc, d); }, 2);
+    scene ("mains off nominal (49.8-60.1 Hz), arriving with it", 60.0, [&] (const PolyTuner::Tuning& t, Scene& sc, Dice& d) {
+        offMains (t, sc, d); sc.humFrom = sc.strumAt; }, 2);
+
+    // The tuner opened onto a string still ringing on a mains line — a bass G on 100 Hz, the 50 Hz mains's 2nd —
+    // alone or in its chord, dying away slowly (7.6 s, 15 s): no strum to measure the quiet against, and the line
+    // steady to a fraction of a dB over the stretch. It is not the mains, and must not be learned as it.
+    {
+        const PolyTuner::Tuning* bass4 = nullptr;
+        for (const auto& t : PolyTuner::tunings)
+            if (std::string (t.name) == "Bass 4 strings")
+                bass4 = &t;
+        static PolyTuner tuner;
+        bool ok = bass4 != nullptr;
+        for (const double tau : { 7.6, 15.0 })
+            for (const bool chord : { false, true })
+            {
+                if (bass4 == nullptr)
+                    break;
+                Scene sc = strum (*bass4, 4242u);
+                for (auto& st : sc.strings)
+                {
+                    st.on = chord;
+                    st.split = 0.0;
+                }
+                auto& g = sc.strings[3];
+                g.on = true;
+                g.f1 = 100.0;
+                g.ring = tau * (1.0 + 100.0 / 500.0);   // the first partial's aftersound dies with tau
+                sc.strumAt = 0.05;
+                sc.glide = 0.0;
+                const auto x = render (sc);
+                tuner.prepare (fs);
+                tuner.setTuning (*bass4);
+                for (size_t k = (size_t) (0.35 * fs); k < x.size(); k += 1600)   // opened 0.3 s after the strum
+                {
+                    tuner.push (x.data() + k, (int) std::min<size_t> (1600, x.size() - k));
+                    tuner.maybeAnalyse();
+                    ok = ok && ! ((tuner.mainsMask() >> 2) & 1u);
+                }
+            }
+        std::printf ("%-52s %s\n", "opened onto a string ringing on 100 Hz: not the mains", ok ? "ok" : "FAIL");
+        if (! ok)
+            ++failures;
+    }
+
     const double share = 100.0 * all.withheld / std::max (1, all.sounding);
-    std::printf ("\nall: %d readings, %d wrong (want 0), %.1f%% of sounding strings' readings withheld\n", all.readings, all.wrong, share);
+    std::printf ("\nall: %d readings, %d wrong (want 0), %.1f%% of sounding strings' readings withheld; worst tick %.1f ms\n",
+                 all.readings, all.wrong, share, worstTickMs);
     if (all.wrong > 0)
         ++failures;
     std::printf ("%s\n", failures == 0 ? "ALL OK" : "FAILURES");

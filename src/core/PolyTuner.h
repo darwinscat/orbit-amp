@@ -46,11 +46,21 @@ namespace orbitamp::core
     MASKED. A string whose every peak lies on another string's partial is tested for whether it adds
     anything at all: the cluster is refitted without it, and if the residual barely moves, the string
     is MASKED — muted, or in exact unison with a harmonic it cannot be told from. A face shows that
-    as "pluck it alone", never as a reading.
+    as "damp the others, pluck it alone", never as a reading. In a full strum that is a guitar's B and
+    high E every time: an in-tune B stands 2.7-4.4 c from the low E's 3rd partial, inside one bin of a
+    1.7 s span (4 c at 247 Hz) — no rule tells them apart there, and plucked over the chord still
+    ringing the B stays covered. A strum of the top four reads all four.
 
     MAINS HUM. 50 or 60 Hz lines are learned before a strum (the quiet stretch before the attack) and
     then fitted as components of their own, held to their line and to no decay — a bass A string
-    5 Hz from the hum, a B string's octave 1.7 Hz from 60, are read beside it, not through it.
+    5 Hz from the hum, a B string's octave 1.7 Hz from 60, are read beside it, not through it. The
+    mains is TRACKED, never taken for exact: the grid wanders 49.9-50.1 Hz every day, and its k-th
+    harmonic is k times that off k x 50 — at 50.2 Hz the 4th stands 0.8 Hz off 200, on a G string.
+
+    WITHHOLD RATHER THAN LIE. A confident wrong number is the defect. Where the evidence does not hold
+    — a string on another's partial or on a mains line, halves of the span that disagree, a model that
+    does not fit — the lane says "pluck alone" or waits, never a number. What is published is within
+    a cent of the string's own sustained pitch (the main plane of a string that beats), or withheld.
 
     Off the audio thread, JUCE-free and headless like PitchTracker: push() or update() on the tuner's
     own timer, read reading(). Everything is allocated in prepare(); nothing per tick. */
@@ -103,6 +113,7 @@ public:
         int      strings = 0;
         std::array<String, maxStrings> string {};
         float    spanMs  = 0.0f;   // how much ringing the reading rests on
+        double   endSec  = 0.0;    // where that span ends: seconds of input since prepare() / reset()
         unsigned strum   = 0;      // counts strums: a new one starts a new reading
         bool     mono    = false;  // exactly one string heard — a single pluck
     };
@@ -130,6 +141,8 @@ public:
         hist.assign ((size_t) histCap, 0.0f);
         chunk.assign ((size_t) (TunerTap::size - TunerTap::guard), 0.0f);
         spec.assign ((size_t) maxL, cd {});
+        humSpec.assign ((size_t) maxL, cd {});
+        humMag.assign ((size_t) maxL / 2 + 1, 0.0);
         mag.assign ((size_t) maxL / 2 + 1, 0.0);
         scratch.assign ((size_t) maxL / 2 + 1, 0.0);
         twiddle.resize ((size_t) maxL / 2);
@@ -163,8 +176,9 @@ public:
         lastAnalysed = 0;
         analysedStrum = ~0u;
         strumCount = 0;
-        humMains = 0;
-        humMask = 0;
+        humHz = spanHumHz = 0.0;
+        humMask = spanHumMask = 0;
+        job.busy = false;
         bbLevel = strumPeak = 0.0;
         strummed = false;
         lastHumAt = 0;
@@ -263,24 +277,72 @@ public:
         // The mains is learned in the stretch before a strum, and — with nobody strumming — from what
         // is there, once a second. Both only in QUIET (learnHum asks): over a strum still ringing, a
         // string on 200 Hz is "mains", and a real 240 Hz line hidden by a partial is lost.
+        // The tick's budget is counted from here: learning the mains is part of what the tick costs.
+        const double w0 = work;
         if (histCount - lastHumAt >= (std::uint64_t) fsD)
             learnHum();
 
-        if (histCount < spanStart() + (std::uint64_t) minN)
-            return false;
-        if (analysedStrum == strumCount && histCount - lastAnalysed < cadenceN)
-            return false;
-        return analyse();
+        if (job.busy && job.strum != strumCount)
+            job.busy = false;   // a new strum: the span in flight is the last one's
+        if (! job.busy)
+        {
+            if (histCount < spanStart() + (std::uint64_t) minN)
+                return false;
+            if (analysedStrum == strumCount && histCount - lastAnalysed < cadenceN)
+                return false;
+            if (! startJob())
+                return false;
+        }
+        return runJob (w0, tickWork);
     }
 
-    /** Analyses the current span now. Returns false (and keeps the last reading) when there is no
-        span yet or it is below the level floor.
+    /** Analyses the current span now, all of it in this call. Returns false (and keeps the last reading)
+        when there is no span yet or it is below the level floor.
 
-        The span is analysed whole and in its two halves, and a string's number is published only
-        where both halves read it within halvesAgreeCents: a pitch still gliding after the attack, two
-        planes of vibration beating, read as one steady partial with a confident sigma, are what the
-        halves disagree on — the lane waits for them instead of showing a wrong number. */
+        The span is analysed whole and in its two halves, and a string's number is published only where the
+        three agree: a pitch still gliding after the attack, two planes of vibration beating, read as one
+        steady partial with a confident sigma, are what they disagree on. Their disagreement beyond their own
+        noise is part of the published sigma, and a sigma past publishSigmaCents is no reading — the lane
+        waits for it instead of showing a wrong number. On the timer (maybeAnalyse) the same three analyses
+        run a step at a time, tickWork of them per tick, and the reading comes when the third is done. */
     bool analyse()
+    {
+        job.busy = false;
+        if (! startJob())
+            return false;
+        return runJob (work, std::numeric_limits<double>::infinity());
+    }
+
+    const Reading& reading() const noexcept { return out; }
+
+    /** What the analysis decimates to, Hz — for tests and cost accounting. */
+    double analysisRate() const noexcept { return fsD; }
+
+    /** The mains as learned: its fundamental, Hz (0: none), and which harmonics stand (bit k: the k-th). */
+    double   mainsHz()   const noexcept { return humHz; }
+    unsigned mainsMask() const noexcept { return humMask; }
+
+private:
+    //==========================================================================
+    // The three analyses of a span — whole, first half, second half — as steps: a span's spectrum, a sweep's
+    // clusters, each cluster's fit, each string's verdict. The message thread runs as many per tick as
+    // tickWork allows, never fewer than one. Counted in work, not read off a clock: what is analysed when
+    // is the same on every machine — a slow one only waits longer for the reading.
+
+    struct Job
+    {
+        bool busy = false;
+        unsigned strum = 0;
+        std::uint64_t start = 0;
+        int N = 0;
+        int part = 0;        // 0 the whole span, 1 its first half, 2 its second
+        int step = 0;        // 0 the spectrum, 1 a sweep's clusters, 2 their fits, 3 the strings, 4 the part done
+        int sweep = 0, ci = 0, s = 0;
+        bool ok[3] {};
+        std::array<double, maxStrings> decay[2] {};
+    };
+
+    bool startJob()
     {
         const std::uint64_t start = std::max (spanStart(), histCount - std::min<std::uint64_t> (histCount, (std::uint64_t) maxN));
         const int N = (int) (histCount - start);
@@ -289,17 +351,107 @@ public:
 
         lastAnalysed  = histCount;
         analysedStrum = strumCount;
-
+        job = {};
+        job.busy  = true;
+        job.strum = strumCount;
+        job.start = start;
+        job.N     = N;
+        // What the three analyses hold the span to is what was known when it began: the mains learned since is
+        // the next span's.
+        spanHumHz   = humHz;
+        spanHumMask = humMask;
         geometrySec = N / fsD;
-        if (! analyseSpan (start, N, whole, publishSigmaCents))
-            return false;
+        return true;
+    }
 
-        // The halves are a third as long in sigma terms (T^-1.5): their gate is wider by that.
-        const int half = N / 2;
-        const bool okA = analyseSpan (start, half, firstHalf, publishSigmaCents * 2.83);
-        const auto decayA = decayOf;
-        const bool okB = analyseSpan (start + (std::uint64_t) (N - half), half, secondHalf, publishSigmaCents * 2.83);
-        const auto decayB = decayOf;
+    /** Steps until the trio is done or the tick's `budget` of work (counted from `w0`) is spent. True when a
+        reading came. */
+    bool runJob (double w0, double budget)
+    {
+        for (;;)
+        {
+            const int r = stepJob();
+            if (r != 0)
+                return r > 0;
+            if (work - w0 >= budget)
+                return false;
+        }
+    }
+
+    /** One step. 0: more to come; 1: the trio is done and published; -1: it ended with nothing to publish. */
+    int stepJob()
+    {
+        auto& j = job;
+        Reading& r = j.part == 0 ? whole : j.part == 1 ? firstHalf : secondHalf;
+        switch (j.step)
+        {
+            case 0:
+            {
+                const int half = j.N / 2;
+                const std::uint64_t st = j.part == 2 ? j.start + (std::uint64_t) (j.N - half) : j.start;
+                j.ok[j.part] = spanBegin (st, j.part == 0 ? j.N : half);
+                if (! j.ok[j.part] && j.part == 0)
+                {
+                    j.busy = false;
+                    return -1;
+                }
+                j.sweep = 0;
+                j.step  = j.ok[j.part] ? 1 : 4;
+                return 0;
+            }
+            case 1:
+                if (j.sweep > 0)
+                {
+                    rehomeCoincident();
+                    relocateStrays();
+                }
+                buildClusters();
+                j.ci = 0;
+                j.step = 2;
+                return 0;
+            case 2:
+                if (j.ci < nClusters)
+                {
+                    fitClusterWithPriors (j.ci++, j.sweep);
+                    return 0;
+                }
+                if (++j.sweep < sweeps)
+                {
+                    j.step = 1;
+                    return 0;
+                }
+                decideBegin();
+                j.s = 0;
+                j.step = 3;
+                return 0;
+            case 3:
+                if (j.s < tuning.strings)
+                {
+                    // The halves are a third as long in sigma terms (T^-1.5): their gate is wider by that.
+                    decideString (j.s++, r, j.part == 0 ? publishSigmaCents : publishSigmaCents * 2.83);
+                    return 0;
+                }
+                j.step = 4;
+                return 0;
+            default:
+                if (j.part > 0)
+                    j.decay[j.part - 1] = decayOf;
+                if (++j.part < 3)
+                {
+                    j.step = 0;
+                    return 0;
+                }
+                j.busy = false;
+                finishTrio();
+                return 1;
+        }
+    }
+
+    /** The whole span's verdicts, held to its halves: a number only where the three agree, and their
+        disagreement in its sigma. */
+    void finishTrio()
+    {
+        const bool okA = job.ok[1], okB = job.ok[2];
         int heard = 0;
         for (int s = 0; s < tuning.strings; ++s)
         {
@@ -311,10 +463,29 @@ public:
             const auto said = [] (const String& x) { return x.heard == Heard::near || x.heard == Heard::far; };
             // ... and one steady partial dies away at one rate: two planes of vibration a fraction of a hertz
             // apart beat, their sum fading and returning — read as one partial, its pitch is off by more
-            // than their split, and the halves' decay rates are what give it away.
-            const bool steady = std::abs (decayA[(size_t) s] - decayB[(size_t) s]) <= halvesDecayAgree;
-            if (! okA || ! okB || ! said (a) || ! said (b) || std::abs (a.cents - b.cents) > halvesAgreeCents
-                || std::abs (w.cents - 0.5f * (a.cents + b.cents)) > halvesAgreeCents || ! steady)
+            // than their split, and the halves' decay rates are what give it away. Nor does its decay ever
+            // QUICKEN: one partial's prompt sound and aftersound are a sum of exponentials at one pitch, whose
+            // log is convex — it dies away fast, then slower. Dying faster in the second half is a sum fading
+            // into its beat: a second plane, the pitch swinging toward the far side of it.
+            const double dA = job.decay[0][(size_t) s], dB = job.decay[1][(size_t) s];
+            const bool steady = std::abs (dA - dB) <= halvesDecayAgree && dB - dA <= halvesDecayRise;
+            bool keep = okA && okB && said (a) && said (b) && std::abs (a.cents - b.cents) <= halvesAgreeCents
+                     && std::abs (w.cents - 0.5f * (a.cents + b.cents)) <= halvesAgreeCents && steady;
+            if (keep)
+            {
+                // The sigma a reading is published with is the WHOLE error budget: the fit's own, and what the
+                // halves and the whole disagree on — a pitch that moves under the span, two planes read as one,
+                // a model that does not fit, all show there and nowhere else. Counted whole, their own noise
+                // with it: the halves are the only check there is on the model, and a check too noisy to see a
+                // cent (their difference known no better than halvesResolveCents) vouches for nothing. Past
+                // publishSigmaCents the promise — within a cent, or nothing — does not hold: the lane waits.
+                const double sw = w.sigmaCents, sa = a.sigmaCents, sb = b.sigmaCents;
+                const double dh = (double) a.cents - b.cents, dw = (double) w.cents - 0.5 * ((double) a.cents + b.cents);
+                const double total = std::sqrt (sw * sw + dh * dh + dw * dw);
+                keep = total <= publishSigmaCents && std::sqrt (sa * sa + sb * sb) <= halvesResolveCents;
+                w.sigmaCents = (float) total;
+            }
+            if (! keep)
             {
                 const float lvl = w.levelDb, tgt = w.targetHz;
                 w = {};
@@ -327,14 +498,14 @@ public:
         }
         whole.mono    = heard == 1;
         whole.strings = tuning.strings;
-        whole.spanMs  = (float) (1000.0 * N / fsD);
-        whole.strum   = strumCount;
+        whole.spanMs  = (float) (1000.0 * job.N / fsD);
+        whole.endSec  = (double) (job.start + (std::uint64_t) job.N) / fsD;
+        whole.strum   = job.strum;
         out = whole;
-        return true;
     }
 
-    /** One span's analysis into `r` — the whole span or one of its halves. */
-    bool analyseSpan (std::uint64_t start, int N, Reading& r, double sigmaGate)
+    /** A span's spectrum, peaks and components: the first step of its analysis. False below the level floor. */
+    bool spanBegin (std::uint64_t start, int N)
     {
         // Hann over the span, zero-padded at least twice.
         spanN = N;
@@ -363,29 +534,9 @@ public:
         findPeaks();
         coarse();
         buildComponents();
-
-        for (int sweep = 0; sweep < sweeps; ++sweep)
-        {
-            if (sweep > 0)
-            {
-                rehomeCoincident();
-                relocateStrays();
-            }
-            buildClusters();
-            for (int ci = 0; ci < nClusters; ++ci)
-                fitClusterWithPriors (ci, sweep);
-        }
-
-        decide (r, sigmaGate);
         return true;
     }
 
-    const Reading& reading() const noexcept { return out; }
-
-    /** What the analysis decimates to, Hz — for tests and cost accounting. */
-    double analysisRate() const noexcept { return fsD; }
-
-private:
     using cd = std::complex<double>;
     static constexpr double pi = 3.14159265358979323846;
     static constexpr double centsPerLog = 1200.0 / 0.69314718055994530942;   // cents per natural-log unit
@@ -429,11 +580,19 @@ private:
     static constexpr double publishSigmaCents = 0.5;   // a reading known no better is not one
     static constexpr double halvesAgreeCents  = 1.0;   // the span's halves must read the same pitch
     static constexpr double halvesDecayAgree  = 0.3;   // ... and see the first partial die away alike, 1/s
+    static constexpr double halvesDecayRise   = 0.1;   // ... never faster in the second, 1/s (their noise allowed for)
+    static constexpr double halvesResolveCents = 0.7;  // ... and know their difference to this: a check that can see a cent
     static constexpr double vouchCents        = 5.0;   // the first partial against the string's other partials
     static constexpr double mainsDecaySec     = 8.0;   // on a mains line, a string must be seen to die away
     static constexpr int    maxHumK           = 20;    // mains harmonics modelled, as far as they stand
     static constexpr double quietDropDb       = 35.0;  // the mains is learned only this far under the last strum
-    static constexpr double humFlatDb         = 0.35;  // a mains line is as loud in both halves of its stretch
+    static constexpr double humFlatDb         = 0.1;   // a mains line is as loud in both halves of its stretch (a partial
+                                                       // dying with tau 26 s drops this much in 0.3 s)
+    static constexpr double humSteadyDb       = 0.25;  // ... and so is the whole stretch: a background, not a ringing chord
+    static constexpr double mainsWanderHz     = 0.3;   // how far the mains strays off 50 / 60 Hz — k times that at the k-th
+    static constexpr double mainsDriftHz      = 0.06;  // how far it moves within a span once learned, sd
+    static constexpr double tickWork          = 2.0e6; // the analysis a timer tick carries, at most (and one step more,
+                                                       // 0.6 ms at most): 2.7 ms on an i9-13900H, 1.9 ms on an M-series Mac
     static constexpr double heardRelDb   = -40.0;   // a string this far under the loudest is not heard
     static constexpr double maskedSigmaCents = 0.25;  // a coincident string known no better is masked
     static constexpr double maskedShare  = 0.01;    // a masked string leaves less than this of its own energy unexplained
@@ -473,6 +632,7 @@ private:
 
     void retarget()
     {
+        job.busy = false;   // a span in flight was analysed for the strings it had
         for (int s = 0; s < maxStrings; ++s)
             target[(size_t) s] = a4 * std::pow (2.0, (tuning.midi[(size_t) s] - 69) / 12.0);
 
@@ -569,9 +729,13 @@ private:
         }
     }
 
-    /** Mains lines in the stretch before an attack: 50 or 60 Hz and their harmonics, each a peak
-        standing on its exact line well above its surroundings. Kept until the next quiet stretch
-        says otherwise. */
+    /** The mains in the stretch before an attack: 50 or 60 Hz and its harmonics, TRACKED. The grid is never
+        exactly on its nominal (49.9-50.1 Hz any day, more on events), and its k-th harmonic stands k times as
+        far off k x 50: so each harmonic is the strongest peak within mainsWanderHz k of its nominal line,
+        standing well above its surroundings and as loud at the stretch's end as at its start; the mains is
+        fitted from the series of those (a line off the series dropped), and a harmonic the search missed — a
+        louder peak beside it — is probed again where the fit puts it. Kept until the next quiet stretch says
+        otherwise. */
     void learnHum()
     {
         lastHumAt = histCount;
@@ -583,45 +747,139 @@ private:
         if (end <= start || (int) (end - start) < (int) std::lround (0.35 * fsD))
             return;
 
-        const int n = (int) (end - start);
+        const int n = (int) (end - start), hn = n / 2;
         const double T = n / fsD;
 
-        // Quiet: nothing strummed yet, or the last strum died away quietDropDb under its loudest.
-        // Otherwise the mask learned in the last quiet stands.
-        double pw0 = 0.0;
+        // Quiet: nothing strummed yet, or the last strum died away quietDropDb under its loudest. Otherwise
+        // the mask learned in the last quiet stands.
+        double pwA = 0.0, pwB = 0.0;
         for (int i = 0; i < n; ++i)
         {
             const double v = hist[(size_t) ((start + (std::uint64_t) i) & (histCap - 1))];
-            pw0 += v * v;
+            (i < hn ? pwA : pwB) += v * v;
         }
+        const double pw0 = pwA + pwB;
         if (strummed && pw0 / n > strumPeak * std::pow (10.0, -quietDropDb / 10.0))
             return;
-        int    bestMains = 0, bestCount = 0;
-        unsigned bestMask = 0;
-        double bestPow = 0.0;
+        if (pw0 <= 0.0)
+        {
+            humHz   = 0.0;   // nothing at all: no mains either
+            humMask = 0;
+            return;
+        }
+        // ... and steady: as loud in its second half as in its first — a background. A chord still ringing
+        // falls (the tuner opened onto one: nothing strummed yet, no strum to measure the quiet against).
+        const double steady = 10.0 * std::log10 ((pwB / (n - hn) + 1.0e-30) / (pwA / hn + 1.0e-30));
+        if (std::abs (steady) > humSteadyDb)
+            return;
 
+        // The stretch's spectrum, a quarter of its bin apart at most.
+        int Lh = 1;
+        while (Lh < 4 * n && Lh < maxL)
+            Lh <<= 1;
+        for (int i = 0; i < n; ++i)
+            humSpec[(size_t) i] = cd (hist[(size_t) ((start + (std::uint64_t) i) & (histCap - 1))] * (0.5 - 0.5 * std::cos (2.0 * pi * i / n)), 0.0);
+        for (int i = n; i < Lh; ++i)
+            humSpec[(size_t) i] = cd {};
+        fft (humSpec.data(), Lh);
+        for (int p = 0; p <= Lh / 2; ++p)
+            humMag[(size_t) p] = std::abs (humSpec[(size_t) p]);
+        const double binHz = fsD / Lh;
+        const auto magAt = [&] (double f) { return humMag[(size_t) std::clamp ((int) std::lround (f / binHz), 0, Lh / 2)]; };
+        const auto floorAt = [&] (double f)
+        {
+            double fl[4];
+            for (int i = 0; i < 4; ++i)
+                fl[i] = magAt (f + (i < 2 ? -1.0 : 1.0) * (4.0 + 2.0 * (i & 1)) / T);
+            std::sort (fl, fl + 4);
+            return 0.5 * (fl[0] + fl[1]) + 1.0e-12;
+        };
+        // A line stands well above its surroundings, and is as loud in the stretch's second half as in its
+        // first — a string dies away, the mains does not (the halves' own noise allowed for).
+        const auto stands = [&] (double f, double a)
+        {
+            const double floorMag = floorAt (f);
+            if (! (a > 3.16 * floorMag && a > 0.25 * rmsFloor * n * 0.25))
+                return false;
+            const double q1 = std::abs (dftAt (start, hn, f)), q2 = std::abs (dftAt (start + (std::uint64_t) hn, hn, f));
+            return q1 > 0.0 && q2 > 0.0 && std::abs (20.0 * std::log10 (q2 / q1)) <= humFlatDb + 10.0 * floorMag / a;
+        };
+
+        double   bestHz = 0.0, bestPow = 0.0;
+        int      bestCount = 0;
+        unsigned bestMask = 0;
         for (const int m : { 50, 60 })
         {
-            unsigned mask = 0;
-            int count = 0;
-            double pw = 0.0;
+            std::array<int, maxHumK + 1> kk {};
+            std::array<double, maxHumK + 1> fk {}, ak {};
+            int nf = 0;
             for (int k = 1; k <= maxHumK && k * m <= fModel; ++k)
             {
-                const double f  = k * m;
-                const double a0 = std::abs (dftAt (start, n, f));
-                const double al = std::abs (dftAt (start, n, f - 0.35 / T));
-                const double ar = std::abs (dftAt (start, n, f + 0.35 / T));
-                double fl[4];
-                for (int i = 0; i < 4; ++i)
-                    fl[i] = std::abs (dftAt (start, n, f + (i < 2 ? -1.0 : 1.0) * (4.0 + 2.0 * (i & 1)) / T));
-                std::sort (fl, fl + 4);
-                const double floorMag = 0.5 * (fl[0] + fl[1]) + 1.0e-12;
-                // And flat: a line is as loud in the stretch's second half as in its first — a string
-                // dies away, the mains does not.
-                const int hn = n / 2;
-                const double q1 = std::abs (dftAt (start, hn, f)), q2 = std::abs (dftAt (start + (std::uint64_t) hn, hn, f));
-                const bool flat = q1 > 0.0 && q2 > 0.0 && std::abs (20.0 * std::log10 (q2 / q1)) <= humFlatDb;
-                if (a0 >= al && a0 >= ar && a0 > 3.16 * floorMag && a0 > 0.25 * rmsFloor * n * 0.25 && flat)
+                const int p0 = std::max (1, (int) std::ceil ((k * m - mainsWanderHz * k) / binHz));
+                const int p1 = std::min (Lh / 2 - 1, (int) std::floor ((k * m + mainsWanderHz * k) / binHz));
+                int best = -1;
+                for (int p = p0; p <= p1; ++p)
+                    if (humMag[(size_t) p] >= humMag[(size_t) p - 1] && humMag[(size_t) p] >= humMag[(size_t) p + 1]
+                        && (best < 0 || humMag[(size_t) p] > humMag[(size_t) best]))
+                        best = p;
+                if (best < 0)
+                    continue;
+                const double a = std::log (humMag[(size_t) best - 1] + 1e-300), b = std::log (humMag[(size_t) best] + 1e-300),
+                             c = std::log (humMag[(size_t) best + 1] + 1e-300);
+                const double den = a - 2.0 * b + c;
+                const double dlt = den < 0.0 ? std::clamp (0.5 * (a - c) / den, -0.5, 0.5) : 0.0;
+                const double f = (best + dlt) * binHz, mg = std::exp (b - 0.25 * (a - c) * dlt);
+                if (stands (f, mg))
+                {
+                    kk[(size_t) nf] = k;
+                    fk[(size_t) nf] = f;
+                    ak[(size_t) nf++] = mg;
+                }
+            }
+
+            // The mains from the series: f_k = k m, each line weighted as well as it is measured; the line
+            // furthest off it dropped while one is further than a quarter of the stretch's bin.
+            double mf = 0.0;
+            while (nf > 0)
+            {
+                double num = 0.0, den = 0.0;
+                for (int i = 0; i < nf; ++i)
+                {
+                    const double w = ak[(size_t) i] * ak[(size_t) i];
+                    num += w * kk[(size_t) i] * fk[(size_t) i];
+                    den += w * kk[(size_t) i] * kk[(size_t) i];
+                }
+                mf = num / den;
+                int worst = 0;
+                for (int i = 1; i < nf; ++i)
+                    if (std::abs (fk[(size_t) i] - kk[(size_t) i] * mf) > std::abs (fk[(size_t) worst] - kk[(size_t) worst] * mf))
+                        worst = i;
+                if (std::abs (fk[(size_t) worst] - kk[(size_t) worst] * mf) <= 0.25 / T)
+                    break;
+                for (int i = worst; i < nf - 1; ++i)
+                {
+                    kk[(size_t) i] = kk[(size_t) i + 1];
+                    fk[(size_t) i] = fk[(size_t) i + 1];
+                    ak[(size_t) i] = ak[(size_t) i + 1];
+                }
+                --nf;
+            }
+
+            unsigned mask = 0;
+            double pw = 0.0;
+            for (int i = 0; i < nf; ++i)
+            {
+                mask |= 1u << kk[(size_t) i];
+                pw += ak[(size_t) i] * ak[(size_t) i];
+            }
+            int count = nf;
+            // A harmonic the search missed, where the series puts it: a peak there, standing.
+            for (int k = 1; nf > 0 && k <= maxHumK && k * mf <= fModel; ++k)
+            {
+                if ((mask >> k) & 1u)
+                    continue;
+                const double f = k * mf, a0 = std::abs (dftAt (start, n, f));
+                if (a0 >= magAt (f - 0.35 / T) && a0 >= magAt (f + 0.35 / T) && stands (f, a0))
                 {
                     mask |= 1u << k;
                     ++count;
@@ -630,19 +888,20 @@ private:
             }
             if (count > bestCount || (count == bestCount && pw > bestPow))
             {
-                bestMains = count > 0 ? m : 0;
+                bestHz    = count > 0 ? mf : 0.0;
                 bestCount = count;
                 bestMask  = mask;
                 bestPow   = pw;
             }
         }
 
-        humMains = bestMains;
-        humMask  = bestMask;
+        humHz   = bestHz;
+        humMask = bestMask;
     }
 
     cd dftAt (std::uint64_t start, int n, double f) const
     {
+        work += 8.0 * n;
         const cd step = std::polar (1.0, -2.0 * pi * f / fsD);
         cd ph (1.0, 0.0), acc {};
         for (int i = 0; i < n; ++i)
@@ -659,6 +918,7 @@ private:
 
     void fft (cd* a, int n) const
     {
+        work += 2.5 * n * std::log2 ((double) n);
         for (int i = 1, j = 0; i < n; ++i)
         {
             int bit = n >> 1;
@@ -754,10 +1014,10 @@ private:
         const double T = spanN / fsD;
         const double thr = std::max (5.6 * noiseMag, strongest * std::pow (10.0, -50.0 / 20.0));
 
-        if (humMains > 0)
+        if (spanHumHz > 0.0)
             for (int k = 1; k <= maxHumK; ++k)
-                if ((humMask >> k) & 1u)
-                    addExplained (k * humMains, true);
+                if ((spanHumMask >> k) & 1u)
+                    addExplained (k * spanHumHz, true);
 
         const int S = tuning.strings;
         for (int oi = 0; oi < S; ++oi)
@@ -838,17 +1098,54 @@ private:
         }
     }
 
-    /** Within `radius` Hz of a 50 or 60 Hz harmonic — learned or not: the second-partial path never
-        takes one, and a first partial on one must be seen to die away (decide). */
-    static bool onMainsLine (double f, double radius) noexcept
+    /** Where a 50 or 60 Hz mains's k-th harmonic may stand, learned or not: within mainsWanderHz k of k x 50
+        (k x 60) — the grid wanders, its harmonics k times as far — or `unison` Hz, whichever is wider. The
+        second-partial path never takes a peak there, and a first partial there must be seen to die away
+        (decide). */
+    static bool onMainsLine (double f, double unison) noexcept
     {
         for (const int m : { 50, 60 })
         {
             const double k = std::round (f / m);
-            if (k >= 1.0 && std::abs (f - k * m) < radius)
+            if (k >= 1.0 && std::abs (f - k * m) < std::max (unison, mainsWanderHz * k))
                 return true;
         }
         return false;
+    }
+
+    /** On a harmonic of the mains as learned for this span, within `unison` Hz and the mains's own drift. */
+    bool onLearnedLine (double f, double unison) const noexcept
+    {
+        if (spanHumHz <= 0.0)
+            return false;
+        const double k = std::round (f / spanHumHz);
+        return k >= 1.0 && k <= maxHumK && ((spanHumMask >> (int) k) & 1u)
+            && std::abs (f - k * spanHumHz) < unison + mainsDriftHz * k;
+    }
+
+    /** String s's partials stand on an exactly harmonic series of its first one (component k1) and none of
+        them dies away: a mains series — or a hum off any grid — not a string. A string's partials stray off
+        the harmonic series (stiffness, its ends: cents), and a string dies away. Takes two partials measured
+        to half a cent to say so. */
+    bool exactSeries (int s, int k1) const
+    {
+        const auto& c1 = comps[(size_t) k1];
+        const double sd1 = std::sqrt (c1.varW) / c1.w * centsPerLog;
+        int on = 0;
+        for (int k = 0; k < nComps; ++k)
+        {
+            const auto& c = comps[(size_t) k];
+            if (c.string != s || ! c.active || c.harm < 2 || ! std::isfinite (c.varW))
+                continue;
+            const double sd = std::sqrt (c.varW) / c.w * centsPerLog;
+            if (sd > 0.5)
+                continue;
+            const double dev = std::log (c.w / (c.harm * c1.w)) * centsPerLog;
+            if (std::abs (dev) > std::max (0.25, 3.0 * std::sqrt (sd * sd + sd1 * sd1)) || c.d * fsD >= 1.0 / mainsDecaySec)
+                return false;
+            ++on;
+        }
+        return on >= 2;
     }
 
     void addExplained (double f, bool mains = false)
@@ -960,17 +1257,17 @@ private:
                 comps[(size_t) nComps++] = c;
             }
         }
-        if (humMains > 0)
+        if (spanHumHz > 0.0)
             for (int k = 1; k <= maxHumK && nComps < maxComps; ++k)
-                if (((humMask >> k) & 1u) && k * humMains <= fModel)
+                if (((spanHumMask >> k) & 1u) && k * spanHumHz <= fModel)
                 {
                     Comp c;
                     c.string = -1;
                     c.harm   = k;
-                    c.w  = 2.0 * pi * k * humMains / fsD;
+                    c.w  = 2.0 * pi * k * spanHumHz / fsD;
                     c.d  = 0.0;
                     c.pw = c.w;
-                    c.psw = 2.0 * pi * 0.06 * k / fsD;
+                    c.psw = 2.0 * pi * mainsDriftHz * k / fsD;
                     c.pd = 0.0;
                     c.psd = 0.3 / spanN;
                     comps[(size_t) nComps++] = c;
@@ -1016,6 +1313,7 @@ private:
 
     void kernelRow (double w, double d, int p0, int P, cd* S1, cd* dS1, cd* S2, cd* dS2, bool image) const
     {
+        work += 16.0 * P;
         const double N  = spanN;
         const double wp = 2.0 * pi * p0 / L;
         const cd stepq = std::polar (1.0, -2.0 * pi / L);
@@ -1171,6 +1469,7 @@ private:
     void normal (int P, int np, const double* J, const double* r, const int* idx, int K, const double* th,
                  double* A, double* g, bool withPriors) const
     {
+        work += 2.0 * P * np * (np + 1);
         for (int a = 0; a < np; ++a)
         {
             g[a] = 0.0;
@@ -1813,25 +2112,28 @@ private:
         the string's OWN first partial, measured (not the model's extrapolation — real partials stray off
         the stiff-string formula by cents), vouched for by its other partials, known to `sigmaGate`, and
         not standing on another string's partial or on a mains line it cannot be told from. */
-    void decide (Reading& r, double sigmaGate)
+    void decideBegin()
     {
-        const int S = tuning.strings;
-        std::array<double, maxStrings> level {};
-        double loudest = 0.0;
+        dLevel = {};
+        dLoudest = 0.0;
         for (int k = 0; k < nComps; ++k)
         {
             const auto& c = comps[(size_t) k];
             if (c.string >= 0 && c.harm <= 2)
-                level[(size_t) c.string] = std::max (level[(size_t) c.string], amplitudeOf (c));
+                dLevel[(size_t) c.string] = std::max (dLevel[(size_t) c.string], amplitudeOf (c));
         }
-        for (int s = 0; s < S; ++s)
-            loudest = std::max (loudest, level[(size_t) s]);
+        for (int s = 0; s < tuning.strings; ++s)
+            dLoudest = std::max (dLoudest, dLevel[(size_t) s]);
+    }
 
+    /** String s's verdict into `r` (decideBegin first). */
+    void decideString (int s, Reading& r, double sigmaGate)
+    {
+        const auto& level = dLevel;
+        const double loudest = dLoudest;
         // The geometry is the WHOLE span's, also when a half is analysed: what is published is resolved
         // by the whole span, and a half must not mask what the whole tells apart.
         const double unisonHz = unisonBins / geometrySec;
-        int heard = 0;
-        for (int s = 0; s < S; ++s)
         {
             auto& o = r.string[(size_t) s];
             const auto& st = strings[(size_t) s];
@@ -1839,7 +2141,7 @@ private:
             o.targetHz = (float) target[(size_t) s];
             o.levelDb  = level[(size_t) s] > 0.0 ? (float) (20.0 * std::log10 (level[(size_t) s])) : -200.0f;
             if (st.status == 0)
-                continue;
+                return;
 
             // Masked only under another STRING: a mains line is held to its line and to no decay,
             // so a string standing on it would still show — one that does not is not there.
@@ -1848,7 +2150,7 @@ private:
             if (! loudEnough || (st.status == 2 && ! addsSomething (s)))
             {
                 o.heard = unheard;
-                continue;
+                return;
             }
 
             // The first partial as measured.
@@ -1859,7 +2161,7 @@ private:
             if (k1 < 0 || ! std::isfinite (comps[(size_t) k1].varW))
             {
                 o.heard = unheard;
-                continue;
+                return;
             }
             const auto&  c1 = comps[(size_t) k1];
             const double hz = c1.w * fsD / (2.0 * pi);
@@ -1867,7 +2169,7 @@ private:
             if (hz < st.lo * 0.999 || hz > st.hi * 1.001)
             {
                 o.heard = unheard;
-                continue;
+                return;
             }
 
             // On another string's partial — where it was fitted, or where its own string puts it —
@@ -1889,19 +2191,24 @@ private:
             if (onOther)
             {
                 o.heard = Heard::masked;
-                continue;
+                return;
             }
 
-            // On a mains line: only a string seen to die away, and never on a line the mains is known to hold.
-            if (onMainsLine (hz, unisonHz))
+            // On a mains line: never on a line the mains is known to hold (it is tracked: the line is where it
+            // stands, not where 50 x k would be), and elsewhere where the mains may stand only a string seen to
+            // die away.
+            const bool dies = c1.d * fsD >= 1.0 / mainsDecaySec;
+            if (onLearnedLine (hz, unisonHz) || (onMainsLine (hz, unisonHz) && ! dies))
             {
-                const bool learned = humMains > 0 && std::abs (hz - std::round (hz / humMains) * humMains) < unisonHz
-                                  && ((humMask >> (int) std::round (hz / humMains)) & 1u);
-                if (learned || c1.d * fsD < 1.0 / mainsDecaySec)
-                {
-                    o.heard = Heard::no;
-                    continue;
-                }
+                o.heard = Heard::no;
+                return;
+            }
+            // ... nor a first partial whose series is exactly harmonic and never dies: a mains series off any
+            // grid, a hum, a synth — not a string.
+            if (! dies && exactSeries (s, k1))
+            {
+                o.heard = Heard::no;
+                return;
             }
 
             // Vouched for: the string's other partials, through its model, put the first one within
@@ -1915,14 +2222,14 @@ private:
                 if (std::abs (dc) > std::max (vouchCents, 3.0 * std::sqrt (var * centsPerLog * centsPerLog + sd * sd)))
                 {
                     o.heard = unheard;
-                    continue;
+                    return;
                 }
             }
 
             if (sd > sigmaGate)
             {
                 o.heard = Heard::no;   // the lane waits
-                continue;
+                return;
             }
 
             decayOf[(size_t) s] = c1.d * fsD;
@@ -1930,9 +2237,7 @@ private:
             o.cents      = (float) (1200.0 * std::log2 (hz / target[(size_t) s]));
             o.sigmaCents = (float) sd;
             o.heard      = std::abs (o.cents) > farCents ? Heard::far : Heard::near;
-            ++heard;
         }
-        r.mono = heard == 1;
     }
 
     /** Does string s explain anything its neighbours in the clusters do not? Take it out and let
@@ -2035,8 +2340,17 @@ private:
     std::uint64_t lastAttack = 0, lastAnalysed = 0, settleN = 600, cadenceN = 480;
     int    minN = 720;
     unsigned strumCount = 0, analysedStrum = ~0u;
-    int    humMains = 0;
+    double humHz = 0.0;              // the mains as tracked: its fundamental (0: none learned)
     unsigned humMask = 0;            // bit k: the k-th mains harmonic stands
+    double spanHumHz = 0.0;          // ... as the span in analysis holds it — see startJob
+    unsigned spanHumMask = 0;
+    std::vector<cd> humSpec;         // learnHum's own spectrum: the span in analysis keeps `spec` across ticks
+    std::vector<double> humMag;
+    Job job {};
+    mutable double work = 0.0;       // what the analysis has done: its inner loops' arithmetic, counted where it is done
+                                     // (FFTs, kernels, normal equations, single-bin DFTs) — the tick's budget is spent in it
+    std::array<double, maxStrings> dLevel {};   // decideBegin, for decideString
+    double dLoudest = 0.0;
     double bbLevel = 0.0, levelA = 0.05, strumPeak = 0.0;   // the broadband level, and its peak since the last strum
     bool   strummed = false;
     std::uint64_t lastHumAt = 0;
