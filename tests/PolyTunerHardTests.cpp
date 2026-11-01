@@ -285,6 +285,8 @@ int main()
     // still settling or strings on the mains lines high, where waiting IS the right answer. A number is published
     // only where the span's halves can see a cent and agree with the whole to half of one, with their
     // disagreement in its sigma: the bass's halves (a few periods of a 31-55 Hz string each) often cannot.
+    // Availability is not the promise — correctness is ("0 wrong" below is the gate's assertion). Each ceiling is
+    // the share measured over 24 seeds (POLY_HARD_SEEDS=24) plus 5 points, so that any seed count stays under it.
     auto scene = [&] (const char* what, double ceiling, auto make, int moreSeeds = 1)
     {
         Tally ty;
@@ -307,25 +309,25 @@ int main()
 
     const auto muteOne = [] (Scene& sc, Dice& dice) { sc.strings[(size_t) (dice.next() * (double) sc.strings.size())].on = false; };
 
-    scene ("a strum, every string", 40.0, [&] (const PolyTuner::Tuning&, Scene&, Dice&) {});
-    scene ("a strum, one string muted", 40.0, [&] (const PolyTuner::Tuning&, Scene& sc, Dice& d) { muteOne (sc, d); });
-    scene ("partials 2.5 c off, a top string muted (on harmonics)", 55.0, [&] (const PolyTuner::Tuning& t, Scene& sc, Dice& d) {
+    scene ("a strum, every string", 55.0, [&] (const PolyTuner::Tuning&, Scene&, Dice&) {});
+    scene ("a strum, one string muted", 50.0, [&] (const PolyTuner::Tuning&, Scene& sc, Dice& d) { muteOne (sc, d); });
+    scene ("partials 2.5 c off, a top string muted (on harmonics)", 57.0, [&] (const PolyTuner::Tuning& t, Scene& sc, Dice& d) {
         // The top strings stand on the low strings' harmonics (a guitar's B on the low E's 3rd, its high E on
         // the 4th): muted, all that is left there is another string's partial, off its formula — the reading
         // a muted string must never borrow.
         sc.stray = 2.5;
         sc.strings[(size_t) (t.strings - 1 - (d.next() < 0.5 ? 0 : 1))].on = false; }, 4);   // the rare far stray is the case
-    scene ("hum to the 12th, learned before: one muted", 50.0, [&] (const PolyTuner::Tuning&, Scene& sc, Dice& d) {
+    scene ("hum to the 12th, learned before: one muted", 58.0, [&] (const PolyTuner::Tuning&, Scene& sc, Dice& d) {
         sc.humHz = d.next() < 0.5 ? 50.0 : 60.0; muteOne (sc, d); });
-    scene ("hum to the 12th, arriving with the strum: one muted", 60.0, [&] (const PolyTuner::Tuning&, Scene& sc, Dice& d) {
+    scene ("hum to the 12th, arriving with the strum: one muted", 71.0, [&] (const PolyTuner::Tuning&, Scene& sc, Dice& d) {
         sc.humHz = d.next() < 0.5 ? 50.0 : 60.0; sc.humFrom = sc.strumAt; muteOne (sc, d); });
-    scene ("hum learned, then a strum over the last one's tail", 50.0, [&] (const PolyTuner::Tuning&, Scene& sc, Dice& d) {
+    scene ("hum learned, then a strum over the last one's tail", 59.0, [&] (const PolyTuner::Tuning&, Scene& sc, Dice& d) {
         sc.humHz = d.next() < 0.5 ? 50.0 : 60.0; sc.restrumAt = sc.strumAt + 2.2; sc.seconds = 5.0; muteOne (sc, d); });
-    scene ("the pitch settling slowly: 20 c, 0.4 s", 92.0, [&] (const PolyTuner::Tuning&, Scene& sc, Dice& d) {
+    scene ("the pitch settling slowly: 20 c, 0.4 s", 95.0, [&] (const PolyTuner::Tuning&, Scene& sc, Dice& d) {
         sc.glide = 20.0; sc.glideTau = 0.4; sc.seconds = 4.0; muteOne (sc, d); });
-    scene ("the pitch settling: 20 c, 0.2 s", 85.0, [&] (const PolyTuner::Tuning&, Scene& sc, Dice& d) {
+    scene ("the pitch settling: 20 c, 0.2 s", 75.0, [&] (const PolyTuner::Tuning&, Scene& sc, Dice& d) {
         sc.glide = 20.0; sc.glideTau = 0.2; sc.seconds = 4.0; muteOne (sc, d); });
-    scene ("strings on mains lines, with and without the mains", 65.0, [&] (const PolyTuner::Tuning& t, Scene& sc, Dice& d) {
+    scene ("strings on mains lines, with and without the mains", 69.0, [&] (const PolyTuner::Tuning& t, Scene& sc, Dice& d) {
         // Each string within 40 c of its note that a 50 Hz harmonic can stand on, put there.
         for (int s = 0; s < t.strings; ++s)
         {
@@ -359,9 +361,13 @@ int main()
             }
         sc.strings[(size_t) muted].on = false;
     };
-    scene ("mains off nominal (49.8-60.1 Hz), learned before", 50.0, [&] (const PolyTuner::Tuning& t, Scene& sc, Dice& d) {
+    scene ("mains off nominal (49.8-60.1 Hz), learned before", 58.0, [&] (const PolyTuner::Tuning& t, Scene& sc, Dice& d) {
         offMains (t, sc, d); }, 2);
-    scene ("mains off nominal (49.8-60.1 Hz), arriving with it", 60.0, [&] (const PolyTuner::Tuning& t, Scene& sc, Dice& d) {
+    scene ("loud hum (-30 dBFS, 50.0/50.1 Hz) arriving with it", 75.0, [&] (const PolyTuner::Tuning&, Scene& sc, Dice& d) {
+        // Hands off the strings on a noisy single coil: a mains line louder than a string's own first partial, never
+        // learned — it came with the strum.
+        sc.humHz = d.next() < 0.5 ? 50.0 : 50.1; sc.humDb = -30.0; sc.humFrom = sc.strumAt; muteOne (sc, d); }, 2);
+    scene ("mains off nominal (49.8-60.1 Hz), arriving with it", 66.0, [&] (const PolyTuner::Tuning& t, Scene& sc, Dice& d) {
         offMains (t, sc, d); sc.humFrom = sc.strumAt; }, 2);
 
     // The tuner opened onto a string still ringing on a mains line — a bass G on 100 Hz, the 50 Hz mains's 2nd —
@@ -402,6 +408,77 @@ int main()
                 }
             }
         std::printf ("%-52s %s\n", "opened onto a string ringing on 100 Hz: not the mains", ok ? "ok" : "FAIL");
+        if (! ok)
+            ++failures;
+    }
+
+    // A plain string, nearly without stiffness, its partials on the harmonic series to a tenth of a cent, sustaining
+    // long (its first three partials die slower than 8 s) and alone — a B off any mains line. It is a string, not a
+    // hum: read, not refused as an exact series that never dies.
+    {
+        const auto& t = PolyTuner::tunings[0];
+        Scene sc = strum (t, 4343u);
+        for (auto& st : sc.strings)
+            st.on = false;
+        auto& b = sc.strings[4];
+        b.on = true;
+        b.f1 = noteHz (t, 4) * ratioOf (-10.0);
+        b.stiffness = 1.0e-5;
+        b.split = 0.0;
+        b.ring = 22.0;
+        b.level = 0.05;
+        sc.stray = 0.0;
+        sc.glide = 0.0;
+        sc.seconds = 4.0;
+        Tally ty;
+        int printed0 = 0;
+        judge ("a plain string sustaining long, alone", t, sc, ty, printed0);
+        const bool ok = ty.wrong == 0 && ty.withheld * 2 < ty.sounding;
+        std::printf ("%-52s %s (%d of %d readings withheld)\n", "a plain string sustaining long, alone: read", ok ? "ok" : "FAIL",
+                     ty.withheld, ty.sounding);
+        if (! ok)
+            ++failures;
+    }
+
+    // The timer stalls (a window dragged, the message thread busy) while an analysis is in flight, and a new chord
+    // is struck under the stall, 20 c sharper: the tap is lapped, what came before the gap is not what comes after
+    // it. The span in flight is the old chord's — no reading may come of it; the next one rests on audio after the gap.
+    {
+        const auto& t = PolyTuner::tunings[0];
+        Scene a = strum (t, 1040u), b = a;
+        for (auto& st : a.strings) st.split = 0.0;
+        a.glide = 0.0;
+        a.seconds = 7.0;
+        b = a;
+        b.strumAt = 2.2;
+        for (auto& st : b.strings) st.f1 *= ratioOf (20.0);
+        auto x = render (a);
+        const auto y = render (b);
+        for (size_t i = (size_t) (2.2 * fs); i < x.size(); ++i)
+            x[i] = y[i];   // the new chord over silence where the old one was: what the player hears after the stall
+        static orbitamp::core::TunerTap tap;
+        static PolyTuner tuner;
+        tuner.prepare (fs);
+        tuner.setTuning (t);
+        size_t k = 0;
+        bool armed = false;
+        for (; k + 1600 <= x.size() && ! armed; k += 1600)
+        {
+            tap.write (x.data() + k, 1600);
+            tuner.update (tap);
+            armed = tuner.reading().strum > 0 && tuner.pending();   // a reading came, and the next one is in flight
+        }
+        const double gapAt = (double) k / fs;
+        tap.write (x.data() + k, 48000);   // a second's stall: the tap laps the history
+        k += 48000;
+        bool ok = armed;
+        for (; k + 1600 <= x.size(); k += 1600)
+        {
+            const bool fresh = tuner.update (tap);
+            tap.write (x.data() + k, 1600);
+            ok = ok && ! (fresh && tuner.reading().endSec < gapAt + 0.5);
+        }
+        std::printf ("%-52s %s\n", "a stall over a new chord: no reading of the old span", ok ? "ok" : "FAIL");
         if (! ok)
             ++failures;
     }

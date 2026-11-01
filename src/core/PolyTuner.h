@@ -262,9 +262,10 @@ public:
         {
             // The timer stalled past what the tap keeps, or the writer lapped the copy: what came before
             // the gap is not what comes after it. Start over from the oldest sample handed over, as
-            // after a pluck.
+            // after a pluck — and the span in flight, the audio before the gap, gives no reading.
             anyAttack  = true;
             lastAttack = histCount;
+            job.busy   = false;
         }
         push (chunk.data(), n);
 
@@ -282,8 +283,10 @@ public:
         if (histCount - lastHumAt >= (std::uint64_t) fsD)
             learnHum();
 
-        if (job.busy && job.strum != strumCount)
-            job.busy = false;   // a new strum: the span in flight is the last one's
+        // A new strum: the span in flight is the last one's. And a span the history has lapped (a stall of seconds)
+        // is no longer there to analyse.
+        if (job.busy && (job.strum != strumCount || histCount - job.start >= (std::uint64_t) histCap))
+            job.busy = false;
         if (! job.busy)
         {
             if (histCount < spanStart() + (std::uint64_t) minN)
@@ -322,6 +325,9 @@ public:
     double   mainsHz()   const noexcept { return humHz; }
     unsigned mainsMask() const noexcept { return humMask; }
 
+    /** Whether the timer has a span's analysis in flight: the reading it will give is still to come. */
+    bool pending() const noexcept { return job.busy; }
+
 private:
     //==========================================================================
     // The three analyses of a span — whole, first half, second half — as steps: a span's spectrum, a sweep's
@@ -339,6 +345,8 @@ private:
         int step = 0;        // 0 the spectrum, 1 a sweep's clusters, 2 their fits, 3 the strings, 4 the part done
         int sweep = 0, ci = 0, s = 0;
         bool ok[3] {};
+        int  retries = 0;       // the whole span analysed again, its strings' refused mains lines set aside
+        bool refused = false;   // ... and a string refused one in the pass just done
         std::array<double, maxStrings> decay[2] {};
     };
 
@@ -360,6 +368,7 @@ private:
         // the next span's.
         spanHumHz   = humHz;
         spanHumMask = humMask;
+        refusedHz.fill (0.0);
         geometrySec = N / fsD;
         return true;
     }
@@ -436,6 +445,18 @@ private:
             default:
                 if (j.part > 0)
                     j.decay[j.part - 1] = decayOf;
+                // A string that took a mains line for its first partial (a hum come with the strum, louder than the
+                // string's own) was refused — and the line's series stood in for its partials, leaving its real
+                // ones to its neighbours, which then read them as their own. So the whole span again, those lines
+                // set aside as the mains's, every string walked from what is left — while a pass refuses a line
+                // the last did not, maxRetries times at most.
+                if (j.part == 0 && j.refused && j.retries < maxRetries)
+                {
+                    ++j.retries;
+                    j.refused = false;
+                    j.step = 0;
+                    return 0;
+                }
                 if (++j.part < 3)
                 {
                     j.step = 0;
@@ -591,6 +612,7 @@ private:
     static constexpr double humSteadyDb       = 0.25;  // ... and so is the whole stretch: a background, not a ringing chord
     static constexpr double mainsWanderHz     = 0.3;   // how far the mains strays off 50 / 60 Hz — k times that at the k-th
     static constexpr double mainsDriftHz      = 0.06;  // how far it moves within a span once learned, sd
+    static constexpr int    maxRetries        = 3;     // the whole span analysed again for refused mains lines, at most
     static constexpr double tickWork          = 2.0e6; // the analysis a timer tick carries, at most (and one step more,
                                                        // 0.6 ms at most): 2.7 ms on an i9-13900H, 1.9 ms on an M-series Mac
     static constexpr double heardRelDb   = -40.0;   // a string this far under the loudest is not heard
@@ -1013,11 +1035,16 @@ private:
         nExplained = 0;
         const double T = spanN / fsD;
         const double thr = std::max (5.6 * noiseMag, strongest * std::pow (10.0, -50.0 / 20.0));
+        coarseThr = thr;
 
         if (spanHumHz > 0.0)
             for (int k = 1; k <= maxHumK; ++k)
                 if ((spanHumMask >> k) & 1u)
                     addExplained (k * spanHumHz, true);
+        // A first partial refused as a mains line (see stepJob): the line and its harmonics are the mains's.
+        for (int s = 0; s < tuning.strings; ++s)
+            for (int h = 1; refusedHz[(size_t) s] > 0.0 && h * refusedHz[(size_t) s] <= fModel; ++h)
+                addExplained (h * refusedHz[(size_t) s], true);
 
         const int S = tuning.strings;
         for (int oi = 0; oi < S; ++oi)
@@ -1123,10 +1150,52 @@ private:
             && std::abs (f - k * spanHumHz) < unison + mainsDriftHz * k;
     }
 
+    /** f is the h-th partial (h = 2, 3) of a fundamental at f / h that the analysis missed: peaks at two of
+        f j / h (j not a multiple of h; peaks over the coarse threshold, not a stronger one's sidelobe) that no other
+        string's partial and no mains line explains. A string has nothing of its own between its partials. */
+    bool octaveOfAnother (int s, double f, double unison) const
+    {
+        for (const int h : { 2, 3 })
+        {
+            int found = 0;
+            for (int j = 1; j <= 2 * h + 1; ++j)
+                if (j % h != 0)
+                    found += unownedPeak (s, f * j / h, unison) ? 1 : 0;
+            if (found >= 2)
+                return true;
+        }
+        return false;
+    }
+
+    /** A peak at g over the coarse threshold that no other string's partial and no mains line explains. */
+    bool unownedPeak (int s, double g, double unison) const
+    {
+        {
+            const double tol = std::max (unison, g * 3.0 / centsPerLog);
+            if (g < 18.0 || g > fModel || onMainsLine (g, unison))
+                return false;
+            bool peak = false;
+            for (int i = 0; i < nPeaks && ! peak; ++i)
+                peak = peaks[(size_t) i].ok && std::abs (peaks[(size_t) i].f - g) < tol && peaks[(size_t) i].m >= coarseThr;
+            if (! peak)
+                return false;
+            for (int k = 0; k < nComps; ++k)
+            {
+                const auto& c = comps[(size_t) k];
+                if (c.string >= 0 && c.string != s && c.active && strings[(size_t) c.string].status != 0
+                    && std::abs (c.w * fsD / (2.0 * pi) - g) < tol)
+                    return false;
+            }
+            return true;
+        }
+    }
+
     /** String s's partials stand on an exactly harmonic series of its first one (component k1) and none of
         them dies away: a mains series — or a hum off any grid — not a string. A string's partials stray off
         the harmonic series (stiffness, its ends: cents), and a string dies away. Takes two partials measured
-        to half a cent to say so. */
+        to half a cent to say so, each on the series within what it is measured to (3 sd, and 0.03 c of the fit's
+        own floor) — a plain string nearly without stiffness (B 1e-5 puts its 3rd partial 0.07 c off) that rings
+        long is still a string. Partials above the band in use are fitted for their leakage only: not counted. */
     bool exactSeries (int s, int k1) const
     {
         const auto& c1 = comps[(size_t) k1];
@@ -1135,13 +1204,13 @@ private:
         for (int k = 0; k < nComps; ++k)
         {
             const auto& c = comps[(size_t) k];
-            if (c.string != s || ! c.active || c.harm < 2 || ! std::isfinite (c.varW))
+            if (c.string != s || ! c.active || c.shield || c.harm < 2 || ! std::isfinite (c.varW))
                 continue;
             const double sd = std::sqrt (c.varW) / c.w * centsPerLog;
             if (sd > 0.5)
                 continue;
             const double dev = std::log (c.w / (c.harm * c1.w)) * centsPerLog;
-            if (std::abs (dev) > std::max (0.25, 3.0 * std::sqrt (sd * sd + sd1 * sd1)) || c.d * fsD >= 1.0 / mainsDecaySec)
+            if (std::abs (dev) > 0.03 + 3.0 * std::sqrt (sd * sd + sd1 * sd1) || c.d * fsD >= 1.0 / mainsDecaySec)
                 return false;
             ++on;
         }
@@ -2124,6 +2193,43 @@ private:
         }
         for (int s = 0; s < tuning.strings; ++s)
             dLoudest = std::max (dLoudest, dLevel[(size_t) s]);
+
+        // A mains not learned (it came with the strum) but there all the same: peaks on three or more of its
+        // possible lines that no string's partial and no learned line explains.
+        mainsHeard = false;
+        const double unison = unisonBins / geometrySec;
+        for (const int m : { 50, 60 })
+        {
+            int lines = 0;
+            for (int k = 1; k <= maxHumK && k * m <= fModel; ++k)
+            {
+                const double r = std::max (unison, mainsWanderHz * k);
+                bool line = false;
+                for (int i = 0; i < nPeaks && ! line; ++i)
+                {
+                    const double f = peaks[(size_t) i].f;
+                    if (! peaks[(size_t) i].ok || std::abs (f - k * m) >= r || peaks[(size_t) i].m < coarseThr || onLearnedLine (f, unison))
+                        continue;
+                    line = true;
+                    for (int c = 0; c < nComps && line; ++c)
+                        line = ! (comps[(size_t) c].string >= 0 && comps[(size_t) c].active
+                                  && std::abs (comps[(size_t) c].w * fsD / (2.0 * pi) - f) < unison);
+                }
+                lines += line ? 1 : 0;
+            }
+            mainsHeard |= lines >= 3;
+        }
+    }
+
+    /** A string whose first partial, picked clean, was a line that never dies: the whole span's first pass
+        notes it, and the span is analysed once more with it set aside (stepJob). */
+    void noteRefused (int s, double hz, bool undying)
+    {
+        if (undying && job.busy && job.part == 0 && job.retries < maxRetries && strings[(size_t) s].status == 1)
+        {
+            refusedHz[(size_t) s] = hz;
+            job.refused = true;
+        }
     }
 
     /** String s's verdict into `r` (decideBegin first). */
@@ -2197,15 +2303,27 @@ private:
             // On a mains line: never on a line the mains is known to hold (it is tracked: the line is where it
             // stands, not where 50 x k would be), and elsewhere where the mains may stand only a string seen to
             // die away.
+            // And where an unlearned mains is heard in the span, a string on one of its possible lines is not told
+            // from it at all: the two are fitted as one, the reading somewhere between.
             const bool dies = c1.d * fsD >= 1.0 / mainsDecaySec;
-            if (onLearnedLine (hz, unisonHz) || (onMainsLine (hz, unisonHz) && ! dies))
+            if (onLearnedLine (hz, unisonHz) || (onMainsLine (hz, unisonHz) && (! dies || mainsHeard)))
             {
                 o.heard = Heard::no;
+                noteRefused (s, hz, ! dies);
                 return;
             }
             // ... nor a first partial whose series is exactly harmonic and never dies: a mains series off any
             // grid, a hum, a synth — not a string.
             if (! dies && exactSeries (s, k1))
+            {
+                o.heard = Heard::no;
+                noteRefused (s, hz, true);
+                return;
+            }
+            // ... nor another string's 2nd partial: peaks at the half-multiples of it that no other string
+            // explains belong to a fundamental an octave down the analysis missed (a string 2 Hz off a loud hum
+            // line is a "sidelobe" of it), and this string would read its owner's octave.
+            if (st.status == 1 && octaveOfAnother (s, hz, unisonHz))
             {
                 o.heard = Heard::no;
                 return;
@@ -2347,6 +2465,9 @@ private:
     std::vector<cd> humSpec;         // learnHum's own spectrum: the span in analysis keeps `spec` across ticks
     std::vector<double> humMag;
     Job job {};
+    double coarseThr = 0.0;          // the coarse step's peak threshold, this span
+    bool   mainsHeard = false;       // decideBegin: an unlearned mains stands in this span
+    std::array<double, maxStrings> refusedHz {};   // per string: a first partial refused as a mains line, this span
     mutable double work = 0.0;       // what the analysis has done: its inner loops' arithmetic, counted where it is done
                                      // (FFTs, kernels, normal equations, single-bin DFTs) — the tick's budget is spent in it
     std::array<double, maxStrings> dLevel {};   // decideBegin, for decideString
