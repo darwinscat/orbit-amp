@@ -4,6 +4,7 @@
 #pragma once
 
 #include "Theme.h"
+#include "OnFirst.h"
 
 namespace orbitamp
 {
@@ -82,7 +83,7 @@ public:
         for (int i = 0; i < items.size(); ++i)
             menu.addItem (i + 1, items[i], true, i == index);
 
-        menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (this),
+        onfirst::show (menu, this, juce::PopupMenu::Options().withTargetComponent (this),
                             [this] (int choice) { if (choice > 0) setSelectedIndex (choice - 1); });
     }
 

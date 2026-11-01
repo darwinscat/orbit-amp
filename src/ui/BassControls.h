@@ -261,9 +261,8 @@ inline void addLpf (Menu& m, juce::PopupMenu& into, juce::AudioProcessorValueTre
 }
 
 /** COMP's menu: exactly its ATTACK, its RELEASE and its CHARACTER, each a submenu (the owner, 01.11). */
-inline Menu compMenu (juce::AudioProcessorValueTreeState& state)
+inline Menu compMenu (juce::AudioProcessorValueTreeState& state, Menu m = {})
 {
-    Menu m;
     addChoices (m, state, params::compAttack,    "ATTACK");
     addChoices (m, state, params::compRelease,   "RELEASE");
     addChoices (m, state, params::compCharacter, "CHARACTER");
@@ -271,9 +270,8 @@ inline Menu compMenu (juce::AudioProcessorValueTreeState& state)
 }
 
 /** OCTAVE's: the -2 at the slider's top, the sub's TONE and its SUB HP, the tracking GATE. */
-inline Menu octaveMenu (juce::AudioProcessorValueTreeState& state)
+inline Menu octaveMenu (juce::AudioProcessorValueTreeState& state, Menu m = {})
 {
-    Menu m;
     addToggle (m, m.items, state, params::octaveSub2, "-2 OCTAVE AT THE TOP");
     addStepsMenu (m, state, params::octaveToneHz,  "TONE",   { 60.0f, 90.0f, 120.0f, 200.0f, 400.0f }, hzWord);
     addStepsMenu (m, state, params::octaveSubHpHz, "SUB HP", { 10.0f, 15.0f, 20.0f, 25.0f, 35.0f, 50.0f, 80.0f }, hzWord);
@@ -283,9 +281,8 @@ inline Menu octaveMenu (juce::AudioProcessorValueTreeState& state)
 
 /** ENVELOPE's: LP or BP, up or down, its range and resonance, the clean lows and their corner, the follower. Its start
     is typed on its picture. */
-inline Menu filterMenu (juce::AudioProcessorValueTreeState& state)
+inline Menu filterMenu (juce::AudioProcessorValueTreeState& state, Menu m = {})
 {
-    Menu m;
     addChoices (m, state, params::filterMode,      "MODE");
     addChoices (m, state, params::filterDirection, "DIRECTION");
     addChoices (m, state, params::filterRange,     "RANGE");
@@ -299,17 +296,15 @@ inline Menu filterMenu (juce::AudioProcessorValueTreeState& state)
 }
 
 /** CHORUS's: the centre its head swings about. Its rate and its crossover are typed on its picture. */
-inline Menu chorusMenu (juce::AudioProcessorValueTreeState& state)
+inline Menu chorusMenu (juce::AudioProcessorValueTreeState& state, Menu m = {})
 {
-    Menu m;
     addStepsMenu (m, state, params::chorusCentreMs, "CENTRE", { 6.0f, 8.0f, 10.0f, 14.0f, 20.0f }, msWord);
     return m;
 }
 
 /** DELAY's: what the guitar's DELAY block offers but MIX (its rail). */
-inline Menu delayMenu (juce::AudioProcessorValueTreeState& state)
+inline Menu delayMenu (juce::AudioProcessorValueTreeState& state, Menu m = {})
 {
-    Menu m;
     addToggle (m, m.items, state, params::delaySync, "SYNC");
     addChoices (m, state, params::delayDiv, "DIVISION");
     addStepsMenu (m, state, params::delayTimeMs, "TIME (FREE)", { 60.0f, 120.0f, 250.0f, 350.0f, 375.0f, 500.0f, 750.0f, 1000.0f, 1500.0f }, msWord);
@@ -323,9 +318,8 @@ inline Menu delayMenu (juce::AudioProcessorValueTreeState& state)
 }
 
 /** REVERB's: its type, its decay and its pre-delay — the guitar's REVERB block's but MIX. */
-inline Menu reverbMenu (juce::AudioProcessorValueTreeState& state)
+inline Menu reverbMenu (juce::AudioProcessorValueTreeState& state, Menu m = {})
 {
-    Menu m;
     addChoices (m, state, params::reverbType, "TYPE");
     addStepsMenu (m, state, params::reverbDecay,    "DECAY",     { 0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f },
                   [] (float v) { return juce::String (v, 2) + " x"; });
@@ -335,9 +329,8 @@ inline Menu reverbMenu (juce::AudioProcessorValueTreeState& state)
 
 /** The AMP's: where BLEND's clean lows give way to the capture and the clean leg's polarity; the HPF and the LPF, their
     switches and their frequencies as under the switches on the face. */
-inline Menu ampMenu (juce::AudioProcessorValueTreeState& state)
+inline Menu ampMenu (juce::AudioProcessorValueTreeState& state, Menu m = {})
 {
-    Menu m;
     addStepsMenu (m, state, params::ampBlendHz, "BLEND CROSSOVER", { 80.0f, 100.0f, 120.0f, 150.0f, 180.0f, 200.0f, 250.0f }, hzWord);
     addToggle (m, m.items, state, params::ampBlendInvert, "INVERT POLARITY");
     juce::PopupMenu hpf, lpf;
@@ -351,9 +344,8 @@ inline Menu ampMenu (juce::AudioProcessorValueTreeState& state)
 }
 
 /** The CAB's: DI/CAB, and the IR's trim, its switch and what it keeps. */
-inline Menu cabMenu (juce::AudioProcessorValueTreeState& state)
+inline Menu cabMenu (juce::AudioProcessorValueTreeState& state, Menu m = {})
 {
-    Menu m;
     addStepsMenu (m, state, params::diMix, "DI / CAB", { 0.0f, 10.0f, 20.0f, 30.0f, 50.0f, 70.0f, 100.0f },
                   [] (float v) { return juce::String (juce::roundToInt (v)) + " % DI"; });
     addToggle (m, m.items, state, params::cabTrimOn, "TRIM");
@@ -362,12 +354,30 @@ inline Menu cabMenu (juce::AudioProcessorValueTreeState& state)
     return m;
 }
 
-/** A block's menu by its name on the face. */
+/** A block's STANDBY/ON — the switch its strip arrow writes — off the chain table, by the block's name there; null for a
+    name the chain does not hold. */
+inline const char* onParamOf (const juce::String& block)
+{
+    for (const auto& link : params::chainLinks)
+        if (block == link.name)
+            return link.onParam;
+    return nullptr;
+}
+
+/** A block's menu by its name on the face: ON first, ruled off — its STANDBY/ON, ticked while it is on, a pick turning it
+    over as its strip arrow does (the owner, 01.11) — then what the block holds. */
 inline Menu blockMenu (juce::AudioProcessorValueTreeState& state, const juce::String& block)
 {
-    return block == "COMP" ? compMenu (state) : block == "OCTAVE" ? octaveMenu (state) : block == "ENVELOPE" ? filterMenu (state)
-         : block == "CHORUS" ? chorusMenu (state) : block == "DELAY" ? delayMenu (state) : block == "REVERB" ? reverbMenu (state)
-         : block == "AMP" ? ampMenu (state) : block == "CAB IR" ? cabMenu (state) : Menu {};
+    Menu m;
+    if (const char* on = onParamOf (block))
+    {
+        addToggle (m, m.items, state, on, "ON");
+        m.items.addSeparator();
+    }
+    return block == "COMP" ? compMenu (state, std::move (m)) : block == "OCTAVE" ? octaveMenu (state, std::move (m))
+         : block == "ENVELOPE" ? filterMenu (state, std::move (m)) : block == "CHORUS" ? chorusMenu (state, std::move (m))
+         : block == "DELAY" ? delayMenu (state, std::move (m)) : block == "REVERB" ? reverbMenu (state, std::move (m))
+         : block == "AMP" ? ampMenu (state, std::move (m)) : block == "CAB IR" ? cabMenu (state, std::move (m)) : Menu {};
 }
 
 /** A block's menu from one of its controls: through the face, which shows it at the block (and says which it was);
@@ -384,20 +394,29 @@ inline void showFilterMenu (juce::AudioProcessorValueTreeState& s, juce::Compone
 inline void showChorusMenu (juce::AudioProcessorValueTreeState& s, juce::Component* t) { showBlockMenu (s, t, "CHORUS"); }
 inline void showAmpMenu    (juce::AudioProcessorValueTreeState& s, juce::Component* t) { showBlockMenu (s, t, "AMP"); }
 
-/** The HPF's menu, under its switch on the face: each string count's frequency. */
-inline void showHpfMenu (juce::AudioProcessorValueTreeState& state, juce::Component* target)
+/** The HPF's menu, under its switch on the face: ON first, ruled off — the cut's own switch (the owner, 01.11: every
+    menu) — then each string count's frequency. */
+inline Menu hpfMenu (juce::AudioProcessorValueTreeState& state)
 {
     Menu m;
+    addToggle (m, m.items, state, params::bassHpfOn, "ON");
+    m.items.addSeparator();
     addHpf (m, m.items, state);
-    show (std::move (m), target);
+    return m;
 }
 
-/** The LPF's menu, under its switch: each hand's frequency. */
-inline void showLpfMenu (juce::AudioProcessorValueTreeState& state, juce::Component* target)
+inline void showHpfMenu (juce::AudioProcessorValueTreeState& state, juce::Component* target) { show (hpfMenu (state), target); }
+
+/** The LPF's menu, under its switch: ON first, ruled off, then each hand's frequency. */
+inline Menu lpfMenu (juce::AudioProcessorValueTreeState& state)
 {
     Menu m;
+    addToggle (m, m.items, state, params::bassLpfOn, "ON");
+    m.items.addSeparator();
     addLpf (m, m.items, state);
-    show (std::move (m), target);
+    return m;
 }
+
+inline void showLpfMenu (juce::AudioProcessorValueTreeState& state, juce::Component* target) { show (lpfMenu (state), target); }
 
 } // namespace orbitamp::bass

@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "OnFirst.h"
 #include "Theme.h"
 
 #include <juce_audio_processors/juce_audio_processors.h>
@@ -20,7 +21,8 @@ namespace orbitamp
 
     Blocks subclass this and fill `layOutContent` / `paintContent`; the frame owns nothing about
     what is inside. It holds no parameter and reaches nothing — the owner wires `onToggled`. */
-class BlockFrame : public juce::Component
+class BlockFrame : public juce::Component,
+                   public onfirst::Owner
 {
 public:
     enum class Kind { captured, dsp };
@@ -85,6 +87,9 @@ public:
         clicks write the negation of ITS value and the visual follows the attachment's echo — a
         widget that flips its own memory first can drift from the parameter and stay drifted,
         which is exactly how two switches on one parameter once disagreed. */
+    /** The switch a menu's ON writes (onfirst::show): the power parameter, the one its strip arrow writes. */
+    juce::RangedAudioParameter* blockSwitch() const noexcept override { return powerParam; }
+
     void attachPower (juce::RangedAudioParameter& param)
     {
         powerParam = &param;
@@ -282,6 +287,15 @@ public:
     {
         if (! hasSwitch)
             return;
+
+        // ON first and ruled off, then whose it is (onfirst::show) — the block's switch, as every menu it opens.
+        if (powerParam != nullptr)
+        {
+            juce::PopupMenu named;
+            named.addSectionHeader (title.toUpperCase());
+            onfirst::show (named, this, juce::PopupMenu::Options().withTargetScreenArea ({ screenPos.x, screenPos.y, 1, 1 }), {});
+            return;
+        }
 
         juce::PopupMenu m;
         m.addSectionHeader (title.toUpperCase());

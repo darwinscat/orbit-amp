@@ -6,6 +6,7 @@
 #include "../Parameters.h"
 #include "Prefs.h"
 #include "../PluginProcessor.h"
+#include "OnFirst.h"
 
 #include <felitronics/analysis/PlotMap.h>
 
@@ -124,7 +125,7 @@ ReverbBlock::ReverbBlock (AmpProcessor& processor)
     {
         juce::PopupMenu m;
         m.addItem (1, "RESET TO DEFAULT");
-        m.showMenuAsync (juce::PopupMenu::Options().withMousePosition(),
+        onfirst::show (m, this, juce::PopupMenu::Options().withMousePosition(),
                          [safe = juce::Component::SafePointer<ReverbBlock> (this)] (int rr)
                          {
                              if (safe == nullptr || rr != 1)

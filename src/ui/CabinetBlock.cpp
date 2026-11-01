@@ -7,6 +7,7 @@
 #include "../device/IrLibrary.h"
 #include "BassControls.h"
 #include "Prefs.h"
+#include "OnFirst.h"
 
 namespace orbitamp
 {
@@ -362,7 +363,7 @@ void CabinetBlock::showIrMenu()
         addTree (menu, library);
     }
 
-    menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&ir),
+    onfirst::show (menu, this, juce::PopupMenu::Options().withTargetComponent (&ir),
                         [safe = juce::Component::SafePointer<CabinetBlock> (this), files] (int r)
                         {
                             if (safe == nullptr || r <= 0)
@@ -550,7 +551,7 @@ void CabinetBlock::showTrimMenu()
     m.addSeparator();
     m.addItem (10, juce::String::fromUTF8 ("\xc3\x98 INVERT PHASE"), true, switches[2].sw.isOn());
 
-    m.showMenuAsync (juce::PopupMenu::Options().withMousePosition(),
+    onfirst::show (m, this, juce::PopupMenu::Options().withMousePosition(),
                      [safe = juce::Component::SafePointer<CabinetBlock> (this)] (int r)
                      {
                          if (safe != nullptr && r > 0)

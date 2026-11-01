@@ -5,6 +5,7 @@
 
 #include "../Parameters.h"
 #include "../PluginProcessor.h"
+#include "OnFirst.h"
 
 namespace orbitamp
 {
@@ -330,7 +331,7 @@ void DelayBlock::showTimeMenu()
                                itemOwn, ! followsHost));
     }
 
-    menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&timeSel),
+    onfirst::show (menu, this, juce::PopupMenu::Options().withTargetComponent (&timeSel),
                         [safe = juce::Component::SafePointer<DelayBlock> (this)] (int r)
                         {
                             if (safe == nullptr || r <= 0)

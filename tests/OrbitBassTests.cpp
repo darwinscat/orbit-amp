@@ -38,6 +38,8 @@
 #include "ui/EqSection.h"
 #include "ui/CapturedBlockPanel.h"
 #include "ui/BassControls.h"
+#include "ui/Selector.h"
+#include "ui/VoicingSelector.h"
 #include "channels/Engine.h"
 #include "channels/Presets.h"
 
@@ -4703,18 +4705,19 @@ int ORBITAMP_GATE_MAIN()
             if (opened.joinIntoString (",") != "AMP,CAB IR,CHORUS,COMP,DELAY,ENVELOPE,OCTAVE,REVERB")
                 wrong.add ("the gears opened " + opened.joinIntoString (","));
 
+            // ...and its ON at the top (step 13).
             const std::map<juce::String, juce::StringArray> held {
-                { "COMP",     { params::compAttack, params::compRelease, params::compCharacter } },
-                { "OCTAVE",   { params::octaveSub2, params::octaveToneHz, params::octaveSubHpHz, params::octaveGateDb } },
-                { "ENVELOPE", { params::filterMode, params::filterDirection, params::filterRange, params::filterResonance, params::filterKeepLows,
-                                params::filterKeepHz, params::filterAttackMs, params::filterReleaseMs } },
-                { "CHORUS",   { params::chorusCentreMs } },
-                { "DELAY",    { params::delaySync, params::delayDiv, params::delayTimeMs, params::delayHostTempo, params::delayBpm,
+                { "COMP",     { params::compOn, params::compAttack, params::compRelease, params::compCharacter } },
+                { "OCTAVE",   { params::octaveOn, params::octaveSub2, params::octaveToneHz, params::octaveSubHpHz, params::octaveGateDb } },
+                { "ENVELOPE", { params::filterOn, params::filterMode, params::filterDirection, params::filterRange, params::filterResonance,
+                                params::filterKeepLows, params::filterKeepHz, params::filterAttackMs, params::filterReleaseMs } },
+                { "CHORUS",   { params::chorusOn, params::chorusCentreMs } },
+                { "DELAY",    { params::delayOn, params::delaySync, params::delayDiv, params::delayTimeMs, params::delayHostTempo, params::delayBpm,
                                 params::delayRepeats, params::delayDark, params::delayOffset } },
-                { "REVERB",   { params::reverbType, params::reverbDecay, params::reverbPredelay } },
-                { "AMP",      { params::ampBlendHz, params::ampBlendInvert, params::bassHpfOn, params::bassHpf, params::bassHpfHz5, params::bassHpfHz4,
-                                params::bassLpfOn, params::bassLpf, params::bassLpfHzFingers, params::bassLpfHzSlap } },
-                { "CAB IR",   { params::diMix, params::cabTrimOn, params::cabTrim } } };
+                { "REVERB",   { params::reverbOn, params::reverbType, params::reverbDecay, params::reverbPredelay } },
+                { "AMP",      { params::preampOn, params::ampBlendHz, params::ampBlendInvert, params::bassHpfOn, params::bassHpf, params::bassHpfHz5,
+                                params::bassHpfHz4, params::bassLpfOn, params::bassLpf, params::bassLpfHzFingers, params::bassLpfHzSlap } },
+                { "CAB IR",   { params::cabOn, params::diMix, params::cabTrimOn, params::cabTrim } } };
             const auto& all = t->getParameters();
             const auto snapshot = [&all]
             {
@@ -4856,6 +4859,402 @@ int ORBITAMP_GATE_MAIN()
         }
         check (wrong.isEmpty(), "GATE's OFF is its rail's end stop, no zone of its own: the scale the whole travel, lifted off the stop on at the lowest "
                                 "threshold, one drag one undo step (OrbitAmp and OrbitBass)" + (wrong.isEmpty() ? juce::String() : ": " + wrong.joinIntoString ("; ")));
+    }
+
+    // ---- STEP 13: ON FIRST, RULED OFF, IN EVERY MENU OF ORBITBASS'S BLOCKS (the owner, 01.11) — the eight blocks' and the guards';
+    // the rest of each as it was; the guitar's guard menus as they were ----
+    {
+        const auto settle = [] (AmpProcessor& a) { for (int i = 0; i < 40; ++i) a.history.tick(); };
+        // A menu as its words in order: "-" a rule, [a header], "NAME >" a submenu with its own words indented under it, " *" ticked.
+        std::function<juce::StringArray (const juce::PopupMenu&)> read = [&read] (const juce::PopupMenu& menu)
+        {
+            juce::StringArray out;
+            for (juce::PopupMenu::MenuItemIterator it (menu); it.next();)
+            {
+                const auto& i = it.getItem();
+                out.add (i.isSeparator ? juce::String ("-") : i.isSectionHeader ? "[" + i.text + "]"
+                                                             : i.text + (i.subMenu != nullptr ? " >" : "") + (i.isTicked ? " *" : ""));
+                if (i.subMenu != nullptr)
+                    for (const auto& line : read (*i.subMenu))
+                        out.add ("  " + line);
+            }
+            return out;
+        };
+        const auto from = [] (const juce::StringArray& lines, int first)
+        {
+            juce::StringArray out;
+            for (int k = first; k < lines.size(); ++k)
+                out.add (lines[k]);
+            return out;
+        };
+        const auto top = [] (const juce::StringArray& lines)
+        {
+            juce::StringArray out;
+            for (const auto& l : lines)
+                if (! l.startsWith (" "))
+                    out.add (l.endsWith (" *") ? l.dropLastCharacters (2) : l);
+            return out;
+        };
+        const auto snapshot = [] (AmpProcessor& a)
+        {
+            std::vector<float> v;
+            for (auto* p : a.getParameters())
+                v.push_back (p->getValue());
+            return v;
+        };
+        const auto movedSince = [] (AmpProcessor& a, const std::vector<float>& before)
+        {
+            juce::StringArray moved;
+            const auto& all = a.getParameters();
+            for (int i = 0; i < all.size(); ++i)
+                if (std::abs (all[i]->getValue() - before[(size_t) i]) > 1.0e-6f)
+                    if (auto* withId = dynamic_cast<juce::AudioProcessorParameterWithID*> (all[i]))
+                        moved.add (withId->getParameterID());
+            return moved;
+        };
+        const auto onItemOf = [] (const juce::PopupMenu& menu)   // item 1's id when it is ON, a plain item, else 0
+        {
+            juce::PopupMenu::MenuItemIterator it (menu);
+            if (! it.next())
+                return 0;
+            const auto& i = it.getItem();
+            return i.text == "ON" && i.subMenu == nullptr && i.isEnabled && ! i.isSeparator && ! i.isSectionHeader ? i.itemID : 0;
+        };
+
+        // THE EIGHT BLOCKS: each its strip arrow's switch, the rest of its menu what step 12's held (its words, and the builder's own).
+        struct Block { const char* name; const char* on; std::function<bass::Menu (juce::AudioProcessorValueTreeState&)> alone; juce::StringArray words; };
+        const std::vector<Block> blocks {
+            { "COMP",     params::compOn,   [] (auto& s) { return bass::compMenu (s); },   { "ATTACK >", "RELEASE >", "CHARACTER >" } },
+            { "OCTAVE",   params::octaveOn, [] (auto& s) { return bass::octaveMenu (s); }, { "-2 OCTAVE AT THE TOP", "TONE >", "SUB HP >", "GATE >" } },
+            { "ENVELOPE", params::filterOn, [] (auto& s) { return bass::filterMenu (s); },
+              { "MODE >", "DIRECTION >", "RANGE >", "RESONANCE >", "KEEP LOWS CLEAN", "KEEP LOWS AT >", "ATTACK >", "RELEASE >" } },
+            { "AMP",      params::preampOn, [] (auto& s) { return bass::ampMenu (s); },    { "BLEND CROSSOVER >", "INVERT POLARITY", "HPF >", "LPF >" } },
+            { "CHORUS",   params::chorusOn, [] (auto& s) { return bass::chorusMenu (s); }, { "CENTRE >" } },
+            { "DELAY",    params::delayOn,  [] (auto& s) { return bass::delayMenu (s); },
+              { "SYNC", "DIVISION >", "TIME (FREE) >", "HOST TEMPO", "BPM >", "REPEATS >", "DARK >", "OFFSET >" } },
+            { "REVERB",   params::reverbOn, [] (auto& s) { return bass::reverbMenu (s); }, { "TYPE >", "DECAY >", "PRE-DELAY >" } },
+            { "CAB IR",   params::cabOn,    [] (auto& s) { return bass::cabMenu (s); },    { "DI / CAB >", "TRIM", "TRIM KEEPS >" } } };
+        juce::StringArray wrong;
+        int menus = 0, picks = 0;
+        {
+            auto t = make (bass);
+            for (const auto& b : blocks)
+            {
+                bool tableSays = false;
+                for (const auto& link : params::chainLinks)
+                    tableSays = tableSays || (juce::String (link.name) == b.name && link.onParam != nullptr && juce::String (link.onParam) == b.on);
+                if (! tableSays)
+                    wrong.add (juce::String (b.name) + ": the chain table's switch is not " + b.on);
+                for (const float was : { 1.0f, 0.0f })
+                {
+                    set (*t, b.on, was);
+                    settle (*t);
+                    auto m = bass::blockMenu (t->apvts, b.name);
+                    const auto lines = read (m.items);
+                    const int  id    = onItemOf (m.items);
+                    const auto rest  = from (lines, 2);
+                    ++menus;
+                    if (id == 0 || lines[0] != (was > 0.5f ? "ON *" : "ON") || lines[1] != "-")
+                        wrong.add (juce::String (b.name) + (was > 0.5f ? " on" : " off") + ": opens with \"" + lines[0] + "\", \"" + lines[1] + "\"");
+                    if (top (rest) != b.words || rest != read (b.alone (t->apvts).items))
+                        wrong.add (juce::String (b.name) + ": the rest reads " + top (rest).joinIntoString (", "));
+                    if (id <= 0 || id > (int) m.acts.size() || ! m.acts[(size_t) id - 1])
+                        continue;
+                    const auto before = snapshot (*t);
+                    m.acts[(size_t) id - 1]();
+                    ++picks;
+                    settle (*t);
+                    const auto moved = movedSince (*t, before);
+                    if (moved != juce::StringArray (b.on) || std::abs (value (*t, b.on) - (1.0f - was)) > 1.0e-6f)
+                        wrong.add (juce::String (b.name) + ": ON picked moved " + moved.joinIntoString (" "));
+                    t->history.undo();
+                    if (! movedSince (*t, before).isEmpty())
+                        wrong.add (juce::String (b.name) + ": one undo left " + movedSince (*t, before).joinIntoString (" ") + " moved");
+                }
+            }
+        }
+
+        // THE GUARDS, through the editor as their blocks open them: the menus' words, both amps; OrbitBass's ON first.
+        for (const auto* p : { &products::orbitAmp(), &bass })
+        {
+            const bool isBass = p == &bass;
+            const juce::String who (p->name);
+            auto t = make (*p);
+            set (*t, params::gateDecay, 0.0f);
+            set (*t, params::gatePos, 0.0f);
+            set (*t, params::gateThreshold, -50.0f);
+            set (*t, params::limiterCeiling, -1.0f);
+            settle (*t);
+            std::unique_ptr<juce::AudioProcessorEditor> ed (t->createEditor());
+            auto* editor = dynamic_cast<AmpEditor*> (ed.get());
+            if (editor == nullptr)
+            {
+                wrong.add (who + ": no AmpEditor");
+                continue;
+            }
+            for (const float was : { 1.0f, 0.0f })
+            {
+                set (*t, params::gateOn, was);
+                set (*t, params::limiterOn, was);
+                settle (*t);
+                const bool on = was > 0.5f;
+                juce::StringArray gate { "LEARN", "-", "SOFT   -60", on ? "MEDIUM -50 *" : "MEDIUM -50", "HARD   -40", "DECAY >", "  NORMAL *", "  METAL",
+                                         "MUTES AT >", "  " + params::gatePositions[0].toUpperCase() + " *", "  " + params::gatePositions[1].toUpperCase() };
+                juce::StringArray limit { "SAFETY  -0.3", on ? "NORMAL  -1.0 *" : "NORMAL  -1.0", "TIGHT   -3.0" };
+                // Step 12's head was the header, OFF under it while on; now, both amps (the owner, 01.11: every menu): ON first and
+                // ruled off, the header, no OFF.
+                const juce::StringArray gateHead  { on ? "ON *" : "ON", "-", on ? "[GATE  -50 DB]" : "[GATE  OFF]" };
+                const juce::StringArray limitHead { on ? "ON *" : "ON", "-", on ? "[LIMITER  -1.0 DB]" : "[LIMITER  OFF]" };
+                gate  = [&] { auto a = gateHead;  a.addArray (gate);  return a; }();
+                limit = [&] { auto a = limitHead; a.addArray (limit); return a; }();
+                ++menus;
+                ++menus;
+                if (const auto g = read (editor->gateMenu()); g != gate)
+                    wrong.add (who + " GATE " + (on ? "on" : "off") + " reads " + g.joinIntoString (" | "));
+                if (const auto l = read (editor->limiterMenu()); l != limit)
+                    wrong.add (who + " LIMIT " + (on ? "on" : "off") + " reads " + l.joinIntoString (" | "));
+
+                // LIMIT's ON: its strip arrow's switch, turned over, the ceiling kept — one undo step.
+                if (const int id = onItemOf (editor->limiterMenu()); id > 0)
+                {
+                    const auto before = snapshot (*t);
+                    editor->pickLimiter (id);
+                    ++picks;
+                    settle (*t);
+                    const auto moved = movedSince (*t, before);
+                    if (moved != juce::StringArray (params::limiterOn) || (value (*t, params::limiterOn) > 0.5f) == on)
+                        wrong.add (who + " LIMIT's ON picked moved " + moved.joinIntoString (" "));
+                    t->history.undo();
+                    if (! movedSince (*t, before).isEmpty())
+                        wrong.add (who + " LIMIT's ON: one undo did not bring it back");
+                }
+            }
+            // A ceiling picked switches the limiter on, as it did.
+            set (*t, params::limiterOn, 0.0f);
+            editor->pickLimiter (4);
+            if (value (*t, params::limiterOn) < 0.5f || std::abs (value (*t, params::limiterCeiling) + 3.0f) > 1.0e-3f)
+                wrong.add (who + ": the limiter's TIGHT not as it was");
+            juce::ignoreUnused (isBass);
+        }
+
+        // GATE'S ON AND ITS RAIL'S END STOP AGREE, both ways (OrbitBass): the menu's OFF what parking the hand on the stop does, its ON what
+        // lifting it off does; the stop parked or lifted, the menu's ON ticked to match.
+        {
+            struct Face { std::unique_ptr<AmpProcessor> t; std::unique_ptr<juce::AudioProcessorEditor> ed; AmpEditor* editor = nullptr; GuardRail* rail = nullptr; };
+            const auto open = [&] (bool on)
+            {
+                Face f;
+                f.t = make (bass);
+                set (*f.t, params::gateThreshold, -50.0f);
+                set (*f.t, params::gateOn, on ? 1.0f : 0.0f);
+                settle (*f.t);
+                f.ed.reset (f.t->createEditor());
+                f.editor = dynamic_cast<AmpEditor*> (f.ed.get());
+                std::function<void (juce::Component&)> walk = [&] (juce::Component& c)
+                {
+                    if (auto* face = dynamic_cast<FaceplateView*> (&c))
+                        f.rail = &face->gateBlock().valueRail();
+                    for (auto* child : c.getChildren())
+                        walk (*child);
+                };
+                walk (*f.ed);
+                return f;
+            };
+            const auto drag = [] (GuardRail& rail, float fromY, float toY)
+            {
+                const auto now = juce::Time::getCurrentTime();
+                const auto ev = [&] (float y)
+                {
+                    const juce::Point<float> at ((float) rail.getWidth() * 0.5f, y), down ((float) rail.getWidth() * 0.5f, fromY);
+                    return juce::MouseEvent (juce::Desktop::getInstance().getMainMouseSource(), at, juce::ModifierKeys(), 0.0f,
+                                             juce::MouseInputSource::defaultOrientation, juce::MouseInputSource::defaultRotation,
+                                             juce::MouseInputSource::defaultTiltX, juce::MouseInputSource::defaultTiltY,
+                                             &rail, &rail, now, down, now, 1, at != down);
+                };
+                rail.mouseDown (ev (fromY));
+                rail.mouseDrag (ev (toY));
+                rail.mouseUp (ev (toY));
+            };
+            const auto ticked = [&] (Face& f)
+            {
+                const auto lines = read (f.editor->gateMenu());
+                return lines.isEmpty() ? juce::String ("nothing") : lines[0];
+            };
+            auto byMenuOff = open (true), byStopOff = open (true), byMenuOn = open (false), byStopOn = open (false);
+            if (byMenuOff.editor == nullptr || byMenuOff.rail == nullptr || byStopOn.rail == nullptr || byStopOff.rail == nullptr || byMenuOn.editor == nullptr)
+                wrong.add ("no GATE rail on OrbitBass's face");
+            else
+            {
+                const float stop = byStopOff.rail->yOfValue (-80.0f);
+                if (std::abs (byMenuOn.rail->lowestValue() + 80.0f) > 1.0e-4f)
+                    wrong.add ("the rail's lowest " + juce::String (byMenuOn.rail->lowestValue(), 2));
+                // OFF: the menu's pick, and the hand pushed onto the stop.
+                const auto beforeOff = snapshot (*byMenuOff.t);
+                byMenuOff.editor->pickGate (onItemOf (byMenuOff.editor->gateMenu()));
+                settle (*byMenuOff.t);
+                drag (*byStopOff.rail, byStopOff.rail->yOfValue (-50.0f), stop + 8.0f);
+                settle (*byStopOff.t);
+                const auto offMoved = movedSince (*byMenuOff.t, beforeOff);
+                const bool offAgree = value (*byMenuOff.t, params::gateOn) < 0.5f && value (*byStopOff.t, params::gateOn) < 0.5f
+                                   && std::abs (value (*byMenuOff.t, params::gateThreshold) + 50.0f) < 1.0e-3f
+                                   && std::abs (value (*byStopOff.t, params::gateThreshold) + 50.0f) < 1.0e-3f
+                                   && offMoved == juce::StringArray (params::gateOn) && byMenuOff.rail->gripText() == byStopOff.rail->gripText();
+                byMenuOff.t->history.undo();
+                const bool offUndone = movedSince (*byMenuOff.t, beforeOff).isEmpty();
+                // ON: the menu's pick, and the hand lifted 4 px off the stop.
+                const auto beforeOn = snapshot (*byMenuOn.t);
+                byMenuOn.editor->pickGate (onItemOf (byMenuOn.editor->gateMenu()));
+                settle (*byMenuOn.t);
+                drag (*byStopOn.rail, stop, stop - 4.0f);
+                settle (*byStopOn.t);
+                const float px = 50.0f / (stop - byStopOn.rail->yOfValue (-30.0f));   // dB a pixel of the rail
+                const float menuTh = value (*byMenuOn.t, params::gateThreshold), stopTh = value (*byStopOn.t, params::gateThreshold);
+                const bool onAgree = value (*byMenuOn.t, params::gateOn) > 0.5f && value (*byStopOn.t, params::gateOn) > 0.5f
+                                  && std::abs (menuTh + 80.0f) < 1.0e-3f && stopTh >= menuTh - 1.0e-3f && stopTh - menuTh <= 4.0f * px + 0.6f;
+                byMenuOn.t->history.undo();
+                const bool onUndone = movedSince (*byMenuOn.t, beforeOn).isEmpty();
+                // The stop's way: the menu reads what the rail did.
+                const auto afterPark = ticked (byStopOff), afterLift = ticked (byStopOn);
+                if (! (offAgree && offUndone && onAgree && onUndone && afterPark == "ON" && afterLift == "ON *"))
+                    wrong.add (juce::String ("GATE: the menu's OFF ") + (offAgree ? "parks as the stop" : "NOT as the stop") + " (moved "
+                               + offMoved.joinIntoString (" ") + ")" + (offUndone ? "" : ", not one undo") + "; its ON " + (onAgree ? "lifts as the stop" : "NOT as the stop")
+                               + " (" + juce::String (menuTh, 2) + " dB, the rail's lift " + juce::String (stopTh, 2) + ")" + (onUndone ? "" : ", not one undo")
+                               + "; parked the menu reads \"" + afterPark + "\", lifted \"" + afterLift + "\"");
+                picks += 2;
+            }
+        }
+        // THE CUTS' MENUS UNDER THEIR SWITCHES (the owner, 01.11: every menu): ON first — the cut's own switch — ruled off, then
+        // the frequencies as they were; ON picked turns the switch over, one undo step.
+        {
+            auto t = make (bass);
+            struct Cut { const char* on; std::function<bass::Menu (juce::AudioProcessorValueTreeState&)> menu;
+                         std::function<void (bass::Menu&, juce::AudioProcessorValueTreeState&)> alone; };
+            const Cut cuts[] { { params::bassHpfOn, [] (auto& s) { return bass::hpfMenu (s); }, [] (bass::Menu& m, auto& s) { bass::addHpf (m, m.items, s); } },
+                               { params::bassLpfOn, [] (auto& s) { return bass::lpfMenu (s); }, [] (bass::Menu& m, auto& s) { bass::addLpf (m, m.items, s); } } };
+            for (const auto& c : cuts)
+                for (const float was : { 1.0f, 0.0f })
+                {
+                    set (*t, c.on, was);
+                    settle (*t);
+                    auto m = c.menu (t->apvts);
+                    bass::Menu old;
+                    c.alone (old, t->apvts);
+                    const auto lines = read (m.items), before = read (old.items);
+                    const int  id    = onItemOf (m.items);
+                    ++menus;
+                    if (id == 0 || lines[0] != (was > 0.5f ? "ON *" : "ON") || lines[1] != "-" || from (lines, 2) != before || before.size() < 12)
+                        wrong.add (juce::String (c.on) + "'s menu reads " + lines.joinIntoString (" | "));
+                    if (id <= 0 || id > (int) m.acts.size() || ! m.acts[(size_t) id - 1])
+                        continue;
+                    const auto snap = snapshot (*t);
+                    m.acts[(size_t) id - 1]();
+                    ++picks;
+                    settle (*t);
+                    if (movedSince (*t, snap) != juce::StringArray (c.on) || (value (*t, c.on) > 0.5f) == (was > 0.5f))
+                        wrong.add (juce::String (c.on) + "'s ON moved " + movedSince (*t, snap).joinIntoString (" "));
+                    t->history.undo();
+                    if (! movedSince (*t, snap).isEmpty())
+                        wrong.add (juce::String (c.on) + "'s ON: one undo did not bring it back");
+                }
+        }
+        check (wrong.isEmpty() && menus == 28 && picks >= 24,
+               "ON first, ruled off, in OrbitBass's every block menu — COMP, OCTAVE, ENVELOPE, AMP, CHORUS, DELAY, REVERB, CAB IR, GATE and LIMIT — "
+               "ticked by the chain table's switch, a pick turning it over in one undo step, the rest as it was; the HPF's and LPF's under their "
+               "switches the same; GATE's ON and OFF its rail's stop "
+               "both ways; OrbitAmp's guard menus the same (" + juce::String (menus) + " menus, " + juce::String (picks) + " picks"
+               + (wrong.isEmpty() ? juce::String() : ": " + wrong.joinIntoString ("; ")) + ")");
+
+        // THE GUITAR'S BLOCKS TOO (the owner, 01.11: every menu): every menu a block on OrbitAmp's face opens — a right click on
+        // it or on anything in it, a selector's click — ON first and ruled off, ticked by the block's chain switch; ON picked
+        // turns that switch over, as the block's strip arrow does, in one undo step.
+        {
+            auto t = make (products::orbitAmp());
+            for (const char* id : { params::preampOn, params::delayOn, params::reverbOn, params::cabOn })
+                set (*t, id, 1.0f);
+            settle (*t);
+            std::unique_ptr<juce::AudioProcessorEditor> ed (t->createEditor());
+            const auto linkOf = [] (const juce::RangedAudioParameter* on) -> juce::String
+            {
+                for (const auto& link : params::chainLinks)
+                    if (on != nullptr && link.onParam != nullptr && on->paramID == link.onParam)
+                        return link.name;
+                return {};
+            };
+            struct Caught { juce::String block; const char* on; juce::StringArray lines; std::function<void (int)> answer; };
+            std::vector<Caught> caught;
+            BlockFrame* clicking = nullptr;
+            onfirst::catcher() = [&] (const juce::PopupMenu& m, const std::function<void (int)>& answer)
+            {
+                auto* sw = clicking != nullptr ? clicking->blockSwitch() : nullptr;
+                caught.push_back ({ linkOf (sw), sw != nullptr ? sw->paramID.toRawUTF8() : "", read (m), answer });
+                return true;
+            };
+            std::vector<std::pair<BlockFrame*, juce::Component*>> targets;
+            std::function<void (juce::Component&, BlockFrame*)> walk = [&] (juce::Component& c, BlockFrame* in)
+            {
+                if (dynamic_cast<GuardBlock*> (&c) != nullptr || ! c.isVisible())
+                    return;   // the guards' menus are the editor's, read above
+                if (auto* frame = dynamic_cast<BlockFrame*> (&c))
+                    in = frame;
+                if (in != nullptr)
+                    targets.push_back ({ in, &c });
+                for (auto* child : c.getChildren())
+                    walk (*child, in);
+            };
+            for (auto* child : ed->getChildren())   // the editor itself is on no screen here
+                walk (*child, nullptr);
+            const auto now = juce::Time::getCurrentTime();
+            for (auto [frame, c] : targets)
+            {
+                clicking = frame;
+                const auto at = c->getLocalBounds().getCentre().toFloat();
+                for (const bool right : { true, false })
+                {
+                    if (! right && dynamic_cast<VoicingSelector*> (c) == nullptr && dynamic_cast<Selector*> (c) == nullptr)
+                        continue;   // a left click only where it opens a menu
+                    const juce::MouseEvent e (juce::Desktop::getInstance().getMainMouseSource(), at,
+                                              right ? juce::ModifierKeys (juce::ModifierKeys::rightButtonModifier) : juce::ModifierKeys(), 0.0f,
+                                              juce::MouseInputSource::defaultOrientation, juce::MouseInputSource::defaultRotation,
+                                              juce::MouseInputSource::defaultTiltX, juce::MouseInputSource::defaultTiltY, c, c, now, at, now, 1, false);
+                    c->mouseDown (e);
+                    c->mouseUp (e);
+                }
+            }
+            clicking = nullptr;
+            onfirst::catcher() = nullptr;
+            juce::PopupMenu::dismissAllActiveMenus();
+            settle (*t);   // what the clicks themselves switched (SMOOTH's tag takes any click) its own undo step, before the picks
+            juce::StringArray reached, seen, bad;
+            for (const auto& m : caught)
+            {
+                seen.addIfNotAlreadyThere (m.block + " " + (m.lines.size() > 2 ? m.lines[2].trim() : juce::String ("?")));
+                if (m.lines.size() < 2 || m.lines[0] != "ON *" || m.lines[1] != "-" || m.block.isEmpty())
+                    bad.addIfNotAlreadyThere (m.block + " opens with \"" + m.lines[0] + "\"");
+                else
+                    reached.addIfNotAlreadyThere (m.block);
+            }
+            // ON picked, once a block: its switch off, the block gone as by its arrow; one undo, back.
+            for (const auto& name : reached)
+                for (const auto& m : caught)
+                    if (m.block == name)
+                    {
+                        const auto before = snapshot (*t);
+                        m.answer (onfirst::item);
+                        settle (*t);
+                        const auto moved = movedSince (*t, before);
+                        if (moved != juce::StringArray (m.on) || value (*t, m.on) > 0.5f)
+                            bad.add (name + "'s ON moved " + moved.joinIntoString (" "));
+                        t->history.undo();
+                        if (const auto left = movedSince (*t, before); ! left.isEmpty())
+                            bad.add (name + "'s ON: one undo left " + left.joinIntoString (" ") + " moved");
+                        break;
+                    }
+            reached.sort (false);
+            check (bad.isEmpty() && reached.joinIntoString (",") == "AMP,CAB IR,DELAY,REVERB",
+                   "OrbitAmp's block menus open with ON, ruled off — " + juce::String ((int) caught.size()) + " menus from "
+                   + reached.joinIntoString (", ") + " (" + seen.joinIntoString ("; ") + ")" + (bad.isEmpty() ? juce::String() : ": " + bad.joinIntoString ("; ")));
+        }
+
     }
 
     // STILLS FOR A LOOK (ORBITBASS_STILLS, as above): OrbitBass's face as it opens, with DELAY and REVERB added at the least
@@ -5010,7 +5409,8 @@ int ORBITAMP_GATE_MAIN()
                     auto* window = ed->getChildComponent (ed->getNumChildComponents() - 1);
                     for (int k = 0; k < down; ++k)
                         window->keyPressed (juce::KeyPress (juce::KeyPress::downKey));
-                    window->keyPressed (juce::KeyPress (juce::KeyPress::rightKey));
+                    if (down >= 0)   // -1: the menu alone, no submenu opened
+                        window->keyPressed (juce::KeyPress (juce::KeyPress::rightKey));
                     auto area = block->getBounds().getUnion (window->getBounds());
                     for (int i = before; i < ed->getNumChildComponents(); ++i)
                         area = area.getUnion (ed->getChildComponent (i)->getBounds());
@@ -5020,6 +5420,27 @@ int ORBITAMP_GATE_MAIN()
             };
             menuShot (cb, bass::compMenu (t->apvts), 1, "comp-menu-attack.png");
             menuShot (delayBlock, bass::delayMenu (t->apvts), 3, "delay-menu-time.png");
+            // STEP 13: COMP's menu and GATE's, ON first and ruled off — GATE off as it opens, then on at -50.
+            menuShot (cb, bass::blockMenu (t->apvts, "COMP"), -1, "step13-comp-menu.png");
+            FaceplateView* face = nullptr;
+            std::function<void (juce::Component&)> findFace = [&] (juce::Component& c)
+            {
+                if (auto* x = dynamic_cast<FaceplateView*> (&c)) face = x;
+                for (auto* child : c.getChildren())
+                    findFace (*child);
+            };
+            findFace (*ed);
+            if (auto* editor = dynamic_cast<AmpEditor*> (ed.get()); editor != nullptr && face != nullptr)
+            {
+                bass::Menu off;
+                off.items = editor->gateMenu();
+                menuShot (&face->gateBlock(), std::move (off), -1, "step13-gate-menu-off.png");
+                set (*t, params::gateThreshold, -50.0f);
+                set (*t, params::gateOn, 1.0f);
+                bass::Menu on;
+                on.items = editor->gateMenu();
+                menuShot (&face->gateBlock(), std::move (on), -1, "step13-gate-menu-on.png");
+            }
         }
         for (const auto* g : { &products::orbitAmp(), &bass })
         {

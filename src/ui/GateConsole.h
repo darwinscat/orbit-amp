@@ -9,6 +9,7 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 
 #include <atomic>
+#include <optional>
 #include <vector>
 
 namespace orbitamp
@@ -90,9 +91,16 @@ public:
     /** STOP, and write nothing (GateLearner::cancel says why). */
     void cancel() { learner.cancel(); }
 
-    /** The gate's whole console. `withVolume` is gone with the column it belonged to: the trim's
-        RESET was the COLUMN's item, and the column has its own door now. */
-    void showMenu (juce::Point<int> screenPos)
+    /** THE ON ITEM's id (OrbitBass's face): ON first, ruled off. */
+    static constexpr int onItem = 20;
+
+    /** The gate's whole console, as showMenu shows it. `withVolume` is gone with the column it belonged to: the trim's
+        RESET was the COLUMN's item, and the column has its own door now.
+
+        `onAt` (the owner, 01.11: every menu — AmpEditor gives it on both faces): ON first, ruled off, ticked while the gate is on, in place of the OFF
+        under the header — the rest as it was. Its pick agrees with the rail's end stop (GuardRail): the gate on is parked,
+        its threshold kept for the way back; the gate off is lifted on at `*onAt`, the rail's lowest threshold. */
+    juce::PopupMenu menu (std::optional<float> onAt = std::nullopt) const
     {
         const bool  isOn  = onP.getValue() > 0.5f;
         const float th    = thP.convertFrom0to1 (thP.getValue());
@@ -104,6 +112,11 @@ public:
         };
 
         juce::PopupMenu m;
+        if (onAt.has_value())
+        {
+            m.addItem (onItem, "ON", true, isOn);
+            m.addSeparator();
+        }
 
         // The header carries the NUMBER, and that is not decoration. The threshold is continuous
         // and these positions are three points on it, so a value restored from a preset or drawn
@@ -113,8 +126,8 @@ public:
                                  : juce::String ("GATE  OFF"));
         // OFF on top, ruled off, and only while there is something to switch off. No ON: a gate is
         // switched on by LEARN — three seconds of quiet set the threshold and arm it — or by one of
-        // the three positions, each of which arms it too (Oleh, 24.10).
-        if (isOn)
+        // the three positions, each of which arms it too (Oleh, 24.10). The ON at the top (onAt) stands for it.
+        if (isOn && ! onAt.has_value())
         {
             m.addItem (1, "OFF");
             m.addSeparator();
@@ -139,24 +152,43 @@ public:
         where.addItem (12, params::gatePositions[0].toUpperCase(), true, ! preReverb);
         where.addItem (13, params::gatePositions[1].toUpperCase(), true, preReverb);
         m.addSubMenu ("MUTES AT", where);
+        return m;
+    }
 
+    /** The gate's console at the mouse; `onAt` as in menu(). */
+    void showMenu (juce::Point<int> screenPos, std::optional<float> onAt = std::nullopt)
+    {
         // The menu outlives the click that opened it, and this console dies with its window.
         // Same guard the gear's and the limiter's menus carry — a weak reference rather than a
         // SafePointer only because this has no pixels and is not a Component.
-        m.showMenuAsync (juce::PopupMenu::Options()
-                             .withTargetScreenArea ({ screenPos.x, screenPos.y, 1, 1 }),
-                         [safe = juce::WeakReference<GateConsole> (this)] (int r)
-                         {
-                             if (safe != nullptr)
-                                 safe->apply (r);
-                         });
+        menu (onAt).showMenuAsync (juce::PopupMenu::Options()
+                                       .withTargetScreenArea ({ screenPos.x, screenPos.y, 1, 1 }),
+                                   [safe = juce::WeakReference<GateConsole> (this), onAt] (int r)
+                                   {
+                                       if (safe != nullptr)
+                                           safe->pick (r, onAt);
+                                   });
     }
 
-private:
-    void apply (int choice)
+    /** What a pick of item `choice` of menu (onAt) does — the popup's answer, and a gate's without one. */
+    void pick (int choice, std::optional<float> onAt = std::nullopt)
     {
         if (choice == 0)
             return;
+
+        // ON at the top: what the rail's end stop does — parked, the threshold kept; lifted, on at the lowest.
+        if (choice == onItem)
+        {
+            if (onP.getValue() > 0.5f)
+            {
+                onAtt->setValueAsCompleteGesture (0.0f);
+                return;
+            }
+            if (onAt.has_value())
+                thAtt->setValueAsCompleteGesture (*onAt);
+            onAtt->setValueAsCompleteGesture (1.0f);
+            return;
+        }
 
         // OFF is offered only to a gate that is on: the way back on is LEARN or a position.
         if (choice == 1)
@@ -190,6 +222,7 @@ private:
         decayAtt->setValueAsCompleteGesture (choice == 4 ? 1.0f : 0.0f);   // HARD is the metal chop
     }
 
+private:
     GateLearner learner;
     juce::RangedAudioParameter& onP;
     juce::RangedAudioParameter& thP;

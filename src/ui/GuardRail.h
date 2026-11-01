@@ -84,6 +84,10 @@ public:
 
     /** For a gate: whose value the rail moves, the size its grip writes it at, and what it writes. */
     const juce::String& paramId() const noexcept { return valueP.paramID; }
+
+    /** The rail's lowest value, as its parameter holds it: where a hand lifted off the end stop sets the guard on. */
+    float lowestValue() const { return juce::jmax (valueP.getNormalisableRange().start, lo); }
+
     juce::String gripText() const { return gripTextOf (valueP.convertFrom0to1 (valueP.getValue())); }
 
     /** THE GRIP'S LOOK, the guards' by default: a lilac hand writing a trim's decibels at 11 px. A rail whose number is

@@ -9,6 +9,7 @@
 #include "BassControls.h"
 #include "GuardRail.h"
 #include "FactoryMissing.h"
+#include "OnFirst.h"
 
 #include <felitronics/appkit/WebpImage.h>
 
@@ -819,7 +820,7 @@ void CapturedBlockPanel::showDeviceMenu()
     if (menu.getNumItems() == 0)
         return;
 
-    menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&device),
+    onfirst::show (menu, this, juce::PopupMenu::Options().withTargetComponent (&device),
                         [safe = juce::Component::SafePointer<CapturedBlockPanel> (this), picks] (int choice)
                         {
                             if (safe != nullptr && choice > 0 && choice <= (int) picks.size())
@@ -1279,7 +1280,7 @@ void CapturedBlockPanel::showBoostMenu()
         m.addItem (i + 1, (db > 0 ? "+" : "") + juce::String (db) + " dB", true, db == now);
     }
 
-    m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&boostKey),
+    onfirst::show (m, this, juce::PopupMenu::Options().withTargetComponent (&boostKey),
                      [safe = juce::Component::SafePointer<CapturedBlockPanel> (this)] (int r)
                      {
                          if (r <= 0 || safe == nullptr)
@@ -1333,7 +1334,7 @@ void CapturedBlockPanel::showVizMenu (juce::Point<int> screenPos)
         m.addItem (i + 1, names[i], i != photoIdx || hasPicture(), ticked);
     }
 
-    m.showMenuAsync (juce::PopupMenu::Options()
+    onfirst::show (m, this, juce::PopupMenu::Options()
                          .withTargetScreenArea ({ screenPos.x, screenPos.y, 1, 1 }),
                      [safe = juce::Component::SafePointer<CapturedBlockPanel> (this)] (int r)
                      {

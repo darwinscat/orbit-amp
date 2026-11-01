@@ -43,6 +43,13 @@ public:
     void showLimiterMenu (juce::Point<int> screenPos);
     void showInputMenu (juce::Point<int> screenPos);
 
+    /** THE GUARDS' MENUS as their blocks open them — ON first, ruled off (the owner, 01.11: every menu) — and what a
+        pick of an item does: the popup's answer, and a gate's without one. */
+    juce::PopupMenu gateMenu();
+    void pickGate (int item);
+    juce::PopupMenu limiterMenu() const;
+    void pickLimiter (int item);
+
     /** Re-read the window preferences (Setup's VIEW page) and lay the editor out to match. */
     void applyViewPrefs();
 
@@ -92,6 +99,13 @@ private:
         window itself, wider when it must be, at the zoom it has. */
     void applyPresence();
     void showChecklist (juce::Component& anchor);
+
+    /** The GATE's ON: the threshold a lift off its rail's end stop sets. */
+    float gateOnAt();
+
+    /** The limiter's menu item `item` picked — through its parameters, which outlive this window. */
+    static void applyLimiter (juce::RangedAudioParameter& on, juce::RangedAudioParameter& ceil, int item);
+    static constexpr int limiterOnItem = 20;
     std::vector<std::unique_ptr<juce::ParameterAttachment>> presenceAtts;
     static constexpr double maxAspect      = 2.2;
 

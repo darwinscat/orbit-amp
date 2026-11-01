@@ -56,7 +56,7 @@ AmpEditor::AmpEditor (AmpProcessor& p)
 
     // THE GUARDS' MENUS open from their blocks on the panel (GuardBlock); a look clears the dot that
     // said the guard worked unseen.
-    faceplate.gateBlock().onMenu  = [this] (juce::Point<int> pos) { amp.gateWorked.store (false);    gateConsole.showMenu (pos); };
+    faceplate.gateBlock().onMenu  = [this] (juce::Point<int> pos) { amp.gateWorked.store (false);    gateConsole.showMenu (pos, gateOnAt()); };
     faceplate.limitBlock().onMenu = [this] (juce::Point<int> pos) { amp.limiterWorked.store (false); showLimiterMenu (pos); };
     if constexpr (features::hum)   // the input column's menu is HUM's in the build that has it (Features.h)
         inColumn.onMenu = [this] (juce::Point<int> pos) { showInputMenu (pos); };
@@ -421,7 +421,7 @@ void AmpEditor::applyViewPrefs()
     repaint();
 }
 
-void AmpEditor::showLimiterMenu (juce::Point<int> screenPos)
+juce::PopupMenu AmpEditor::limiterMenu() const
 {
     auto* on   = amp.apvts.getParameter (params::limiterOn);
     auto* ceil = amp.apvts.getParameter (params::limiterCeiling);
@@ -432,52 +432,71 @@ void AmpEditor::showLimiterMenu (juce::Point<int> screenPos)
     const auto matches = [&] (float v) { return isOn && std::abs (c - v) < 0.05f; };
 
     juce::PopupMenu m;
+    // ON first, ruled off (the owner, 01.11: every menu): its strip arrow's switch, the ceiling kept. It stands for the OFF
+    // that stood under the header while the limiter was on.
+    m.addItem (limiterOnItem, "ON", true, isOn);
+    m.addSeparator();
     // The number in the header, for the same reason the gate's carries one: the ceiling is
     // continuous and these are three points on it, so a value from a preset or an automation lane
     // can sit between them with no item ticked and nothing anywhere to say what it is.
     m.addSectionHeader (isOn ? "LIMITER  " + juce::String (c, 1) + " DB"
                              : juce::String ("LIMITER  OFF"));
-    // OFF on top, ruled off, and only while it is on; a ceiling picked below switches it on (Oleh, 24.10).
-    if (isOn)
-    {
-        m.addItem (1, "OFF");
-        m.addSeparator();
-    }
-
+    // A ceiling picked below switches it on (Oleh, 24.10).
     m.addItem (2, "SAFETY  -0.3",  true, matches (-0.3f));
     m.addItem (3, "NORMAL  -1.0",  true, matches (-1.0f));
     m.addItem (4, "TIGHT   -3.0",  true, matches (-3.0f));
-
-
-    m.showMenuAsync (juce::PopupMenu::Options()
-                         .withTargetScreenArea ({ screenPos.x, screenPos.y, 1, 1 }),
-                     // The parameters outlive this window — the processor owns them — but the
-                     // editor does not: closing it with the menu open would leave the RESET branch
-                     // reaching through a dead `this`. Guarded the way the gear's menu already is.
-                     [safe = juce::Component::SafePointer<AmpEditor> (this), on, ceil] (int r)
-                     {
-                         if (r == 0)
-                             return;
-
-                         const auto set = [] (juce::RangedAudioParameter* p, float plain)
-                         {
-                             p->beginChangeGesture();
-                             p->setValueNotifyingHost (p->convertTo0to1 (plain));
-                             p->endChangeGesture();
-                         };
-
-                         // OFF is offered only to a limiter that is on; a ceiling is the way back on.
-                         if (r == 1)
-                         {
-                             set (on, 0.0f);
-                             return;
-                         }
-
-
-                         set (on, 1.0f);
-                         set (ceil, r == 2 ? -0.3f : r == 3 ? -1.0f : -3.0f);
-                     });
+    return m;
 }
+
+void AmpEditor::applyLimiter (juce::RangedAudioParameter& on, juce::RangedAudioParameter& ceil, int r)
+{
+    if (r == 0)
+        return;
+
+    const auto set = [] (juce::RangedAudioParameter& p, float plain)
+    {
+        p.beginChangeGesture();
+        p.setValueNotifyingHost (p.convertTo0to1 (plain));
+        p.endChangeGesture();
+    };
+
+    // ON (OrbitBass): turned over, as the strip's arrow turns it.
+    if (r == limiterOnItem)
+    {
+        set (on, on.getValue() > 0.5f ? 0.0f : 1.0f);
+        return;
+    }
+
+    set (on, 1.0f);
+    set (ceil, r == 2 ? -0.3f : r == 3 ? -1.0f : -3.0f);
+}
+
+void AmpEditor::pickLimiter (int item)
+{
+    applyLimiter (*amp.apvts.getParameter (params::limiterOn), *amp.apvts.getParameter (params::limiterCeiling), item);
+}
+
+void AmpEditor::showLimiterMenu (juce::Point<int> screenPos)
+{
+    auto* on   = amp.apvts.getParameter (params::limiterOn);
+    auto* ceil = amp.apvts.getParameter (params::limiterCeiling);
+
+    limiterMenu().showMenuAsync (juce::PopupMenu::Options()
+                                     .withTargetScreenArea ({ screenPos.x, screenPos.y, 1, 1 }),
+                                 // The parameters outlive this window — the processor owns them — but the
+                                 // editor does not: closing it with the menu open would leave the RESET branch
+                                 // reaching through a dead `this`. Guarded the way the gear's menu already is.
+                                 [safe = juce::Component::SafePointer<AmpEditor> (this), on, ceil] (int r)
+                                 {
+                                     applyLimiter (*on, *ceil, r);
+                                 });
+}
+
+float AmpEditor::gateOnAt() { return faceplate.gateBlock().valueRail().lowestValue(); }
+
+juce::PopupMenu AmpEditor::gateMenu() { return gateConsole.menu (gateOnAt()); }
+
+void AmpEditor::pickGate (int item) { gateConsole.pick (item, gateOnAt()); }
 
 /** A RIGHT CLICK ON THE INPUT COLUMN: the hum the input carries, and what to take off it. It is the
     machine's, not the sound's (prefs::hum) — a preset neither carries it nor moves it, undo steps over

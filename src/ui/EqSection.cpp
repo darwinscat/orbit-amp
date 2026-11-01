@@ -9,6 +9,7 @@
 #include "Prefs.h"
 
 #include "Theme.h"
+#include "OnFirst.h"
 
 namespace orbitamp
 {
@@ -232,7 +233,7 @@ void EqSection::showModeMenu (juce::Point<int> screenPos)
 
     m.addItem (100, "RESET");
 
-    m.showMenuAsync (juce::PopupMenu::Options()
+    onfirst::show (m, &curve, juce::PopupMenu::Options()
                          .withTargetScreenArea ({ screenPos.x, screenPos.y, 1, 1 }),
                      [safe = juce::Component::SafePointer<juce::Component> (&curve), this] (int r)
                      {
@@ -493,7 +494,7 @@ void EqSection::SlopeCombo::mouseDown (const juce::MouseEvent& e)
     for (int i = 0; i < params::eqSlopes.size(); ++i)
         m.addItem (i + 1, params::eqSlopes[i] + " dB/oct", true, i == getIndex());
 
-    m.showMenuAsync (juce::PopupMenu::Options()
+    onfirst::show (m, this, juce::PopupMenu::Options()
                          .withTargetScreenArea ({ e.getScreenPosition().x,
                                                   e.getScreenPosition().y, 1, 1 }),
                      [safe = juce::Component::SafePointer<SlopeCombo> (this)] (int r)

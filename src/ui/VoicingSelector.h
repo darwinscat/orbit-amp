@@ -4,6 +4,7 @@
 #pragma once
 
 #include "Theme.h"
+#include "OnFirst.h"
 
 #include <optional>
 
@@ -164,7 +165,7 @@ public:
             menu.addItem (item);
         }
 
-        menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (this),
+        onfirst::show (menu, this, juce::PopupMenu::Options().withTargetComponent (this),
                             [this] (int choice) { if (choice > 0) pick (choice - 1); });
     }
 
