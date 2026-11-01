@@ -7,6 +7,26 @@ Up to 0.7.0 this book was OrbitAmp's alone. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [0.9.1] — 2026-11-01 — MIDI CC 24, 25 and 26 find BASS, MIDDLE and TREBLE by name
+
+### FrostPawAmp
+
+#### Fixed
+- **MIDI CC 24, 25 and 26 turn BASS, MIDDLE and TREBLE, as the MIDI list says, on every channel.** They used to
+  turn the first three tone knobs in order, so on a channel whose knobs run otherwise they missed: on FrostPawAmp's
+  CLEAN CC 25 turned TREBLE and CC 26 nothing; on AmberPawAmp's CLEAN CC 24 turned TONE and BASS had no controller.
+  Now each finds its knob by name; a channel without that knob (CLEAN's MIDDLE on FrostPawAmp) leaves the controller
+  turning nothing.
+
+### AmberPawAmp
+
+#### Fixed
+- **MIDI CC 24, 25 and 26 turn BASS, MIDDLE and TREBLE, as the MIDI list says, on every channel.** They used to
+  turn the first three tone knobs in order, so on a channel whose knobs run otherwise they missed: on FrostPawAmp's
+  CLEAN CC 25 turned TREBLE and CC 26 nothing; on AmberPawAmp's CLEAN CC 24 turned TONE and BASS had no controller.
+  Now each finds its knob by name; a channel without that knob (CLEAN's MIDDLE on FrostPawAmp) leaves the controller
+  turning nothing.
+
 ## [0.9.0] — 2026-10-24 — OrbitAmp's new face, FrostPawAmp and AmberPawAmp join, one plug-in per format, the packs at their measured levels
 
 ### Every amp
