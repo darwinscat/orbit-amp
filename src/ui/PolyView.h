@@ -21,7 +21,10 @@ namespace orbitamp::polyview
     as the needle swings — with the needle on it, in the needle's own ink: green when the string is home,
     warming to orange by `warmCents` out. Nothing heard of the string: the name quiet and a dash. FAR: the
     word, toward the side it is off — or, where the scale is narrower than the word, across the whole lane.
-    MASKED: a plectrum's outline, orange — pluck this one alone. Orange is only ever a line or a solid. */
+    MASKED: a plectrum's outline, orange — this string stands on another's partial (a guitar's B on the low E's
+    3rd, a cent or three apart: one bin of the span), so damp the others and pluck it alone; plucked over a chord
+    still ringing, it stays covered. Where a face has room for words it says so ("DAMP · PLUCK ALONE": the
+    cockpit's screen); the strips and the dial show the plectrum only. Orange is only ever a line or a solid. */
 struct Ink
 {
     juce::Font   font;              // names and words: 13 px at the face's reading size

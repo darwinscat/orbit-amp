@@ -1576,7 +1576,8 @@ void TunerFace::paintPoly (juce::Graphics& g)
     }
 
     // THE SCREEN: big lanes, and under them the state in its corner, the A opposite when it is not 440, and
-    // between them the words for the plectrum, while one shows.
+    // between them the words for the plectrum, while one shows: what works for a string the others' partials
+    // cover — damp them, then pluck it (plucked alone over a chord still ringing, it stays covered).
     auto area = getLocalBounds().toFloat().reduced (18.0f, 10.0f);
     auto foot = area.removeFromBottom (24.0f);
     area.removeFromBottom (6.0f);
@@ -1591,7 +1592,7 @@ void TunerFace::paintPoly (juce::Graphics& g)
     if (polyview::anyMasked (lanes))
     {
         g.setColour (orange);
-        g.drawText ("PLUCK ALONE", foot, juce::Justification::centred, false);
+        g.drawText (juce::String::fromUTF8 ("DAMP \xc2\xb7 PLUCK ALONE"), foot, juce::Justification::centred, false);
     }
     polyview::paintColumns (g, area, lanes, ink, labelFont (stage::px16), polyGap * 2.0f);
 }
