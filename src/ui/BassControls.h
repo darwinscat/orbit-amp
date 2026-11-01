@@ -52,6 +52,13 @@ inline void asBassRail (GuardRail& r)
     r.typedScale     = 100.0f;
 }
 
+/** A HINT over a bass control (the owner, 01.11: what is this, BLEND?): its name in capitals, then in a few words what it
+    does — the tooltip the window's TooltipWindow shows, at its 13 px. */
+inline void hint (juce::SettableTooltipClient& control, const juce::String& text)
+{
+    control.setTooltip (text);
+}
+
 /** A knob whose right click asks for its menu. */
 class MenuKnob final : public Knob
 {

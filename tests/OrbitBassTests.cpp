@@ -5336,6 +5336,47 @@ int ORBITAMP_GATE_MAIN()
                    + reached.joinIntoString (", ") + " (" + seen.joinIntoString ("; ") + ")" + (bad.isEmpty() ? juce::String() : ": " + bad.joinIntoString ("; ")));
         }
 
+        // HINTS OVER THE SLIDERS (the owner, 01.11: what is this, BLEND?): every rail and slider on OrbitBass's face — COMP's
+        // threshold, ratio and BLEND, OCTAVE, ENVELOPE, CHORUS, DELAY's and REVERB's MIX, the AMP's BLEND, DI/CAB, GATE, LIMIT —
+        // a tooltip, its name in capitals first, then what it does; the window's TooltipWindow shows it at 13 px.
+        {
+            auto t = make (bass);
+            set (*t, params::delayPresent, 1.0f);
+            set (*t, params::reverbPresent, 1.0f);
+            settle (*t);
+            std::unique_ptr<juce::AudioProcessorEditor> ed (t->createEditor());
+            juce::StringArray bad, seen;
+            std::function<void (juce::Component&)> walk = [&] (juce::Component& c)
+            {
+                if (! c.isVisible())
+                    return;
+                juce::SettableTooltipClient* tip = nullptr;
+                if (auto* r = dynamic_cast<GuardRail*> (&c))
+                    tip = r;
+                else if (auto* s = dynamic_cast<CompRatioSlider*> (&c))
+                    tip = s;
+                else if (auto* k = dynamic_cast<bass::MenuKnob*> (&c))
+                    tip = k;
+                if (tip != nullptr)
+                {
+                    const auto text = tip->getTooltip();
+                    const auto name = text.upToFirstOccurrenceOf (": ", false, false);
+                    if (! text.contains (": ") || name.isEmpty() || name != name.toUpperCase() || ! juce::CharacterFunctions::isLetter (name[0])
+                        || text.length() < name.length() + 12)
+                        bad.add (juce::String (typeid (c).name()) + " \"" + text + "\"");
+                    else
+                        seen.add (name);
+                }
+                for (auto* child : c.getChildren())
+                    walk (*child);
+            };
+            for (auto* child : ed->getChildren())
+                walk (*child);
+            seen.sort (false);
+            check (bad.isEmpty() && seen.joinIntoString (",") == "BLEND,BLEND,CHORUS,DI/CAB,ENVELOPE,GATE,LIMIT,MIX,MIX,OCTAVE,RATIO,THRESHOLD" && juce::TooltipWindow().getLookAndFeel().getTooltipBounds ("BLEND: a hint", {}, { 0, 0, 2000, 2000 }).getHeight() >= 13,
+                   "every rail and slider on OrbitBass's face has a hint, its name first: " + seen.joinIntoString (", ")
+                   + (bad.isEmpty() ? juce::String() : "; without: " + bad.joinIntoString ("; ")));
+        }
     }
 
     // STILLS FOR A LOOK (ORBITBASS_STILLS, as above): OrbitBass's face as it opens, with DELAY and REVERB added at the least

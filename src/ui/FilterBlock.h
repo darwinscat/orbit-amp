@@ -377,6 +377,7 @@ public:
     {
         shieldsWhenOff = false;
         bass::asBassRail (rail);   // the amount in percent, a field too
+        bass::hint (rail, "ENVELOPE: how much of the swept filter is heard, 0-100 %");
         rail.onGesture = [&processor] (bool begin) { if (begin) processor.history.beginGesture(); else processor.history.endGesture(); };   // one undo step a drag, as COMP's
         for (auto* c : { (juce::Component*) &rail, (juce::Component*) &curve })
             addAndMakeVisible (*c);

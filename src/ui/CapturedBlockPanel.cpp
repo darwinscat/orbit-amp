@@ -32,6 +32,7 @@ struct CapturedBlockPanel::BassKnobs
         // BLEND, a rail as the bass's others are (the owner, 31.10): its amount in percent on its hand, 13 px, typed on
         // a click; its menu on a right click.
         bass::asBassRail (blend);
+        bass::hint (blend, "BLEND: the clean DI lows mixed in under the amp, 0-100 %");
         blend.onMenu = [this] (juce::Point<int>) { bass::showAmpMenu (state, &blend); };   // the AMP's menu, its gear's
         name.setFont (theme::displayFont (13.0f));
         name.setColour (juce::Label::textColourId, theme::txDim);

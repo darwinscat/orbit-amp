@@ -277,6 +277,8 @@ public:
         setName (name);
         shieldsWhenOff = false;
         bass::asBassRail (rail);
+        bass::hint (rail, w == SpacePicture::Which::delay ? "MIX: how loud the echoes are against the dry sound, 0-100 %"
+                                                          : "MIX: how loud the room is against the dry sound, 0-100 %");
         rail.textForValue = [] (float v) { return juce::String (juce::roundToInt (v)); };   // MIX is percent already
         rail.typedScale   = 1.0f;
         rail.onGesture = [&processor] (bool begin) { if (begin) processor.history.beginGesture(); else processor.history.endGesture(); };

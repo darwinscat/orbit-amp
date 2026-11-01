@@ -27,6 +27,7 @@ struct CabinetBlock::BassRow
         owner.addAndMakeVisible (di);
 
 
+        bass::hint (di, "DI/CAB: the dry DI mixed with the cabinet, 0-100 % DI");
         di.labelFontHeight = Knob::fxLabelH;
         di.labelTracking   = Knob::fxLabelTracking;
         di.labelRowHeight  = Knob::fxLabelRowH;

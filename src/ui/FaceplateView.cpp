@@ -69,6 +69,7 @@ FaceplateView::FaceplateView (AmpProcessor& processor)
             octave->marks.push_back ({ (float) k * 0.1f, k % 5 == 0 });
         octave->numbered = false;
         bass::asBassRail (octave->valueRail());
+        bass::hint (octave->valueRail(), "OCTAVE: the octave below mixed in under your note, 0-100 %");
         octave->valueRail().onGesture = [&processor] (bool begin) { if (begin) processor.history.beginGesture(); else processor.history.endGesture(); };
         octave->onMenu = [&state, raw = octave.get()] (juce::Point<int>) { bass::showOctaveMenu (state, raw); };
         octave->setPicture (std::make_unique<OctaveScope> (processor));   // the note and its sub, right of the rail
@@ -126,6 +127,8 @@ FaceplateView::FaceplateView (AmpProcessor& processor)
     if (processor.product().chain == Chain::bass)
     {
         bassRows = true;   // three rows by the signal's way
+        bass::hint (gate.valueRail(),  "GATE: below this level the gate closes, -80 to -30 dB; on the bottom stop it is OFF");
+        bass::hint (limit.valueRail(), "LIMIT: the ceiling the output never goes over, -3 to -0.1 dB");
         const auto gear = [this] (BlockFrame* b, const char* name) { if (b != nullptr) b->enableGear ([this, name] { openMenu (name); }); };
         gear (comp.get(), "COMP");
         gear (octave.get(), "OCTAVE");

@@ -27,7 +27,8 @@ namespace orbitamp
     reading OFF, and lifted off it the guard is on again at the lowest value.
 
     Drag to move; a click without a drag, either button, is the guard's menu (Oleh, 24.10). */
-class GuardRail final : public juce::Component
+class GuardRail final : public juce::Component,
+                        public juce::SettableTooltipClient
 {
 public:
     GuardRail (juce::RangedAudioParameter& valueParam, juce::RangedAudioParameter& onParam,

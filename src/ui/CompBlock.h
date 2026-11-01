@@ -460,7 +460,8 @@ double snapRatio (double r, float at, PositionOf positionOf)
 /** COMP'S RATIO SLIDER, over the IN/OUT square: 2:1 … 10:1 along `comp_ratio`'s own travel, a lilac track and an orange
     grip — the hand's — carrying the ratio at 13 px, the ratio's own control (the detents: compRatioDetents); moved, it sets
     the ratio (one gesture a drag), as a drag in the square does. */
-class CompRatioSlider final : public juce::Component
+class CompRatioSlider final : public juce::Component,
+                              public juce::SettableTooltipClient
 {
 public:
     explicit CompRatioSlider (AmpProcessor& processor) : ratio (processor)
@@ -719,6 +720,9 @@ public:
         shieldsWhenOff = false;
         bass::asBassRail (rail);   // the fader's amount in percent, a field too
         bass::asBassRail (thresholdRail);
+        bass::hint (thresholdRail, "THRESHOLD: the level COMP starts to squeeze at, in dB");
+        bass::hint (ratioSlider,   "RATIO: how hard COMP squeezes above the threshold, 2:1 to 10:1");
+        bass::hint (rail,          "BLEND: the compressed sound mixed with the dry one, 0-100 %");
         thresholdRail.textForValue = [] (float db) { return juce::String (juce::roundToInt (db)); };   // dB, as "dB" over it says
         thresholdRail.typedScale   = 1.0f;
         const auto undoStep = [&processor] (bool begin) { if (begin) processor.history.beginGesture(); else processor.history.endGesture(); };
