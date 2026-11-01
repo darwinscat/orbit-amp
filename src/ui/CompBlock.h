@@ -41,7 +41,7 @@ public:
           characterP (*processor.apvts.getParameter (params::compCharacter)),
           thresholdP (*processor.apvts.getParameter (params::compThreshold)),
           onP (*processor.apvts.getParameter (params::compOn)),
-          cols ((size_t) columnsShown)
+          cols ((size_t) core::CompTap::columns)
     {
         amountAtt    = std::make_unique<juce::ParameterAttachment> (amountP,    [this] (float) { repaint(); });
         onAtt        = std::make_unique<juce::ParameterAttachment> (onP,        [] (float) {});
@@ -55,8 +55,12 @@ public:
 
     static constexpr double topDb = 0.0, bottomDb = -48.0;   // the levels' scale
     static constexpr double grRangeDb = 24.0;                // the squeeze's, down its strip
-    static constexpr double spanSeconds = 2.5;
-    static constexpr int    columnsShown = (int) (spanSeconds / core::CompTap::hopSeconds + 0.5);
+    /** ONE PIXEL, A FIXED GROUP OF COLUMNS (the owner, 01.11: the picture flickered as it moved): a whole number of columns a
+        pixel, chosen from the plot's width so the span stays about 2.5 s, the groups counted from the tap's first column —
+        a pixel stays the same sound while it scrolls and the picture moves by whole pixels; only the newest, still filling
+        at the right edge, grows. A resize may regroup. */
+    static constexpr int spanColumns = (int) (2.5 / core::CompTap::hopSeconds + 0.5);
+    static int columnsPerPixel (int w) noexcept { return juce::jmax (1, juce::roundToInt ((double) spanColumns / (double) juce::jmax (1, w))); }
     static constexpr float  textHeight = 13.0f, grStripH = 30.0f, stripGap = 3.0f;
 
     /** How far a GuardRail's hand centre stands in from the rail's ends (its box less 2 px, then half a hand): the levels
@@ -166,12 +170,50 @@ public:
     /** What the taps hold, newest last — the timer's work, and a picture's made off screen. */
     void pull()
     {
-        shown = amp.compTap.read (cols.data(), (int) cols.size());
+        shown = amp.compTap.read (cols.data(), (int) cols.size(), &end);
         if (const auto w = amp.compTap.written(); w != lastWritten)
         {
             lastWritten = w;
             repaint();
         }
+    }
+
+    /** A pixel's columns: the loudest of each level, the deepest squeeze, and whether a break runs through them. */
+    struct Pixel { float in = 0.0f, out = 0.0f, mid = 0.0f, gr = 0.0f; bool any = false, broken = false; };
+
+    /** The plot's `w` pixels, the newest group at the right. */
+    std::vector<Pixel> bins (int w) const
+    {
+        std::vector<Pixel> px ((size_t) juce::jmax (0, w));
+        const auto take = [this] (Pixel& p, int k)
+        {
+            const auto& c = cols[(size_t) k];
+            p.in  = juce::jmax (p.in, c.in);
+            p.out = juce::jmax (p.out, c.out);
+            p.mid = juce::jmax (p.mid, c.mid);
+            p.gr  = juce::jmin (p.gr, c.gr);
+            p.broken = p.broken || ! c.joined;
+            p.any = true;
+        };
+        if (shown <= 0)
+            return px;
+        // Columns by their number since the prepare: cols[0] is column end - shown, a pixel's group its number / per.
+        const std::int64_t per = columnsPerPixel (w);
+        const auto last = (std::int64_t) end, first = last - shown, newest = (last - 1) / per;
+        for (int x = 0; x < w; ++x)
+        {
+            const auto group = newest - (w - 1 - x);
+            for (auto j = juce::jmax (first, group * per); j < juce::jmin (last, (group + 1) * per); ++j)
+                take (px[(size_t) x], (int) (j - first));
+        }
+        return px;
+    }
+
+    /** The pixel (from the plot's left) a column `age` columns older than the newest stands at. */
+    int pixelOfAge (int age, int w) const
+    {
+        const auto newest = (std::int64_t) (end - 1u), per = (std::int64_t) columnsPerPixel (w);
+        return w - 1 - (int) (newest / per - (newest - age) / per);
     }
 
     void paint (juce::Graphics& g) override
@@ -205,24 +247,14 @@ public:
             inSegment.clear();
         };
         const auto grY = [&] (float gr) { return strip.getY() + 3.0f + juce::jmin (1.0f, (float) (-gr / grRangeDb)) * (strip.getHeight() - 6.0f); };
-        for (int x = 0; x < w && shown > 0; ++x)
+        const auto pixels = bins (w);
+        for (int x = 0; x < w; ++x)
         {
-            const int a = x * columnsShown / w, b = juce::jmax (a + 1, (x + 1) * columnsShown / w);
-            float in = 0.0f, out = 0.0f, gr = 0.0f, mid = 0.0f;
-            bool  any = false, broken = false;
-            for (int j = a; j < b; ++j)
-                if (const int k = j - (columnsShown - shown); k >= 0)
-                {
-                    const auto& c = cols[(size_t) k];
-                    in  = juce::jmax (in, c.in);
-                    out = juce::jmax (out, c.out);
-                    mid = juce::jmax (mid, c.mid);
-                    gr  = juce::jmin (gr, c.gr);
-                    broken = broken || ! c.joined;
-                    any = true;
-                }
-            if (! any)
+            const auto& p = pixels[(size_t) x];
+            if (! p.any)
                 continue;
+            const float in = p.in, out = p.out, mid = p.mid, gr = p.gr;
+            const bool  broken = p.broken;
 
             const float px  = r.getX() + (float) x + 0.5f;
             const float yIn = juce::jlimit (lv.getY(), lv.getBottom(), yOfDb (dbOf (in)));
@@ -335,6 +367,7 @@ private:
     std::unique_ptr<juce::ParameterAttachment> amountAtt, characterAtt, onAtt, thrAtt;
     std::vector<core::CompTap::Column> cols;
     int shown = 0;
+    std::uint32_t end = 0;   // the count `cols` ends at: cols[shown - 1] is column end - 1
     std::uint32_t lastWritten = 0;
     bool  dragging = false, pressed = false;
     float grab = 0.0f;

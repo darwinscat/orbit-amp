@@ -4413,6 +4413,87 @@ int ORBITAMP_GATE_MAIN()
                 a.compTap.write (i.data(), m.data(), o.data(), g.data(), hop, false);
         };
 
+        // THE PICTURE MOVES BY WHOLE PIXELS (step 13, the owner, 01.11: it flickered as it moved): a fixed run of columns, the
+        // tap advanced 1 to 7 columns between frames — every complete pixel's values the same one whole shift later, at every
+        // whole number of columns a pixel the widths give.
+        juce::StringArray perSeen;
+        for (const int width : { 64, 74, 86, 102, 127, 170, 252, 502 })
+        {
+            auto t = make (bass);
+            CompGraph g (*t);
+            g.setSize (width, 120);
+            const int hop = (int) std::lround (sampleRate * core::CompTap::hopSeconds);
+            int fed = 0;
+            const auto feed = [&] (int n)
+            {
+                for (int k = 0; k < n; ++k, ++fed)
+                {
+                    const float v = 0.05f + 0.9f * (float) std::fmod (fed * 0.618034, 1.0);
+                    std::vector<float> i ((size_t) hop, v), m ((size_t) hop, v * 0.5f), o ((size_t) hop, v * 0.25f), r ((size_t) hop, -24.0f * v);
+                    t->compTap.write (i.data(), m.data(), o.data(), r.data(), hop, false);
+                }
+            };
+            feed (900);
+            g.pull();
+            const int w = (int) g.plot().getWidth();
+            auto before = g.bins (w);
+            juce::StringArray wrong;
+            int compared = 0;
+            for (const int step : { 1, 2, 3, 4, 5, 6, 7, 6, 7, 3 })
+            {
+                const int was = fed;
+                feed (step);
+                g.pull();
+                const auto after = g.bins (w);
+                const int per = CompGraph::columnsPerPixel (w), shift = (fed - 1) / per - (was - 1) / per;
+                int differ = 0;
+                for (int x = shift; x < w - 1; ++x)   // the old newest pixel, still filling, may grow
+                {
+                    const auto& a = before[(size_t) x];
+                    const auto& b = after[(size_t) (x - shift)];
+                    ++compared;
+                    if (! a.any || a.in != b.in || a.out != b.out || a.mid != b.mid || a.gr != b.gr || a.any != b.any || a.broken != b.broken)
+                        ++differ;
+                }
+                if (differ > 0)
+                    wrong.add ("+" + juce::String (step) + " columns: " + juce::String (differ) + " of " + juce::String (w - 1 - shift) + " pixels changed");
+                before = after;
+            }
+            perSeen.add (juce::String (CompGraph::columnsPerPixel (w)));
+            check (wrong.isEmpty() && compared > 300,
+                   "COMP's picture moves by whole pixels: " + juce::String (CompGraph::columnsPerPixel (w)) + " columns a pixel at " + juce::String (w)
+                   + " px, grouped from the tap's first, every complete pixel's values unchanged as it scrolls, 1 to 7 columns a frame ("
+                   + juce::String (compared) + " compared" + (wrong.isEmpty() ? juce::String() : ": " + wrong.joinIntoString ("; ")) + ")");
+        }
+        check (perSeen.joinIntoString (",") == "8,7,6,5,4,3,2,1", "...at every whole number of columns a pixel, 8 down to 1 (" + perSeen.joinIntoString (",") + ")");
+
+        // THE SPAN STAYS ABOUT 2.5 s (01.11): at the face's width as it opens, its least and its widest, the
+        // plot's pixels times their columns — within what rounding the columns a pixel to a whole number can leave, half a
+        // column a pixel.
+        {
+            auto t = make (bass);
+            std::unique_ptr<juce::AudioProcessorEditor> ed (t->createEditor());
+            const int h = ed->getHeight();
+            juce::StringArray spans;
+            bool ok = true;
+            for (const int width : { ed->getWidth(), 1, h * 10 })
+            {
+                ed->setSize (width, h);
+                CompGraph* graph = nullptr;
+                std::function<void (juce::Component&)> find = [&] (juce::Component& c)
+                {
+                    if (auto* x = dynamic_cast<CompGraph*> (&c)) graph = x;
+                    for (auto* child : c.getChildren())
+                        find (*child);
+                };
+                find (*ed);
+                const int w = graph != nullptr ? (int) graph->plot().getWidth() : 0, per = CompGraph::columnsPerPixel (w), span = w * per;
+                ok = ok && graph != nullptr && w > 0 && std::abs (span - CompGraph::spanColumns) * 2 <= w;
+                spans.add (juce::String (w) + " px x " + juce::String (per) + " = " + juce::String (span * core::CompTap::hopSeconds, 2) + " s");
+            }
+            check (ok && CompGraph::spanColumns == 500, "COMP's picture shows about 2.5 s at every width: " + spans.joinIntoString (", "));
+        }
+
         // THE LAYOUT, left to right: the threshold rail ("dB" over it), the picture, the ratio (slider over square), BLEND —
         // and nothing a player reads under 13 px; the threshold's number on its grip, the picture's orange box gone.
         {
@@ -4575,7 +4656,7 @@ int ORBITAMP_GATE_MAIN()
                 const int sampleAt[] { 150, 330, 390, 465 };
                 for (int k = 0; k < 4; ++k)
                 {
-                    const int px = 1 + (int) (((float) sampleAt[k] + 0.5f) * (float) w / (float) CompGraph::columnsShown);
+                    const int px = 1 + g.pixelOfAge (499 - sampleAt[k], w);
                     const int lowest = (float) px >= plate.getX() - 2.0f && (float) px <= plate.getRight() + 2.0f ? (int) plate.getY() - 1 : (int) strip.getBottom();
                     juce::Colour best = well;
                     for (int y = (int) strip.getY(); y < lowest; ++y)

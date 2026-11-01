@@ -96,8 +96,9 @@ public:
     /** Any thread: how many columns have gone in since the prepare. */
     std::uint32_t written() const noexcept { return count.load (std::memory_order_acquire); }
 
-    /** The message thread: the newest `want` columns (at most `columns`), oldest first, into `dst`; how many there were. */
-    int read (Column* dst, int want) const noexcept
+    /** The message thread: the newest `want` columns (at most `columns`), oldest first, into `dst`; how many there were.
+        `end`: the count the copy ends at — the n columns copied are the ones numbered end - n to end - 1 since the prepare. */
+    int read (Column* dst, int want, std::uint32_t* end = nullptr) const noexcept
     {
         const auto k    = count.load (std::memory_order_acquire);
         const int  have = (int) std::min<std::uint32_t> (k, (std::uint32_t) std::clamp (want, 0, columns));
@@ -116,6 +117,8 @@ public:
         const int  lost  = ahead > room ? (int) std::min<std::uint32_t> ((std::uint32_t) have, ahead - room) : 0;
         if (lost > 0)
             std::copy (dst + lost, dst + have, dst);
+        if (end != nullptr)
+            *end = k;
         return have - lost;
     }
 
