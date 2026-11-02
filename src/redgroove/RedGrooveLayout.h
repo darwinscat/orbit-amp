@@ -71,6 +71,29 @@ inline constexpr float knobNameY = 712.0f;          // the row the knobs' names 
 inline constexpr std::array<float, 3> toneX { 646.8f, 753.8f, 860.0f };
 inline constexpr float toneY = 766.0f, toneSocket = 77.0f, toneKnob = 64.0f;
 
+// THE OTHER KNOBS: COMP and BLEND either side of DRIVE, DI/CAB in the cabinet's panel — each in its socket. A ring
+// round every knob, in its socket's groove, `ringInset` inside the socket's edge.
+inline const juce::Point<float> comp { 288.8f, 794.5f }, blend { 532.0f, 794.0f }, diCab { 1281.0f, 828.0f };
+inline constexpr float smallSocket = 78.0f, smallKnob = 64.0f, diCabSocket = 73.5f, diCabKnob = 60.0f;
+inline constexpr float ringInset = 3.5f, ringWidth = 2.5f, driveRingWidth = 3.0f;
+
+// COMP's squeeze, in its slot between COMP and DRIVE.
+inline const juce::Rectangle<float> grSlot { 336.5f, 753.5f, 12.5f, 85.0f };
+
+// THE EFFECTS: three slots, OCTAVE, ENVELOPE and CHORUS, a vertical fader in each.
+inline constexpr std::array<float, 3> effectX { 975.0f, 1073.8f, 1170.0f };
+inline constexpr float effectTop = 734.0f, effectBottom = 864.0f, effectFaderWidth = 44.0f;
+inline constexpr float effectNameRoom = 90.0f;      // each name set condensed into this, where wider
+
+// MIDDLE's frequency: the slot lying under the tones, a fader across it; its ends' words beside it.
+inline const juce::Rectangle<float> midFreqSlot { 683.5f, 865.0f, 141.5f, 16.0f };
+inline constexpr float midFreqCap = 12.0f;
+
+// THE READINGS, a row under each group of controls: the AMP's, the effects' and DI/CAB's; the tones'; MIDDLE's
+// frequency over its slot; IN's and OUT's levers over their lamps' slots.
+inline constexpr float valueY = 882.0f, toneValueY = 822.0f, midFreqValueY = 849.0f, levelValueY = 855.0f;
+inline constexpr float diCabNameY = 778.0f, diCabValueY = 886.0f;
+
 // The bottom edge under the panels: PRESET, the version, MEM and CPU — for now.
 inline constexpr float footY = 928.0f;
 inline const juce::Rectangle<float> presetPlace  { 150.0f, footY - 12.0f, 130.0f, 24.0f };

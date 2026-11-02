@@ -1330,6 +1330,7 @@ endif()
 set(REDGROOVEBASS_SOURCES
     ${FACE_SOURCES}
     src/redgroove/RedGrooveArt.cpp
+    src/redgroove/RedGrooveControls.cpp
     src/redgroove/RedGrooveEditor.cpp
     src/redgroove/RedGrooveLineup.cpp)
 
@@ -1546,6 +1547,8 @@ gate_in_binary(amberpaw-channel  tests/AmpChannelTests.cpp  PRODUCT AmberPawAmp 
 gate_in_binary(amberpaw-set      tests/AmpSetTests.cpp      PRODUCT AmberPawAmp  CHANNELS 6)
 gate_in_binary(redgroove-channel tests/AmpChannelTests.cpp  PRODUCT RedGrooveBass CHANNELS 2)
 gate_in_binary(redgroove-set     tests/AmpSetTests.cpp      PRODUCT RedGrooveBass CHANNELS 2)
+# ...and the walker's face, its window made and never shown: what its own controls turn, and the tone left alone.
+gate_in_binary(redgroove-face    tests/RedGrooveFaceTests.cpp PRODUCT RedGrooveBass)
 
 # ORBITBASS'S CHAIN, headless: where a fresh one stands (the gate off, the HPF on at 25 Hz, the LPF off, mono,
 # its one temporary pack), the strip's arrows in its order (GATE, AMP, CAB, LIMIT), the delay and the reverb

@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include "RedGrooveControls.h"
+
 #include "../face/Console.h"
 
 namespace orbitamp::redgroove
@@ -36,7 +38,9 @@ public:
     walker's dashboard, under its glass dome over the mushroom forest, its channels the bass's two amps. What
     the walker has of the console's own: DRIVE, the tones, the six keys of the history and the registers, IN
     and OUT, GATE and LIMITER, the tuner, the maker's plate; what it has not: REVERB, DELAY and CAB's plates,
-    HPF and LPF (Console::Places::plates, filterKeys). */
+    HPF and LPF (Console::Places::plates, filterKeys). What is the walker's own over it: COMP's knob, its threshold,
+    and its squeeze beside it, BLEND, the three effects' faders, MIDDLE's frequency across under the tones, DI/CAB,
+    a ring round every knob and a reading under every control. */
 class RedGrooveEditor final : public face::Console
 {
 public:
@@ -45,6 +49,26 @@ public:
 private:
     Dome dome;
 
+    // THE BASS'S OWN CONTROLS. COMP's knob is its threshold, clockwise the deeper (0 to -48 dB); its ratio, its
+    // character and its share are the walker's to hold (channels::Lineup::pinned). BLEND and DI/CAB are their
+    // parameters'; each effect's fader its amount, 0 the dry; MIDDLE's frequency lies across, 200 Hz to 3 kHz on a
+    // logarithmic travel. A double click puts any of them back where it opens.
+    face::ArtKnob comp, blend, diCab;
+    face::ColumnFader octave, envelope, chorus, midFreq;
+    GrColumn squeeze;
+    std::vector<std::unique_ptr<face::KnobRing>> rings;     // DRIVE's, COMP's, BLEND's, DI/CAB's, then the tones'
+    static constexpr size_t firstToneRing = 4;
+    std::vector<std::unique_ptr<Readout>> readouts;
+
+    /** A reading of its own under a control, in `box`. */
+    Readout& readout (juce::Rectangle<float> box);
+
+    /** A control onto a parameter through its own travel: where a value stands on it, and the value a travel is. */
+    template <typename Control>
+    void bindTravel (Control&, const juce::String& paramId, std::function<float (float)> toTravel,
+                     std::function<float (float)> toPlain, std::function<void (float)> shown);
+
+    void stripsLaid (const face::Strips&) override;     // the tones' rings go round their knobs where they stand now
     void webExtras (const juce::File& dir, juce::DynamicObject& places, juce::DynamicObject& world) override;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (RedGrooveEditor)

@@ -67,6 +67,34 @@ namespace
         ink.label (g, text, juce::Rectangle<float> (360.0f, 32.0f).withCentre (at), em, colour);
     }
 
+    /** ...set condensed into `room` about its centre, as tall, where it is wider. */
+    void printInto (juce::Graphics& g, const juce::String& text, juce::Point<float> at, float room, float em, juce::Colour colour)
+    {
+        constexpr float tracking = 0.08f;
+        const float wide = juce::GlyphArrangement::getStringWidth (labelFont (em).withExtraKerningFactor (tracking), text.toUpperCase());
+        const juce::Graphics::ScopedSaveState keep (g);
+        if (wide > room)
+            g.addTransform (juce::AffineTransform::scale (room / wide, 1.0f, at.x, at.y));
+        print (g, text, at, em, colour);
+    }
+
+    /** THE RINGS' LIGHT: the family's violet, round every knob. */
+    const juce::Colour ringLight { 0xff8b6cff };
+
+    /** What a reading says: decibels signed to a tenth, whole decibels, a share in percent, a frequency. */
+    juce::String dbTenth (float v) { return (v > 0.04f ? "+" : "") + juce::String (v, 1) + " dB"; }
+    juce::String dbWhole (float v) { return juce::String (juce::roundToInt (v)) + " dB"; }
+    juce::String percent (float share) { return juce::String (juce::roundToInt (share * 100.0f)) + "%"; }
+    juce::String hertz (float hz) { return hz >= 1000.0f ? juce::String (hz / 1000.0f, 2) + " kHz" : juce::String (juce::roundToInt (hz)) + " Hz"; }
+
+    /** MIDDLE's frequency on its fader: the span params::bassMidMinHz .. bassMidMaxHz on a logarithmic travel. */
+    float midTravel (float hz)
+    {
+        const float lo = params::bassMidMinHz, hi = params::bassMidMaxHz;
+        return juce::jlimit (0.0f, 1.0f, std::log (juce::jlimit (lo, hi, hz) / lo) / std::log (hi / lo));
+    }
+    float midHz (float travel) { return params::bassMidMinHz * std::pow (params::bassMidMaxHz / params::bassMidMinHz, travel); }
+
     /** ...a title, from its left edge at `at.x`, as the layout's drawing sets its panels' names. */
     void printFromLeft (juce::Graphics& g, const juce::String& text, juce::Point<float> at, float em, juce::Colour colour)
     {
@@ -193,6 +221,19 @@ void Cabin::paintStatic (juce::Graphics& g, float scale) const
 
     // DRIVE, the hero, a size up and in the values' white; the tones' names are the playing channel's (paintStrips).
     print (g, "DRIVE", { drive.x, knobNameY }, px15, cabinInk().values);
+
+    // The other controls' names over them: COMP and BLEND beside DRIVE — COMP's squeeze between COMP and DRIVE says itself; the three effects, each condensed
+    // into its pitch where wider; DI/CAB over its knob; and the words at the ends of MIDDLE's frequency.
+    const auto words = cabinInk().words;
+    print (g, "COMP", { comp.x, knobNameY }, px13, words);
+    print (g, "BLEND", { blend.x, knobNameY }, px13, words);
+    const char* effects[] { "OCTAVE", "ENVELOPE", "CHORUS" };
+    for (size_t i = 0; i < effectX.size(); ++i)
+        printInto (g, effects[i], { effectX[i], knobNameY }, effectNameRoom, px13, words);
+    print (g, "DI/CAB", { diCab.x, diCabNameY }, px13, words);
+    const auto ends = cabinInk().at (words, 0.8f);
+    writeAsIs (g, cabinInk(), "200 Hz", around ({ midFreqSlot.getX() - 48.0f, midFreqSlot.getCentreY() }, 90.0f, 28.0f), px13, ends);
+    writeAsIs (g, cabinInk(), "3 kHz", around ({ midFreqSlot.getRight() + 40.0f, midFreqSlot.getCentreY() }, 80.0f, 28.0f), px13, ends);
 }
 
 /** THE PLAYING CHANNEL'S TONES' NAMES over their knobs, each in its row — its sockets are the picture's own. */
@@ -219,7 +260,12 @@ void Dome::paint (juce::Graphics& g)
 
 //==============================================================================
 RedGrooveEditor::RedGrooveEditor (AmpProcessor& p)
-    : face::Console (p, std::make_unique<Cabin>(), cabinPlaces(), cabinLook())
+    : face::Console (p, std::make_unique<Cabin>(), cabinPlaces(), cabinLook()),
+      comp (Art::of().knobTone, tonePointer),
+      blend (Art::of().knobTone, tonePointer),
+      diCab (Art::of().knobTone, tonePointer),
+      octave (Art::of().faderCap), envelope (Art::of().faderCap), chorus (Art::of().faderCap), midFreq (Art::of().faderCap),
+      squeeze ([&p] { return p.compGrDb.load (std::memory_order_relaxed); })
 {
     // Everything this constructor sets is the face settling onto the state, not a player's edit.
     const felitronics::appkit::CompareHistory::ScopedSuppress settling (amp.history);
@@ -253,6 +299,108 @@ RedGrooveEditor::RedGrooveEditor (AmpProcessor& p)
             }
         };
 
+    // THE BASS'S OWN KNOBS, each in its socket: COMP, BLEND, DI/CAB.
+    const auto knobAt = [this] (face::ArtKnob& knob, juce::Point<float> centre, float size)
+    {
+        addToStage (knob);
+        knob.setBounds (around (centre, size, size).toNearestInt());
+    };
+    knobAt (comp, layout::comp, layout::smallKnob);
+    knobAt (blend, layout::blend, layout::smallKnob);
+    knobAt (diCab, layout::diCab, layout::diCabKnob);
+
+    // THE RINGS, one round every knob in its socket's groove, the tones' where the rows put them (stripsLaid).
+    const auto ringFor = [this] (const face::ArtKnob& knob, juce::Point<float> centre, float socket, float width)
+    {
+        rings.push_back (std::make_unique<face::KnobRing> (knob, ringLight, centre, socket * 0.5f - layout::ringInset, width));
+        addToStage (*rings.back());
+    };
+    ringFor (driveKnob(), layout::drive, layout::driveSocket, layout::driveRingWidth);
+    ringFor (comp, layout::comp, layout::smallSocket, layout::ringWidth);
+    ringFor (blend, layout::blend, layout::smallSocket, layout::ringWidth);
+    ringFor (diCab, layout::diCab, layout::diCabSocket, layout::ringWidth);
+    for (int t = 0; t < Channels::maxTones; ++t)
+        ringFor (toneKnob (t), { layout::toneX[0], layout::toneY }, layout::toneSocket, layout::ringWidth);
+    stripsLaid (strips);        // the console laid the rows before there were rings to put round them
+
+    // THE FADERS: the three effects upright in their slots, MIDDLE's frequency across under the tones. Each says
+    // where it stands in the tag over it while it is held.
+    const auto faderIn = [this] (face::ColumnFader& fader, juce::Rectangle<float> box, float cap, bool across)
+    {
+        fader.capLength = cap;
+        fader.handLight = handLight;
+        fader.marks = across ? 4 : 10;
+        fader.longMark = -1;
+        fader.setAcross (across);
+        addToStage (fader);
+        fader.setBounds (box.toNearestInt());
+    };
+    face::ColumnFader* effectFaders[] { &octave, &envelope, &chorus };
+    const float effectHeight = layout::effectBottom - layout::effectTop;
+    for (size_t i = 0; i < 3; ++i)
+        faderIn (*effectFaders[i], juce::Rectangle<float> (layout::effectFaderWidth, effectHeight)
+                                       .withCentre ({ layout::effectX[i], layout::effectTop + 0.5f * effectHeight }),
+                 layout::faderCapLength, false);
+    faderIn (midFreq, layout::midFreqSlot.withSizeKeepingCentre (layout::midFreqSlot.getWidth(), 40.0f), layout::midFreqCap, true);
+
+    // Each known by a name of its own, as a gate finds it (tests/RedGrooveFaceTests.cpp).
+    comp.setComponentID ("comp");
+    blend.setComponentID ("blend");
+    diCab.setComponentID ("diCab");
+    octave.setComponentID ("octave");
+    envelope.setComponentID ("envelope");
+    chorus.setComponentID ("chorus");
+    midFreq.setComponentID ("midFreq");
+
+    // COMP's squeeze, in its slot.
+    addToStage (squeeze);
+    squeeze.setBounds (layout::grSlot.reduced (2.0f).toNearestInt());
+
+    // THE READINGS, one under every control.
+    const auto under = [] (float x, float y, float w = 120.0f) { return around ({ x, y }, w, 26.0f); };
+    auto& driveValue  = readout (under (layout::drive.x, layout::valueY));
+    auto& compValue   = readout (under (layout::comp.x, layout::valueY, 84.0f));
+    auto& blendValue  = readout (under (layout::blend.x, layout::valueY));
+    auto& midValue    = readout (under (layout::toneX[1], layout::midFreqValueY));
+    auto& diCabValue  = readout (under (layout::diCab.x, layout::diCabValueY));
+    auto& inValue     = readout (under (layout::inTitle.x, layout::levelValueY, 104.0f));
+    auto& outValue    = readout (under (layout::outTitle.x, layout::levelValueY, 104.0f));
+    Readout* effectValues[] { &readout (under (layout::effectX[0], layout::valueY, 90.0f)),
+                              &readout (under (layout::effectX[1], layout::valueY, 90.0f)),
+                              &readout (under (layout::effectX[2], layout::valueY, 90.0f)) };
+
+    // ...DRIVE's as its dial reads, 0 to 10; the tones' in decibels — the bass's standard's three, the same on every
+    // gear (Channels::toneOf); the levers' in decibels.
+    auto* gain = amp.apvts.getParameter (params::preampGain);
+    follow (params::preampGain, [gain, &driveValue] (float v) { driveValue.set (juce::String (gain->convertTo0to1 (v) * 10.0f, 1)); })->sendInitialUpdate();
+    for (int t = 0; t < 3; ++t)
+    {
+        auto& value = readout (under (layout::toneX[(size_t) t], layout::toneValueY, 100.0f));
+        follow (channels.toneOf (channels.active(), t).toRawUTF8(), [&value] (float v) { value.set (dbTenth (v)); })->sendInitialUpdate();
+    }
+    follow (params::inTrim,  [&inValue]  (float v) { inValue.set (dbTenth (v)); })->sendInitialUpdate();
+    follow (params::outTrim, [&outValue] (float v) { outValue.set (dbTenth (v)); })->sendInitialUpdate();
+
+    // ...and the bass's own, each bound through its own travel.
+    bindTravel (comp, params::compThreshold, [] (float db) { return db / params::compThresholdMin; },
+                [] (float t) { return t * params::compThresholdMin; }, [&compValue] (float db) { compValue.set (dbWhole (db)); });
+    bindTravel (blend, params::ampBlend, [] (float v) { return v; }, [] (float t) { return t; },
+                [&blendValue] (float v) { blendValue.set (percent (v)); });
+    bindTravel (diCab, params::diMix, [] (float v) { return v / 100.0f; }, [] (float t) { return t * 100.0f; },
+                [&diCabValue] (float v) { diCabValue.set (percent (v / 100.0f)); });
+    const char* effectIds[] { params::octaveAmount, params::filterAmount, params::chorusAmount };
+    const char* effectNames[] { "OCTAVE", "ENVELOPE", "CHORUS" };
+    for (size_t i = 0; i < 3; ++i)
+    {
+        auto& value = *effectValues[i];
+        bindTravel (*effectFaders[i], effectIds[i], [] (float v) { return v; }, [] (float t) { return t; },
+                    [&value] (float v) { value.set (percent (v)); });
+        sayLever (*effectFaders[i], effectNames[i], [this, id = effectIds[i]] { return 100.0f * getParam (id); });
+    }
+    const auto midId = params::eqBellHz (0, 0);
+    bindTravel (midFreq, midId, midTravel, midHz, [&midValue] (float hz) { midValue.set (hertz (juce::jlimit (params::bassMidMinHz, params::bassMidMaxHz, hz))); });
+    sayLever (midFreq, "MIDDLE", [this, midId] { return getParam (midId.toRawUTF8()); });
+
     // THE DOME, under the dashboard: the picture's alpha is its frame.
     dome.still = Art::still();
     stage.addAndMakeVisible (dome, 0);
@@ -264,6 +412,50 @@ RedGrooveEditor::RedGrooveEditor (AmpProcessor& p)
         engine.go (c.getIntValue());
 
     showChannel();
+}
+
+Readout& RedGrooveEditor::readout (juce::Rectangle<float> box)
+{
+    auto& r = *readouts.emplace_back (std::make_unique<Readout> (cabinInk(), stage::px13));
+    addToStage (r);
+    r.setBounds (box.toNearestInt());
+    return r;
+}
+
+template <typename Control>
+void RedGrooveEditor::bindTravel (Control& control, const juce::String& paramId, std::function<float (float)> toTravel,
+                                  std::function<float (float)> toPlain, std::function<void (float)> shown)
+{
+    auto* p = amp.apvts.getParameter (paramId);
+    jassert (p != nullptr);
+    if (p == nullptr)
+        return;
+    auto* a = follow (paramId.toRawUTF8(), [&control, toTravel, shown] (float v)
+    {
+        control.setValue (toTravel (v), false);
+        if (shown)
+            shown (v);
+    });
+    control.onGestureStart = [a] { a->beginGesture(); };
+    control.onChange       = [a, toPlain] (float t) { a->setValueAsPartOfGesture (toPlain (t)); };
+    control.onGestureEnd   = [a] { a->endGesture(); };
+    control.defaultValue   = toTravel (p->convertFrom0to1 (p->getDefaultValue()));     // where a double click puts it
+    a->sendInitialUpdate();
+}
+
+/** THE TONES' RINGS GO WITH THEIR KNOBS: each round its knob where the rows put it, the size the row gives it; a ring
+    whose knob the channel has not, hidden with it. */
+void RedGrooveEditor::stripsLaid (const face::Strips& laid)
+{
+    for (size_t t = 0; t + firstToneRing < rings.size(); ++t)
+    {
+        auto& ring = *rings[t + firstToneRing];
+        const bool shown = t < laid.tones.size();
+        if (shown)
+            ring.place (laid.tones[t].knob.getCentre(), (layout::toneSocket * 0.5f - layout::ringInset) * laid.toneScale,
+                        layout::ringWidth * laid.toneScale);
+        ring.setVisible (shown);
+    }
 }
 
 /** The walker's own part of the site's demo (Console::webExtras): the dome — the box the world is drawn in — the

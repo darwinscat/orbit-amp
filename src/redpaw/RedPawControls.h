@@ -147,45 +147,7 @@ private:
 };
 
 //==============================================================================
-/** THE RING ROUND A KNOB: the ring round each knob's socket, made to say where the knob stands — lit
-    from the start of its travel to where its pointer is, the rest dim. It breathes only when it matters:
-    under the hand, or while the knob turns, it brightens softly, and about a second after the hand has
-    gone it eases back. Nothing moves on it otherwise.
-
-    It is the whole ring: the pictures had one painted in the groove round each socket, and tools/bake-art
-    takes it out of them, for a painted ring is no true circle — it wandered out from under a true one in
-    slivers, and in under it in steps at the lit band's edge. It watches its knob (a dumb view watching
-    another) and lies in that groove, `radius` from the socket's middle and `width` wide, where the ring
-    was painted; it never takes a click. */
-class KnobRing final : public juce::Component, private juce::Timer
-{
-public:
-    KnobRing (const Skin&, const face::ArtKnob&, juce::Point<float> centre, float radius, float width);
-
-    void paint (juce::Graphics&) override;
-
-    /** Put round its knob where the knob now stands, the ring this big: the rows are laid again with
-        the channel (face::Console::layStrips). */
-    void place (juce::Point<float> centre, float radius, float width);
-
-    // What it is drawn with — said here so that the site's demo is drawn with it too (RedPawEditor::webExtras).
-    static constexpr float from = -135.0f, sweep = 270.0f;      // a knob's travel, as ArtKnob turns it
-    static constexpr juce::uint32 restDark = 0xff05090b;         // the rest of the ring: its light taken toward this dark...
-    static constexpr float restDim = 0.62f;                      // ...this far, as the painted ring looked under the veil that dimmed it
-    static juce::Colour restOf (juce::Colour light) { return light.interpolatedWith (juce::Colour (restDark), restDim); }
-    static constexpr float litAlpha = 0.7f, litAlphaHand = 0.3f;         // the lit arc, and how much more under the hand
-    static constexpr float glowAlpha = 0.35f, glowAlphaHand = 0.4f, glowRadius = 3.0f, glowRadiusHand = 4.0f;
-    static constexpr float rimOfKnob = 0.46f, rimAlpha = 0.8f;   // under the hand, an orange rim round the cap, of the knob's width
-
-private:
-    const Skin& skin;               // the rover's whose ring it is: its light
-    const face::ArtKnob& knob;
-    float radius, width;
-    float shown = -1.0f;            // the value the whole ring is drawn at, taken with its repaint (timerCallback)
-    face::Glide breath;             // 0 resting .. 1 under the hand
-    double leftAt = 0.0;            // when the hand last left, on the millisecond counter
-    bool touched = false;
-    void timerCallback() override;
-};
+/** THE RING ROUND A KNOB is the family's now (face/Controls.h), in the rover's ring light. */
+using face::KnobRing;
 
 } // namespace orbitamp::redpaw
