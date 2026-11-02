@@ -104,6 +104,18 @@ public:
         bool keyNamesAlternate = false, keyNamesOnKeys = false;
         std::array<juce::Point<float>, 6> holes;            // the roof keys' centres
         float holeKeySize = 40.0f;
+        /** A ROOF KEY'S OWN BOX, where a face's key is not the square `holeKeySize` across round its hole —
+            RedGrooveBass's, wider than tall, the history's wider than the registers'. Empty: the square. */
+        std::array<juce::Rectangle<float>, 6> holeKeys {};
+        /** WHAT OF THE CONSOLE'S OWN A FACE HAS NO PLACE FOR. Every face but RedGrooveBass has both:
+            - `plates`: REVERB, DELAY and CAB on their plates, with their words. Without them none is on the
+              stage and REVERB's and DELAY's levels are bound to nothing; CAB's slider is still kept unseen —
+              the console reads the cabinet that is playing off it — and its plate's box, sliderNames[2], is
+              still where a dropped IR's tag stands and where a right click opens the cabinets' window.
+            - `filterKeys`: HPF and LPF, the cabinet's cuts, under the tones. Without them neither key is on the
+              stage or in the rows (Strips), and neither is bound to the cuts. */
+        bool plates = true;
+        bool filterKeys = true;
         std::array<juce::Rectangle<float>, 3> sliders;      // REVERB, DELAY, CAB
         std::array<juce::Rectangle<float>, 3> sliderNames;  // the row each plate's words stand in
         float sliderCapAngle = juce::MathConstants<float>::halfPi;  // how the sliders' caps lie (PlateSlider)
@@ -118,6 +130,7 @@ public:
         juce::Rectangle<float> emblemMark;                  // the box the mark is cut in
         juce::Rectangle<float> version, load, memory, preset, gateDoor, limiterDoor;
         float gateDoorAngle = 0.0f, limiterDoorAngle = 0.0f;    // GATE and LIMITER turned about their middles, radians
+        bool doorsFit = false;                              // ...set condensed into their boxes, as tall, where wider (Legend::fit)
         float readingPx = stage::px11;                      // what CPU and MEM are written at...
         bool readingsFit = false;                           // ...set condensed into their boxes, as tall, where wider (Legend::fit)
         bool tunerStrip = false;                            // the tuner in one low line (TunerFace::setStrip)...

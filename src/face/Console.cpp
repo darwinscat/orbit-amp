@@ -211,7 +211,7 @@ Console::Console (AmpProcessor& p, std::unique_ptr<Picture> pic, const Places& w
         buttons[i] = std::make_unique<PushButton> (filter ? switches[i].name : "");
         auto& b = *buttons[i];
         stage.addChildComponent (b);
-        if (filter)
+        if (filter && places.filterKeys)
         {
             b.setVisible (true);
             b.setBounds (around (places.keys[i], places.filterKeyWidth > 0.0f ? places.filterKeyWidth : places.keySize,
@@ -233,7 +233,8 @@ Console::Console (AmpProcessor& p, std::unique_ptr<Picture> pic, const Places& w
         auto& key = *overhead[i];
         key.latching = false;
         stage.addAndMakeVisible (key);
-        key.setBounds (around (places.holes[i], places.holeKeySize, places.holeKeySize));
+        key.setBounds (places.holeKeys[i].isEmpty() ? around (places.holes[i], places.holeKeySize, places.holeKeySize)
+                                                    : box (places.holeKeys[i]));
     }
     overhead[ovUndo]->onPress = [this] { endTapping(); amp.history.undo(); };
     overhead[ovRedo]->onPress = [this] { endTapping(); amp.history.redo(); };
@@ -248,7 +249,8 @@ Console::Console (AmpProcessor& p, std::unique_ptr<Picture> pic, const Places& w
         key.onPress  = [this, r] { endTapping(); amp.history.switchTo (r); };
         key.onMenu   = [this, r] { showRegisterMenu (r); };
         stage.addAndMakeVisible (key);
-        key.setBounds (around (places.holes[i], places.holeKeySize, places.holeKeySize));
+        key.setBounds (places.holeKeys[i].isEmpty() ? around (places.holes[i], places.holeKeySize, places.holeKeySize)
+                                                    : box (places.holeKeys[i]));
     }
     amp.history.onHistoryChanged = [this] { refreshHistory(); };
     refreshHistory();
@@ -267,7 +269,8 @@ Console::Console (AmpProcessor& p, std::unique_ptr<Picture> pic, const Places& w
         sliders[i]->capAngle  = places.sliderCapAngle;
         sliders[i]->capLength = places.sliderCapLength;
         sliders[i]->handLight = look.handLight;
-        stage.addAndMakeVisible (*sliders[i]);
+        stage.addChildComponent (*sliders[i]);         // ...on a face that has the plates (Places::plates)
+        sliders[i]->setVisible (places.plates);
         sliders[i]->setBounds (box (places.sliders[i]));
     }
 
@@ -286,7 +289,8 @@ Console::Console (AmpProcessor& p, std::unique_ptr<Picture> pic, const Places& w
 
     // REVERB's name carries the reverb's character, and a click on it opens the list — the same six
     // OrbitAmp's reverb block offers.
-    stage.addAndMakeVisible (reverbName);
+    stage.addChildComponent (reverbName);
+    reverbName.setVisible (places.plates);
     reverbName.setBounds (box (places.sliderNames[0]));
     reverbName.onClick = [this] { showReverbMenu(); };
     reverbType = follow (params::reverbType, [this] (float v)
@@ -300,7 +304,10 @@ Console::Console (AmpProcessor& p, std::unique_ptr<Picture> pic, const Places& w
     // delay's own when it stands alone, since with a host the host conducts — is dragged up or down,
     // or rolled under the wheel, like a knob.
     for (auto* legend : { &delayWord, &delayNote, &delayTempo })
-        stage.addAndMakeVisible (legend);
+    {
+        stage.addChildComponent (legend);
+        legend->setVisible (places.plates);
+    }
     delayWord.nameColour = ink.state;
     delayWord.onClick = [this] { tapTempo(); };
     // Nothing on the plate says the word is a key, so the pointer is told: what a tap on it does —
@@ -340,7 +347,8 @@ Console::Console (AmpProcessor& p, std::unique_ptr<Picture> pic, const Places& w
     // REVERB's reads its character. With fewer than two there is nothing to choose between, and it
     // stands dim.
     cabName.setInterceptsMouseClicks (false, false);      // a reading: the slider under it is the control
-    stage.addAndMakeVisible (cabName);
+    stage.addChildComponent (cabName);
+    cabName.setVisible (places.plates);
     cabName.setBounds (box (places.sliderNames[2]));
 
     sliders[2]->onMenu = [this] { showCabs(); };
@@ -378,8 +386,11 @@ Console::Console (AmpProcessor& p, std::unique_ptr<Picture> pic, const Places& w
     bind (drive, params::preampGain);
     drive.onMenu = [this] { showDriveMenu(); };
     drive.detent = [this] (float travel) { return driveSteps ? (float) amp.preamp.stepAt ((double) travel) : travel; };
-    bind (*sliders[0], params::reverbMix);
-    bind (*sliders[1], params::delayMix);
+    if (places.plates)
+    {
+        bind (*sliders[0], params::reverbMix);
+        bind (*sliders[1], params::delayMix);
+    }
     bind (outFader, params::outTrim);
 
     // INPUT's lever IS the trim, as OUTPUT's is: unity in its middle (Console.h).
@@ -408,8 +419,11 @@ Console::Console (AmpProcessor& p, std::unique_ptr<Picture> pic, const Places& w
     // HPF and LPF switch the cabinet's own cut filters in and out. The keys right of them are the playing
     // pack's switches a hand may throw, as many as it has (rightKeysOf), and the face's own after them;
     // a pack with none has none there. Which they are is showKeys' to say, on every channel.
-    bindButton (*buttons[btHpf], params::cabHpfOn);
-    bindButton (*buttons[btLpf], params::cabLpfOn);
+    if (places.filterKeys)
+    {
+        bindButton (*buttons[btHpf], params::cabHpfOn);
+        bindButton (*buttons[btLpf], params::cabLpfOn);
+    }
     for (int key = btFirstRight; key < numKeys; ++key)
         buttons[(size_t) key]->onChange = [this, key] (bool on) { keyThrown (key, on); };
 
@@ -473,6 +487,7 @@ Console::Console (AmpProcessor& p, std::unique_ptr<Picture> pic, const Places& w
     for (auto* door : { &gateDoor, &limiterDoor })
     {
         door->valueColour = ink.at (ink.words, 0.85f);
+        door->fit = places.doorsFit;
         stage.addAndMakeVisible (door);
     }
     gateDoor.set ({}, "GATE");
@@ -1833,7 +1848,7 @@ Strips Console::stripsFor (int channel) const
                                             : juce::Rectangle<float> (p.keyNameRoom, 20.0f).withCentre ({ c.x, over ? p.keyNameOverY : p.keyNameUnderY });
         return Strips::Key { juce::Rectangle<float> (size, size).withCentre (c), label, name, live, p.keyNamesOnKeys };
     };
-    for (int f = btHpf; f < btFirstRight; ++f)      // the filters' names are on their keys, on every face
+    for (int f = btHpf; f < btFirstRight && p.filterKeys; ++f)     // the filters' names are on their keys, on every face that has them
     {
         const auto box = juce::Rectangle<float> (p.filterKeyWidth > 0.0f ? p.filterKeyWidth : p.keySize,
                                                  p.filterKeyHeight > 0.0f ? p.filterKeyHeight : p.keySize).withCentre (p.keys[(size_t) f]);
@@ -2463,7 +2478,7 @@ void Console::showDelayTime()
                                                             juce::roundToInt (getParam (params::delayDiv)))]);
 
     tempoIsOwn = ! (amp.runsInHost() && amp.hostTempoBpm() > 0.0f);
-    delayTempo.setVisible (tempoIsOwn);
+    delayTempo.setVisible (tempoIsOwn && places.plates);
     delayTempo.set ({}, juce::String (juce::roundToInt (getParam (params::delayBpm))) + " BPM");
 
     // Side by side, the row centred over the plate.
