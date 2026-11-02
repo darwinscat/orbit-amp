@@ -210,6 +210,7 @@ void Chrome::showPresetMenu()
 
             amp.takeEmbeddedIrs (tree);   // a cabinet IR it carries goes to the store, not the history
             amp.takeFormerCabinet (tree); // one saved while every amp opened on DARK MATTER, on RED GIANT
+            amp.takeBassCabinet (tree);   // ...and a bass's on a guitar cabinet, on the bass's own
 
             // Through the history, so loading a preset is one undoable step rather than a silent
             // replacement of everything behind undo's back.
@@ -257,6 +258,7 @@ void Chrome::showPresetMenu()
                 if (child.isValid())
                     child.setProperty ("value", rp->convertFrom0to1 (amp.engineDefault (*rp)), nullptr);
             }
+        amp.takeBassCabinet (tree);   // a bass's cabinet, as a fresh one's
 
         amp.history.applyEdit (amp.history.active(), tree, "Reset to default");
         presetName = "Default";

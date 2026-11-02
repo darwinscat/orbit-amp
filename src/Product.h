@@ -108,6 +108,23 @@ struct Product
     {
         return chain == Chain::bass ? params::EqStandard::bass : params::EqStandard::guitar;
     }
+
+    /** A GUITAR AMP'S CABINETS AND A BASS AMP'S NEVER CROSS (the owner, 02.11): not the IRs the build carries,
+        and not the player's own. Both are asked of the chain here, and nowhere else.
+
+        Whether it plays the catalog's IR `number` (resources/cabinets.txt): a bass amp the bass's alone, a
+        guitar amp every other — which of those its own list lays out is the list's to say (device/FactoryShelf.h). */
+    bool playsCabIr (int number) const noexcept
+    {
+        return number >= 0 && number < (int) std::size (catalog::irs) && catalog::irs[number].bass == (chain == Chain::bass);
+    }
+
+    /** ...and the folder the player's own IRs lie in, under the family's (device/IrLibrary.h): `IRs` for every
+        guitar amp, `Bass IRs` for every bass amp. */
+    const char* irsFolder() const noexcept
+    {
+        return chain == Chain::bass ? "Bass IRs" : "IRs";
+    }
 };
 
 /** EVERY AMP OF THE FAMILY, each defined in its own file (above). A binary links the ones it plays. */

@@ -217,7 +217,11 @@ void CabinetBlock::refreshIr (bool force, bool keepTrimWord)
 
     shownIr = choice.identity() + "|" + choice.name;
 
-    ir.setEntries ({ { choice.isUser() ? choice.name : params::cabIrNames[choice.factory], 0, false } });
+    // ...and a number the product does not play (Product::playsCabIr) is no cabinet: a bass amp with none of
+    // its own plays no IR at all, and says so rather than a guitar cabinet's name.
+    ir.setEntries ({ { choice.isUser() ? choice.name
+                                       : amp.product().playsCabIr (choice.factory) ? params::cabIrNames[choice.factory] : noIr,
+                       0, false } });
     ir.setSelection (0);
 
     // The same bytes the engine convolves, whichever shelf they came off.
@@ -260,10 +264,10 @@ namespace
     }
 }
 
-void CabinetBlock::showIrMenu()
+juce::PopupMenu CabinetBlock::irMenu (const AmpProcessor& amp, std::vector<juce::File>& files)
 {
     const auto choice  = amp.cabChoice();
-    const auto library = device::IrLibrary::scan();
+    const auto library = device::IrLibrary::scan (device::IrLibrary::directory (amp.product().irsFolder()));
     const auto root    = library.file;
 
     const auto itemFor = [] (const juce::String& name, int id, bool ticked)
@@ -279,7 +283,8 @@ void CabinetBlock::showIrMenu()
     // for each, in the order params::cabShelves first comes to it, and inside it each of its cabinets
     // in turn, a line that says what these IRs are and then their names. A shelf IR keeps its number in
     // the parameter whichever folder shows it, so its item is that number and one more, as it always
-    // was. The folder holding the IR that plays wears the tick, so the way to it can be followed.
+    // was. The folder holding the IR that plays wears the tick, so the way to it can be followed. Only the
+    // cabinets the product plays: a bass amp's menu holds no guitar cabinet (Product::playsCabIr).
     juce::PopupMenu menu;
 
     struct Folder
@@ -292,6 +297,9 @@ void CabinetBlock::showIrMenu()
 
     for (const auto& shelf : params::cabShelves)
     {
+        if (! amp.product().playsCabIr (shelf.first))
+            continue;
+
         const juce::String name (AmpProcessor::cabIrBytes (amp.product(), shelf.first).folder);
         auto at = std::find_if (folders.begin(), folders.end(), [&name] (const Folder& f) { return f.name == name; });
         if (at == folders.end())
@@ -310,9 +318,8 @@ void CabinetBlock::showIrMenu()
     for (auto& folder : folders)
         menu.addSubMenu (folder.name, folder.items, true, nullptr, folder.holdsChoice);
 
-    // The player's files are numbered from here, in the order the tree lists them.
-    static constexpr int firstFile = 1000;
-    auto files = std::make_shared<std::vector<juce::File>>();
+    // The player's files are numbered from firstFile, in the order the tree lists them.
+    files.clear();
 
     if (irsBeneath (library) > 0)
     {
@@ -320,7 +327,8 @@ void CabinetBlock::showIrMenu()
         // out below it the way SETUP shows it: folders first, each a submenu, then the files. A
         // folder with nothing playable anywhere under it is a shelf with nothing on it, and stays
         // out. A folder holding what plays wears the tick too, so the way to it can be followed.
-        menu.addSeparator();
+        if (! folders.empty())
+            menu.addSeparator();
 
         std::function<bool (juce::PopupMenu&, const device::IrLibrary::Node&)> addTree =
             [&] (juce::PopupMenu& into, const device::IrLibrary::Node& folder)
@@ -344,9 +352,9 @@ void CabinetBlock::showIrMenu()
                     const auto from = n.file.getRelativePathFrom (root).replaceCharacter ('\\', '/');
                     const bool ticked = choice.isUser() && from == choice.from;
 
-                    files->push_back (n.file);
+                    files.push_back (n.file);
                     into.addItem (itemFor (n.file.getFileNameWithoutExtension(),
-                                           firstFile + (int) files->size() - 1, ticked));
+                                           firstFile + (int) files.size() - 1, ticked));
                     holdsChoice = holdsChoice || ticked;
                 }
             }
@@ -356,6 +364,19 @@ void CabinetBlock::showIrMenu()
 
         addTree (menu, library);
     }
+
+    // Nothing to pick — a bass amp, with no cabinet of the bass's on the shelf yet and none of the player's:
+    // a line that says so, where an empty menu would say nothing. SETUP's IR tab takes them in.
+    if (menu.getNumItems() == 0)
+        menu.addItem ("No IRs yet", false, false, [] {});
+
+    return menu;
+}
+
+void CabinetBlock::showIrMenu()
+{
+    auto files = std::make_shared<std::vector<juce::File>>();
+    auto menu = irMenu (amp, *files);
 
     onfirst::show (menu, this, juce::PopupMenu::Options().withTargetComponent (&ir),
                         [safe = juce::Component::SafePointer<CabinetBlock> (this), files] (int r)

@@ -21,7 +21,8 @@ namespace orbitamp::device::shelf
 
     ON THE SHELF IN FOLDERS, one for each maker's cabinets — `Orange PPC212V` for Darwin's Cat's own and
     `Other` for the rest. OrbitAmp plays the whole shelf and lists it by them, a submenu each; a face plays
-    Darwin's Cat's own folder alone, one list. Which a product plays is its own list's to say: an IR it
+    Darwin's Cat's own folder alone, one list. A bass amp plays the bass's folders alone, and no guitar
+    cabinet (Product::playsCabIr) — none yet. Which a product plays is its own list's to say: an IR it
     does not name is a place held empty, with no bytes and no name, whatever the folder holds. A cabinet
     joining the shelf joins a folder, or brings a new one.
 
@@ -34,7 +35,7 @@ namespace orbitamp::device::shelf
 /** Where the shelf lies in a factory folder. */
 inline constexpr const char* folderName = "IRs";
 
-/** The shelf's folder every product plays — Darwin's Cat's own. */
+/** The shelf's folder every guitar amp plays — Darwin's Cat's own. */
 inline constexpr const char* ours = catalog::ours;
 
 /** One IR of the shelf: the folder it lies in, its file's name as the tree has it, and its bytes — no

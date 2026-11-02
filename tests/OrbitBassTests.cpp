@@ -22,6 +22,10 @@
 #include "core/BassComp.h"
 #include "core/FilterTap.h"
 #include "device/DeviceLibrary.h"
+#include "device/FactoryShelf.h"
+#include "device/IrLibrary.h"
+#include "ui/CabinetBlock.h"
+#include "ui/library/IrTreeView.h"
 #include "ui/LoadBreakdown.h"
 #include "ui/GuardBlock.h"
 #include "ui/CompBlock.h"
@@ -328,6 +332,169 @@ int ORBITAMP_GATE_MAIN()
     const Product& bass = ORBITAMP_GATE_PRODUCT();
     check (juce::String (bass.name) == "OrbitBass" && bass.chain == Chain::bass, "OrbitBass plays the bass's chain");
 
+    // ---- ITS CABINETS: NEVER A GUITAR AMP'S --------------------------------------------------------------
+    // A guitar amp's cabinets and a bass amp's never cross (Product::playsCabIr, Product::irsFolder): the bass plays no
+    // cabinet of the shelf, which holds none of the bass's yet, and keeps the player's own in `Bass IRs`, beside the
+    // guitar's `IRs`, each listing none of the other's. A fresh one opens on the first of its own, and with none there on
+    // no cabinet at all. This takes files into the player's folders, so only where the home is the gate's own
+    // (ORBITBASS_GATE_OWNS_HOME, tests/gates.txt). The cabinet the rest of the gate hears is the one it leaves there
+    // first: RED GIANT's bytes, as `Bass IRs/Fixture 1.wav`.
+    if (juce::SystemStats::getEnvironmentVariable ("ORBITBASS_GATE_OWNS_HOME", {}).isEmpty())
+        check (false, "the bass's cabinets are tried in a home of the gate's own (ORBITBASS_GATE_OWNS_HOME): tools/run-gates.sh makes one");
+    else
+    {
+        const auto& redGiant = device::shelf::irs (products::orbitAmp().name)[(size_t) params::cabIrDefault];
+        const auto bassIrs   = device::IrLibrary::directory (bass.irsFolder());
+        const auto guitarIrs = device::IrLibrary::directory (products::orbitAmp().irsFolder());
+        check (redGiant.data != nullptr && bassIrs == device::DeviceLibrary::familyRoot().getChildFile ("Bass IRs")
+                   && guitarIrs == device::DeviceLibrary::familyRoot().getChildFile ("IRs")
+                   && device::IrLibrary::listed (bassIrs).isEmpty() && device::IrLibrary::listed (guitarIrs).isEmpty(),
+               "the bass's own IRs in `Bass IRs`, the guitar's in `IRs`, side by side in the family's folder, both empty yet");
+
+        const auto menuOf = [] (const AmpProcessor& a, std::vector<juce::File>& files)
+        {
+            juce::StringArray items;
+            const auto menu = CabinetBlock::irMenu (a, files);
+            for (juce::PopupMenu::MenuItemIterator it (menu, true); it.next();)
+                if (const auto& item = it.getItem(); ! item.isSectionHeader && ! item.isSeparator && item.subMenu == nullptr)
+                    items.add (item.text + (item.isEnabled ? "" : " (off)") + (item.isTicked ? " (ticked)" : ""));
+            return items;
+        };
+
+        // WITH NONE THERE: no cabinet. No IR loads, and the cabinet's share is silent: at DI/CAB's 30 % the DI's share alone.
+        juce::MemoryBlock before;
+        {
+            auto fresh = make (bass);
+            bool shelfNone = true;
+            for (int i = 0; i < params::cabIrNames.size(); ++i)
+                shelfNone = shelfNone && AmpProcessor::cabIrBytes (bass, i).data == nullptr;
+            check (! fresh->cabChoice().isUser() && shelfNone,
+                   "with no IR in `Bass IRs`, a fresh one plays no cabinet: none of the player's, no number of the shelf, RED GIANT none");
+
+            std::vector<juce::File> files;
+            const auto items = menuOf (*fresh, files);
+            check (items.joinIntoString (", ") == "No IRs yet (off)" && files.empty(),
+                   "...its CAB menu no cabinet of the shelf, a line that says there is none: " + items.joinIntoString (", "));
+
+            auto cabOut = make (bass);
+            set (*cabOut, params::cabOn, 0.0f);
+            const auto heard = play (*fresh, 120, false), dry = play (*cabOut, 120, false);
+            float worst = 0.0f;
+            for (size_t i = 0; i < heard.l.size(); ++i)
+                worst = std::max (worst, std::abs (heard.l[i] - 0.3f * dry.l[i]));
+            check (peak (dry.l) > 1.0e-3f && worst <= 1.0e-5f,
+                   "...and plays the DI's 30 % alone, the cabinet's share silent (worst apart " + juce::String (worst, 8) + " of peak "
+                       + juce::String (peak (heard.l), 4) + ")");
+
+            // A session of before: the bass on RED GIANT's number, which it played then, with no IR of the player's.
+            fresh->getStateInformation (before);
+        }
+
+        // ...AND WITH SOME: the first, in the order the tree lists them — not the order they came in.
+        const auto put = [&redGiant] (const juce::File& f, char nudge)
+        {
+            juce::MemoryBlock bytes (redGiant.data, (size_t) redGiant.size);
+            bytes[bytes.getSize() - 1] = (char) (bytes[bytes.getSize() - 1] ^ nudge);
+            f.getParentDirectory().createDirectory();
+            return f.replaceWithData (bytes.getData(), bytes.getSize());
+        };
+        const auto second = bassIrs.getChildFile ("Fixture 2.wav"), first = bassIrs.getChildFile ("Fixture 1.wav");
+        const auto guitarOwn = guitarIrs.getChildFile ("Guitar own.wav");
+        check (put (second, 4) && put (first, 0) && put (guitarOwn, 8), "two IRs into `Bass IRs`, the second first, and one into `IRs`");
+        {
+            auto fresh = make (bass);
+            const auto opens = fresh->cabChoice();
+            check (opens.isUser() && opens.name == "Fixture 1" && opens.from == "Fixture 1.wav"
+                       && (int) opens.bytes->getSize() == redGiant.size && std::memcmp (opens.bytes->getData(), redGiant.data, (size_t) redGiant.size) == 0,
+                   "a fresh one opens on the first of `Bass IRs`, as a pick of it leaves the state: " + opens.name + ", " + opens.from);
+
+            // The other chain's number is never picked, nor the guitar's player's IR listed.
+            fresh->chooseCabFactory (params::cabIrDefault);
+            check (fresh->cabChoice().identity() == opens.identity(), "...a pick of RED GIANT changes nothing");
+
+            std::vector<juce::File> files;
+            const auto items = menuOf (*fresh, files);
+            check (items.joinIntoString (", ") == "Fixture 1 (ticked), Fixture 2" && files.size() == 2 && files[0] == first && files[1] == second,
+                   "...its CAB menu the two of `Bass IRs`, the first ticked, and nothing of the shelf's or of `IRs`: " + items.joinIntoString (", "));
+
+            // A HOST'S LANE over the shelf's numbers lets the player's pick go, and plays the bass's own again.
+            check (fresh->chooseCabFile (second) && fresh->cabChoice().name == "Fixture 2", "...a pick of the second plays it");
+            fresh->pumpDeviceWork();
+            set (*fresh, params::cabIr, 3.0f);
+            fresh->pumpDeviceWork();
+            check (fresh->cabChoice().isUser() && fresh->cabChoice().name == "Fixture 1",
+                   "...and a host moving `cab_ir` to KAIJU TAMER's number plays the first of `Bass IRs` again, never the shelf's: "
+                       + fresh->cabChoice().name);
+
+            // A STATE ON THE GUITAR'S NUMBER — the session of before — lands on the bass's own, not on RED GIANT.
+            check (fresh->chooseCabFile (second) && fresh->cabChoice().name == "Fixture 2", "a bass playing the second...");
+            fresh->setStateInformation (before.getData(), (int) before.getSize());
+            check (fresh->cabChoice().isUser() && fresh->cabChoice().name == "Fixture 1"
+                       && juce::roundToInt (value (*fresh, params::cabIr)) == params::cabIrDefault,
+                   "...given a session of before, on RED GIANT's number with no IR of the player's, plays the first of `Bass IRs`, RED GIANT's number kept: "
+                       + fresh->cabChoice().name);
+        }
+
+        // EACH LISTS ITS OWN AND NONE OF THE OTHER'S: the library, the CAB menu, the SETUP tree, a face's channels.
+        {
+            const auto names = [] (const juce::Array<juce::File>& fs)
+            {
+                juce::StringArray n;
+                for (const auto& f : fs)
+                    n.add (f.getRelativePathFrom (device::DeviceLibrary::familyRoot()));
+                return n.joinIntoString (", ");
+            };
+            check (names (device::IrLibrary::listed (bassIrs)) == "Bass IRs/Fixture 1.wav, Bass IRs/Fixture 2.wav"
+                       && names (device::IrLibrary::listed (guitarIrs)) == "IRs/Guitar own.wav",
+                   "the bass's library lists `Bass IRs` alone, the guitar's `IRs` alone: " + names (device::IrLibrary::listed (bassIrs))
+                       + " | " + names (device::IrLibrary::listed (guitarIrs)));
+
+            auto guitar = make (products::orbitAmp());
+            std::vector<juce::File> files;
+            const auto items = menuOf (*guitar, files);
+            bool shelfAsBefore = items.size() == params::cabIrNames.size() + 1;
+            for (int i = 0; i < params::cabIrNames.size() && shelfAsBefore; ++i)
+                shelfAsBefore = items.contains (params::cabIrNames[i] + (i == params::cabIrDefault ? " (ticked)" : ""));
+            check (shelfAsBefore && items.contains ("Guitar own") && files.size() == 1 && files[0] == guitarOwn,
+                   "OrbitAmp's CAB menu: the whole shelf as before, RED GIANT ticked, and of the player's `IRs` alone");
+
+            const auto rows = [] (IrTreeView& view)
+            {
+                view.rebuild();
+                for (auto* c : view.getChildren())
+                    if (auto* t = dynamic_cast<juce::TreeView*> (c); t != nullptr && t->getRootItem() != nullptr)
+                        return t->getRootItem()->getNumSubItems();
+                return -1;
+            };
+            IrTreeView bassTree (bass.irsFolder()), guitarTree (products::orbitAmp().irsFolder());
+            check (rows (bassTree) == 2 && rows (guitarTree) == 1, "the SETUP tree of each: the bass's two rows, the guitar's one");
+
+            auto cockpit = make (products::catpitAmp());
+            const auto& cabinets = channels::Engine::of (*cockpit).channels.cabinets();
+            bool bassless = cabinets.contains (guitarOwn);
+            for (const auto& f : cabinets)
+                bassless = bassless && ! f.isAChildOf (bassIrs);
+            check (bassless, "the cockpit's channels list the player's `IRs` and nothing of `Bass IRs` (" + juce::String (cabinets.size()) + ")");
+
+            // WHAT THE BASS TAKES IN, RENAMES AND REMOVES IS IN `Bass IRs`, and only there: its SETUP tree's drop lands
+            // there, and its library's root refuses what lies in `IRs`.
+            const auto outside = juce::File::getSpecialLocation (juce::File::tempDirectory)
+                                     .getChildFile ("orbitbass-cabinets-" + juce::String::toHexString (juce::Random::getSystemRandom().nextInt()));
+            const auto dropped = outside.getChildFile ("Dropped.wav");
+            check (put (dropped, 16), "an IR outside both");
+            bassTree.filesDropped ({ dropped.getFullPathName() }, 0, 0);
+            check (bassIrs.getChildFile ("Dropped.wav").existsAsFile() && ! guitarIrs.getChildFile ("Dropped.wav").exists(),
+                   "...dropped on the bass's SETUP tree, lands in `Bass IRs`, not in `IRs`");
+            check (device::IrLibrary::rename (bassIrs, bassIrs.getChildFile ("Dropped.wav"), "Renamed")
+                       && bassIrs.getChildFile ("Renamed.wav").existsAsFile(),
+                   "...renamed by the bass's root, in `Bass IRs`");
+            check (! device::IrLibrary::rename (bassIrs, guitarOwn, "Taken") && ! device::IrLibrary::remove (bassIrs, guitarOwn)
+                       && ! device::IrLibrary::move (bassIrs, guitarOwn, bassIrs).exists() && guitarOwn.existsAsFile(),
+                   "...and the bass's root renames, removes and moves nothing of `IRs`");
+            outside.deleteRecursively();
+        }
+    }
+
     // ---- WHERE A FRESH ONE STANDS ------------------------------------------------------------------
     auto amp = make (bass);
     {
@@ -492,13 +659,15 @@ int ORBITAMP_GATE_MAIN()
                 place = i;
         check (place >= 0, "OrbitAmp plays the ReVolt Clean too (place " + juce::String (place) + ")");
 
-        // Each product reads its shelf into memory of its own: the same IR is the same bytes, not the same address.
+        // The bass plays no cabinet of the shelf (ITS CABINETS): it opens on the first of the player's `Bass IRs`, which
+        // holds RED GIANT's bytes here — what OrbitAmp opens on at the number the bass's `cab_ir` keeps.
         const int  ir    = juce::roundToInt (value (*amp, params::cabIr));
         const auto& his  = AmpProcessor::cabIrBytes (quiet (products::orbitAmp()), ir);
-        const auto& ours = AmpProcessor::cabIrBytes (bass, ir);
-        check (his.data != nullptr && ours.data != nullptr && his.size == ours.size && his.size > 0
-                   && std::memcmp (his.data, ours.data, (size_t) ours.size) == 0,
-               "...and the cabinet OrbitBass opens on at the same number (" + juce::String (ours.size) + " bytes)");
+        const auto  ours = amp->cabChoice();
+        check (his.data != nullptr && his.size > 0 && ours.isUser() && (int) ours.bytes->getSize() == his.size
+                   && std::memcmp (his.data, ours.bytes->getData(), (size_t) his.size) == 0,
+               "...and the cabinet OrbitBass opens on, the first of its `Bass IRs` (" + ours.name + "), what OrbitAmp opens on at the same number ("
+                   + juce::String (his.size) + " bytes)");
 
         // An OrbitAmp on the same pack, every other parameter as `from`'s, prepared again once it stands so —
         // every link starting from silence, as OrbitBass's did; what it plays, against what `heard` did.
@@ -3761,11 +3930,11 @@ int ORBITAMP_GATE_MAIN()
             juce::String irLine;
             {
                 auto probe = make (bass);
-                const auto& bytes = AmpProcessor::cabIrBytes (bass, juce::roundToInt (value (*probe, params::cabIr)));
+                const auto opens = probe->cabChoice();   // the first of the player's `Bass IRs` (ITS CABINETS)
                 juce::AudioFormatManager formats;
                 formats.registerBasicFormats();
-                if (bytes.data != nullptr)
-                    if (std::unique_ptr<juce::AudioFormatReader> r (formats.createReaderFor (std::make_unique<juce::MemoryInputStream> (bytes.data, (size_t) bytes.size, false)));
+                if (opens.isUser())
+                    if (std::unique_ptr<juce::AudioFormatReader> r (formats.createReaderFor (std::make_unique<juce::MemoryInputStream> (opens.bytes->getData(), opens.bytes->getSize(), false)));
                         r != nullptr && r->sampleRate > 0.0)
                     {
                         const int ch = (int) r->numChannels;

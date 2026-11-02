@@ -373,6 +373,18 @@ public:
         bytes from any. */
     void takeFormerCabinet (juce::ValueTree& tree);
 
+    /** A BASS STATE ON NO CABINET OF THE BASS'S, on the bass's own. A bass amp plays no guitar cabinet
+        (Product::playsCabIr), and the catalog holds no bass cabinet yet, so in every tree of the state's type
+        in `tree` — a fresh instance's, INIT's, a session or a preset saved while the bass opened on RED
+        GIANT, one whose IR of the player's did not survive — that plays neither an IR of the player's the
+        store holds nor a cabinet the bass plays, the cabinet is made THE FIRST IR OF THE PLAYER'S `Bass IRs`
+        that plays, in the order the tree lists them (device::IrLibrary::listed): its bytes into the store,
+        and its key, name and `from` on the state, as a pick of it leaves them — so a session keeps what it
+        played wherever it opens. With none there it is left as it is, on no cabinet: no bytes, and nothing
+        loads, as with the factory folder missing. A guitar amp's state is left as it is. Any thread: it
+        touches `tree`, the IR store, which takes bytes from any, and reads the player's folder. */
+    void takeBassCabinet (juce::ValueTree& tree);
+
     /** The note (takeFormerCabinet): on every state, from the first moment of the processor's (its
         constructor) and of every state that lands. */
     static constexpr const char* cabOpeningId = "cab_opening";
@@ -1159,7 +1171,8 @@ public:
 
     /** The cabinet shelf — the family's (device/FactoryShelf.h), in params::cabIrNames order, and the
         folder of it each IR lies in. The face draws the same bytes the engine convolves. A number the
-        build does not carry (a face, and the shelf's `Other`) is RED GIANT's, the default's. */
+        build does not carry (a face, and the shelf's `Other`) is RED GIANT's, the default's. A number of
+        the other chain's (Product::playsCabIr) is no bytes and no folder, whatever the factory folder holds. */
     struct IrBytes { const char* data; int size; const char* folder; };
     static const IrBytes& cabIrBytes (const Product&, int index);
 
@@ -1182,7 +1195,8 @@ public:
     CabChoice cabChoice() const;
 
     /** A factory IR from the shelf: the player's own is let go, and the parameter takes the pick
-        as one gesture. Message thread only. */
+        as one gesture. One the product does not play (Product::playsCabIr) changes nothing. Message
+        thread only. */
     void chooseCabFactory (int index);
 
     /** An IR out of the library: its bytes are read once, here, and from then on the state names
@@ -1700,7 +1714,8 @@ private:
 };
 
 /** THE PLAYER'S IRS OF BEFORE, gathered into the family's folder: what the product kept in its own `IRs`
-    is copied into `Darwin's Cat/IRs` (device::IrLibrary::gather) — once in a process for each product,
+    is copied into the family's folder of its chain, `Darwin's Cat/IRs` for a guitar amp (Product::irsFolder,
+    device::IrLibrary::gather) — once in a process for each product,
     and once on this machine (prefs::irsGathered), tried again on the next start only where a file could
     not be copied. Every product's first start calls it (Product::firstStart), so a gate that plays a
     product with none never reaches the machine's real folders. */

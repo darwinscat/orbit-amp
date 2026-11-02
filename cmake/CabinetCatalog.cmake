@@ -1,13 +1,15 @@
 # THE CABINET CATALOG, read (resources/cabinets.txt says what is in it and how a line is written). One
 # function, orbitamp_cabinet_catalog(<catalog> <resources dir> <header>): it writes the table the code
-# plays the cabinets by into <header>, and hands back the files to build into the binaries, in the order
+# plays the cabinets by into <header>, and hands back the files the factory folder holds, in the order
 # of their numbers —
 #
-#   ORBITAMP_CABINETS_EVERY_PRODUCT   the folder every product carries (OrbitAmpData)
-#   ORBITAMP_CABINETS_ORBITAMP        the folders OrbitAmp alone carries (OrbitAmpShelfOtherData)
+#   ORBITAMP_CABINETS_GUITAR     the folder every guitar amp carries
+#   ORBITAMP_CABINETS_ORBITAMP   the folders OrbitAmp alone carries (add_amp: WHOLE_SHELF)
+#   ORBITAMP_CABINETS_BASS       the folders every bass amp carries (add_amp: BASS), and no guitar amp
 #
 # — and, beside each, the same files as paths inside the factory folder, IRs/<folder>/<file>, in the same
-# order: ORBITAMP_CABINETS_EVERY_PRODUCT_AT and ORBITAMP_CABINETS_ORBITAMP_AT (THE FACTORY FOLDER).
+# order: ORBITAMP_CABINETS_GUITAR_AT, ORBITAMP_CABINETS_ORBITAMP_AT and ORBITAMP_CABINETS_BASS_AT (THE
+# FACTORY FOLDER). Any of the three may be empty but the guitar's.
 #
 # A catalog that breaks one of its rules stops the configure with the line that broke it, rather than
 # building a shelf whose numbers would mean other cabinets than a session saved them on.
@@ -48,7 +50,8 @@ function(orbitamp_cabinet_catalog catalog resources header)
     file(STRINGS "${catalog}" lines ENCODING UTF-8)
 
     set(folders "")          # the folders, in the catalog's order
-    set(ours "")             # ...and the one every product carries
+    set(ours "")             # ...the one every guitar amp carries
+    set(bassFolders "")      # ...and the ones every bass amp does
     set(cabinets 0)
     set(irs 0)
     set(names "")
@@ -70,13 +73,15 @@ function(orbitamp_cabinet_catalog catalog resources header)
             if(name IN_LIST folders)
                 message(FATAL_ERROR "${catalog}: the folder `${name}` is said twice")
             endif()
-            if(carrier STREQUAL "every product")
+            if(carrier STREQUAL "guitar")
                 if(NOT ours STREQUAL "")
-                    message(FATAL_ERROR "${catalog}: one folder is carried by every product — `${ours}`, and now `${name}` too")
+                    message(FATAL_ERROR "${catalog}: one folder is carried by every guitar amp — `${ours}`, and now `${name}` too")
                 endif()
                 set(ours "${name}")
+            elseif(carrier STREQUAL "bass")
+                list(APPEND bassFolders "${name}")
             elseif(NOT carrier STREQUAL "OrbitAmp")
-                message(FATAL_ERROR "${catalog}: a folder is carried by `every product` or by `OrbitAmp` — `${line}`")
+                message(FATAL_ERROR "${catalog}: a folder is carried by `guitar`, by `OrbitAmp` or by `bass` — `${line}`")
             endif()
             list(APPEND folders "${name}")
 
@@ -146,7 +151,7 @@ function(orbitamp_cabinet_catalog catalog resources header)
     endforeach()
 
     if(irs EQUAL 0 OR ours STREQUAL "")
-        message(FATAL_ERROR "${catalog}: a catalog holds IRs, and one folder that every product carries")
+        message(FATAL_ERROR "${catalog}: a catalog holds IRs, and one folder that every guitar amp carries")
     endif()
     math(EXPR lastCabinet "${cabinets} - 1")
     foreach(cabinet RANGE ${lastCabinet})
@@ -156,10 +161,12 @@ function(orbitamp_cabinet_catalog catalog resources header)
     endforeach()
 
     # The table, in the order of the numbers — which run from 0 with none left out — and the files with it.
-    set(every "")
+    set(guitar "")
     set(orbitamp "")
-    set(everyAt "")
+    set(bass "")
+    set(guitarAt "")
     set(orbitampAt "")
+    set(bassAt "")
     set(table "")
     set(opens "")
     math(EXPR last "${irs} - 1")
@@ -168,14 +175,22 @@ function(orbitamp_cabinet_catalog catalog resources header)
             message(FATAL_ERROR "${catalog}: the numbers run from 0 with none left out, and ${number} is not there")
         endif()
         set(laid "IRs/${_ir_${number}_folder}/${_ir_${number}_file}")
+        set(isBass false)
         if(_ir_${number}_folder STREQUAL ours)
-            list(APPEND every "${_ir_${number}_path}")
-            list(APPEND everyAt "${laid}")
+            list(APPEND guitar "${_ir_${number}_path}")
+            list(APPEND guitarAt "${laid}")
+        elseif(_ir_${number}_folder IN_LIST bassFolders)
+            list(APPEND bass "${_ir_${number}_path}")
+            list(APPEND bassAt "${laid}")
+            set(isBass true)
         else()
             list(APPEND orbitamp "${_ir_${number}_path}")
             list(APPEND orbitampAt "${laid}")
         endif()
         if(_ir_${number}_name STREQUAL default)
+            if(isBass)
+                message(FATAL_ERROR "${catalog}: the default is the cabinet a guitar amp opens on, and `${default}` is a bass's")
+            endif()
             set(opens ${number})
         endif()
         _orbitamp_cabinet_literal(folder "${_ir_${number}_folder}")
@@ -185,7 +200,7 @@ function(orbitamp_cabinet_catalog catalog resources header)
         if(number LESS 10)
             set(at " ${number}")
         endif()
-        string(APPEND table "    /* ${at} */ { ${folder}, ${name}, ${file} },\n")
+        string(APPEND table "    /* ${at} */ { ${folder}, ${name}, ${file}, ${isBass} },\n")
     endforeach()
     if(opens STREQUAL "")
         message(FATAL_ERROR "${catalog}: the default is the name of an IR in it, and `${default}` is none")
@@ -197,7 +212,7 @@ function(orbitamp_cabinet_catalog catalog resources header)
         string(APPEND shown "    { ${about}, ${_cabinet_${cabinet}_first}, ${_cabinet_${cabinet}_count} },\n")
     endforeach()
 
-    _orbitamp_cabinet_literal(everyProduct "${ours}")
+    _orbitamp_cabinet_literal(guitarFolder "${ours}")
     _orbitamp_cabinet_literal(defaultName "${default}")
     file(RELATIVE_PATH from "${CMAKE_CURRENT_SOURCE_DIR}" "${catalog}")
     set(text
@@ -207,12 +222,15 @@ function(orbitamp_cabinet_catalog catalog resources header)
 
 namespace orbitamp::catalog
 {
-/** An IR of the shelf: the folder it lies in, the name the player reads, and its file's name. */
+/** An IR of the shelf: the folder it lies in, the name the player reads, its file's name, and whether it
+    is a bass cabinet — carried by every bass amp and played by no guitar amp, as a guitar cabinet is
+    played by no bass amp. */
 struct Ir
 {
     const char* folder;
     const char* name;
     const char* file;
+    bool bass;
 };
 
 /** A cabinet as the IR menu shows it: the line that heads its IRs (UTF-8), and the run of numbers they hold. */
@@ -222,15 +240,15 @@ struct Cabinet
     int first, count;
 };
 
-/** The folder every product carries; the others are OrbitAmp's alone. */
-inline constexpr const char* ours = ${everyProduct};
+/** The folder every guitar amp carries; the others are OrbitAmp's alone, or every bass amp's. */
+inline constexpr const char* ours = ${guitarFolder};
 
 /** Every IR, at its number. */
 inline constexpr Ir irs[]
 {
 ${table}};
 
-/** The number a fresh instance opens on: ${defaultName}. */
+/** The number a fresh guitar amp opens on: ${defaultName}. */
 inline constexpr int defaultIr = ${opens};
 
 /** The cabinets, in the order the menu shows them. */
@@ -249,12 +267,15 @@ ${shown}};
         file(WRITE "${header}" "${text}")
     endif()
 
-    list(LENGTH every everyCount)
+    list(LENGTH guitar guitarCount)
     list(LENGTH orbitamp orbitampCount)
-    message(STATUS "Cabinets: ${irs} in the catalog — ${everyCount} every product carries, ${orbitampCount} OrbitAmp's alone")
+    list(LENGTH bass bassCount)
+    message(STATUS "Cabinets: ${irs} in the catalog — ${guitarCount} every guitar amp carries, ${orbitampCount} OrbitAmp's alone, ${bassCount} every bass amp's")
 
-    set(ORBITAMP_CABINETS_EVERY_PRODUCT "${every}" PARENT_SCOPE)
+    set(ORBITAMP_CABINETS_GUITAR "${guitar}" PARENT_SCOPE)
     set(ORBITAMP_CABINETS_ORBITAMP "${orbitamp}" PARENT_SCOPE)
-    set(ORBITAMP_CABINETS_EVERY_PRODUCT_AT "${everyAt}" PARENT_SCOPE)
+    set(ORBITAMP_CABINETS_BASS "${bass}" PARENT_SCOPE)
+    set(ORBITAMP_CABINETS_GUITAR_AT "${guitarAt}" PARENT_SCOPE)
     set(ORBITAMP_CABINETS_ORBITAMP_AT "${orbitampAt}" PARENT_SCOPE)
+    set(ORBITAMP_CABINETS_BASS_AT "${bassAt}" PARENT_SCOPE)
 endfunction()

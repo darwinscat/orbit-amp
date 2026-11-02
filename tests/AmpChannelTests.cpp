@@ -483,7 +483,7 @@ int ORBITAMP_GATE_MAIN()
 
         // THE IR OF BEFORE, gathered at the first start: copied into the family's folder, in its own
         // folder, and still where it was.
-        const auto gathered = device::IrLibrary::directory().getChildFile ("Old Pack").getChildFile (formerIr.getFileName());
+        const auto gathered = device::IrLibrary::directory (ORBITAMP_GATE_PRODUCT().irsFolder()).getChildFile ("Old Pack").getChildFile (formerIr.getFileName());
         check (gathered.existsAsFile() && formerIr.existsAsFile() && gathered.hasIdenticalContentTo (formerIr),
                "the player's IRs of before are copied into the family's folder, folders and all, and left where they were");
         check (channels.cabinets().indexOf (gathered) >= factory, "...and are among the player's cabinets");

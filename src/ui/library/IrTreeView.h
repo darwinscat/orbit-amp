@@ -30,7 +30,8 @@ class IrTreeView final : public juce::Component,
                          public juce::DragAndDropContainer   // the tree's own row drags need a container
 {
 public:
-    IrTreeView();
+    /** Over the player's IRs in `folder` of the family's (Product::irsFolder): the product's own chain's. */
+    explicit IrTreeView (juce::String folder);
     ~IrTreeView() override;
 
     /** Re-reads the folder and re-renders, keeping which branches were open. */
@@ -70,6 +71,10 @@ private:
         that the rebuild would free while it is still on the call stack. */
     void changedLater();
 
+    /** The library's root: the folder of the product's chain, made again if it has gone. */
+    juce::File root() const;
+
+    const juce::String irsFolder;
     juce::TreeView tree;
     std::unique_ptr<Item> rootItem;
 
