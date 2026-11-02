@@ -213,7 +213,6 @@ void FaceplateView::layOutBassRows()
     // out, COMP takes the row.
     gate.setBounds (fx.removeFromLeft (GuardBlock::designWidth));
     fx.removeFromLeft (colGap);
-    constexpr int fxLeast = 219;   // OCTAVE's and ENVELOPE's share at the least width (880)
     const int effects = (octaveB != nullptr ? 1 : 0) + (filterB != nullptr ? 1 : 0);
     if (effects == 2)
     {
