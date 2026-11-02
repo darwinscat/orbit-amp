@@ -682,6 +682,42 @@ void EqSection::layOutRow (juce::Rectangle<int> row)
     // A block's own switches stand inside the cuts, where it asked for room (setInnerCells): HPF, the first, the dials,
     // the second, LPF.
     const int n     = juce::jmax (1, (int) bandKnobs.size());
+
+    // ON THE BASS WITH A PACK'S SWITCHES, every switch on ONE LINE and two lines a side of the dials (the owner, 02.11):
+    // HPF over the pack's first, LPF over its second — the name, the switch, the choice beside it.
+    if (bassStandard() && (innerW[0] > 0 || innerW[1] > 0))
+    {
+        constexpr int nameW = 32, swW = 30, gap = 4, choiceW = 80, lineH = 18;
+        constexpr int cutLineW = nameW + gap + swW + gap + choiceW;
+        const int leftW  = juce::jmax (cutLineW, innerW[0]);
+        const int rightW = juce::jmax (cutLineW, innerW[1]);
+        const int bandW  = (row.getWidth() - leftW - rightW) / n;
+
+        const auto left  = row.removeFromLeft (leftW);
+        const auto right = row.removeFromRight (rightW);
+        for (auto& knob : bandKnobs)
+            knob->setBounds (row.removeFromLeft (bandW));
+
+        const auto lineOf = [] (juce::Rectangle<int> side, int which)
+        {
+            const int centre = side.getY() + (which == 0 ? side.getHeight() / 3 : 2 * side.getHeight() / 3);
+            return juce::Rectangle<int> (side.getX(), centre - lineH / 2, side.getWidth(), lineH);
+        };
+        const auto cutLine = [] (juce::Rectangle<int> line, ZoneSwitch& sw, juce::Label& label, SlopeCombo& combo)
+        {
+            label.setBounds (line.removeFromLeft (nameW));
+            line.removeFromLeft (gap);
+            sw.setBounds (line.removeFromLeft (swW).withSizeKeepingCentre (swW, 16));
+            line.removeFromLeft (gap);
+            combo.setBounds (line);
+        };
+        cutLine (lineOf (left, 0), hpfSw, hpfLabel, hpfSlopeBox);
+        cutLine (lineOf (right, 0), lpfSw, lpfLabel, lpfSlopeBox);
+        innerCells[0] = innerW[0] > 0 ? lineOf (left, 1) : juce::Rectangle<int>();
+        innerCells[1] = innerW[1] > 0 ? lineOf (right, 1) : juce::Rectangle<int>();
+        return;
+    }
+
     const int knobW = (row.getWidth() - 2 * cutW - innerW[0] - innerW[1]) / n;
 
     const auto hpfCell = row.removeFromLeft (cutW);

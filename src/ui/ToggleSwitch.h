@@ -43,6 +43,11 @@ public:
 
     juce::Colour accent = theme::orange;
 
+    /** ONE LINE (the owner, 02.11): the name on the left, then the marks either side of the oval, all on one line —
+        as the bass's tone row stands its switches, two a side of the dials. */
+    bool oneLine = false;
+    static constexpr int nameGap = 6;   // between the name and the first mark, on one line
+
     /** The switch's name and its positions, the chosen one `selected`. */
     void setItems (juce::String switchName, juce::StringArray positions, int selected)
     {
@@ -80,6 +85,8 @@ public:
     int idealWidth() const
     {
         const float line = markWidth (0) + (float) (markGap + ovalW + markGap) + markWidth (items.size() - 1);
+        if (oneLine)
+            return juce::roundToInt (std::ceil (textWidth (name) + (float) nameGap + line)) + 4;
         return juce::roundToInt (std::ceil (juce::jmax (line, textWidth (name)))) + 4;
     }
 
@@ -92,7 +99,10 @@ public:
 
         // The name, as the cuts' are written over theirs.
         g.setColour (theme::txDim);
-        g.drawText (name, getLocalBounds().removeFromTop (nameH), juce::Justification::centred, false);
+        if (oneLine)
+            g.drawText (name, getLocalBounds().withWidth (juce::roundToInt (std::ceil (textWidth (name)))), juce::Justification::centredLeft, false);
+        else
+            g.drawText (name, getLocalBounds().removeFromTop (nameH), juce::Justification::centred, false);
 
         // The oval, as the cuts' switch draws it.
         const auto line = lineArea();
@@ -170,6 +180,12 @@ private:
 
     juce::Rectangle<float> lineArea() const
     {
+        if (oneLine)
+        {
+            auto b = getLocalBounds().toFloat();
+            b.removeFromLeft (textWidth (name) + (float) nameGap);
+            return b.withSizeKeepingCentre (b.getWidth(), (float) ovalH);
+        }
         return getLocalBounds().toFloat().removeFromBottom ((float) ovalH);
     }
 

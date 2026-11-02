@@ -888,6 +888,7 @@ void CapturedBlockPanel::buildSelectors()
             // On the bass, a cell of the console's row, among the dials (switchesInRow): its marks and its name
             // its own to write, the whole list the hint.
             sel.toggle = std::make_unique<ToggleSwitch>();
+            sel.toggle->oneLine = true;   // a line of its own under the cut beside it (EqSection::layOutRow)
             sel.toggle->setItems (sel.name, labels, 0);
             sel.toggle->setTooltip (hint);
             sel.toggle->onChange = moved;
@@ -992,7 +993,7 @@ void CapturedBlockPanel::layOutContent (juce::Rectangle<int> area)
             if (selectors[i].toggle != nullptr)
                 inner[k++] = selectors[i].toggle.get();
 
-        const auto width = [] (const ToggleSwitch* t) { return t != nullptr ? juce::jmax (EqSection::cutW, t->idealWidth()) : 0; };
+        const auto width = [] (const ToggleSwitch* t) { return t != nullptr ? t->idealWidth() : 0; };
         eq.setInnerCells (width (inner[0]), width (inner[1]));
         eq.layOutRow (strip3);
 
