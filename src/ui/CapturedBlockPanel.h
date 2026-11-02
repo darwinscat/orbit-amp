@@ -184,6 +184,7 @@ private:
         empty, rather than closing the gap. */
     LatchKey boostKey { "BOOST" };
     int boostIndex = -1;   // which of the selectors it is, or -1
+    int voiceIndex = -1;   // the bass pack's switch the lever throws (buildSelectors), or -1
 
     /** ...and on a pack with no Boost switch — the X88-IR's — the key is still BOOST, thrown on
         params::preampBoost: the capture played two positions up the dial, the knob where it stands.

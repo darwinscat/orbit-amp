@@ -714,6 +714,9 @@ void CapturedBlockPanel::playPack (int index)
     plays a channel of the device it already shows, so the count cannot change under its hand. */
 void CapturedBlockPanel::showChannels (const juce::StringArray& names, int lit)
 {
+    if (names.size() < 2 && voiceIndex >= 0)
+        return;   // the lever throws the pack's voice (buildSelectors)
+
     if (names.size() < 2)
     {
         if (lever != nullptr)
@@ -830,6 +833,22 @@ void CapturedBlockPanel::buildSelectors()
             break;
         }
 
+    // THE BASS'S VOICE ON THE LEVER (the owner, 02.11: the gear lever IS the SGT's SVT / B15): a pack of one channel
+    // throws its first switch of two to four positions with the lever, where a device of several channels throws its
+    // channels; the rest of its switches stand in the console's row.
+    voiceIndex = -1;
+    if (switchesInRow())
+    {
+        const auto* dev = shelf.deviceOf (AmpChannels (amp).playing());
+        if (dev == nullptr || dev->channels.size() < 2)
+            for (int i = 0; i < params::numSelectors && i < list.size(); ++i)
+                if (i != boostIndex && list.getReference (i).values.size() >= 2 && list.getReference (i).values.size() <= 4)
+                {
+                    voiceIndex = i;
+                    break;
+                }
+    }
+
     // ...and none: the key throws preamp_boost instead, on any pack that plays.
     boostAttachment.reset();
     boostShown = (boostIndex >= 0 || block.selectedName().isNotEmpty())
@@ -882,6 +901,27 @@ void CapturedBlockPanel::buildSelectors()
         {
             selectors[(size_t) i].attachment->setValueAsCompleteGesture ((float) v);
         };
+
+        if (i == voiceIndex)
+        {
+            if (lever != nullptr)
+                removeChildComponent (lever.get());
+            lever = std::make_unique<ChannelLever> (labels.size());
+            lever->onPick = moved;
+            lever->setChannels (labels, 0);
+            lever->setTooltip (hint);
+            addChildComponent (*lever);
+
+            sel.attachment = std::make_unique<juce::ParameterAttachment> (
+                *amp.apvts.getParameter (params::selectorId (blk, i)),
+                [this, labels] (float v)
+                {
+                    if (lever != nullptr)
+                        lever->setChannels (labels, juce::jlimit (0, labels.size() - 1, juce::roundToInt (v)));
+                });
+            sel.attachment->sendInitialUpdate();
+            continue;
+        }
 
         if (switchesInRow())
         {
@@ -966,7 +1006,9 @@ void CapturedBlockPanel::layOutContent (juce::Rectangle<int> area)
     auto s1 = area.removeFromLeft (gainW + (bassKnobs != nullptr ? bassSideW : 0));
     const auto column1 = s1;   // GAIN's whole column: its strip is its own, not the shared one
     area.removeFromLeft (sectionGap);
-    auto s2 = area.removeFromLeft (bassKnobs != nullptr ? bassSection2W : section2W);
+    // The bass's lever section: its 80, or as wide as the lever it holds needs for its names (SVT, B15).
+    const int bassS2 = juce::jmax (bassSection2W, lever != nullptr ? juce::roundToInt (std::ceil (ChannelLever::idealWidth (lever->channelNames()))) + 2 : 0);
+    auto s2 = area.removeFromLeft (bassKnobs != nullptr ? bassS2 : section2W);
     area.removeFromLeft (sectionGap);
     auto s3 = area;
 
