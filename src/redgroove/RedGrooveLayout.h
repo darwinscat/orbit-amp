@@ -118,6 +118,12 @@ inline const juce::Rectangle<float> lowCutSlot  { 1389.0f, 788.5f, 52.0f, 28.0f 
 inline const juce::Rectangle<float> highCutSlot { 1389.0f, 862.0f, 52.0f, 28.0f };
 inline constexpr float cutWordsAbove = 14.0f, cutWordRoom = 78.0f;
 
+// THE SWITCHES' COLUMN, right of DI/CAB, one line a switch (the owner, 02.11): STR, FING/SLAP, then the pack's ULTRA LO
+// and ULTRA HI — each the cuts' slot, cut out of the picture, its slot at switchSlotX and its line's centre here.
+inline constexpr float switchSlotX = 1409.0f, switchSlotW = 52.0f, switchSlotH = 24.0f;
+inline constexpr std::array<float, 4> switchLineY { 780.0f, 816.0f, 852.0f, 888.0f };
+inline constexpr float switchRuleX = 1325.0f;   // the line parting the column from DI/CAB, cut into the panel
+
 // THE CABINET'S SCREEN, across the top of its panel.
 inline const juce::Rectangle<float> cabinetScreen { 1246.0f, 707.5f, 251.5f, 49.0f };
 

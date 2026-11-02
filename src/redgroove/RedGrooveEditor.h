@@ -96,7 +96,7 @@ private:
     // on its right click; the cabinet's screen names the cabinet that plays, its list on a click, the cabinets'
     // window on a right click.
     ChannelLever lever;
-    SlideSwitch lowCut, highCut;
+    SlideSwitch lowCut, highCut, ultraLo, ultraHi;
     CabinetScreen cabinet;
     void bindSwitch (SlideSwitch&, const char* paramId);
     void showCabinetList();
