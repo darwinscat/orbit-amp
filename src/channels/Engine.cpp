@@ -143,8 +143,11 @@ void Engine::pump()
 
 void Engine::setParam (const juce::String& paramId, float value)
 {
+    // Only a move is told to the host (as Channels::set): the chain set up again on every opening of the face must
+    // not write automation points for parameters already where they stand.
     if (auto* p = amp.apvts.getParameter (paramId))
-        p->setValueNotifyingHost (p->convertTo0to1 (value));
+        if (const float to = p->convertTo0to1 (value); ! juce::approximatelyEqual (to, p->getValue()))
+            p->setValueNotifyingHost (to);
 }
 
 void Engine::setUpChain (bool firstTime)
