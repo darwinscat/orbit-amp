@@ -357,6 +357,7 @@ private:
     void playDemo (int loop);
 
     juce::Point<int> windowedAt;             // where the window stood before it took the screen
+    int windowedTitleBarH = 0;               // ...and its title bar's height, gone while it has the screen
     void showSettingsMenu();
 
     const juce::String midiCommands;

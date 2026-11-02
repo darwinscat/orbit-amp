@@ -2067,9 +2067,22 @@ void Console::setFullScreen (bool on)
 
     fullScreen = on;
 
+    // THE WINDOW'S OWN BAR GOES WITH IT (the owner, 02.11): full screen is the face alone, not the face under the
+    // standalone's title bar and its Options button — the face's menu has the devices. Back in a window, both return.
+    const auto showBar = [window, this] (bool show)
+    {
+        if (! show)
+            windowedTitleBarH = window->getTitleBarHeight();
+        window->setTitleBarHeight (show ? windowedTitleBarH : 0);
+        for (auto* child : window->getChildren())
+            if (auto* b = dynamic_cast<juce::Button*> (child); b != nullptr && b->getButtonText() == "Options")
+                b->setVisible (show);
+    };
+
     auto& desktop = juce::Desktop::getInstance();
     if (on)
     {
+        showBar (false);
         windowedAt = window->getPosition();
         getConstrainer()->setFixedAspectRatio (0.0);
         getConstrainer()->setSizeLimits (stage::minWindowWidth, juce::roundToInt ((float) stage::minWindowWidth * stage::height / stage::width),
@@ -2082,6 +2095,7 @@ void Console::setFullScreen (bool on)
         getConstrainer()->setSizeLimits (stage::minWindowWidth, juce::roundToInt ((float) stage::minWindowWidth * stage::height / stage::width),
                                          stage::readingWidth * 2, juce::roundToInt ((float) stage::readingWidth * 2.0f * stage::height / stage::width));
         desktop.setKioskModeComponent (nullptr);
+        showBar (true);
         setBoundsConstrained (getBounds());
         standalone::rememberWindowPosition (windowedAt);
     }
