@@ -318,7 +318,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout (const juce::St
         // search→treat lands in.
         layout.add (std::make_unique<Float> (juce::ParameterID { eqBellDb (l, 0), 1 }, name + "B1",      tone, 0.0f),
                     std::make_unique<Float> (juce::ParameterID { eqBellHz (l, 0), 1 }, name + "B1 Freq",
-                                             hz (60.0f, 3000.0f, 400.0f), 400.0f),
+                                             hz (60.0f, 3000.0f, 400.0f), opening.midHz),
                     std::make_unique<Float> (juce::ParameterID { eqBellQ (l, 0),  1 }, name + "B1 Q", q, 1.0f),
                     std::make_unique<Float> (juce::ParameterID { eqBellDb (l, 1), 1 }, name + "B2",      tone, 0.0f),
                     std::make_unique<Float> (juce::ParameterID { eqBellHz (l, 1), 1 }, name + "B2 Freq",

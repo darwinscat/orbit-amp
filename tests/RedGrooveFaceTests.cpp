@@ -6,7 +6,7 @@
 //
 //   - the face coming up, and coming up again, leaves BASS, MIDDLE and TREBLE where the player put them;
 //   - COMP's knob is its threshold turned round: at the top of its travel -48 dB, at the bottom 0, a double click -24;
-//   - MIDDLE's frequency lies across on a logarithmic travel, 200 Hz at its foot, 3 kHz at its head;
+//   - MIDDLE's frequency lies across on a logarithmic travel, 200 Hz at its foot, 3 kHz at its head, opening at 1 kHz;
 //   - BLEND, DI/CAB and the three effects' faders turn their parameters;
 //   - the channel lever: a host's CHANNEL moves it and the sound, the number keys and the lever itself move both;
 //   - the cuts' switches stand where their parameters do and throw them;
@@ -56,6 +56,9 @@ int ORBITAMP_GATE_MAIN()
     const auto plain = [&amp] (const juce::String& id) { auto* p = amp->apvts.getParameter (id); return p != nullptr ? p->convertFrom0to1 (p->getValue()) : -1000.0f; };
     const auto setPlain = [&amp] (const juce::String& id, float v) { if (auto* p = amp->apvts.getParameter (id)) p->setValueNotifyingHost (p->convertTo0to1 (v)); };
 
+    // MIDDLE'S FREQUENCY OPENS AT 1 kHz on the walker (the owner, 02.11): a fresh one stands there.
+    check (std::abs (plain (params::eqBellHz (0, 0)) - 1000.0f) < 0.5f, "a fresh walker's MIDDLE frequency stands at 1 kHz");
+
     // THE TONE, LEFT AS IT STANDS when the face comes up — twice.
     setPlain (params::eqLoDb (0), 6.0f);
     setPlain (params::eqBellDb (0, 0), -3.0f);
@@ -100,6 +103,9 @@ int ORBITAMP_GATE_MAIN()
     const bool atHead = mid != nullptr && std::abs (mid->getValue() - 1.0f) < 1.0e-3f;
     setPlain (params::eqBellHz (0, 0), 100.0f);
     check (atHead && mid != nullptr && mid->getValue() < 1.0e-3f, "...3 kHz at its head, and a frequency under 200 Hz at its foot");
+    if (mid != nullptr)
+        mid->setValue (mid->defaultValue, true);    // what a double click on it does (face::ColumnFader)
+    check (mid != nullptr && std::abs (plain (params::eqBellHz (0, 0)) - 1000.0f) < 1.0f, "...and a double click puts it back at 1 kHz");
 
     // BLEND, DI/CAB and the effects turn their parameters.
     const auto turns = [&face, &plain] (const char* name, float travel, const char* id, float want)

@@ -76,9 +76,14 @@ namespace
         return std::make_unique<channels::Engine> (p, redgroove::lineup());
     }
 
+    /** Where a fresh walker stands: on its first gear (Engine::opening), and with MIDDLE's frequency at 1 kHz — every
+        gear opening there, INIT and a double click on MID FREQ bringing it back there (the owner, 02.11). */
+    constexpr float midOpensHz = 1000.0f;
+
     void opening (const Product&, params::Opening& o)
     {
         channels::Engine::opening (redgroove::lineup(), o);
+        o.midHz = midOpensHz;
     }
 }
 
