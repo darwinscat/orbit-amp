@@ -64,13 +64,15 @@ void addBassParameters (juce::AudioProcessorValueTreeState::ParameterLayout& lay
         return juce::NormalisableRange<float> (lo, hi, 0.1f, std::log (0.5f) / std::log ((centre - lo) / (hi - lo)));
     };
 
-    // COMP: on in the strip, its BLEND at half, its threshold at -24 dB and its ratio at 4:1 (the owner, 31.10).
+    // COMP: on in the strip, its BLEND at half, its threshold at -24 dB and its ratio at 4:1 (the owner, 31.10), on OPTO
+    // (the owner, 02.11).
     layout.add (std::make_unique<Bool>   (juce::ParameterID { compOn, 1 },        "Comp", true),
                 std::make_unique<Float>  (juce::ParameterID { compAmount, 1 },    "Comp Blend",
                                           juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.5f),
                 std::make_unique<Choice> (juce::ParameterID { compAttack, 1 },    "Comp Attack",    compAttacks, 1),
                 std::make_unique<Choice> (juce::ParameterID { compRelease, 1 },   "Comp Release",   compReleases, 0),
-                std::make_unique<Choice> (juce::ParameterID { compCharacter, 1 }, "Comp Character", compCharacters, 0),
+                std::make_unique<Choice> (juce::ParameterID { compCharacter, 1 }, "Comp Character", compCharacters,
+                                          compCharacters.indexOf ("Opto")),
                 std::make_unique<Float>  (juce::ParameterID { compThreshold, 1 }, "Comp Threshold",
                                           juce::NormalisableRange<float> (compThresholdMin, compThresholdMax, 0.1f), compThresholdDefault),
                 std::make_unique<Float>  (juce::ParameterID { compRatio, 1 },     "Comp Ratio",

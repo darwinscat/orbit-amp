@@ -271,12 +271,12 @@ inline void addLpf (Menu& m, juce::PopupMenu& into, juce::AudioProcessorValueTre
               position == (int) params::BassLpf::slap, pick (params::BassLpf::slap));
 }
 
-/** COMP's menu: exactly its ATTACK, its RELEASE and its CHARACTER, each a submenu (the owner, 01.11). */
+/** COMP's menu: exactly its ATTACK and its RELEASE, each a submenu (the owner, 01.11) — its CHARACTER is the combo on
+    its border (the owner, 02.11). */
 inline Menu compMenu (juce::AudioProcessorValueTreeState& state, Menu m = {})
 {
     addChoices (m, state, params::compAttack,    "ATTACK");
     addChoices (m, state, params::compRelease,   "RELEASE");
-    addChoices (m, state, params::compCharacter, "CHARACTER");
     return m;
 }
 

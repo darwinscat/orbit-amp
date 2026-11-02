@@ -334,8 +334,8 @@ int ORBITAMP_GATE_MAIN()
                "the cabinet's own cuts off: its IR plays as it was shot");
         check (value (a, params::compOn) > 0.5f && juce::approximatelyEqual (value (a, params::compAmount), 0.5f)
                    && juce::roundToInt (value (a, params::compAttack)) == 1 && juce::roundToInt (value (a, params::compRelease)) == 0
-                   && juce::roundToInt (value (a, params::compCharacter)) == 0,
-               "COMP on, BLEND at half, MED attack, AUTO release, SMOOTH");
+                   && juce::roundToInt (value (a, params::compCharacter)) == params::compCharacters.indexOf ("Opto"),
+               "COMP on, BLEND at half, MED attack, AUTO release, OPTO");
         check (juce::approximatelyEqual (value (a, params::ampBlend), 0.0f) && juce::approximatelyEqual (value (a, params::ampBlendHz), 150.0f)
                    && value (a, params::ampBlendInvert) < 0.5f,
                "BLEND 0, its crossover at 150 Hz, not inverted");
@@ -1802,7 +1802,9 @@ int ORBITAMP_GATE_MAIN()
             t->compWatched.store (true);
             (void) tone (*t, 97.0, -6.0f, 100);
             const auto playing = t->compTap.written();
-            (void) tone (*t, 97.0, -6.0f, 200, -1, {}, 0);
+            // The tail: until the squeeze has let go — OPTO's (the default since 02.11) is its memory's, up to 2 s a time
+            // constant, so 16 s of silence.
+            (void) tone (*t, 97.0, -6.0f, (int) std::ceil (16.0 * sampleRate / blockSize), -1, {}, 0);
             const auto tail = t->compTap.written();
             (void) tone (*t, 97.0, -6.0f, 100, -1, {}, 0);
             const auto still = t->compTap.written();
@@ -4908,15 +4910,15 @@ int ORBITAMP_GATE_MAIN()
         {
             auto t = make (bass);
             auto m = bass::compMenu (t->apvts);
-            const std::pair<const char*, const char*> want[] { { "ATTACK", params::compAttack }, { "RELEASE", params::compRelease },
-                                                               { "CHARACTER", params::compCharacter } };
-            const juce::StringArray words[] { { "SLOW", "MED", "FAST" }, { "AUTO", "FAST", "SLOW" }, { "SMOOTH", "PUNCHY" } };
+            // Its CHARACTER is the combo on its border since 02.11 (proved below), not in the menu.
+            const std::pair<const char*, const char*> want[] { { "ATTACK", params::compAttack }, { "RELEASE", params::compRelease } };
+            const juce::StringArray words[] { { "SLOW", "MED", "FAST" }, { "AUTO", "FAST", "SLOW" } };
             juce::StringArray wrong;
             int k = 0;
             for (juce::PopupMenu::MenuItemIterator it (m.items); it.next(); ++k)
             {
                 const auto& item = it.getItem();
-                if (k >= 3 || item.text != want[k].first || item.subMenu == nullptr)
+                if (k >= 2 || item.text != want[k].first || item.subMenu == nullptr)
                 {
                     wrong.add ("item " + juce::String (k) + " \"" + item.text + "\"" + (item.subMenu == nullptr ? " (no submenu)" : ""));
                     continue;
@@ -4934,8 +4936,45 @@ int ORBITAMP_GATE_MAIN()
                 if (j != words[k].size())
                     wrong.add (juce::String (want[k].first) + " has " + juce::String (j) + " items");
             }
-            check (wrong.isEmpty() && k == 3, "COMP's menu: exactly ATTACK, RELEASE and CHARACTER, submenus of their choices, each pick its parameter ("
+            check (wrong.isEmpty() && k == 2, "COMP's menu: exactly ATTACK and RELEASE, submenus of their choices, each pick its parameter ("
                                                   + juce::String (k) + " items" + (wrong.isEmpty() ? juce::String() : ": " + wrong.joinIntoString ("; ")) + ")");
+        }
+
+        // COMP'S CHARACTER ON ITS BORDER (the owner, 02.11): "COMP —— OPTO ⌄", a combo of every character, OPTO standing;
+        // a pick one undo step, the sound's parameter with it; set from elsewhere, the combo follows.
+        {
+            auto t = make (bass);
+            for (int i = 0; i < 40; ++i)
+                t->history.tick();
+            std::unique_ptr<juce::AudioProcessorEditor> ed (t->createEditor());
+            VoicingSelector* combo = nullptr;
+            if (auto* block = compOf (*ed))
+                walk12 (*block, [&] (juce::Component& c) { if (auto* v = dynamic_cast<VoicingSelector*> (&c); v != nullptr && combo == nullptr) combo = v; });
+            juce::String said = "no combo on COMP's border";
+            bool ok = false;
+            if (combo != nullptr && combo->onPick != nullptr)
+            {
+                const int opto = params::compCharacters.indexOf ("Opto"), fet = params::compCharacters.indexOf ("FET");
+                const int startsAt = combo->getSelection();
+                const int depth = t->history.undoDepth();
+                combo->onPick (fet);
+                for (int i = 0; i < 40; ++i)
+                    t->history.tick();
+                const int picked = juce::roundToInt (value (*t, params::compCharacter));
+                const int steps  = t->history.undoDepth() - depth;
+                t->history.undo();
+                for (int i = 0; i < 40; ++i)
+                    t->history.tick();
+                const int undone = juce::roundToInt (value (*t, params::compCharacter));
+                set (*t, params::compCharacter, (float) params::compCharacters.indexOf ("Squash"));
+                const int follows = combo->getSelection();
+                ok = combo->getCount() == params::compCharacters.size() && startsAt == opto && picked == fet && steps == 1 && undone == opto
+                     && follows == params::compCharacters.indexOf ("Squash");
+                said = juce::String (combo->getCount()) + " characters, standing on " + juce::String (startsAt) + "; FET picked -> "
+                       + juce::String (picked) + " in " + juce::String (steps) + " step(s), undone to " + juce::String (undone)
+                       + "; SQUASH set elsewhere, the combo on " + juce::String (follows);
+            }
+            check (ok, "COMP's character a combo on its border, OPTO by default: " + said);
         }
 
         // THE MENUS: no window anywhere, no gear on any frame — a right click on a block (and on COMP's every control) opens
@@ -4985,9 +5024,9 @@ int ORBITAMP_GATE_MAIN()
 
             // ...and its ON at the top (step 13).
             const std::map<juce::String, juce::StringArray> held {
-                // OCTAVE's TONE, ENVELOPE's RELEASE and CHORUS's RATE are rails on their blocks, ENVELOPE's RANGE and
-                // CHORUS's crossover lists on their pictures (01.11).
-                { "COMP",     { params::compOn, params::compAttack, params::compRelease, params::compCharacter } },
+                // COMP's CHARACTER is the combo on its border (02.11); OCTAVE's TONE, ENVELOPE's RELEASE and CHORUS's RATE are
+                // rails on their blocks, ENVELOPE's RANGE and CHORUS's crossover lists on their pictures (01.11).
+                { "COMP",     { params::compOn, params::compAttack, params::compRelease } },
                 { "OCTAVE",   { params::octaveOn } },
                 { "ENVELOPE", { params::filterOn, params::filterMode, params::filterDirection, params::filterResonance,
                                 params::filterKeepLows, params::filterKeepHz } },
@@ -5273,8 +5312,9 @@ int ORBITAMP_GATE_MAIN()
         struct Block { const char* name; const char* on; std::function<bass::Menu (juce::AudioProcessorValueTreeState&)> alone; juce::StringArray words; };
         const std::vector<Block> blocks {
             // 01.11: OCTAVE's and CHORUS's menus hold nothing past ON (their TONE and RATE rails on the blocks), ENVELOPE's
-            // RANGE is its picture's list, its RELEASE a rail. RESET at every menu's foot (checked as `withReset` below).
-            { "COMP",     params::compOn,   [] (auto& s) { return bass::compMenu (s); },   { "ATTACK >", "RELEASE >", "CHARACTER >" } },
+            // RANGE is its picture's list, its RELEASE a rail; 02.11: COMP's CHARACTER is the combo on its border. RESET at
+            // every menu's foot (checked as `withReset` below).
+            { "COMP",     params::compOn,   [] (auto& s) { return bass::compMenu (s); },   { "ATTACK >", "RELEASE >" } },
             { "OCTAVE",   params::octaveOn, [] (auto& s) { return bass::octaveMenu (s); }, {} },
             { "ENVELOPE", params::filterOn, [] (auto& s) { return bass::filterMenu (s); },
               { "MODE >", "DIRECTION >", "RESONANCE >", "CLEAN LOWS >" } },

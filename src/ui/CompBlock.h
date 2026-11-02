@@ -8,6 +8,7 @@
 #include "GuardRail.h"
 #include "MeterRail.h"
 #include "OnFirst.h"
+#include "VoicingSelector.h"
 #include "scope/EnvelopeView.h"
 #include "scope/TransferView.h"
 #include "../PluginProcessor.h"
@@ -778,9 +779,10 @@ private:
 /** THE BASS'S COMP, A BLOCK OF ITS OWN (the owner, 31.10): after the GATE and before OCTAVE on the panel, as in the
     strip. Inside, left to right (the owner, 01.11): its THRESHOLD (a rail in dB, "dB" over it, its number on the grip —
     one control with the line on the picture), its PICTURE, its RATIO (a combo over the IN/OUT square) and its BLEND (a
-    rail, 0..100 %, parallel compression) — each control one job. ATTACK, RELEASE and CHARACTER are its menu: a right
-    click anywhere on it. Our own DSP, so violet; its arrow in the strip switches it, and standing by it dims in place,
-    still in reach. */
+    rail, 0..100 %, parallel compression) — each control one job. Its CHARACTER a combo on the top border, centred in the
+    run after its name, as the AMP's device stands (the owner, 02.11); ATTACK and RELEASE are its menu: a right click
+    anywhere on it. Our own DSP, so violet; its arrow in the strip switches it, and standing by it dims in place, still
+    in reach. */
 class CompBlock final : public BlockFrame
 {
 public:
@@ -812,8 +814,30 @@ public:
         unit.setBorderSize ({});
         unit.setInterceptsMouseClicks (false, false);   // a right click there is the block's
         for (auto* c : { (juce::Component*) &unit, (juce::Component*) &thresholdRail, (juce::Component*) &graph,
-                         (juce::Component*) &grColumn, (juce::Component*) &ratioCombo, (juce::Component*) &transfer, (juce::Component*) &rail })
+                         (juce::Component*) &grColumn, (juce::Component*) &ratioCombo, (juce::Component*) &transfer, (juce::Component*) &rail,
+                         (juce::Component*) &character })
             addAndMakeVisible (*c);
+
+        // THE CHARACTER on the border, set like the block's name beside it (the AMP's device's look); one undo step a pick.
+        {
+            juce::Array<VoicingSelector::Entry> entries;
+            for (const auto& name : params::compCharacters)
+                entries.add ({ name.toUpperCase(), 0, false });
+            character.setEntries (std::move (entries));
+        }
+        character.fontHeight = 16.0f;
+        character.tracking   = 0.15f;
+        character.boxed      = false;
+        character.tint       = theme::lilac;
+        characterAttachment = std::make_unique<juce::ParameterAttachment> (
+            *processor.apvts.getParameter (params::compCharacter),
+            [this] (float v)
+            {
+                character.setSelection (juce::jlimit (0, params::compCharacters.size() - 1, juce::roundToInt (v)));
+                resized();   // the name on the border is as wide as the name
+            });
+        character.onPick = [this] (int i) { characterAttachment->setValueAsCompleteGesture ((float) i); };
+        characterAttachment->sendInitialUpdate();
         const auto menu = [this] (juce::Point<int>) { bass::showCompMenu (state, this); };
         thresholdRail.onMenu = rail.onMenu = graph.onMenu = ratioCombo.onMenu = transfer.onMenu = menu;
         attachPower (*processor.apvts.getParameter (params::compOn));
@@ -837,6 +861,13 @@ public:
 protected:
     void layOutContent (juce::Rectangle<int> r) override
     {
+        // The character on the top border, sized to its name and centred in the run, the line showing both sides of it.
+        {
+            const auto slot = borderSlotArea();
+            character.setBounds (slot.withSizeKeepingCentre (juce::jmin (slot.getWidth(), character.idealWidth()), slot.getHeight()));
+            borderSlotUsed = character.getBounds();   // the frame opens the line under it
+        }
+
         auto left = r.removeFromLeft (GuardRail::designWidth);
         r.removeFromLeft (gap);
         rail.setBounds (r.removeFromRight (rail.columnWidth));
@@ -877,6 +908,8 @@ private:
     CompGrColumn    grColumn;
     CompRatioCombo  ratioCombo;
     CompTransfer    transfer;
+    VoicingSelector character;
+    std::unique_ptr<juce::ParameterAttachment> characterAttachment;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (CompBlock)
 };
