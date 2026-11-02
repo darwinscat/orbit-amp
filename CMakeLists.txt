@@ -601,6 +601,9 @@ endfunction()
 #               at the factory folder's top, zipped.
 #   WHOLE_SHELF the whole cabinet shelf, the folders the cabinet catalog gives OrbitAmp alone with Darwin's
 #               Cat's own; without it, Darwin's Cat's own alone.
+#   BASS        its chain is the bass's (src/Product.h, Product::chain — the two say one thing): it carries
+#               the catalog's bass folders and none of the guitar's — a guitar amp's cabinets and a bass
+#               amp's never cross (resources/cabinets.txt). Not with WHOLE_SHELF.
 #
 # Whatever it plays is in the family's factory folder and in its own list there (THE FACTORY FOLDER), never
 # in its binary.
@@ -708,7 +711,7 @@ function(export_entry_points_only)
 endfunction()
 
 function(add_amp name)
-    cmake_parse_arguments(PARSE_ARGV 1 AMP "BY_NAME;WHOLE_SHELF" "CODE;ICON" "SOURCES;LIBRARIES;ART;SET")
+    cmake_parse_arguments(PARSE_ARGV 1 AMP "BY_NAME;WHOLE_SHELF;BASS" "CODE;ICON" "SOURCES;LIBRARIES;ART;SET")
     string(TOLOWER "${name}" id)
     set(iconOf "${name}")
     if(AMP_ICON)
@@ -804,7 +807,8 @@ function(add_amp name)
     target_link_libraries(${name} PRIVATE ${libraries})
 
     # WHAT IT PLAYS, in the family's factory folder (THE FACTORY FOLDER): its pictures, its packs and
-    # Darwin's Cat's own cabinets — and the shelf's other folders, where it plays the whole shelf.
+    # its chain's cabinets — a guitar amp Darwin's Cat's own, and the shelf's other folders where it plays
+    # the whole shelf; a bass amp the bass's folders, and none of the guitar's.
     set(files "")
     set(at "")
     foreach(render IN LISTS AMP_ART)
@@ -819,11 +823,18 @@ function(add_amp name)
         list(APPEND files "${ORBITAMP_SET_ZIPPED}/${pack}.orbitrig.zip")
         list(APPEND at "${pack}.orbitrig.zip")
     endforeach()
-    list(APPEND files ${ORBITAMP_CABINETS_EVERY_PRODUCT})
-    list(APPEND at ${ORBITAMP_CABINETS_EVERY_PRODUCT_AT})
-    if(AMP_WHOLE_SHELF)
-        list(APPEND files ${ORBITAMP_CABINETS_ORBITAMP})
-        list(APPEND at ${ORBITAMP_CABINETS_ORBITAMP_AT})
+    if(AMP_BASS AND AMP_WHOLE_SHELF)
+        message(FATAL_ERROR "${name} is a bass amp, and the whole shelf is the guitar's")
+    elseif(AMP_BASS)
+        list(APPEND files ${ORBITAMP_CABINETS_BASS})
+        list(APPEND at ${ORBITAMP_CABINETS_BASS_AT})
+    else()
+        list(APPEND files ${ORBITAMP_CABINETS_GUITAR})
+        list(APPEND at ${ORBITAMP_CABINETS_GUITAR_AT})
+        if(AMP_WHOLE_SHELF)
+            list(APPEND files ${ORBITAMP_CABINETS_ORBITAMP})
+            list(APPEND at ${ORBITAMP_CABINETS_ORBITAMP_AT})
+        endif()
     endif()
     factory_carries(${name} FILES ${files} AT ${at})
     add_dependencies(${name} Family_Factory)
@@ -1032,7 +1043,8 @@ endforeach()
 # THE CABINET CATALOG (resources/cabinets.txt): every cabinet IR the family carries, each said once — its
 # number, its name, the folder of the shelf it lies in and its file. cmake/CabinetCatalog.cmake reads it
 # into the files the factory folder holds, in the order of their numbers — Darwin's Cat's own, which every
-# amp plays, and the folders OrbitAmp alone plays (add_amp: WHOLE_SHELF) — and into the table the code
+# guitar amp plays, the folders OrbitAmp alone plays (add_amp: WHOLE_SHELF), and the bass's, which every
+# bass amp plays and no guitar amp (add_amp: BASS; none yet) — and into the table the code
 # plays them by, generated/CabinetCatalog.h: the `cab_ir` parameter's names and default (src/Parameters.h)
 # and the shelf's folders (src/device/FactoryShelf.h). A cabinet joining the shelf is a line there, and its
 # file; nothing here or in the code lists one. What compiles Parameters.h links OrbitAmpCabinetCatalog for
@@ -1433,10 +1445,11 @@ add_amp(AmberPawAmp   CODE Ambp    BY_NAME
     SET       ${AMBERPAWAMP_SET})
 
 # OrbitBass — the bass's workstation: OrbitAmp's frame and blocks over the bass's chain (src/Product.h,
-# Chain::bass) — mono, no delay, no reverb. It plays bass packs alone, ORBITBASS_SET's, and Darwin's Cat's
-# own cabinets. Not in the family's release (installer/family.ini), and asked for by name. Its icon its own
+# Chain::bass) — mono, no delay, no reverb. It plays bass packs alone, ORBITBASS_SET's, and the bass's cabinets
+# alone (BASS), which the catalog has none of yet: no guitar cabinet, and the player's own out of `Bass IRs`
+# (device/IrLibrary.h). Not in the family's release (installer/family.ini), and asked for by name. Its icon its own
 # (the owner, 02.11): OrbitAmp's orbit doubled, a second ring inside it.
-add_amp(OrbitBass     CODE Obas    BY_NAME
+add_amp(OrbitBass     CODE Obas    BY_NAME    BASS
     SOURCES   ${ORBITBASS_SOURCES}
     LIBRARIES
         OrbitAmpData                 # the mark, the notice, the disclaimer — BinaryData::*

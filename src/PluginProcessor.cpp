@@ -32,7 +32,7 @@ void gatherFormerIrs (const Product& product)
             return true;
 
         const auto gathered = device::IrLibrary::gather (device::IrLibrary::formerDirectory (product.name),
-                                                         device::IrLibrary::directory(), product.name);
+                                                         device::IrLibrary::directory (product.irsFolder()), product.name);
 
         // A file that would not copy is tried again on the next start; what was copied is not copied twice.
         if (gathered.failed == 0)
@@ -254,6 +254,7 @@ AmpProcessor::AmpProcessor (const Product& product)
     // (takeFormerCabinet).
     seedSwitchNames();
     apvts.state.setProperty (cabOpeningId, params::cabIrDefault, nullptr);
+    takeBassCabinet (apvts.state);   // a fresh bass amp's cabinet, which the catalog has none of yet
     history.reset();
     history.markSaved();
 
@@ -424,6 +425,7 @@ void AmpProcessor::setStateInformation (const void* data, int sizeInBytes)
         // MATTER was the cabinet every amp opened on, on the one they open on now.
         self.takeFormerTrims (t);
         self.takeFormerCabinet (t);
+        self.takeBassCabinet (t);   // ...and a bass's on a guitar cabinet, on the bass's own
 
         // The aim's bookkeeping belongs to the thread that runs it. Arming it here rather than at
         // the top of setStateInformation also means it is armed AFTER the tree has landed, which
@@ -553,6 +555,74 @@ void AmpProcessor::takeFormerCabinet (juce::ValueTree& tree)
         takeFormerCabinet (child);
 }
 
+namespace
+{
+    /** What a pick of a player's IR takes of its file: its bytes, where they are an IR the cabinet plays —
+        not too big to be kept inside a session (EmbeddedIrs), and audio. */
+    bool readCabFile (const juce::File& file, juce::MemoryBlock& bytes)
+    {
+        return file.existsAsFile() && file.getSize() <= device::EmbeddedIrs::maxBytes
+            && file.loadFileAsData (bytes) && core::CabinetIr::decodes (bytes.getData(), bytes.getSize());
+    }
+
+    /** ...and what it leaves on the state: the IR's name, where in the library under `root` it came from,
+        and the key of its bytes in the store. */
+    void nameCabFile (juce::ValueTree& tree, const juce::File& file, const juce::File& root, const juce::String& key)
+    {
+        // Where it came from, in the library's own terms and one spelling on every system — a tick in
+        // the menu, and nothing that the sound depends on.
+        const auto from = file.getRelativePathFrom (root).replaceCharacter ('\\', '/');
+
+        // The key LAST: it is the one the pump and the face watch, and by then the name beside it is
+        // already the right one.
+        tree.setProperty (params::cabIrUserName, file.getFileNameWithoutExtension(), nullptr);
+        tree.setProperty (params::cabIrUserFrom, from, nullptr);
+        tree.setProperty (params::cabIrUserKey,  key, nullptr);
+    }
+}
+
+void AmpProcessor::takeBassCabinet (juce::ValueTree& tree)
+{
+    if (! tree.isValid() || ownProduct.chain != Chain::bass)
+        return;
+
+    if (tree.hasType (stateType))
+    {
+        // What it plays: an IR of the player's the store holds, or the number `cabIr` keeps — the live
+        // parameter's, for the live tree, whose own copy of it may not have caught up yet.
+        const auto key = tree.getProperty (params::cabIrUserKey).toString();
+        int number = params::cabIrDefault;
+        if (tree == apvts.state)
+        {
+            const auto* p = apvts.getParameter (params::cabIr);
+            number = juce::roundToInt (p->convertFrom0to1 (p->getValue()));
+        }
+        else if (const auto p = tree.getChildWithProperty ("id", juce::String (params::cabIr)); p.isValid())
+            number = juce::roundToInt ((float) p.getProperty ("value"));
+
+        if ((key.isNotEmpty() && cabIrEmbeds.find (key) != nullptr) || ownProduct.playsCabIr (number))
+            return;
+
+        const auto root = device::IrLibrary::directory (ownProduct.irsFolder());
+        for (const auto& file : device::IrLibrary::listed (root))
+        {
+            juce::MemoryBlock bytes;
+            if (! readCabFile (file, bytes))
+                continue;
+
+            if (const auto added = cabIrEmbeds.add (std::move (bytes)); added.isNotEmpty())
+            {
+                nameCabFile (tree, file, root, added);
+                return;
+            }
+        }
+        return;
+    }
+
+    for (auto child : tree)
+        takeBassCabinet (child);
+}
+
 juce::String AmpProcessor::loadedAs() const
 {
     // JUCE names every wrapper of the family's but one: clap-juce-extensions makes its processor as no
@@ -658,13 +728,20 @@ const AmpProcessor::IrBytes& AmpProcessor::cabIrBytes (const Product& product, i
     });
 
     jassert (shelf.size() == (size_t) params::cabIrNames.size());
-    const auto& ir = shelf[(size_t) juce::jlimit (0, (int) shelf.size() - 1, index)];
+    index = juce::jlimit (0, (int) shelf.size() - 1, index);
+    const auto& ir = shelf[(size_t) index];
+
+    // A NUMBER OF THE OTHER CHAIN'S is no cabinet at all, whatever the factory folder holds: a bass amp
+    // plays no guitar cabinet — not even RED GIANT in its place — and a guitar amp no bass one.
+    static const IrBytes none { nullptr, 0, nullptr };
+    if (! product.playsCabIr (index))
+        return none;
 
     // A place the product holds empty — a face plays none of the shelf's `Other` — plays RED GIANT, the
-    // cabinet every product opens on: a host that moves the number there hears a cabinet the product has.
-    // With the factory folder missing that one is empty too, and no bytes is what the cabinet is given:
-    // the cabinet loads nothing then: where it is loaded, an IR with no bytes is passed over.
-    return ir.data != nullptr ? ir : shelf[(size_t) params::cabIrDefault];
+    // cabinet every guitar amp opens on: a host that moves the number there hears a cabinet the product
+    // has. With the factory folder missing that one is empty too, and no bytes is what the cabinet is
+    // given: the cabinet loads nothing then: where it is loaded, an IR with no bytes is passed over.
+    return ir.data != nullptr ? ir : product.playsCabIr (params::cabIrDefault) ? shelf[(size_t) params::cabIrDefault] : none;
 }
 
 AmpProcessor::CabChoice AmpProcessor::cabChoice() const
@@ -691,6 +768,8 @@ AmpProcessor::CabChoice AmpProcessor::cabChoice() const
 void AmpProcessor::chooseCabFactory (int index)
 {
     index = juce::jlimit (0, params::cabIrNames.size() - 1, index);
+    if (! ownProduct.playsCabIr (index))
+        return;     // the other chain's: never this amp's to play
 
     const auto choice = cabChoice();
 
@@ -720,24 +799,14 @@ void AmpProcessor::chooseCabFactory (int index)
 bool AmpProcessor::chooseCabFile (const juce::File& file)
 {
     juce::MemoryBlock bytes;
-
-    if (! file.existsAsFile() || file.getSize() > device::EmbeddedIrs::maxBytes
-        || ! file.loadFileAsData (bytes) || ! core::CabinetIr::decodes (bytes.getData(), bytes.getSize()))
+    if (! readCabFile (file, bytes))
         return false;
 
     const auto key = cabIrEmbeds.add (std::move (bytes));
     if (key.isEmpty())
         return false;
 
-    // Where it came from, in the library's own terms and one spelling on every system — a tick in
-    // the menu, and nothing that the sound depends on.
-    const auto from = file.getRelativePathFrom (device::IrLibrary::directory()).replaceCharacter ('\\', '/');
-
-    // The key LAST: it is the one the pump and the face watch, and by then the name beside it is
-    // already the right one.
-    apvts.state.setProperty (params::cabIrUserName, file.getFileNameWithoutExtension(), nullptr);
-    apvts.state.setProperty (params::cabIrUserFrom, from, nullptr);
-    apvts.state.setProperty (params::cabIrUserKey,  key, nullptr);
+    nameCabFile (apvts.state, file, device::IrLibrary::directory (ownProduct.irsFolder()), key);
 
     // No parameter moved: without this, a host would not know the session has something to save.
     updateHostDisplay (ChangeDetails{}.withNonParameterStateChanged (true));
@@ -886,10 +955,16 @@ void AmpProcessor::pumpDeviceWork()
             const auto* p = apvts.getParameter (params::cabIr);
             const int now = juce::roundToInt (p->convertFrom0to1 (p->getValue()));
 
-            if (! cabIrParamBaselineStale && now != lastCabIrParam
-                && apvts.state.hasProperty (params::cabIrUserKey))
-                for (const auto* id : { params::cabIrUserKey, params::cabIrUserName, params::cabIrUserFrom })
-                    apvts.state.removeProperty (id, nullptr);
+            if (! cabIrParamBaselineStale && now != lastCabIrParam)
+            {
+                if (apvts.state.hasProperty (params::cabIrUserKey))
+                    for (const auto* id : { params::cabIrUserKey, params::cabIrUserName, params::cabIrUserFrom })
+                        apvts.state.removeProperty (id, nullptr);
+
+                // ...and a number the product does not play — a bass amp's lane over the guitar's shelf —
+                // plays the bass's own: the first of the player's bass IRs again, or no cabinet.
+                takeBassCabinet (apvts.state);
+            }
 
             cabIrParamBaselineStale = false;
             lastCabIrParam = now;

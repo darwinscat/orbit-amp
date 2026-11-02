@@ -11,7 +11,8 @@ namespace orbitamp
 {
 
 SetupPanel::SetupPanel (AmpProcessor& processor)
-    : amp (processor), preampDevices (processor.product().name, device::DeviceLibrary::ampSlot)
+    : amp (processor), preampDevices (processor.product().name, device::DeviceLibrary::ampSlot),
+      irs (processor.product().irsFolder())
 {
     setWantsKeyboardFocus (true);
 

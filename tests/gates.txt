@@ -79,7 +79,9 @@ redgroove-nofactory orbitamp_gates
 # Every amp in one binary: all of them side by side in one process, each its own product (src/Product.h).
 family             orbitamp_gates
 
-orbitbass          orbitamp_gates
+# The bass's chain. It takes IRs into the player's `Bass IRs` and `IRs` only when told the home is its own —
+# and here it always is: every cabinet it hears is the one it puts there.
+orbitbass          orbitamp_gates  ORBITBASS_GATE_OWNS_HOME=1
 
 # The input's level: unity at every amp's input, the pack's own level feeding the model, 0.8.0's states as they played.
 input-level        orbitamp_gates

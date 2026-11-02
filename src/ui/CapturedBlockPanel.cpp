@@ -849,6 +849,7 @@ void CapturedBlockPanel::buildSelectors()
 
         sel.attachment.reset();
         sel.steps.reset();
+        sel.toggle.reset();
         sel.row = {};
 
         if (i >= list.size())
@@ -877,31 +878,48 @@ void CapturedBlockPanel::buildSelectors()
             continue;
         }
 
-        sel.steps = std::make_unique<VSwitch>();
-        sel.steps->accent = theme::orange;
+        const auto moved = [this, i] (int v)
+        {
+            selectors[(size_t) i].attachment->setValueAsCompleteGesture ((float) v);
+        };
 
-        // Lying down in the dial's strip, one line high: the slot and its lever alone — the word
-        // beside it is written by the panel, and the whole list is the hint.
-        sel.steps->setHorizontal (true);
-        sel.steps->setNamesShown (false);
-        sel.steps->setItems (labels, 0);
-        sel.steps->setTooltip (hint);
-        addAndMakeVisible (*sel.steps);
+        if (switchesInRow())
+        {
+            // On the bass, a cell of the console's row, among the dials (switchesInRow): its marks and its name
+            // its own to write, the whole list the hint.
+            sel.toggle = std::make_unique<ToggleSwitch>();
+            sel.toggle->oneLine = true;   // a line of its own under the cut beside it (EqSection::layOutRow)
+            sel.toggle->setItems (sel.name, labels, 0);
+            sel.toggle->setTooltip (hint);
+            sel.toggle->onChange = moved;
+            addAndMakeVisible (*sel.toggle);
+        }
+        else
+        {
+            sel.steps = std::make_unique<VSwitch>();
+            sel.steps->accent = theme::orange;
+
+            // Lying down in the dial's strip, one line high: the slot and its lever alone — the word
+            // beside it is written by the panel, and the whole list is the hint.
+            sel.steps->setHorizontal (true);
+            sel.steps->setNamesShown (false);
+            sel.steps->setItems (labels, 0);
+            sel.steps->setTooltip (hint);
+            sel.steps->onChange = moved;
+            addAndMakeVisible (*sel.steps);
+        }
 
         sel.attachment = std::make_unique<juce::ParameterAttachment> (
             *amp.apvts.getParameter (params::selectorId (blk, i)),
             [this, i, n = labels.size()] (float v)
             {
+                const int at = juce::jlimit (0, n - 1, juce::roundToInt (v));
                 if (auto* s = selectors[(size_t) i].steps.get())
-                    s->setSelectedIndex (juce::jlimit (0, n - 1, juce::roundToInt (v)),
-                                         juce::dontSendNotification);
+                    s->setSelectedIndex (at, juce::dontSendNotification);
+                if (auto* t = selectors[(size_t) i].toggle.get())
+                    t->setSelectedIndex (at, juce::dontSendNotification);
                 repaint();   // the chosen position's name is the panel's to write
             });
-
-        sel.steps->onChange = [this, i] (int v)
-        {
-            selectors[(size_t) i].attachment->setValueAsCompleteGesture ((float) v);
-        };
 
         sel.attachment->sendInitialUpdate();
     }
@@ -931,6 +949,7 @@ void CapturedBlockPanel::layOutContent (juce::Rectangle<int> area)
         setControlsVisible (false);
         eq.setRowVisible (false);
         dividerX = { -1, -1 };
+        sectionAreas = {};
         layPicture (area);
         return;
     }
@@ -940,14 +959,19 @@ void CapturedBlockPanel::layOutContent (juce::Rectangle<int> area)
 
     // ---- THREE SECTIONS, each a tier over a strip. The two narrow ones are a FIXED width and the
     //      well takes the rest, so the widest thing on the block is the picture. ----
-    auto s1 = area.removeFromLeft (section1W + (bassKnobs != nullptr ? bassSideW : 0));
+    //      On the bass GAIN's column is only as wide as what it holds — the dial its height allows over SMOOTH and the
+    //      line kept under it, or SMOOTH — and BLEND stands right after it; its lever's section is the bass's.
+    const int dialByHeight = juce::jmin (maxGainSide, area.getHeight() - (2 * pickRowH + pickRowGap) - dialGap - Knob::valueRowH);
+    const int gainW = bassKnobs != nullptr ? juce::jmax (SmoothTag::idealWidth(), dialByHeight) : section1W;
+    auto s1 = area.removeFromLeft (gainW + (bassKnobs != nullptr ? bassSideW : 0));
     const auto column1 = s1;   // GAIN's whole column: its strip is its own, not the shared one
     area.removeFromLeft (sectionGap);
-    auto s2 = area.removeFromLeft (section2W);
+    auto s2 = area.removeFromLeft (bassKnobs != nullptr ? bassSection2W : section2W);
     area.removeFromLeft (sectionGap);
     auto s3 = area;
 
     dividerX = { s1.getRight() + sectionGap / 2, s2.getRight() + sectionGap / 2 };
+    sectionAreas = { s1, s2, s3 };
 
     // One line across the block where the tiers end and the strips begin.
     const auto strip = [] (juce::Rectangle<int>& s, int h)
@@ -960,8 +984,23 @@ void CapturedBlockPanel::layOutContent (juce::Rectangle<int> area)
     // The console's strip is its row's height: on the bass a lane taller, for MID FREQ under MIDDLE.
     auto strip2 = strip (s2, stripH), strip3 = strip (s3, eq.rowHeight());
 
-    // ---- section 3: the picture well, the console's row under it. ----
-    eq.layOutRow (strip3);
+    // ---- section 3: the picture well, the console's row under it — on the bass with a pack's tone switches among its
+    //      cells, the first inside HPF and the second inside LPF (switchesInRow), each as wide as its words and never
+    //      narrower than a cut. ----
+    {
+        std::array<ToggleSwitch*, 2> inner {};
+        for (size_t k = 0, i = 0; i < selectors.size() && k < inner.size(); ++i)
+            if (selectors[i].toggle != nullptr)
+                inner[k++] = selectors[i].toggle.get();
+
+        const auto width = [] (const ToggleSwitch* t) { return t != nullptr ? t->idealWidth() : 0; };
+        eq.setInnerCells (width (inner[0]), width (inner[1]));
+        eq.layOutRow (strip3);
+
+        for (size_t k = 0; k < inner.size(); ++k)
+            if (inner[k] != nullptr)
+                inner[k]->setBounds (eq.innerCell ((int) k));
+    }
     layPicture (s3);
 
     // ---- section 1: the GAIN dial, as BIG as the block lets it be. Its strip is not the shared one:
@@ -1062,8 +1101,10 @@ void CapturedBlockPanel::setControlsVisible (bool v)
     }
 
     for (auto& sel : selectors)
-        if (sel.steps != nullptr)
-            sel.steps->setVisible (v);
+    {
+        if (sel.steps != nullptr)  sel.steps->setVisible (v);
+        if (sel.toggle != nullptr) sel.toggle->setVisible (v);
+    }
 }
 
 void CapturedBlockPanel::setPictureShown (bool shown)

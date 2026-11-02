@@ -205,6 +205,15 @@ public:
     /** The row's height: the dials'. */
     int rowHeight() const noexcept { return rowH; }
 
+    /** ROOM IN THE ROW FOR A SWITCH OF THE BLOCK'S OWN inside each cut — between HPF and the first dial (0), between the
+        last dial and LPF (1): a pack's tone switches on the bass (CapturedBlockPanel::switchesInRow). 0 wide, none; the
+        dials share whatever the cuts and these leave. */
+    void setInnerCells (int firstW, int secondW) { innerW = { firstW, secondW }; }
+
+    /** Where layOutRow left that room: from the row's top, where the names stand, down to the cuts' switches' foot — a
+        switch put there has its name on the names' line and its oval on the cuts'. Empty where none was asked. */
+    juce::Rectangle<int> innerCell (int which) const { return innerCells[(size_t) which]; }
+
     /** Put a set of bands on the row. Ours by default; a captured block hands it the device's own.
 
         The two are alternatives and the console shows one at a time, because a device wearing its
@@ -276,6 +285,9 @@ private:
 
     std::vector<Band> bands;
     std::vector<std::unique_ptr<Knob>> bandKnobs;
+
+    std::array<int, 2> innerW { 0, 0 };                    // setInnerCells
+    std::array<juce::Rectangle<int>, 2> innerCells;        // ...and where layOutRow left them
 
     std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>> bandAtts;
 

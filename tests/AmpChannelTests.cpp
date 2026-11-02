@@ -489,14 +489,14 @@ int ORBITAMP_GATE_MAIN()
         check (added.first >= factory && channels.cabinets()[added.first].getFileName() == early.getFileName(),
                "...a name that would sort first still stands after the build's own");
         check (added.refused.size() == 1 && added.refused[0] == big.getFileName(), "an IR too big for a session is refused, by name");
-        check (channels.cabinets()[added.first].getParentDirectory() == device::DeviceLibrary::familyRoot().getChildFile ("IRs"),
+        check (channels.cabinets()[added.first].getParentDirectory() == device::DeviceLibrary::familyRoot().getChildFile (ORBITAMP_GATE_PRODUCT().irsFolder()),
                "...and what is taken in lands in the family's own IRs folder, beside Factory");
 
         // THE IR OF BEFORE, gathered at the first start: copied into the family's folder, in its own
         // folder, and still where it was — by a product that has IRs of before to gather (product.gathers).
         if (product.gathers)
         {
-            const auto gathered = device::IrLibrary::directory().getChildFile ("Old Pack").getChildFile (formerIr.getFileName());
+            const auto gathered = device::IrLibrary::directory (ORBITAMP_GATE_PRODUCT().irsFolder()).getChildFile ("Old Pack").getChildFile (formerIr.getFileName());
             check (gathered.existsAsFile() && formerIr.existsAsFile() && gathered.hasIdenticalContentTo (formerIr),
                    "the player's IRs of before are copied into the family's folder, folders and all, and left where they were");
             check (channels.cabinets().indexOf (gathered) >= factory, "...and are among the player's cabinets");

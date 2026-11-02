@@ -15,6 +15,7 @@
 
 #include <array>
 #include <memory>
+#include <vector>
 
 namespace orbitamp
 {
@@ -84,6 +85,15 @@ public:
 
     /** OrbitBass's DI/CAB rail, or none on the guitar's (a gate reads it). */
     GuardRail* diRail() noexcept;
+
+    /** THE IR MENU, as the block opens it (showIrMenu): the shelf the product plays, a submenu for each of its
+        folders, item `1 + number`; then the player's own IRs out of the product's folder of them, item
+        `firstFile + i` for the file `files[i]`. A product with neither offers a line that says so. A gate reads it. */
+    static juce::PopupMenu irMenu (const AmpProcessor&, std::vector<juce::File>& files);
+    static constexpr int firstFile = 1000;
+
+    /** What the border says where no cabinet plays: a bass amp with no IR of its own. */
+    static constexpr const char* noIr = "NO IR";
 
 private:
 

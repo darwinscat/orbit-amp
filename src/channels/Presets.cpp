@@ -106,6 +106,7 @@ bool Presets::load (const juce::String& name)
     amp.takeEmbeddedIrs (tree);     // a cabinet IR it carries goes to the store, not into the history
     amp.takeFormerTrims (tree);     // a preset of 0.8.0's: its gate set where 0.8.0's key heard the guitar
     amp.takeFormerCabinet (tree);   // ...and one saved while every amp opened on DARK MATTER, on RED GIANT
+    amp.takeBassCabinet (tree);     // ...and a bass's on a guitar cabinet, on the bass's own
 
     // INPUT stays where the player has it.
     if (auto* in = amp.apvts.getParameter (params::inTrim))
@@ -173,6 +174,7 @@ void Presets::init()
     // product has not seen, and its engine adopts it the way it adopts the first: chain, channel, pack.
     if (auto node = tree.getChildWithName (channels.nodeType()); node.isValid())
         tree.removeChild (node, nullptr);
+    amp.takeBassCabinet (tree);     // a bass's cabinet, as a fresh one's
 
     amp.history.applyEdit (amp.history.active(), tree, "Init");
     amp.history.markSaved();

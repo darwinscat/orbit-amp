@@ -274,6 +274,54 @@ int ORBITAMP_GATE_MAIN()
     check (AmpProcessor::cabIrBytes (products::orbitAmp(), 0).data != AmpProcessor::cabIrBytes (products::catpitAmp(), 0).data,
            "...and the cabinet each opens its shelf on is its own");
 
+    // A GUITAR AMP'S CABINETS AND A BASS AMP'S NEVER CROSS (Product::playsCabIr). Every guitar amp plays the shelf it
+    // played before: the catalog's names at their numbers, the places it holds — OrbitAmp every one, a face Darwin's
+    // Cat's own ten — every other place playing RED GIANT, its default, as a fresh one opens on it. The bass plays none
+    // of it, whatever the number: no place held, and no RED GIANT in a place it holds empty.
+    {
+        check (params::cabIrNames.joinIntoString (",")
+                   == "COOKIE MONSTER,DARTH GENOCIDER,KITTEN SLAYER,KAIJU TAMER,ICEBURN SUICIDE,VERTICAL LIP STABBER,MANSLAUGHTER JOE,"
+                      "BIG BUBBA,DEVILS CUNNILINGUS,OCTOBER 32TH,WUMBO,WORLD COLLIDER,CANNIBAL CHOIR,CATHODE RAY FLESHBURN,IMPALER JIM,"
+                      "NACHO GUACAMOLE,PICKLE PUNISHER,WASABI WARRIOR,PESTO PALADIN,DON SPINACIO,KILL DILL,DARK MATTER,ION CAVITY,"
+                      "EVENT HORIZON,CORONAL FLARE,BROWN DWARF,ACCRETION GAP,DUST CLOUD,BLUE SHIFT,RED GIANT,PULSAR BEAM"
+                   && params::cabIrDefault == 29 && params::cabIrNames[params::cabIrDefault] == "RED GIANT",
+               "the shelf's thirty-one names at the numbers sessions keep, RED GIANT the default at 29");
+
+        for (const auto& [product, lineup] : family())
+        {
+            juce::StringArray held;
+            bool everyNumberPlays = true;
+            for (int i = 0; i < params::cabIrNames.size(); ++i)
+            {
+                if (device::shelf::irs (product.name)[(size_t) i].data != nullptr)
+                    held.add (juce::String (i));
+                everyNumberPlays = everyNumberPlays && product.playsCabIr (i) && AmpProcessor::cabIrBytes (product, i).data != nullptr;
+            }
+            // ...a face on RED GIANT's file, which its channels play as an IR of their own (channels::Channels::align).
+            const auto fresh = std::make_unique<AmpProcessor> (product);
+            const auto opens = fresh->cabChoice();
+            const auto redGiant = juce::String::fromUTF8 (catalog::irs[params::cabIrDefault].file).upToLastOccurrenceOf (".", false, false);
+            const bool onRedGiant = lineup == nullptr ? ! opens.isUser() && opens.factory == params::cabIrDefault
+                                                      : opens.isUser() && opens.name == redGiant;
+            const juce::String before = juce::String (product.name) == "OrbitAmp"
+                ? "0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30"
+                : "21,22,23,24,25,26,27,28,29,30";
+            check (product.chain == Chain::guitar && held.joinIntoString (",") == before && everyNumberPlays && onRedGiant
+                       && juce::String (product.irsFolder()) == "IRs",
+                   juce::String (product.name) + " plays the shelf it played before (places " + held.joinIntoString (",")
+                       + "), every number a cabinet, opens on RED GIANT (" + (opens.isUser() ? opens.name : params::cabIrNames[opens.factory])
+                       + "), and keeps the player's IRs in `IRs`");
+        }
+
+        const auto& bass = products::orbitBass();
+        bool none = cabinetsOn (bass) == 0;
+        for (int i = 0; i < params::cabIrNames.size(); ++i)
+            none = none && ! bass.playsCabIr (i) && AmpProcessor::cabIrBytes (bass, i).data == nullptr;
+        check (bass.chain == Chain::bass && none && juce::String (bass.irsFolder()) == "Bass IRs",
+               "OrbitBass plays no guitar cabinet: no place of the shelf held, no number a cabinet, RED GIANT none; "
+               "the player's IRs in `Bass IRs`");
+    }
+
     // TWO AT ONCE — and every one of them at once, the cockpit twice.
     {
         const auto amps = family();

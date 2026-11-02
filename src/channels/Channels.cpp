@@ -139,7 +139,7 @@ void Channels::readCabinets()
     irs = cabinetsAmong (bundledCabinets (amp.product().name), set::cabinetsIn (device::DeviceLibrary::factoryDirectory()));
 
     factory = irs.size();
-    irs.addArray (cabinetsIn (device::IrLibrary::directory()));
+    irs.addArray (cabinetsIn (device::IrLibrary::directory (amp.product().irsFolder())));
     irKeys.clear();
 }
 
@@ -147,7 +147,7 @@ Channels::Added Channels::importCabinets (const juce::StringArray& paths)
 {
     Added out;
     const auto before = irs;
-    const auto library = device::IrLibrary::directory();
+    const auto library = device::IrLibrary::directory (amp.product().irsFolder());
 
     for (const auto& path : paths)
     {
@@ -270,7 +270,7 @@ void Channels::nameCabinet (const juce::File& file)
 {
     amp.apvts.state.setProperty (params::cabIrUserName, file.getFileNameWithoutExtension(), nullptr);
     amp.apvts.state.setProperty (params::cabIrUserFrom,
-                                 file.getRelativePathFrom (device::IrLibrary::directory()).replaceCharacter ('\\', '/'), nullptr);
+                                 file.getRelativePathFrom (device::IrLibrary::directory (amp.product().irsFolder())).replaceCharacter ('\\', '/'), nullptr);
 }
 
 bool Channels::renameCabinet (int index, const juce::String& name)
@@ -284,7 +284,7 @@ bool Channels::renameCabinet (int index, const juce::String& name)
     // The name it will have, cut the way the library cuts it: legal, and with the file's own extension.
     const auto legal = juce::File::createLegalFileName (name.trim()).upToLastOccurrenceOf (".", false, false);
     const auto renamed = file.getSiblingFile (legal + file.getFileExtension());
-    if (legal.isEmpty() || ! device::IrLibrary::rename (device::IrLibrary::directory(), file, name))
+    if (legal.isEmpty() || ! device::IrLibrary::rename (device::IrLibrary::directory (amp.product().irsFolder()), file, name))
         return false;
 
     // A CHANNEL REMEMBERS ITS CABINET BY THE FILE'S NAME, and so does the sound that is playing: both
@@ -303,7 +303,7 @@ bool Channels::renameCabinet (int index, const juce::String& name)
 bool Channels::removeCabinet (int index)
 {
     if (index < factory || index >= irs.size()
-        || ! device::IrLibrary::remove (device::IrLibrary::directory(), irs[index]))
+        || ! device::IrLibrary::remove (device::IrLibrary::directory (amp.product().irsFolder()), irs[index]))
         return false;
 
     readCabinets();
