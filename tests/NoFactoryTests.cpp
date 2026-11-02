@@ -7,7 +7,7 @@
 // no pack of its own; play a guitar through for as long as a few seconds of blocks, and through every
 // channel it has, without a crash and without a sample that is not a number; and open a window that says
 // the folder is missing and where it belongs — a face in place of its whole window, in type a player
-// reads. OrbitAmp, the cockpit and the rovers' dashboard each run it as themselves.
+// reads. OrbitAmp, the cockpit, the rovers' dashboard and the walker's each run it as themselves.
 
 #include "GateMain.h"
 #include "PluginProcessor.h"

@@ -1588,6 +1588,7 @@ gate_in_binary(orbitbass         tests/OrbitBassTests.cpp   PRODUCT OrbitBass
 gate_in_binary(nofactory         tests/NoFactoryTests.cpp   PRODUCT OrbitAmp     NO_FACTORY)
 gate_in_binary(catpit-nofactory  tests/NoFactoryTests.cpp   PRODUCT CatpitAmp    NO_FACTORY)
 gate_in_binary(redpaw-nofactory  tests/NoFactoryTests.cpp   PRODUCT RedPawAmp    NO_FACTORY)
+gate_in_binary(redgroove-nofactory tests/NoFactoryTests.cpp  PRODUCT RedGrooveBass NO_FACTORY)
 
 # ORBITAMP'S FACE AS THE SITE GETS IT (src/ui/WebFaceplate.h): a fresh OrbitAmp writes the kit, and the kit
 # builds the face back — its own format, every place on the stage, the hull the poster less its places.
