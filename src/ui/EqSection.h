@@ -9,6 +9,7 @@
 #include "../core/EqLink.h"
 #include "EqCurve.h"
 #include "Knob.h"
+#include "ToggleSwitch.h"
 #include "ZoneSwitch.h"
 
 #include <felitronics/analysis/RollingSpectrumTap.h>
@@ -213,6 +214,9 @@ public:
         dials share whatever the cuts and these leave. */
     void setInnerCells (int firstW, int secondW) { innerW = { firstW, secondW }; }
 
+    /** ...and the switches themselves, so a side's slots stand in one column with the cut's line over them. */
+    void setInnerToggles (ToggleSwitch* first, ToggleSwitch* second) { innerToggles = { first, second }; }
+
     /** Where layOutRow left that room: from the row's top, where the names stand, down to the cuts' switches' foot — a
         switch put there has its name on the names' line and its oval on the cuts'. Empty where none was asked. */
     juce::Rectangle<int> innerCell (int which) const { return innerCells[(size_t) which]; }
@@ -291,6 +295,14 @@ private:
 
     std::array<int, 2> innerW { 0, 0 };                    // setInnerCells
     std::array<juce::Rectangle<int>, 2> innerCells;        // ...and where layOutRow left them
+    std::array<ToggleSwitch*, 2> innerToggles {};          // setInnerToggles
+
+    // THE BASS'S CUTS AS THE WALKER HAS THEM (the owner, 03.11), on a row with a pack's switches: STR 4 / 5 and
+    // FING / SLAP, one line each, both cuts always in — the switch chooses between their places.
+    ToggleSwitch strLine, fingLine;
+    std::unique_ptr<juce::ParameterAttachment> strAtt, fingAtt;
+    bool walkerLines = false;
+    void holdOn (const char* paramId);
 
     std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>> bandAtts;
 

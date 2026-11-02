@@ -48,6 +48,31 @@ public:
     bool oneLine = false;
     static constexpr int nameGap = 6;   // between the name and the first mark, on one line
 
+    /** THE WALKER'S LOOK (the owner, 03.11: the switches exactly as RedGrooveBass has them): one line — the name, the
+        end words either side of a dark slot, a round cap in it at its place, the word it stands at lit — in the face's
+        12 px. A two-word name is written short, as there: ULTRA LO → U-LO. `slotAt` lines the slots of a column up
+        (its left edge in the switch's bounds; -1 right after the switch's own left part). */
+    bool walkerLook = false;
+    float slotAt = -1.0f;
+    static constexpr float walkerFontH = 12.0f;
+    static constexpr int   slotW = 40, slotH = 20, walkerGap = 4, markPad = 3;
+
+    juce::String shownName() const
+    {
+        if (! walkerLook)
+            return name;
+        const auto words = juce::StringArray::fromTokens (name.trim(), " ", "");
+        return words.size() == 2 && name.length() > 5 ? words[0].substring (0, 1) + "-" + words[1] : name;
+    }
+
+    /** The walker's line: how much stands left of the slot (the name, the first word) and right of it (the last). */
+    float leftPart() const
+    {
+        const auto n = shownName();
+        return (n.isNotEmpty() ? walkerText (n) + (float) walkerGap : 0.0f) + walkerText (markFor (items[0])) + (float) markPad;
+    }
+    float rightPart() const { return (float) markPad + walkerText (markFor (items[items.size() - 1])); }
+
     /** The switch's name and its positions, the chosen one `selected`. */
     void setItems (juce::String switchName, juce::StringArray positions, int selected)
     {
@@ -84,6 +109,8 @@ public:
     /** The oval with its marks either side, or the name over it, whichever is wider. */
     int idealWidth() const
     {
+        if (walkerLook && ! items.isEmpty())
+            return juce::roundToInt (std::ceil (leftPart() + (float) slotW + rightPart())) + 2;
         const float line = markWidth (0) + (float) (markGap + ovalW + markGap) + markWidth (items.size() - 1);
         if (oneLine)
             return juce::roundToInt (std::ceil (textWidth (name) + (float) nameGap + line)) + 4;
@@ -94,6 +121,12 @@ public:
     {
         if (items.isEmpty())
             return;
+
+        if (walkerLook)
+        {
+            paintWalker (g);
+            return;
+        }
 
         g.setFont (theme::displayFont (fontH));
 
@@ -152,7 +185,8 @@ public:
             return;
 
         // Toward the side of the dot the click lands on — and from the end it stands against, back.
-        int step = e.position.x < dotX (ovalIn (lineArea()).reduced (0.5f), index) ? -1 : 1;
+        const float dot = walkerLook ? capCentreX() : dotX (ovalIn (lineArea()).reduced (0.5f), index);
+        int step = e.position.x < dot ? -1 : 1;
         if (! juce::isPositiveAndBelow (index + step, items.size()))
             step = -step;
         setSelectedIndex (index + step);
@@ -162,6 +196,63 @@ private:
     static float textWidth (const juce::String& s)
     {
         return juce::GlyphArrangement::getStringWidth (theme::displayFont (fontH), s);
+    }
+
+    static juce::Font walkerFont() { return theme::displayFont (walkerFontH).withExtraKerningFactor (0.04f); }
+    static float walkerText (const juce::String& s) { return juce::GlyphArrangement::getStringWidth (walkerFont(), s); }
+
+    juce::Rectangle<float> slotRect() const
+    {
+        const float x = slotAt >= 0.0f ? slotAt : leftPart();
+        return { x, getLocalBounds().toFloat().getCentreY() - 0.5f * (float) slotH, (float) slotW, (float) slotH };
+    }
+
+    float capCentreX() const
+    {
+        const auto s = slotRect();
+        const float d = s.getHeight() - 6.0f;
+        return s.getX() + 3.0f + 0.5f * d + (s.getWidth() - 6.0f - d) * (float) index / (float) juce::jmax (1, items.size() - 1);
+    }
+
+    /** As RedGrooveBass's SlideSwitch draws its line: the name, the end words, the slot, the cap with its orange tick. */
+    void paintWalker (juce::Graphics& g) const
+    {
+        const auto font = walkerFont();
+        g.setFont (font);
+        const auto s    = slotRect();
+        const int  last = items.size() - 1;
+        const auto dim  = theme::txDim.withMultipliedAlpha (0.7f);
+
+        if (const auto n = shownName(); n.isNotEmpty())
+        {
+            g.setColour (theme::lilac);
+            g.drawText (n, juce::Rectangle<float> (0.0f, 0.0f, walkerText (n) + 2.0f, (float) getHeight()), juce::Justification::centredLeft, false);
+        }
+        g.setColour (index == 0 ? theme::tx : dim);
+        g.drawText (markFor (items[0]), juce::Rectangle<float> (0.0f, 0.0f, s.getX() - (float) markPad, (float) getHeight()),
+                    juce::Justification::centredRight, false);
+        g.setColour (index == last ? theme::tx : dim);
+        g.drawText (markFor (items[last]), juce::Rectangle<float> (s.getRight() + (float) markPad, 0.0f,
+                                                                   (float) getWidth() - s.getRight() - (float) markPad, (float) getHeight()),
+                    juce::Justification::centredLeft, false);
+
+        // The slot: dark, its upper edge in shadow and its lower one catching the light.
+        const float r = 0.5f * s.getHeight();
+        g.setColour (juce::Colour (0xff111117));
+        g.fillRoundedRectangle (s, r);
+        g.setColour (juce::Colours::white.withAlpha (0.14f));
+        g.drawRoundedRectangle (s.translated (0.0f, 0.75f), r, 1.0f);
+        g.setColour (juce::Colours::black.withAlpha (0.7f));
+        g.drawRoundedRectangle (s, r, 1.0f);
+
+        const float d = s.getHeight() - 6.0f;
+        const auto cap = juce::Rectangle<float> (d, d).withCentre ({ capCentreX(), s.getCentreY() });
+        g.setColour (juce::Colour (0xff22222e));
+        g.fillEllipse (cap);
+        g.setColour (juce::Colour (0xff8b6cff));
+        g.drawEllipse (cap.reduced (0.9f), 1.8f);
+        g.setColour (theme::orange);
+        g.fillRoundedRectangle (cap.withSizeKeepingCentre (2.6f, d * 0.46f), 1.3f);
     }
 
     float markWidth (int i) const

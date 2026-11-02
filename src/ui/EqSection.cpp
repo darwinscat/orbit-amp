@@ -351,6 +351,8 @@ void EqSection::addTo (juce::Component& parent)
     parent.addAndMakeVisible (lpfLabel);
     parent.addAndMakeVisible (hpfSlopeBox);
     parent.addAndMakeVisible (lpfSlopeBox);
+    parent.addChildComponent (strLine);
+    parent.addChildComponent (fingLine);
 
     for (auto& k : bandKnobs)
         parent.addAndMakeVisible (*k);
@@ -438,6 +440,35 @@ void EqSection::setStandard (params::EqStandard standard, BlockFrame& owner)
     hpfSlopeBox.setPaintingIsUnclipped (true);
     lpfSlopeBox.setPaintingIsUnclipped (true);
     lpfSlopeBox.openMenu = [this] { bass::showLpfMenu (state, &lpfSlopeBox); };
+
+    // ...and as the walker has them, for a row that holds a pack's switches too: one line each, the cut always in.
+    for (auto* line : { &strLine, &fingLine })
+    {
+        line->oneLine    = true;
+        line->walkerLook = true;
+    }
+    strLine.setItems ("STR", { "4", "5" }, 1);
+    fingLine.setItems ({}, { "FING", "SLAP" }, 0);
+    strAtt = std::make_unique<juce::ParameterAttachment> (*state.getParameter (params::bassHpf), [this] (float v)
+    {
+        strLine.setSelectedIndex (juce::roundToInt (v) == (int) params::BassHpf::four ? 0 : 1, juce::dontSendNotification);
+    });
+    fingAtt = std::make_unique<juce::ParameterAttachment> (*state.getParameter (params::bassLpf), [this] (float v)
+    {
+        fingLine.setSelectedIndex (juce::roundToInt (v), juce::dontSendNotification);
+    });
+    strLine.onChange = [this] (int i)
+    {
+        holdOn (params::bassHpfOn);
+        strAtt->setValueAsCompleteGesture ((float) (i == 0 ? (int) params::BassHpf::four : (int) params::BassHpf::five));
+    };
+    fingLine.onChange = [this] (int i)
+    {
+        holdOn (params::bassLpfOn);
+        fingAtt->setValueAsCompleteGesture ((float) i);
+    };
+    strAtt->sendInitialUpdate();
+    fingAtt->sendInitialUpdate();
 
     // ...and they work across the chain, so they stay live with the block they stand on standing by.
     for (auto* c : { (juce::Component*) &hpfSw, (juce::Component*) &lpfSw, (juce::Component*) &hpfLabel, (juce::Component*) &lpfLabel,
@@ -688,14 +719,38 @@ void EqSection::layOutRow (juce::Rectangle<int> row)
     // the second, LPF.
     const int n     = juce::jmax (1, (int) bandKnobs.size());
 
-    // ON THE BASS WITH A PACK'S SWITCHES, every switch on ONE LINE and two lines a side of the dials (the owner, 02.11):
-    // HPF over the pack's first, LPF over its second — the name, the switch, the choice beside it.
+    // ON THE BASS WITH A PACK'S SWITCHES, every switch on ONE LINE as the walker has them, two a side of the dials (the
+    // owner, 02.11 and 03.11): STR 4 / 5 over the pack's first left of them, FING / SLAP over its second right of them,
+    // each side's slots in one column. The cuts are always in there, as on the walker.
     if (bassStandard() && (innerW[0] > 0 || innerW[1] > 0))
     {
-        constexpr int nameW = 32, swW = 30, gap = 4, choiceW = 80, lineH = 18;
-        constexpr int cutLineW = nameW + gap + swW + gap + choiceW;
-        const int leftW  = juce::jmax (cutLineW, innerW[0]);
-        const int rightW = juce::jmax (cutLineW, innerW[1]);
+        if (! walkerLines)
+        {
+            walkerLines = true;
+            holdOn (params::bassHpfOn);
+            holdOn (params::bassLpfOn);
+        }
+        for (juce::Component* c : { (juce::Component*) &hpfSw, (juce::Component*) &lpfSw, (juce::Component*) &hpfLabel,
+                                    (juce::Component*) &lpfLabel, (juce::Component*) &hpfSlopeBox, (juce::Component*) &lpfSlopeBox })
+            c->setVisible (false);
+        strLine.setVisible (true);
+        fingLine.setVisible (true);
+
+        constexpr int lineH = ToggleSwitch::slotH + 4;
+        const auto sideOf = [] (const ToggleSwitch& top, const ToggleSwitch* under)
+        {
+            float left = top.leftPart(), right = top.rightPart();
+            if (under != nullptr)
+            {
+                left  = juce::jmax (left, under->leftPart());
+                right = juce::jmax (right, under->rightPart());
+            }
+            return std::pair { left, right };
+        };
+        const auto [l0, r0] = sideOf (strLine, innerToggles[0]);
+        const auto [l1, r1] = sideOf (fingLine, innerToggles[1]);
+        const int leftW  = juce::roundToInt (std::ceil (l0 + (float) ToggleSwitch::slotW + r0)) + 2;
+        const int rightW = juce::roundToInt (std::ceil (l1 + (float) ToggleSwitch::slotW + r1)) + 2;
         const int bandW  = (row.getWidth() - leftW - rightW) / n;
 
         const auto left  = row.removeFromLeft (leftW);
@@ -708,19 +763,25 @@ void EqSection::layOutRow (juce::Rectangle<int> row)
             const int centre = side.getY() + (which == 0 ? side.getHeight() / 3 : 2 * side.getHeight() / 3);
             return juce::Rectangle<int> (side.getX(), centre - lineH / 2, side.getWidth(), lineH);
         };
-        const auto cutLine = [] (juce::Rectangle<int> line, ZoneSwitch& sw, juce::Label& label, SlopeCombo& combo)
-        {
-            label.setBounds (line.removeFromLeft (nameW));
-            line.removeFromLeft (gap);
-            sw.setBounds (line.removeFromLeft (swW).withSizeKeepingCentre (swW, 16));
-            line.removeFromLeft (gap);
-            combo.setBounds (line);
-        };
-        cutLine (lineOf (left, 0), hpfSw, hpfLabel, hpfSlopeBox);
-        cutLine (lineOf (right, 0), lpfSw, lpfLabel, lpfSlopeBox);
+        strLine.slotAt  = l0;
+        fingLine.slotAt = l1;
+        strLine.setBounds (lineOf (left, 0));
+        fingLine.setBounds (lineOf (right, 0));
+        if (innerToggles[0] != nullptr) innerToggles[0]->slotAt = l0;
+        if (innerToggles[1] != nullptr) innerToggles[1]->slotAt = l1;
         innerCells[0] = innerW[0] > 0 ? lineOf (left, 1) : juce::Rectangle<int>();
         innerCells[1] = innerW[1] > 0 ? lineOf (right, 1) : juce::Rectangle<int>();
         return;
+    }
+
+    if (walkerLines)
+    {
+        walkerLines = false;
+        strLine.setVisible (false);
+        fingLine.setVisible (false);
+        for (juce::Component* c : { (juce::Component*) &hpfSw, (juce::Component*) &lpfSw, (juce::Component*) &hpfLabel,
+                                    (juce::Component*) &lpfLabel, (juce::Component*) &hpfSlopeBox, (juce::Component*) &lpfSlopeBox })
+            c->setVisible (true);
     }
 
     const int knobW = (row.getWidth() - 2 * cutW - innerW[0] - innerW[1]) / n;
@@ -778,6 +839,16 @@ void EqSection::layOutRow (juce::Rectangle<int> row)
         lpfSlopeBox.toFront (false);
     }
 
+}
+
+void EqSection::holdOn (const char* paramId)
+{
+    if (auto* p = state.getParameter (paramId); p != nullptr && p->getValue() < 0.5f)
+    {
+        p->beginChangeGesture();
+        p->setValueNotifyingHost (1.0f);
+        p->endChangeGesture();
+    }
 }
 
 void EqSection::layOutCurve (juce::Rectangle<int> area)
