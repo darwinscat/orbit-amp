@@ -711,7 +711,17 @@ struct Opening
     // defaults, so INIT never brings a bass's reverb back.
     bool  delayOn  = true;
     bool  reverbOn = true;
+
+    // THE BASS'S OWN, where a product holds them elsewhere than OrbitBass opens them (channels::Lineup::pinned,
+    // which channels::Engine::opening reads into these): all of the signal through COMP, and the LPF on. Declared by
+    // addBassParameters, which the product hands this Opening; engineDefault leaves them their declared defaults.
+    float compAmount = 0.5f;
+    bool  bassLpfOn  = false;
 };
+
+/** The bass's own parameters (above), each declaring as its default where `opening` says a fresh instance of the
+    product stands. */
+void addBassParameters (juce::AudioProcessorValueTreeState::ParameterLayout&, const Opening&);
 
 /** The engine's parameters, for the product of that name: the devices a parameter offers are the ones
     it plays, and a fresh instance stands where `opening` says. */

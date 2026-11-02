@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <juce_core/juce_core.h>
+
 #include <optional>
 #include <vector>
 
@@ -45,6 +47,23 @@ struct Lineup
         cabinet, the reverb, the delay — the rover's gear and its TURBO, which is an option of the gear's
         as its tone is. What a pair opens on is the first's. */
     bool pairs = false;
+
+    /** WHAT A CHANNEL KEEPS BEYOND WHAT EVERY ONE DOES (Channels: DRIVE, TURBO, the tones, the pack's switches,
+        the cabinet's cuts, the room, the delay and the cabinet): the product's own parameters each of its
+        channels remembers apart — the walker's BLEND, MIDDLE's frequency, COMP's threshold, its three
+        effects and DI/CAB. A parameter neither list names is one for every channel. */
+    std::vector<juce::String> kept {};
+
+    /** WHAT THE PRODUCT HOLDS WHERE IT IS, whatever a record, a preset, an INIT or a host left it at: each of
+        these parameters set to its value every time the chain is set up (Engine::setUpChain) — the walker's
+        COMP on, all of the signal through it at 4:1 on OPTO, its effects in the strip and on, its cuts on,
+        no delay and no room. */
+    struct Pin
+    {
+        juce::String param;
+        float value = 0.0f;
+    };
+    std::vector<Pin> pinned {};
 
     int count() const noexcept { return (int) channels.size(); }
 };

@@ -54,15 +54,16 @@ namespace
     }
 
     /** COMP's parameters, the bass's and the guitar's alike but for the character it opens on: on in the strip, its
-        BLEND at half, its threshold at -24 dB and its ratio at 4:1 (the owner, 31.10). */
-    void addCompParameters (juce::AudioProcessorValueTreeState::ParameterLayout& layout, int character)
+        BLEND at half — or where the product's Opening says — its threshold at -24 dB and its ratio at 4:1 (the owner,
+        31.10). */
+    void addCompParameters (juce::AudioProcessorValueTreeState::ParameterLayout& layout, int character, float blend = 0.5f)
     {
         using Bool   = juce::AudioParameterBool;
         using Choice = juce::AudioParameterChoice;
         using Float  = juce::AudioParameterFloat;
         layout.add (std::make_unique<Bool>   (juce::ParameterID { compOn, 1 },        "Comp", true),
                     std::make_unique<Float>  (juce::ParameterID { compAmount, 1 },    "Comp Blend",
-                                              juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.5f),
+                                              juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), blend),
                     std::make_unique<Choice> (juce::ParameterID { compAttack, 1 },    "Comp Attack",    compAttacks, 1),
                     std::make_unique<Choice> (juce::ParameterID { compRelease, 1 },   "Comp Release",   compReleases, 0),
                     std::make_unique<Choice> (juce::ParameterID { compCharacter, 1 }, "Comp Character", compCharacters, character),
@@ -82,6 +83,11 @@ void addGuitarCompParameters (juce::AudioProcessorValueTreeState::ParameterLayou
 
 void addBassParameters (juce::AudioProcessorValueTreeState::ParameterLayout& layout)
 {
+    addBassParameters (layout, Opening {});
+}
+
+void addBassParameters (juce::AudioProcessorValueTreeState::ParameterLayout& layout, const Opening& opening)
+{
     using Bool   = juce::AudioParameterBool;
     using Choice = juce::AudioParameterChoice;
     using Float  = juce::AudioParameterFloat;
@@ -90,7 +96,7 @@ void addBassParameters (juce::AudioProcessorValueTreeState::ParameterLayout& lay
         return juce::NormalisableRange<float> (lo, hi, 0.1f, std::log (0.5f) / std::log ((centre - lo) / (hi - lo)));
     };
 
-    addCompParameters (layout, compCharacters.indexOf ("Opto"));   // on OPTO (the owner, 02.11)
+    addCompParameters (layout, compCharacters.indexOf ("Opto"), opening.compAmount);   // on OPTO (the owner, 02.11)
 
     // The three effects: in the strip, their sliders at 0 — present, and doing nothing until one is moved. The menus'
     // defaults are the modules' own.
@@ -140,7 +146,7 @@ void addBassParameters (juce::AudioProcessorValueTreeState::ParameterLayout& lay
                                           juce::NormalisableRange<float> (20.0f, 60.0f, 0.1f), bassHpfDefaultHz4),
                 std::make_unique<Float>  (juce::ParameterID { bassHpfHz5, 1 },       "Bass HPF 5 Hz",
                                           juce::NormalisableRange<float> (15.0f, 45.0f, 0.1f), bassHpfDefaultHz5),
-                std::make_unique<Bool>   (juce::ParameterID { bassLpfOn, 1 },        "Bass LPF On", false),
+                std::make_unique<Bool>   (juce::ParameterID { bassLpfOn, 1 },        "Bass LPF On", opening.bassLpfOn),
                 std::make_unique<Choice> (juce::ParameterID { bassLpf, 1 },          "Bass LPF", bassLpfPositions, (int) BassLpf::fingers),
                 std::make_unique<Float>  (juce::ParameterID { bassLpfHzFingers, 1 }, "Bass LPF Fingers Hz",
                                           hz (2000.0f, 8000.0f, 4500.0f), bassLpfDefaultHzFingers),

@@ -70,6 +70,29 @@ namespace
                                                    : juce::Array<juce::File>());
     }
 
+    /** THE TONE KNOBS OF A PRODUCT WHOSE CONSOLE IS THE BASS'S STANDARD (Product::eqStandard): the standard's own
+        three, whatever the pack — BASS the console's low shelf, MIDDLE its first bell (its frequency swept apart),
+        TREBLE its high shelf — the tone that sounds on the bass's chain, where a pack's own never does
+        (AmpProcessor::bassEq). The console is the AMP's, the only one. */
+    constexpr int ampConsole = 0;
+    const juce::StringArray bassStandardTones { "Bass", "Middle", "Treble" };
+
+    bool onBassStandard (const AmpProcessor& amp)
+    {
+        return amp.product().eqStandard() == params::EqStandard::bass;
+    }
+
+    juce::String bassStandardTone (int knob)
+    {
+        switch (knob)
+        {
+            case 0:  return params::eqLoDb (ampConsole);
+            case 1:  return params::eqBellDb (ampConsole, 0);
+            case 2:  return params::eqHiDb (ampConsole);
+            default: return {};
+        }
+    }
+
     /** A channel's record in the node; made if `create` and it is not there. */
     juce::ValueTree recordOf (juce::ValueTree node, int channel, bool create)
     {
@@ -101,6 +124,8 @@ Channels::Channels (AmpProcessor& p, const Lineup& l) : amp (p), line (l)
     kept.add (params::reverbType);
     kept.add (params::delayMix);
     kept.add (params::delayDiv);        // the note value; the tempo it is counted in is the song's, not a channel's
+    for (const auto& id : line.kept)    // ...and what the product's own channels keep beside (Lineup::kept)
+        kept.addIfNotAlreadyThere (id);
 
     readCabinets();
 }
@@ -370,6 +395,9 @@ int Channels::packFor (int channel) const
 
 juce::StringArray Channels::toneNamesOf (int channel) const
 {
+    if (onBassStandard (amp))
+        return bassStandardTones;
+
     juce::StringArray names;
     if (const int pack = packFor (channel); pack >= 0)
         for (const auto& stage : amp.preamp.packs.getReference (pack).rig.chain)
@@ -386,6 +414,8 @@ juce::StringArray Channels::toneNamesOf (int channel) const
 std::vector<namz::rig::Tone> Channels::tonesOf (int channel) const
 {
     std::vector<namz::rig::Tone> out;
+    if (onBassStandard (amp))
+        return out;         // the standard's knobs are no tone of the pack's
     if (const int pack = packFor (channel); pack >= 0)
         for (const auto& stage : amp.preamp.packs.getReference (pack).rig.chain)
         {
@@ -400,7 +430,9 @@ std::vector<namz::rig::Tone> Channels::tonesOf (int channel) const
 
 juce::String Channels::toneOf (int channel, int knob) const
 {
-    // Knob i is the pack's tone i: there while its list goes that far.
+    // Knob i is the pack's tone i: there while its list goes that far. On the bass's standard, its own three.
+    if (onBassStandard (amp))
+        return bassStandardTone (knob);
     return knob >= 0 && knob < toneNamesOf (channel).size() ? params::preampMeasured (knob) : juce::String();
 }
 

@@ -54,7 +54,11 @@ public:
         (face::Console lays them out). At most maxTones, the places the engine has; a pack's tones past
         them have no knob. toneOf is empty for a knob past the pack's list, and for every knob of a
         channel whose pack is not installed; toneId is the parameter a knob turns on the channel that
-        is playing. */
+        is playing.
+        ...BUT ON A PRODUCT WHOSE CONSOLE IS THE BASS'S STANDARD (Product::eqStandard) the knobs are the
+        standard's three, on every channel and whatever its pack: Bass, Middle and Treble — the AMP's console's
+        low shelf, first bell and high shelf, the tone the bass's chain plays — and tonesOf is empty, since none
+        of them is a tone the pack states. A rig that says a standard of its own will be asked here. */
     static constexpr int maxTones = params::preampNumMeasured;
     juce::StringArray toneNamesOf (int channel) const;
     std::vector<namz::rig::Tone> tonesOf (int channel) const;      // ...and the tones themselves, as the pack states them

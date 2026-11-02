@@ -39,6 +39,14 @@ void Engine::opening (const Lineup& lineup, params::Opening& o)
     o.delayMix = first.delayMix;
     if (first.reverbMix.has_value())
         o.reverbMix = *first.reverbMix;
+
+    // ...and what the lineup holds where it is, said where the Opening has a place for it (Lineup::pinned) — the
+    // rest of what it pins is held where the parameter opens anyway.
+    for (const auto& pin : lineup.pinned)
+    {
+        if (pin.param == params::compAmount) o.compAmount = pin.value;
+        if (pin.param == params::bassLpfOn)  o.bassLpfOn  = pin.value > 0.5f;
+    }
 }
 
 Engine& Engine::of (AmpProcessor& p)
@@ -174,14 +182,23 @@ void Engine::setUpChain (bool firstTime)
     // BASS / MIDDLE / TREBLE are the pack's own tone stack. The universal console's three bands they
     // used to ride stand flat behind it: a pack with no tone of its own falls to that console, and
     // must not find a setting there that no knob on the face shows.
-    setParam (params::blockEqMode (params::preampId), (float) params::eqModes.indexOf ("Device Tone"));
-    setParam (params::eqLoDb (preampConsole), 0.0f);
-    setParam (params::eqBellDb (preampConsole, 0), 0.0f);
-    setParam (params::eqHiDb (preampConsole), 0.0f);
+    // ...BUT ON THE BASS'S STANDARD those three bands ARE the knobs (Channels::toneOf), the tone the chain
+    // plays whatever the pack, and left where the player put them — every time the face opens.
+    if (amp.product().eqStandard() != params::EqStandard::bass)
+    {
+        setParam (params::blockEqMode (params::preampId), (float) params::eqModes.indexOf ("Device Tone"));
+        setParam (params::eqLoDb (preampConsole), 0.0f);
+        setParam (params::eqBellDb (preampConsole, 0), 0.0f);
+        setParam (params::eqHiDb (preampConsole), 0.0f);
+    }
 
     // HPF / LPF are on-off: the corners and slopes stay where OrbitCab puts them until set by ear.
     setParam (params::cabHpfHz, params::cabHpfDefaultHz);
     setParam (params::cabLpfHz, params::cabLpfDefaultHz);
+
+    // ...and what the product holds where it is, whatever the state said (Lineup::pinned).
+    for (const auto& pin : channels.lineup().pinned)
+        setParam (pin.param, pin.value);
 }
 
 } // namespace orbitamp::channels
