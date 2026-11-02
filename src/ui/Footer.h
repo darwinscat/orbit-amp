@@ -84,6 +84,28 @@ private:
     ClickTarget devicesBadge;
     ClickTarget stampBadge;
 
+    /** A LINK'S BOX (the bass, the owner 01.11): OCTAVE, ENVELOPE or CHORUS in the plug-in or out — a short word in a
+        box, violet while in, see-through while out; its whole name a hint. Out, the block leaves the face and the strip and makes no sound (its `*_present`); a click is one undo
+        step. They stand where the guitar's MONO | STEREO does — the bass has none. */
+    struct PresenceBox final : public juce::Component,
+                               public juce::SettableTooltipClient
+    {
+        PresenceBox (AmpProcessor& processor, const char* paramId, const juce::String& word, const juce::String& hint);
+        void paint (juce::Graphics&) override;
+        void mouseDown  (const juce::MouseEvent&) override;
+        void mouseEnter (const juce::MouseEvent&) override { repaint(); }
+        void mouseExit  (const juce::MouseEvent&) override { repaint(); }
+        bool on() const;
+
+        AmpProcessor& amp;
+        juce::RangedAudioParameter& param;
+        const juce::String word;
+        std::unique_ptr<juce::ParameterAttachment> att;
+    };
+
+    std::vector<std::unique_ptr<PresenceBox>> presence;
+    static constexpr int boxW = 36, boxGap = 4;
+
     /** appkit's version badge, kept INVISIBLE and only for its window — the whole build stamp, the
         opt-in update check and the family's tip jar, one `showPopup()` away (public since appkit
         v0.11.3). Its own face paints two lines, which is right for a toolbar corner and wrong for

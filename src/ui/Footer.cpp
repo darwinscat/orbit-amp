@@ -75,11 +75,21 @@ Footer::Footer (AmpProcessor& processor)
 
     stereoAttachment->sendInitialUpdate();
 
-    // The bass's chain is mono, whatever the mode says (Product::chain): nothing to switch, no place.
+    // The bass's chain is mono, whatever the mode says (Product::chain): nothing to switch — its place holds the three
+    // effects' boxes instead (the owner, 01.11).
     if (amp.product().chain == Chain::bass)
     {
         stereo.setVisible (false);
-        stereoSlotW = 0;
+        for (const auto& [id, word, hint] : { std::tuple { params::octavePresent, "OCT", "OCTAVE" },
+                                              std::tuple { params::filterPresent, "ENV", "ENVELOPE" },
+                                              std::tuple { params::chorusPresent, "CHR", "CHORUS" },
+                                              std::tuple { params::delayPresent,  "DEL", "DELAY" },
+                                              std::tuple { params::reverbPresent, "REV", "REVERB" } })
+        {
+            presence.push_back (std::make_unique<PresenceBox> (amp, id, word, hint));
+            addAndMakeVisible (*presence.back());
+        }
+        stereoSlotW = (int) presence.size() * boxW + ((int) presence.size() - 1) * boxGap;
     }
 
     loadBadge.onClick = [this] { showLoadBreakdown(); };
@@ -160,8 +170,19 @@ Footer::Places Footer::places() const
     constexpr int dotRoom = 14;   // the update dot rides after the stamp
 
     // The longest each can read: a rate at 88.2 and a load at three figures.
-    const int w[] = { stereoSlotW, width ("88.2 KHZ"), width ("DSP 100%"), width ("DEVICES"),
-                      width (stampText) + dotRoom };
+    int w[] = { stereoSlotW, width ("88.2 KHZ"), width ("DSP 100%"), width ("DEVICES"),
+                width (stampText) + dotRoom };
+
+    // The bass's five boxes stand only where all five fit beside the facts at the strip's least gaps — else none of them
+    // (the owner, 01.11): the strip in the plug-in's menu still has them.
+    if (! presence.empty())
+    {
+        int facts = 0;
+        for (size_t i = 1; i < std::size (w); ++i)
+            facts += w[i];
+        if (facts + stereoSlotW + 4 * 8 > getWidth())
+            w[0] = 0;
+    }
 
     int total = 0;
     for (const int x : w)
@@ -173,7 +194,12 @@ Footer::Places Footer::places() const
     Places p;
     // The stereo item centres its word in its own place, and a place exactly the word's width
     // drops the last letter — so the item is the place with a little air either side.
-    p.stereo  = r.removeFromLeft (w[0]).expanded (6, 0);  r.removeFromLeft (gap);
+    if (presence.empty())
+        p.stereo = r.removeFromLeft (w[0]).expanded (6, 0);
+    else
+        p.stereo = r.removeFromLeft (w[0]);
+    if (w[0] > 0)
+        r.removeFromLeft (gap);
     p.rate    = r.removeFromLeft (w[1]);  r.removeFromLeft (gap);
     p.load    = r.removeFromLeft (w[2]);  r.removeFromLeft (gap);
     p.devices = r.removeFromLeft (w[3]);  r.removeFromLeft (gap);
@@ -219,6 +245,15 @@ void Footer::resized()
 {
     const auto p = places();
     stereo.setBounds (p.stereo);
+    {
+        auto row = p.stereo;
+        for (auto& b : presence)
+        {
+            b->setVisible (! p.stereo.isEmpty());
+            b->setBounds (row.removeFromLeft (boxW));   // the row's whole height: its word centred where the facts' are
+            row.removeFromLeft (boxGap);
+        }
+    }
 
     // The stamp's click target, and under it the badge that owns the popover — same rectangle, so
     // the callout's arrow points at the words that opened it.
@@ -230,6 +265,39 @@ void Footer::resized()
 
     // The invisible click target over the painted DSP number.
     loadBadge.setBounds (p.load);
+}
+
+Footer::PresenceBox::PresenceBox (AmpProcessor& processor, const char* paramId, const juce::String& w, const juce::String& hint)
+    : amp (processor), param (*processor.apvts.getParameter (paramId)), word (w)
+{
+    att = std::make_unique<juce::ParameterAttachment> (param, [this] (float) { repaint(); });
+    setTooltip (hint);
+    setMouseCursor (juce::MouseCursor::PointingHandCursor);
+}
+
+bool Footer::PresenceBox::on() const { return param.getValue() > 0.5f; }
+
+void Footer::PresenceBox::paint (juce::Graphics& g)
+{
+    // A word and its underline, as the strip's flat items (the owner, 01.11): no box, no fill — in, the word and its line
+    // in the violet of what works; out, both faint.
+    const auto r    = getLocalBounds().toFloat();
+    const bool over = isMouseOver();
+    const auto c    = on() ? (over ? theme::violet.brighter (0.35f) : theme::violet.brighter (0.15f))
+                           : (over ? theme::tx : theme::txFaint);
+    g.setColour (c);
+    // On the strip's own line: centred on the row as every fact beside it, the strip's tracking — the underline under it.
+    theme::drawTracked (g, word, r, theme::displayFont (13.0f), 0.1f, juce::Justification::centred);
+    const float lineH = on() ? 2.0f : 1.0f, lineY = r.getCentreY() + 9.0f;
+    g.setColour (on() ? c : theme::hair);
+    g.fillRect (r.getX() + 2.0f, lineY, r.getWidth() - 4.0f, lineH);
+}
+
+void Footer::PresenceBox::mouseDown (const juce::MouseEvent&)
+{
+    amp.history.beginGesture();
+    att->setValueAsCompleteGesture (on() ? 0.0f : 1.0f);
+    amp.history.endGesture();
 }
 
 void Footer::showLoadBreakdown()
