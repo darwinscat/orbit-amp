@@ -12,7 +12,7 @@
 // face used to do that itself on every start. This does it once, and writes what comes out into
 // resources/<face> as lossless WebP — the panel, each render, each sprite made from one — and that is
 // what a product carries and draws as it is (src/face/Renders.h). The numbers each correction was
-// measured to are here, in Rover.cpp and Cockpit.cpp; a face's skin keeps only where things are.
+// measured to are here, in Rover.cpp, Cockpit.cpp and Walker.cpp; a face's skin keeps only where things are.
 //
 // A picture is written so that the faces' decoding gives back every byte it had here: JUCE keeps a
 // picture premultiplied and WebP straight, and for each premultiplied value the straight one is the
@@ -21,7 +21,7 @@
 // BAKE ON A MAC. The faces made these pictures with what JUCE decodes and draws with there — CoreImage
 // and CoreGraphics — and so does this; elsewhere they come out a shade different, which --check says.
 //
-//   (no face)        every face: redpaw, frostpaw, amberpaw, catpit
+//   (no face)        every face: redpaw, frostpaw, amberpaw, catpit, redgroove
 //   --check          writes nothing: fails when a picture a face ships is not what its sources make
 //   --out <dir>      writes into <dir>/<face> instead — a folder for the face's *_ART_DIR to try
 //   --resources <d>  the resources folder to read and write (the tree's, by default)
@@ -31,6 +31,7 @@
 #include "Bake.h"
 
 #include "catpit/CatpitLayout.h"
+#include "redgroove/RedGrooveLayout.h"
 #include "face/Renders.h"
 
 #include <webp/encode.h>
@@ -197,7 +198,7 @@ int main (int argc, char* argv[])
 {
     const juce::ScopedJuceInitialiser_GUI gui;
 
-    const juce::StringArray everyFace { "redpaw", "frostpaw", "amberpaw", "catpit" };
+    const juce::StringArray everyFace { "redpaw", "frostpaw", "amberpaw", "catpit", "redgroove" };
     auto resources = juce::File (ORBITAMP_RESOURCES_DIR);
     juce::File outDir;
     bool check = false;
@@ -231,7 +232,10 @@ int main (int argc, char* argv[])
         const auto shipped = outDir == juce::File() ? resources.getChildFile (face) : outDir.getChildFile (face);
 
         float gripAxis = 0.0f;
-        const auto pictures = bake::isRover (face) ? bake::bakeRover (face, sources) : bake::bakeCockpit (sources, gripAxis);
+        std::vector<std::pair<juce::String, juce::Point<float>>> sockets;
+        const auto pictures = bake::isRover (face)  ? bake::bakeRover (face, sources)
+                            : bake::isWalker (face) ? bake::bakeWalker (sources, sockets)
+                                                    : bake::bakeCockpit (sources, gripAxis);
         for (const auto& [name, img] : pictures)
         {
             const auto file = shipped.getChildFile (name);
@@ -273,6 +277,27 @@ int main (int argc, char* argv[])
             std::printf ("%-9s the throttle grip's stem stands %.9g across it; catpit::layout::gripAxis says %.9g\n",
                          face.toRawUTF8(), (double) gripAxis, (double) catpit::layout::gripAxis);
             ++failed;
+        }
+        // ...and where the walker's sockets stand, fitted to its picture, which its layout carries: to a tenth of the
+        // stage's pixel, as the layout says them — the tones' to half of one, since the strip lays them on one line,
+        // `pitch` apart (face/Strip.h).
+        if (bake::isWalker (face))
+        {
+            namespace walker = redgroove::layout;
+            const std::pair<const char*, juce::Point<float>> said[] {
+                { "drive", walker::drive }, { "comp", walker::comp }, { "blend", walker::blend }, { "diCab", walker::diCab },
+                { "bass", { walker::toneX[0], walker::toneY } }, { "middle", { walker::toneX[1], walker::toneY } },
+                { "treble", { walker::toneX[2], walker::toneY } } };
+            for (const auto& [name, at] : sockets)
+                for (const auto& [layoutName, layoutAt] : said)
+                    if (name == layoutName)
+                    {
+                        const bool tone = juce::String (name) == "bass" || juce::String (name) == "middle" || juce::String (name) == "treble";
+                        const bool same = at.getDistanceFrom (layoutAt) < (tone ? 0.5f : 0.11f);
+                        std::printf ("%-9s socket %-8s fitted at %.2f, %.2f; the layout says %.2f, %.2f%s\n", face.toRawUTF8(), name.toRawUTF8(),
+                                     (double) at.x, (double) at.y, (double) layoutAt.x, (double) layoutAt.y, same ? "" : "  — NOT WHERE IT IS");
+                        failed += same ? 0 : 1;
+                    }
         }
     }
 

@@ -1093,6 +1093,7 @@ target_sources(orbitamp_bake_art PRIVATE
     tools/bake-art/BakeArt.cpp
     tools/bake-art/Rover.cpp
     tools/bake-art/Cockpit.cpp
+    tools/bake-art/Walker.cpp
     src/face/Renders.cpp)
 target_include_directories(orbitamp_bake_art PRIVATE src)
 target_compile_definitions(orbitamp_bake_art PRIVATE

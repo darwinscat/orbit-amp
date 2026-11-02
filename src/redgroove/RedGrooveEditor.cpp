@@ -62,21 +62,22 @@ namespace
     }
 
     /** A WORD PRINTED ON THE PANEL, centred on `at`, a dark edge under it. */
-    void print (juce::Graphics& g, const juce::String& text, juce::Point<float> at, float em, juce::Colour colour)
+    void print (juce::Graphics& g, const juce::String& text, juce::Point<float> at, float em, juce::Colour colour,
+                float tracking = 0.08f)
     {
         const auto ink = cabinInk();
-        ink.label (g, text, juce::Rectangle<float> (360.0f, 32.0f).withCentre (at), em, colour);
+        ink.label (g, text, juce::Rectangle<float> (360.0f, 32.0f).withCentre (at), em, colour, tracking);
     }
 
-    /** ...set condensed into `room` about its centre, as tall, where it is wider. */
-    void printInto (juce::Graphics& g, const juce::String& text, juce::Point<float> at, float room, float em, juce::Colour colour)
+    /** ...set condensed into `room` about its centre, as tall, where it is wider — tracked `tracking` of the size. */
+    void printInto (juce::Graphics& g, const juce::String& text, juce::Point<float> at, float room, float em, juce::Colour colour,
+                    float tracking = 0.08f)
     {
-        constexpr float tracking = 0.08f;
         const float wide = juce::GlyphArrangement::getStringWidth (labelFont (em).withExtraKerningFactor (tracking), text.toUpperCase());
         const juce::Graphics::ScopedSaveState keep (g);
         if (wide > room)
             g.addTransform (juce::AffineTransform::scale (room / wide, 1.0f, at.x, at.y));
-        print (g, text, at, em, colour);
+        print (g, text, at, em, colour, tracking);
     }
 
     /** THE RINGS' LIGHT: the family's violet, round every knob. */
@@ -224,14 +225,15 @@ void Cabin::paintStatic (juce::Graphics& g, float scale) const
     // DRIVE, the hero, a size up and in the values' white; the tones' names are the playing channel's (paintStrips).
     print (g, "DRIVE", { drive.x, knobNameY }, px15, cabinInk().values);
 
-    // The other controls' names over them: COMP and BLEND beside DRIVE — COMP's squeeze between COMP and DRIVE says itself; the three effects, each condensed
-    // into its pitch where wider; DI/CAB over its knob; and the words at the ends of MIDDLE's frequency.
+    // The other controls' names over them: COMP and BLEND beside DRIVE — COMP's squeeze between COMP and DRIVE says
+    // itself; the three effects tracked tighter than the rest, each condensed into a room well short of its pitch, so
+    // that air stands between them; DI/CAB over its knob; and the words at the ends of MIDDLE's frequency.
     const auto words = cabinInk().words;
     print (g, "COMP", { comp.x, knobNameY }, px13, words);
     print (g, "BLEND", { blend.x, knobNameY }, px13, words);
     const char* effects[] { "OCTAVE", "ENVELOPE", "CHORUS" };
     for (size_t i = 0; i < effectX.size(); ++i)
-        printInto (g, effects[i], { effectX[i], knobNameY }, effectNameRoom, px13, words);
+        printInto (g, effects[i], { effectX[i], knobNameY }, effectNameRoom, px13, words, effectNameTracking);
     print (g, "DI/CAB", { diCab.x, diCabNameY }, px13, words);
     const auto ends = cabinInk().at (words, 0.8f);
     writeAsIs (g, cabinInk(), "200 Hz", around ({ midFreqSlot.getX() - 48.0f, midFreqSlot.getCentreY() }, 90.0f, 28.0f), px13, ends);

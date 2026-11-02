@@ -12,7 +12,8 @@
 
 /** WHERE EVERYTHING STANDS ON THE WALKER'S DASHBOARD, in the stage's own 1672 x 941 — measured off its render
     (resources/redgroove/dashboard.webp, drawn at twice the stage), which was painted after the layout's drawing
-    scaled by 1.045. Its dome is the picture's transparent top; under it, the dashboard's two rows: KEYS, the
+    scaled by 1.045. The knobs' sockets are where bake-art fits them to the picture (tools/bake-art/Walker.cpp), to
+    a tenth of a pixel, and its check holds them there. Its dome is the picture's transparent top; under it, the dashboard's two rows: KEYS, the
     maker's plate and TUNER along the top; IN, AMP, TONE, EFFECTS, CABINET and OUT along the bottom. */
 namespace orbitamp::redgroove::layout
 {
@@ -64,17 +65,17 @@ inline constexpr float faderWidth = 40.0f;          // a column fader's box roun
 inline constexpr float faderCapLength = 16.0f;      // ...and its cap's render, across the slot
 
 // AMP: CHANNEL's lever slot, COMP, GR's column, DRIVE (the hero) and BLEND — each a socket in the picture.
-inline const juce::Point<float> drive { 418.5f, 792.0f };
+inline const juce::Point<float> drive { 418.8f, 791.5f };
 inline constexpr float driveSocket = 120.0f, driveKnob = 104.0f;
 inline constexpr float knobNameY = 712.0f;          // the row the knobs' names stand in, over AMP and TONE
 
 // TONE: three sockets for as many tone knobs as the bass's standard has, and MID FREQ's slot under them.
-inline constexpr std::array<float, 3> toneX { 646.8f, 753.8f, 860.0f };
-inline constexpr float toneY = 766.0f, toneSocket = 77.0f, toneKnob = 64.0f;
+inline constexpr std::array<float, 3> toneX { 645.5f, 753.1f, 860.5f };
+inline constexpr float toneY = 765.1f, toneSocket = 77.0f, toneKnob = 64.0f;
 
 // THE OTHER KNOBS: COMP and BLEND either side of DRIVE, DI/CAB in the cabinet's panel — each in its socket. A ring
 // round every knob, in its socket's groove, `ringInset` inside the socket's edge.
-inline const juce::Point<float> comp { 288.8f, 794.5f }, blend { 532.0f, 794.0f }, diCab { 1281.0f, 828.0f };
+inline const juce::Point<float> comp { 287.7f, 794.6f }, blend { 532.0f, 794.5f }, diCab { 1280.4f, 826.1f };
 inline constexpr float smallSocket = 78.0f, smallKnob = 64.0f, diCabSocket = 73.5f, diCabKnob = 60.0f;
 inline constexpr float ringInset = 3.5f, ringWidth = 2.5f, driveRingWidth = 3.0f;
 
@@ -84,7 +85,8 @@ inline const juce::Rectangle<float> grSlot { 336.5f, 753.5f, 12.5f, 85.0f };
 // THE EFFECTS: three slots, OCTAVE, ENVELOPE and CHORUS, a vertical fader in each.
 inline constexpr std::array<float, 3> effectX { 975.0f, 1073.8f, 1170.0f };
 inline constexpr float effectTop = 734.0f, effectBottom = 864.0f, effectFaderWidth = 44.0f;
-inline constexpr float effectNameRoom = 90.0f;      // each name set condensed into this, where wider
+inline constexpr float effectNameRoom = 80.0f;      // each name set condensed into this, where wider: air between them
+inline constexpr float effectNameTracking = 0.02f;  // ...and tracked tighter than the panel's other names
 
 // MIDDLE's frequency: the slot lying under the tones, a fader across it; its ends' words beside it.
 inline const juce::Rectangle<float> midFreqSlot { 683.5f, 865.0f, 141.5f, 16.0f };

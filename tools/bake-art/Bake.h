@@ -36,9 +36,24 @@ struct Sources
 bool isRover (const juce::String& face);
 Pictures bakeRover (const juce::String& face, const Sources&);
 
+/** THE WALKER (RedGrooveBass): `face` is redgroove. The sockets' painted rims it takes out are fitted to the picture as
+    they are taken out — each socket's middle, in the stage's space, comes back in `sockets` under its name, for the
+    numbers its layout carries (redgroove/RedGrooveLayout.h). */
+bool isWalker (const juce::String& face);
+Pictures bakeWalker (const Sources&, std::vector<std::pair<juce::String, juce::Point<float>>>& sockets);
+
 /** THE COCKPIT; `gripAxis` comes back as where the throttle grip's stem stands across the grip, 0 its
     left end — the number catpit::layout::gripAxis carries. */
 Pictures bakeCockpit (const Sources&, float& gripAxis);
+
+/** A RING PAINTED ROUND A KNOB (`eraseRing`): the circle fitted to the middle of its light, `centre` and `radius`; how
+    far its middle wanders off that circle, at most (`reach`); and how far its light reaches either side of its own
+    middle, its glow on the groove's floor included (`half`) — in the space `k` scales to the picture's pixels. */
+struct PaintedRing { juce::Point<float> centre; float radius, reach, half; };
+
+/** ...TAKEN OUT (Rover.cpp says how): across the band, the picture becomes what lies just beyond it inside and outside.
+    `ringness` says how much of a pixel is the ring's light. */
+juce::Image eraseRing (juce::Image img, const PaintedRing&, float k, float (*ringness) (juce::Colour));
 
 /** THE LAMPS GO OUT. A render paints lit the lamps a face lights itself. Each, in its box (`box`, in the
     face's 1672-wide stage), is taken out as it was painted, glow and all — to be laid back over at the
