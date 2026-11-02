@@ -52,6 +52,7 @@ struct CutBiquad
       - A FREQUENCY moves by gliding — log-evenly, ~30 ms to within a percent, the coefficients redrawn every
         32 samples — so 5 <-> 4, FINGERS <-> SLAP or a pick from the menu is a sweep, not a jump.
       - Settled and on, the cut runs plainly; settled and off, it is not run at all: the stage is a wire.
+      - A NaN that comes in heals at the end of its cadence step: the filter's memory is cleared, never kept.
 
     The guitar's console (EqLink) is not this, and does not change. Up to two channels; real-time safe. */
 class BassCuts
@@ -182,6 +183,10 @@ private:
                         else
                             d[i] = y;
                     }
+                    // A sample that was not a number has passed (the door downstream silences it), but it must not
+                    // stay in the recursion: a NaN in z1/z2 feeds itself and the cut would be NaN from then on.
+                    if (! std::isfinite (b.z1) || ! std::isfinite (b.z2))
+                        b.reset();
                     if (c == nc - 1)
                         g = gg;
                 }
