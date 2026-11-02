@@ -972,6 +972,9 @@ set(AMBERPAWAMP_SET "Victory V4 Copper (clean)" "Victory V4 Sheriff (crunch)" "V
 # OrbitBass plays bass packs alone — and until the bass captures are trained, ONE TEMPORARY PACK, a clean
 # guitar amp's, to play its chain through. The bass packs replace this line; it opens on the first.
 set(ORBITBASS_SET   "Two Notes ReVolt Clean PowerAmp")   # TEMPORARY — not a bass pack
+# RedGrooveBass's two channels, B15 and SVT, play the same way until the bass captures are trained: TWO
+# TEMPORARY PACKS, the ReVolt's clean and crunch, each with its Boost held off (src/redgroove/RedGrooveLineup.cpp).
+set(REDGROOVEBASS_SET "Two Notes ReVolt Clean PowerAmp" "Two Notes ReVolt Crunch PowerAmp")   # TEMPORARY — not bass packs
 
 # A RELEASE SHIPS NO PACK OF AN AMP IT LEAVES OUT. A release (ORBITAMP_DEV_FACTORY OFF) carries the amps
 # installer/family.ini names; the packs only an amp it leaves out plays — today AmberPawAmp's V4 — are not
@@ -1308,6 +1311,28 @@ set(ROVER_LIBRARIES
     ${AMP_ENGINE_LIBRARIES}
     juce::juce_opengl)               # the windscreen, on the GPU
 
+# THE WALKER'S FACE (src/redgroove): the family's console on the walker's dashboard under its glass dome. Its
+# renders by the file names the face asks for, from resources/redgroove; a render it has not drawn yet is the
+# helicopter's, from resources/amberpaw, until its own is dropped in — the folder is looked at again on every
+# build. Its still is its own or none: never another face's world.
+set(REDGROOVEBASS_RENDERS "")
+file(GLOB redgroove_own CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/resources/redgroove/*")
+foreach(render IN ITEMS dashboard.webp mark.svg midi.txt knob-drive.webp knob-tone.webp fader-cap.webp)
+    if("${CMAKE_CURRENT_SOURCE_DIR}/resources/redgroove/${render}" IN_LIST redgroove_own)
+        list(APPEND REDGROOVEBASS_RENDERS "${CMAKE_CURRENT_SOURCE_DIR}/resources/redgroove/${render}")
+    else()
+        list(APPEND REDGROOVEBASS_RENDERS "${CMAKE_CURRENT_SOURCE_DIR}/resources/amberpaw/${render}")
+    endif()
+endforeach()
+if("${CMAKE_CURRENT_SOURCE_DIR}/resources/redgroove/still.jpg" IN_LIST redgroove_own)
+    list(APPEND REDGROOVEBASS_RENDERS "${CMAKE_CURRENT_SOURCE_DIR}/resources/redgroove/still.jpg")
+endif()
+set(REDGROOVEBASS_SOURCES
+    ${FACE_SOURCES}
+    src/redgroove/RedGrooveArt.cpp
+    src/redgroove/RedGrooveEditor.cpp
+    src/redgroove/RedGrooveLineup.cpp)
+
 # ----------------------------------------------------------------------------
 # THE AMPS — the family's table, one row an amp (THE FAMILY says what a row says).
 #
@@ -1386,6 +1411,18 @@ add_amp(OrbitBass     CODE Obas    BY_NAME
         OrbitAmpData                 # the mark, the notice, the disclaimer — BinaryData::*
         ${AMP_ENGINE_LIBRARIES}
     SET       ${ORBITBASS_SET})
+
+# RedGrooveBass — the walker: a bass amp in a cabin, the walker's glass dome over a glowing mushroom forest
+# (src/redgroove) — the family's console over the bass's chain (Chain::bass), driven as channels: two, B15 and
+# SVT, its two gears, over REDGROOVEBASS_SET's packs; Darwin's Cat's own cabinets. Not in the family's release
+# (installer/family.ini), and asked for by name.
+add_amp(RedGrooveBass CODE Rgrv    BY_NAME
+    ART       ${REDGROOVEBASS_RENDERS}
+    SOURCES   ${REDGROOVEBASS_SOURCES}
+    LIBRARIES
+        OrbitAmpData                 # the family's mark, the notice, the disclaimer — BinaryData::*
+        ${AMP_ENGINE_LIBRARIES}
+    SET       ${REDGROOVEBASS_SET})
 
 # ----------------------------------------------------------------------------
 # THE FACES' GATES — in the gates binary, with every other (THE GATES BINARY, below); amp_console builds an amp

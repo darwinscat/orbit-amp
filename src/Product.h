@@ -23,7 +23,8 @@
     by side, out of one binary, and each processor is what it was made as.
 
     Each amp says what it is in a file of its own — OrbitAmp in OrbitAmpStart.cpp, OrbitBass in
-    OrbitBassStart.cpp, the cockpit in catpit/CatpitLineup.cpp, each rover in its skin's file — and no two
+    OrbitBassStart.cpp, the cockpit in catpit/CatpitLineup.cpp, each rover in its skin's file, the walker in
+    redgroove/RedGrooveLineup.cpp — and no two
     of them define anything under the same name, so every amp's sources link into one binary. Each amp's plug-in makes a processor of its
     own product (createPluginFilter, beside its Product, compiled into that plug-in alone); a gate makes
     whichever it plays.
@@ -119,6 +120,7 @@ const Product& redPawAmp();
 const Product& frostPawAmp();
 const Product& amberPawAmp();
 const Product& orbitBass();
+const Product& redGrooveBass();
 } // namespace products
 
 } // namespace orbitamp
