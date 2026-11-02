@@ -376,8 +376,6 @@ inline const char* onParamOf (const juce::String& block)
     return nullptr;
 }
 
-/** A block's menu by its name on the face: ON first, ruled off — its STANDBY/ON, ticked while it is on, a pick turning it
-    over as its strip arrow does (the owner, 01.11) — then what the block holds. */
 /** WHAT A BLOCK'S RESET SETS BACK (the owner, 01.11): every parameter of the block, by the ids' heads — its switches
     (`_on`), its place in the strip (`_present`) and the AMP's channel (`_device`) kept. */
 inline juce::StringArray resetIdsOf (juce::AudioProcessorValueTreeState& state, const juce::String& block)
@@ -421,6 +419,8 @@ inline void addReset (Menu& m, juce::AudioProcessorValueTreeState& state, const 
                      "RESET");
 }
 
+/** A block's menu by its name on the face: ON first, ruled off — its STANDBY/ON, ticked while it is on, a pick turning it
+    over as its strip arrow does (the owner, 01.11) — then what the block holds. */
 inline Menu blockMenu (juce::AudioProcessorValueTreeState& state, const juce::String& block)
 {
     Menu m;
