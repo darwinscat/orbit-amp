@@ -34,7 +34,7 @@ inline const juce::Point<float> keysTitle { 48.0f, 576.0f };            // "KEYS
 inline constexpr std::array<juce::Point<float>, 7> emblemFace {{
     { 792.5f, 539.0f }, { 880.0f, 539.0f }, { 899.0f, 570.0f }, { 886.0f, 640.0f },
     { 837.0f, 648.0f }, { 788.0f, 640.0f }, { 774.0f, 570.0f } }};
-inline const juce::Rectangle<float> emblemMark { 808.0f, 563.0f, 58.0f, 58.0f };
+inline const juce::Rectangle<float> emblemMark { 800.0f, 555.0f, 74.0f, 74.0f };
 inline const juce::Rectangle<float> poweredByPlate { 561.5f, 611.5f, 202.5f, 34.5f };
 inline const juce::Rectangle<float> makerNamePlate { 908.5f, 611.5f, 203.0f, 34.5f };
 
