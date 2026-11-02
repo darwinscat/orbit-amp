@@ -226,9 +226,8 @@ inline std::atomic<int>& tunerDisplayCache (const Product& p)
 inline TunerDisplay tunerDisplay (const Product& p)                { return (TunerDisplay) tunerDisplayCache (p).load (std::memory_order_relaxed); }
 inline void         setTunerDisplay (const Product& p, TunerDisplay d) { tunerDisplayCache (p).store ((int) d, std::memory_order_relaxed); store (p).set (tunerDisplayKey, (int) d); }
 
-/** WHETHER THE PRODUCT'S TUNER TUNES A BASS — whose tunings it offers (core::polyTunings). Every amp of this
-    build is a guitar amp; a bass amp answers true here. */
-inline bool tunesBass (const Product&) { return false; }
+/** WHETHER THE PRODUCT'S TUNER TUNES A BASS — whose tunings it offers (core::polyTunings): a bass amp's (its chain). */
+inline bool tunesBass (const Product& p) { return p.chain == Chain::bass; }
 
 /** THE STRINGS THE POLYPHONIC TUNER READS: one of the product's own tunings (core::polyTunings), kept by its
     id. The standard one unless the player chose another; one the product does not offer is its standard too. */
