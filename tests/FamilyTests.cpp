@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of OrbitAmp — see LICENSE.
 
-// Gate for EVERY AMP IN ONE BINARY (src/Product.h): the sources of all five amps linked into this one
+// Gate for EVERY AMP IN ONE BINARY (src/Product.h): the sources of all the amps linked into this one
 // executable — which they could not be while each amp's file defined its face, its first start, its
 // parameters, its engine and its skin under the same names as the others' — and played side by side, in
 // one process, headless, out of the build's factory folder (CMakeLists.txt: gate_reads_factory). What a
@@ -32,6 +32,7 @@
 #include "device/FactorySet.h"
 #include "device/FactoryShelf.h"
 #include "redpaw/RedPawSkin.h"
+#include "redgroove/RedGrooveLineup.h"
 #include "catpit/CatpitLayout.h"
 #include "face/Strip.h"
 #include "ProductPage.h"
@@ -72,6 +73,7 @@ namespace
             { products::redPawAmp(),   &redpaw::skinOf (products::redPawAmp()).lineup },
             { products::frostPawAmp(), &redpaw::skinOf (products::frostPawAmp()).lineup },
             { products::amberPawAmp(), &redpaw::skinOf (products::amberPawAmp()).lineup },
+            { products::redGrooveBass(), &redgroove::lineup() },
         };
     }
 
@@ -290,7 +292,7 @@ int ORBITAMP_GATE_MAIN()
             if (expected.lineup != nullptr)
                 ownChannels = ownChannels && &channels::Engine::of (*all[i]).channels.lineup() == expected.lineup;
         }
-        check (named, "all five side by side, and a second cockpit, each says its own name");
+        check (named, "all " + juce::String ((int) amps.size()) + " side by side, and a second cockpit, each says its own name");
         check (ownLists, "...each offers its own list's devices");
         check (ownChannels, "...each plays its own channels, the two cockpits the same");
         check (all[0]->getParameters().size() != all[1]->getParameters().size(),
@@ -309,9 +311,9 @@ int ORBITAMP_GATE_MAIN()
             caches.insert (&prefs::spectraCache (amp.product));
             std::printf ("      %s: %s\n", amp.product.name, prefs::store (amp.product).file().getFullPathName().toRawUTF8());
         }
-        check (settings.size() == 5, "each product keeps its settings in a file of its own");
-        check (updates.size() == 5, "...and its update badge in a file of its own");
-        check (caches.size() == 5, "...and the switches the faces cache are its own");
+        check (settings.size() == (int) family().size(), "each product keeps its settings in a file of its own");
+        check (updates.size() == (int) family().size(), "...and its update badge in a file of its own");
+        check (caches.size() == family().size(), "...and the switches the faces cache are its own");
 
         const auto a = prefs::UpdateStore::of (products::redPawAmp());
         const auto b = prefs::UpdateStore::of (products::redPawAmp());

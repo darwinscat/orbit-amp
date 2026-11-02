@@ -67,7 +67,11 @@ frostpaw-channel   orbitamp_gates  ROVER_GATE_OWNS_HOME=1
 amberpaw-set       orbitamp_gates
 amberpaw-channel   orbitamp_gates  ROVER_GATE_OWNS_HOME=1
 
-# Every amp in one binary: all five side by side in one process, each its own product (src/Product.h).
+# ...and the walker's, over its two gears on the bass's chain.
+redgroove-set      orbitamp_gates
+redgroove-channel  orbitamp_gates  REDGROOVE_GATE_OWNS_HOME=1
+
+# Every amp in one binary: all of them side by side in one process, each its own product (src/Product.h).
 family             orbitamp_gates
 
 orbitbass          orbitamp_gates

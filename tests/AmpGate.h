@@ -92,6 +92,15 @@ struct Product
     const char* installed;
     const char* tones;
     const char* opening;
+
+    /** ON THE BASS'S CHAIN, its console the bass's standard (src/Product.h, Chain::bass): its tone knobs the
+        standard's three whatever the pack, and what a bass's gear keeps and the product holds (Lineup::kept,
+        pinned) checked besides. */
+    bool bass = false;
+
+    /** Whether it has IRs of before to gather at its first start (gatherFormerIrs) — every amp that kept them in a
+        folder of its own before the family's; not one made after. */
+    bool gathers = true;
 };
 
 /** THE PRODUCTS, each as its gate knows it. */
@@ -159,6 +168,21 @@ inline const Product& product()
                    { "v4-kraken-ch1-f7fc",  "Boost=on",  "Plate",    10.0f, 0.0f  },
                },
                "each gear is one of the V4's three, its TURBO the same with the Boost on"),
+        // The walker: the bass's two amps, B15 and SVT, a gear each and each its own memory, on the bass's chain —
+        // no room and no delay in its strip, each opening on the engine's share of a plate it never plays. Until the
+        // bass's captures are trained, the ReVolt's clean and crunch, the Boost held off on both.
+        { "RedGrooveBass", "walker", "REDGROOVE_GATE_OWNS_HOME",
+          {
+              { "revolt-clean-poweramp-bf62",  "Boost=off", "Plate", 30.0f, 0.0f },
+              { "revolt-crunch-poweramp-73a7", "Boost=off", "Plate", 30.0f, 0.0f },
+          },
+          nullptr,
+          {},
+          "both gears' packs are installed",
+          "both gears' tone knobs are the bass's standard's three, Bass, Middle and Treble, on the AMP's console, whatever the pack",
+          "...and both on the build's RED GIANT",
+          true,
+          false },
     };
 
     for (const auto& p : products)

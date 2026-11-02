@@ -1544,6 +1544,8 @@ gate_in_binary(frostpaw-channel  tests/AmpChannelTests.cpp  PRODUCT FrostPawAmp 
 gate_in_binary(frostpaw-set      tests/AmpSetTests.cpp      PRODUCT FrostPawAmp  CHANNELS 6)
 gate_in_binary(amberpaw-channel  tests/AmpChannelTests.cpp  PRODUCT AmberPawAmp  CHANNELS 6)
 gate_in_binary(amberpaw-set      tests/AmpSetTests.cpp      PRODUCT AmberPawAmp  CHANNELS 6)
+gate_in_binary(redgroove-channel tests/AmpChannelTests.cpp  PRODUCT RedGrooveBass CHANNELS 2)
+gate_in_binary(redgroove-set     tests/AmpSetTests.cpp      PRODUCT RedGrooveBass CHANNELS 2)
 
 # ORBITBASS'S CHAIN, headless: where a fresh one stands (the gate off, the HPF on at 25 Hz, the LPF off, mono,
 # its one temporary pack), the strip's arrows in its order (GATE, AMP, CAB, LIMIT), the delay and the reverb

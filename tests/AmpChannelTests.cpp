@@ -48,6 +48,7 @@
 #include "channels/Engine.h"
 #include "channels/Presets.h"
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstdio>
@@ -67,7 +68,6 @@ namespace
     /** The channel a gear and TURBO make, where the channels go in pairs: a gear's two stand side by
         side in the lineup, TURBO the second (redpaw/RedPawLineup.h). */
     constexpr int channelOf (int gear, bool turbo) noexcept { return gear * 2 + (turbo ? 1 : 0); }
-    constexpr bool turboOf (int channel) noexcept           { return channel % 2 == 1; }
 }
 
 int ORBITAMP_GATE_MAIN()
@@ -82,11 +82,12 @@ int ORBITAMP_GATE_MAIN()
     gate::Checks check;
 
     // AN IR OF BEFORE, in the product's own folder, for the first start to gather into the family's — only
-    // where the home is the gate's own (product.ownsHome), and as if this product had never gathered here.
+    // where the home is the gate's own (product.ownsHome), and as if this product had never gathered here — where
+    // it has a first start that gathers them (product.gathers).
     const bool ownsHome = juce::SystemStats::getEnvironmentVariable (product.ownsHome, {}).isNotEmpty();
     const auto seedRun  = juce::String::toHexString (juce::Random::getSystemRandom().nextInt());
     const auto formerIr = device::IrLibrary::formerDirectory (ORBITAMP_PRODUCT_NAME).getChildFile ("Old Pack").getChildFile ("gathered-" + seedRun + ".wav");
-    if (ownsHome)
+    if (ownsHome && product.gathers)
     {
         // An IR of its own: the shelf's default, RED GIANT, with its last sample nudged, like no other here.
         const auto& shelf = device::shelf::irs (ORBITAMP_PRODUCT_NAME)[(size_t) params::cabIrDefault];
@@ -144,6 +145,9 @@ int ORBITAMP_GATE_MAIN()
     // IR-X's Bass, Middle, Treble; the Sheriff's and the Kraken's those and Bright; the Copper's two Tone,
     // Treble, Middle, Bass, Bass cut; the ReVolt's Clean Bass and Treble, its Crunch and Lead Bass, Mid,
     // Treble. A knob past the list names nothing.
+    // ...BUT ON THE BASS'S STANDARD (product.bass) every channel's knobs are the standard's three, whatever its
+    // pack — the ReVolt Clean's two tones and the Crunch's three alike — on the AMP's console's low shelf, first
+    // bell and high shelf, and none of them is a tone of the pack's.
     {
         const auto listOf = [] (const juce::String& capture) -> juce::StringArray
         {
@@ -153,13 +157,16 @@ int ORBITAMP_GATE_MAIN()
             if (capture.startsWith ("revolt-"))                                      return { "Bass", "Mid", "Treble" };
             return { "Bass", "Middle", "Treble" };
         };
+        const juce::StringArray standard { params::eqLoDb (0), params::eqBellDb (0, 0), params::eqHiDb (0) };
         bool found = true;
         for (int c = 0; c < channels.count(); ++c)
         {
-            const auto want = listOf (channels.lineup().channels[(size_t) c].capture);
-            found = found && channels.toneNamesOf (c) == want;
+            const auto want = product.bass ? juce::StringArray { "Bass", "Middle", "Treble" }
+                                           : listOf (channels.lineup().channels[(size_t) c].capture);
+            found = found && channels.toneNamesOf (c) == want && (! product.bass || channels.tonesOf (c).empty());
             for (int t = 0; t < channels::Channels::maxTones; ++t)
-                found = found && channels.toneOf (c, t) == (t < want.size() ? params::preampMeasured (t) : juce::String());
+                found = found && channels.toneOf (c, t) == (t >= want.size() ? juce::String()
+                                                             : product.bass ? standard[t] : params::preampMeasured (t));
         }
         check (found, product.tones);
     }
@@ -291,7 +298,7 @@ int ORBITAMP_GATE_MAIN()
             if (crunch < 0 && capture.startsWith ("revolt-crunch")) crunch = c;
         }
 
-        if (clean >= 0 && crunch >= 0)
+        if (clean >= 0 && crunch >= 0 && ! product.bass)     // on the bass's standard the knobs are no pack's tones
         {
             const auto everything = [&amp]
             {
@@ -332,19 +339,23 @@ int ORBITAMP_GATE_MAIN()
         }
     }
 
-    // A hand's switch: one step, and undone whole.
-    asHost (2);
+    // A hand's switch: one step, and undone whole — from the third channel to the second, or on an amp of two
+    // from the second to the first.
+    {
+    const int from = std::min (2, last), to = from == 1 ? 0 : 1;
+    asHost (from);
     ticks();
     const int depth = history.undoDepth();
-    check (engine.go (1), "a hand takes the lever to another channel");
-    check (channels.active() == 1 && asked() == 1, "...and CHANNEL goes with it at once");
+    check (engine.go (to), "a hand takes the lever to another channel");
+    check (channels.active() == to && asked() == to, "...and CHANNEL goes with it at once");
     ticks();
     check (history.undoDepth() == depth + 1, "...as one step of the history");
     history.undo();
     ticks();
-    check (channels.active() == 2 && asked() == 2, "undo brings the channel back, parameter and sound together");
-    check (playing() == channels.packFor (2), "...and its pack");
+    check (channels.active() == from && asked() == from, "undo brings the channel back, parameter and sound together");
+    check (playing() == channels.packFor (from), "...and its pack");
     check (history.undoDepth() == depth, "...leaving no step of its own behind");
+    }
 
     // A state from before there was a parameter: it says its channel on the node, and nowhere else.
     {
@@ -482,12 +493,15 @@ int ORBITAMP_GATE_MAIN()
                "...and what is taken in lands in the family's own IRs folder, beside Factory");
 
         // THE IR OF BEFORE, gathered at the first start: copied into the family's folder, in its own
-        // folder, and still where it was.
-        const auto gathered = device::IrLibrary::directory().getChildFile ("Old Pack").getChildFile (formerIr.getFileName());
-        check (gathered.existsAsFile() && formerIr.existsAsFile() && gathered.hasIdenticalContentTo (formerIr),
-               "the player's IRs of before are copied into the family's folder, folders and all, and left where they were");
-        check (channels.cabinets().indexOf (gathered) >= factory, "...and are among the player's cabinets");
-        check (prefs::getBool (ORBITAMP_GATE_PRODUCT(), prefs::irsGathered, false), "...once: the product remembers it has gathered them");
+        // folder, and still where it was — by a product that has IRs of before to gather (product.gathers).
+        if (product.gathers)
+        {
+            const auto gathered = device::IrLibrary::directory().getChildFile ("Old Pack").getChildFile (formerIr.getFileName());
+            check (gathered.existsAsFile() && formerIr.existsAsFile() && gathered.hasIdenticalContentTo (formerIr),
+                   "the player's IRs of before are copied into the family's folder, folders and all, and left where they were");
+            check (channels.cabinets().indexOf (gathered) >= factory, "...and are among the player's cabinets");
+            check (prefs::getBool (ORBITAMP_GATE_PRODUCT(), prefs::irsGathered, false), "...once: the product remembers it has gathered them");
+        }
 
         channels.chooseCabinet (added.first);
         check (channels.cabinet() == added.first, "a cabinet taken in plays");
@@ -709,20 +723,24 @@ int ORBITAMP_GATE_MAIN()
         presets.init();
         ticks();
 
+        // Where the product's table says each channel holds it (AmpGate.h): off on a gear, on on its TURBO; off on
+        // both of the walker's gears.
+        const auto heldAs = [&played] (int c) { return juce::String (played[(size_t) c].held).fromFirstOccurrenceOf ("=", false, false); };
         bool held = true, opens = true, free = false;
         for (int c = 0; c < channels.count(); ++c)
         {
             engine.go (c);
             for (const auto& s : channels.switchesOf (c))
                 if (s.held)
-                    held = held && at (s.slot) == s.opening && s.values[s.opening] == (turboOf (c) ? "on" : "off");
+                    held = held && at (s.slot) == s.opening && s.values[s.opening] == heldAs (c);
                 else
                 {
                     free = true;
                     opens = opens && at (s.slot) == s.opening;
                 }
         }
-        check (held, "every channel's Boost stands where the lineup puts it: off on a gear, on on its TURBO");
+        check (held, product.gears != nullptr ? "every channel's Boost stands where the lineup puts it: off on a gear, on on its TURBO"
+                                              : "every channel's Boost stands where the lineup puts it");
         if (! free)
         {
             // The Boost the only switch: none of them the hand's, and a Boost a host throws under TURBO is
@@ -737,12 +755,17 @@ int ORBITAMP_GATE_MAIN()
                 }
             check (boost >= 0 && switches == channels.count(), "...and its packs have no other switch: the Boost is each channel's one, and held");
 
-            engine.go (1);
-            put (boost, 0);                 // a host throws the TURBO's Boost off
             engine.go (0);
-            const bool offOnGear = at (boost) == 0;
+            const int onFirst = at (boost);
             engine.go (1);
-            check (offOnGear && at (boost) == 1, "...a Boost a host threw off under TURBO is off on the gear, and on again under TURBO pulled again");
+            const int onSecond = at (boost);
+            put (boost, 1 - onSecond);      // a host throws the second channel's Boost the other way — the TURBO's off
+            engine.go (0);
+            const bool firstsOwn = at (boost) == onFirst;
+            engine.go (1);
+            check (firstsOwn && at (boost) == onSecond,
+                   product.gears != nullptr ? "...a Boost a host threw off under TURBO is off on the gear, and on again under TURBO pulled again"
+                                            : "...a Boost a host threw on the second channel is where the lineup holds it on the first, and on the second pulled again");
         }
         else
         {
@@ -769,6 +792,103 @@ int ORBITAMP_GATE_MAIN()
             check (sharedOnTurbo, "a switch moved on a gear is its TURBO's too: one memory, the Boost held on");
             check (backOnGear && keptOnGear, "...and moved under TURBO, the gear's, kept; the Boost a host threw stands where the lineup holds it again");
         }
+        ticks();
+    }
+
+    // THE BASS'S GEARS (product.bass), each an amp of its own (Lineup::kept): DRIVE, BLEND, BASS, MIDDLE, TREBLE and
+    // MIDDLE's frequency, COMP's threshold, OCTAVE, ENVELOPE, CHORUS and DI/CAB come back on the gear they were left
+    // on, and a gear never pulled since INIT opens on its own; the instrument and the hand — 5 STR / 4 STR, FINGERS /
+    // SLAP — are the player's on every gear. The face coming up again and again (Engine::setUpChain, as the console
+    // calls it each time) leaves the tone where the player put it. And INIT gives what the product holds
+    // (Lineup::pinned) — COMP on, all of the signal through it at 4:1 on OPTO, OCTAVE, ENVELOPE and CHORUS in the
+    // strip and on, both cuts on, no delay and no room — as the face coming up does after a host moved any of it.
+    if (product.bass)
+    {
+        auto* hpf = amp->apvts.getParameter (params::bassHpf);
+        auto* lpf = amp->apvts.getParameter (params::bassLpf);
+        const juce::StringArray kept { params::preampGain, params::ampBlend, params::eqLoDb (0), params::eqBellDb (0, 0),
+                                       params::eqHiDb (0), params::eqBellHz (0, 0), params::compThreshold,
+                                       params::octaveAmount, params::filterAmount, params::chorusAmount, params::diMix };
+        const auto at  = [&amp] (const juce::String& id) { auto* p = amp->apvts.getParameter (id); return p != nullptr ? p->getValue() : -1.0f; };
+        const auto put = [&amp] (const juce::String& id, float to) { if (auto* p = amp->apvts.getParameter (id)) p->setValueNotifyingHost (to); };
+        const auto plain = [&amp] (const juce::String& id) { auto* p = amp->apvts.getParameter (id); return p != nullptr ? p->convertFrom0to1 (p->getValue()) : -1000.0f; };
+        const auto on    = [&plain] (const juce::String& id) { return plain (id) > 0.5f; };
+        const auto leave = [&] (float from, float step)     // each kept control somewhere of its own, as it stands then
+        {
+            std::vector<float> left;
+            for (int i = 0; i < kept.size(); ++i)
+            {
+                put (kept[i], from + step * (float) i);
+                left.push_back (at (kept[i]));
+            }
+            return left;
+        };
+        const auto standsAs = [&] (const std::vector<float>& left)
+        {
+            bool same = hpf != nullptr && lpf != nullptr;
+            for (int i = 0; i < kept.size(); ++i)
+                same = same && std::abs (at (kept[i]) - left[(size_t) i]) < 1.0e-4f;
+            return same;
+        };
+        const auto differsFrom = [&] (const std::vector<float>& left)
+        {
+            bool all = true;
+            for (int i = 0; i < kept.size(); ++i)
+                all = all && std::abs (at (kept[i]) - left[(size_t) i]) > 1.0e-3f;
+            return all;
+        };
+
+        orbitamp::channels::Presets presets (*amp, channels);
+        presets.init();
+        ticks();
+
+        engine.go (0);
+        const auto first = leave (0.12f, 0.07f);
+        put (params::bassHpf, 1.0f);        // 4 STR
+        put (params::bassLpf, 1.0f);        // SLAP
+        engine.go (1);
+        check (differsFrom (first), "a bass's gear never pulled since INIT opens on its own DRIVE, BLEND, tones, MIDDLE's frequency, COMP, effects and DI/CAB, not the other gear's");
+        const auto second = leave (0.85f, -0.07f);
+        engine.go (0);
+        check (standsAs (first), "each gear comes back with the DRIVE, BLEND, BASS, MIDDLE, TREBLE, MIDDLE's frequency, COMP threshold, OCTAVE, ENVELOPE, CHORUS and DI/CAB it was left with");
+        engine.go (1);
+        check (standsAs (second), "...and so does the other");
+        check (juce::roundToInt (plain (params::bassHpf)) == (int) params::BassHpf::four && juce::roundToInt (plain (params::bassLpf)) == (int) params::BassLpf::slap,
+               "...while 5 STR / 4 STR and FINGERS / SLAP stand as the player threw them, on every gear");
+
+        engine.setUpChain (channels.adopt());     // the face comes up — as the console does it — and again
+        engine.setUpChain (channels.adopt());
+        check (standsAs (second), "the face coming up, twice, leaves BASS, MIDDLE, TREBLE and every other control of the gear where it stood");
+
+        presets.init();
+        ticks();
+        const auto holds = [&]
+        {
+            const auto* character = amp->apvts.getParameter (params::compCharacter);
+            return on (params::compOn) && std::abs (plain (params::compAmount) - 1.0f) < 1.0e-4f && std::abs (plain (params::compRatio) - 4.0f) < 1.0e-3f
+                && character != nullptr && character->getCurrentValueAsText() == "Opto"
+                && on (params::octavePresent) && on (params::octaveOn)
+                && on (params::filterPresent) && on (params::filterOn)
+                && on (params::chorusPresent) && on (params::chorusOn)
+                && on (params::bassHpfOn) && on (params::bassLpfOn)
+                && ! on (params::delayPresent) && ! on (params::reverbPresent);
+        };
+        check (holds(), "INIT gives COMP on, all of the signal through it at 4:1 on OPTO, OCTAVE, ENVELOPE and CHORUS in the strip and on, both cuts on, no delay and no room");
+        bool flat = true;
+        for (int c = 0; c < channels.count(); ++c)
+        {
+            engine.go (c);
+            for (int t = 0; t < 3; ++t)
+                flat = flat && std::abs (plain (channels.toneOf (c, t))) < 1.0e-4f;
+        }
+        check (flat, "...and every gear's BASS, MIDDLE and TREBLE at 0 dB");
+
+        put (params::compRatio, 0.9f);
+        put (params::compAmount, 0.3f);
+        put (params::chorusPresent, 0.0f);
+        put (params::reverbPresent, 1.0f);
+        engine.setUpChain (channels.adopt());
+        check (holds(), "...and the face coming up gives them again, where a host left them anywhere else");
         ticks();
     }
 
