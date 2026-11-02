@@ -42,6 +42,7 @@ public:
     /** The limiter's whole console. */
     void showLimiterMenu (juce::Point<int> screenPos);
     void showInputMenu (juce::Point<int> screenPos);
+    void showTunerMenu (juce::Point<int> screenPos);
 
     /** THE GUARDS' MENUS as their blocks open them — ON first, ruled off (the owner, 01.11: every menu) — and what a
         pick of an item does: the popup's answer, and a gate's without one. */

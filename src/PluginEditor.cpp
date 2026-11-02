@@ -62,7 +62,8 @@ AmpEditor::AmpEditor (AmpProcessor& p)
     if constexpr (features::hum)   // the input column's menu is HUM's in the build that has it (Features.h)
         inColumn.onMenu = [this] (juce::Point<int> pos) { showInputMenu (pos); };
     addAndMakeVisible (tunerStrip);
-    tunerStrip.mute.attach (*p.apvts.getParameter (params::tunerMute));
+    tunerStrip.isMuted = [&p] { return p.apvts.getRawParameterValue (params::tunerMute)->load() > 0.5f; };
+    tunerStrip.onMenu  = [this] (juce::Point<int> pos) { showTunerMenu (pos); };
     addAndMakeVisible (footer);
     // The two TEMPORARY strips under the footer, off unless this player asked for them (the gear).
     // The demo needs its loops on disk — a machine without them has no player to show.
@@ -487,6 +488,27 @@ void AmpEditor::applyLimiter (juce::RangedAudioParameter& on, juce::RangedAudioP
 void AmpEditor::pickLimiter (int item)
 {
     applyLimiter (*amp.apvts.getParameter (params::limiterOn), *amp.apvts.getParameter (params::limiterCeiling), item);
+}
+
+/** THE TUNER STRIP'S MENU (the owner, 01.11): MUTE alone, ticked while the output is muted — the tuner needs no ON
+    here. One undo step a pick. */
+void AmpEditor::showTunerMenu (juce::Point<int> screenPos)
+{
+    auto* mute = amp.apvts.getParameter (params::tunerMute);
+    juce::PopupMenu m;
+    m.addItem (1, "MUTE", true, mute->getValue() > 0.5f);
+    m.showMenuAsync (juce::PopupMenu::Options().withTargetScreenArea ({ screenPos.x, screenPos.y, 1, 1 }),
+                     [safe = juce::Component::SafePointer<AmpEditor> (this), mute] (int r)
+                     {
+                         if (safe == nullptr || r != 1)
+                             return;
+                         auto* p = mute;
+                         safe->amp.history.beginGesture();
+                         p->beginChangeGesture();
+                         p->setValueNotifyingHost (p->getValue() > 0.5f ? 0.0f : 1.0f);
+                         p->endChangeGesture();
+                         safe->amp.history.endGesture();
+                     });
 }
 
 void AmpEditor::showLimiterMenu (juce::Point<int> screenPos)

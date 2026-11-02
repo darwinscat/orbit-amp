@@ -5,7 +5,6 @@
 
 #include "../core/TunerEar.h"
 #include "Theme.h"
-#include "ZoneSwitch.h"
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
@@ -27,29 +26,26 @@ public:
     {
         setMouseCursor (juce::MouseCursor::PointingHandCursor);
         startTimerHz (30);
-
-        mute.setTooltip ("Mute the output while tuning");
-        mute.setMouseCursor (juce::MouseCursor::PointingHandCursor);
-        addAndMakeVisible (mute);
     }
 
-    /** The MUTE pill, under the cents — the strip's one switch. The owner attaches it to the
-        tuner's mute parameter; the strip only gives it a place. It takes its own clicks, so a
-        click on it never opens the big tuner. */
-    ZoneSwitch mute;
-
-    void resized() override
-    {
-        mute.setBounds (muteArea().toNearestInt());
-    }
+    /** MUTE IS IN THE STRIP'S MENU (the owner, 01.11), a right click — no pill on it any more; while the output is
+        muted a crossed-out speaker BLINKS at the scale's left. The owner says whether it is (the tuner's parameter). */
+    std::function<bool()> isMuted;
+    std::function<void (juce::Point<int> screenPos)> onMenu;
 
     /** A click opens the big tuner — the strip is the glance, the zoom is the look. */
     std::function<void()> onClick;
 
     void mouseDown (const juce::MouseEvent& e) override
     {
-        // Left only — a right-click is never "open the lens".
-        if (! e.mods.isPopupMenu() && onClick != nullptr)
+        // Left only — a right-click is never "open the lens": it is the strip's menu.
+        if (e.mods.isPopupMenu())
+        {
+            if (onMenu != nullptr)
+                onMenu (e.getScreenPosition());
+            return;
+        }
+        if (onClick != nullptr)
             onClick();
     }
 
@@ -95,8 +91,7 @@ public:
             g.fillRoundedRectangle (noteArea.getX(), noteArea.getCentreY() - 2.0f, 30.0f, 4.0f, 2.0f);
         }
 
-        // ---- the MUTE pill at the far right, the cents just before it ----
-        inner.removeFromRight (muteW + muteGap);
+        // ---- the cents at the far right ----
         auto centsArea = inner.removeFromRight (52.0f);
         if (live)
         {
@@ -167,21 +162,33 @@ public:
             g.setColour (needle);
             g.fillRoundedRectangle (x - 1.25f, midY - nh * 0.5f, 2.5f, nh, 1.25f);
         }
+
+        // MUTED: a crossed-out speaker at the scale's left, blinking — orange, the family's "look here".
+        if (isMuted != nullptr && isMuted() && (juce::Time::getMillisecondCounter() / 500) % 2 == 0)
+            paintMutedSpeaker (g, juce::Rectangle<float> (16.0f, 14.0f).withCentre ({ ruler.getX() + 12.0f, midY }));
+    }
+
+    static void paintMutedSpeaker (juce::Graphics& g, juce::Rectangle<float> b)
+    {
+        juce::Path speaker;
+        const float x = b.getX(), y = b.getY(), w = b.getWidth(), h = b.getHeight();
+        speaker.startNewSubPath (x, y + h * 0.35f);
+        speaker.lineTo (x + w * 0.25f, y + h * 0.35f);
+        speaker.lineTo (x + w * 0.55f, y);
+        speaker.lineTo (x + w * 0.55f, y + h);
+        speaker.lineTo (x + w * 0.25f, y + h * 0.65f);
+        speaker.lineTo (x, y + h * 0.65f);
+        speaker.closeSubPath();
+        g.setColour (theme::orange);
+        g.fillPath (speaker);
+        g.drawLine (x + w * 0.68f, y + h * 0.3f, x + w, y + h * 0.7f, 1.5f);
+        g.drawLine (x + w * 0.68f, y + h * 0.7f, x + w, y + h * 0.3f, 1.5f);
     }
 
 private:
     void timerCallback() override { repaint(); }
 
-    static constexpr float muteW = 26.0f, muteH = 13.0f, muteGap = 8.0f;
     static constexpr float insetY = 5.0f;
-
-    /** Where the pill stands: at the far right, centred on the strip, the cents just before it —
-        the same insets `paint` lays the row out with. */
-    juce::Rectangle<float> muteArea() const
-    {
-        return getLocalBounds().toFloat().reduced (14.0f, insetY)
-                   .removeFromRight (muteW).withSizeKeepingCentre (muteW, muteH);
-    }
 
 public:
     /** WORKING or standing by — see VolumeColumn::setLive. A tuner standing by hears nothing (the
