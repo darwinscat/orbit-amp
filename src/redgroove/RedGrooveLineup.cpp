@@ -95,6 +95,7 @@ const Product& products::redGrooveBass()
         p.opening       = opening;
         p.chain         = Chain::bass;
         p.tunerLowestHz = core::PitchTracker::bassLowestHz;
+        p.viewLitByDefault = true;      // the forest answers the bass from the first note
         return p;
     }();
     return walker;

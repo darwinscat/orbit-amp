@@ -1352,7 +1352,9 @@ set(REDGROOVEBASS_SOURCES
     src/redgroove/RedGrooveArt.cpp
     src/redgroove/RedGrooveControls.cpp
     src/redgroove/RedGrooveEditor.cpp
-    src/redgroove/RedGrooveLineup.cpp)
+    src/redgroove/RedGrooveLineup.cpp
+    ${REDPAW_VIEW_SOURCES}           # the windscreen the rovers look through ...
+    ${REDGROOVE_VIEW_SOURCES})       # ... looking out on the walker's forest
 
 # ----------------------------------------------------------------------------
 # THE AMPS — the family's table, one row an amp (THE FAMILY says what a row says).
@@ -1442,7 +1444,9 @@ add_amp(RedGrooveBass CODE Rgrv    BY_NAME
     SOURCES   ${REDGROOVEBASS_SOURCES}
     LIBRARIES
         OrbitAmpData                 # the family's mark, the notice, the disclaimer — BinaryData::*
+        OrbitAmpShaders              # the dome's shaders
         ${AMP_ENGINE_LIBRARIES}
+        juce::juce_opengl            # the dome, on the GPU
     SET       ${REDGROOVEBASS_SET})
 
 # ----------------------------------------------------------------------------
