@@ -7,6 +7,7 @@
 #include "BlockFrame.h"
 #include "GuardRail.h"
 #include "MeterRail.h"
+#include "OnFirst.h"
 #include "../PluginProcessor.h"
 #include "../core/FilterTap.h"
 
@@ -28,9 +29,8 @@ namespace orbitamp
     module's read-out, through the processor's tap (core::FilterTap). The slider at 0 or the link standing by is a
     flat line: the stage passes the signal untouched there.
 
-    THE START CORNER'S NUMBER IS A FIELD: a click on it, a number typed, Enter — the RANGE whose resting corner is
-    nearest (the menu's three), one gesture; under 20 it reads as kHz ("3" is 3K). Anywhere else a click is the
-    block's menu. Every number on it is 13 px; the axis's are a reading and do not look like fields.
+    THE START CORNER'S NUMBER IS THE RANGE'S LIST (the owner, 01.11): a click on it lists LOW, MID and HIGH, the one
+    playing ticked, each with the corner it rests at; a pick is one undo step. Anywhere else a click is the block's menu. Every number on it is 13 px; the axis's are a reading and do not look like fields.
 
     It reads the tap on its own timer, and only while it is on screen — the audio thread writes it only then. The timer
     asks isShowing() on every tick, so a parent hidden (which tells no child) or a window put away stops the writing
@@ -123,35 +123,37 @@ public:
         return { x, row.getY(), w, row.getHeight() };
     }
 
-    // ---- the field ---------------------------------------------------------------------------------------------
-    void openStartField()
+    // ---- the range's list ------------------------------------------------------------------------------------
+    /** The ranges, the playing one ticked, each named with the corner it rests at; item `i` is id i + 1. */
+    juce::PopupMenu rangeList() const
     {
-        field.open (*this, numberBox().toNearestInt().expanded (2, 1), (float) restHz(), theme::lilac,
-                    [this] (float typed) { typeStartHz (typed); }, 0, textHeight);
+        juce::PopupMenu m;
+        const bool down = knobs().direction == felitronics::envfilter::Direction::down;
+        const int  now  = juce::roundToInt (rangeP.convertFrom0to1 (rangeP.getValue()));
+        for (int i = 0; i < params::filterRanges.size(); ++i)
+            m.addItem (i + 1, params::filterRanges[i].toUpperCase() + "   " + hzText ((double) params::filterRangeHz[i][down ? 1 : 0]),
+                       true, i == now);
+        return m;
     }
 
-    /** A start corner typed: the RANGE whose resting corner — its low end going up, its high end going down — is
-        nearest on the log axis; one gesture. Under 20 it is kHz. */
-    void typeStartHz (float typed)
+    void pickRange (int i)
     {
-        if (! (typed > 0.0f) || ! std::isfinite (typed))
+        if (i < 0 || i >= params::filterRanges.size())
             return;
-        const double hz   = typed < 20.0f ? typed * 1000.0 : (double) typed;
-        const bool   down = knobs().direction == felitronics::envfilter::Direction::down;
-        int    best  = 0;
-        double apart = 1.0e9;
-        for (int i = 0; i < 3; ++i)
-            if (const double d = std::abs (std::log2 (hz / (double) params::filterRangeHz[i][down ? 1 : 0])); d < apart)
-            {
-                apart = d;
-                best  = i;
-            }
-        amp.history.beginGesture();   // ONE undo step of its own: two typed in quick succession stay two
-        rangeAtt->setValueAsCompleteGesture ((float) best);
+        amp.history.beginGesture();   // one undo step
+        rangeAtt->setValueAsCompleteGesture ((float) i);
         amp.history.endGesture();
     }
 
-    bool fieldOpen() const { return field.isOpen(); }
+    void openRangeList()
+    {
+        onfirst::showList (rangeList(), juce::PopupMenu::Options().withTargetScreenArea (localAreaToGlobal (numberBox().toNearestInt())),
+                           [safe = juce::Component::SafePointer<FilterCurve> (this)] (int choice)
+                           {
+                               if (safe != nullptr && choice > 0)
+                                   safe->pickRange (choice - 1);
+                           });
+    }
 
     // ---- the tap -----------------------------------------------------------------------------------------------
     /** What the tap holds, newest last — the timer's work, and a picture's made off screen. */
@@ -190,7 +192,6 @@ public:
 
     bool isWatching() const noexcept { return watching; }
     bool polling() const noexcept    { return isTimerRunning(); }   // hidden too: it has to notice coming back
-    meterrail::GripEditor& startField() noexcept { return field; }
 
     // ---- drawing -----------------------------------------------------------------------------------------------
     void paint (juce::Graphics& g) override
@@ -262,8 +263,7 @@ public:
             g.strokePath (curve (nowHz()), juce::PathStrokeType (1.75f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
         }
 
-        // The start corner's number: a field — lilac, brighter under the mouse.
-        if (! field.isOpen())
+        // The start corner's number: the range's list — lilac, brighter under the mouse.
         {
             const auto box = numberBox();
             g.setColour (hovered ? theme::tx : theme::lilac);
@@ -281,7 +281,7 @@ public:
     {
         if (! e.mods.isPopupMenu() && numberBox().contains (e.position))
         {
-            openStartField();
+            openRangeList();
             return;
         }
         if (onMenu != nullptr)
@@ -294,7 +294,7 @@ public:
         if (over != hovered)
         {
             hovered = over;
-            setMouseCursor (over ? juce::MouseCursor::IBeamCursor : juce::MouseCursor::PointingHandCursor);
+            setMouseCursor (juce::MouseCursor::PointingHandCursor);
             repaint();
         }
     }
@@ -351,7 +351,6 @@ private:
     std::unique_ptr<juce::ParameterAttachment> rangeAtt;
     std::vector<std::unique_ptr<juce::ParameterAttachment>> atts;
     std::vector<core::FilterTap::Column> cols;
-    meterrail::GripEditor field;
     int  shown = 0;
     std::uint32_t lastWritten = 0, writtenAtWatch = 0;
     bool watching = false, hovered = false;
@@ -363,8 +362,9 @@ private:
     their filter_* ids): after OCTAVE at the head of the AMP's row, as in the strip. Its SLIDER at the left — the rail
     over its one amount, 0..1 (felitronics::envfilter's law: the mix, then the sensitivity), the bass's rail (orange
     grip, percent, a click on it types it: bass::asBassRail) — and its PICTURE right of it (FilterCurve), which shows
-    it at work: no lamp. MODE, DIRECTION, RESONANCE, RANGE, KEEP LOWS, ATTACK
-    and RELEASE are its menu, on a click anywhere on it but the rail's drag and the start corner's number. Our own DSP,
+    it at work: no lamp — and its RELEASE, the "wow", a second rail at the right, 30 … 1000 ms laid out as time is
+    felt; both faders, MIX and RELEASE, each number under its fader with its unit (the owner, 01.11). MODE, DIRECTION, RESONANCE and CLEAN LOWS are its menu;
+    its RANGE is the list on the picture's start corner. Our own DSP,
     so violet; its arrow in the strip switches it, and standing by it dims in place, still in reach. */
 class FilterBlock final : public BlockFrame
 {
@@ -373,17 +373,23 @@ public:
         : BlockFrame ("ENVELOPE", Kind::dsp),
           state (processor.apvts),
           rail (*processor.apvts.getParameter (params::filterAmount), *processor.apvts.getParameter (params::filterOn), 0.0f, 1.0f, false),
+          releaseRail (*processor.apvts.getParameter (params::filterReleaseMs), 30.0f, 1000.0f),
           curve (processor)
     {
         shieldsWhenOff = false;
-        bass::asBassRail (rail);   // the amount in percent, a field too
-        bass::hint (rail, "ENVELOPE: how much of the swept filter is heard, 0-100 %");
+        bass::asBassAmount (rail, "MIX");   // the amount in percent, a field too
+        bass::hint (rail, "ENVELOPE: filter with dry");
         rail.onGesture = [&processor] (bool begin) { if (begin) processor.history.beginGesture(); else processor.history.endGesture(); };   // one undo step a drag, as COMP's
-        for (auto* c : { (juce::Component*) &rail, (juce::Component*) &curve })
+        bass::asBassFader (releaseRail, "RELEASE", [] (float ms) { return juce::String (juce::roundToInt (ms)) + " ms"; });
+        releaseRail.logScale    = true;
+        releaseRail.columnWidth = fader::columnFor ({ "RELEASE", "1000 ms" });   // its name wider than the family's 46
+        bass::hint (releaseRail, "RELEASE");
+        releaseRail.onGesture = rail.onGesture;
+        for (auto* c : { (juce::Component*) &rail, (juce::Component*) &curve, (juce::Component*) &releaseRail })
             addAndMakeVisible (*c);
         setMouseCursor (juce::MouseCursor::PointingHandCursor);
         const auto menu = [this] (juce::Point<int>) { bass::showFilterMenu (state, this); };
-        rail.onMenu = curve.onMenu = menu;
+        rail.onMenu = releaseRail.onMenu = curve.onMenu = menu;
         attachPower (*processor.apvts.getParameter (params::filterOn));
         dimWhenIdle (curve, *processor.apvts.getParameter (params::filterAmount));
     }
@@ -392,12 +398,15 @@ public:
 
     FilterCurve& picture() noexcept { return curve; }
     GuardRail&   fader() noexcept   { return rail; }
+    GuardRail&   release() noexcept { return releaseRail; }
 
 protected:
     void layOutContent (juce::Rectangle<int> r) override
     {
-        rail.setBounds (r.removeFromLeft (GuardRail::designWidth));
+        rail.setBounds (r.removeFromLeft (rail.columnWidth));
         r.removeFromLeft (gap);
+        releaseRail.setBounds (r.removeFromRight (releaseRail.columnWidth));
+        r.removeFromRight (gap);
         curve.setBounds (r);
     }
 
@@ -406,6 +415,7 @@ private:
 
     juce::AudioProcessorValueTreeState& state;
     GuardRail   rail;
+    GuardRail   releaseRail;
     FilterCurve curve;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (FilterBlock)

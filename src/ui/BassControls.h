@@ -41,8 +41,9 @@ inline float plain (juce::AudioProcessorValueTreeState& state, const char* id)
     return p != nullptr ? p->convertFrom0to1 (p->getValue()) : 0.0f;
 }
 
-/** THE BASS'S RAILS — COMP, OCTAVE, FILTER, CHORUS, BLEND — one look: an orange hand (what the hand sets), its amount
-    written in percent at 13 px, and a click on the hand types it, in percent. */
+/** THE PLAIN RAIL'S LOOK on the bass — COMP's THRESHOLD, one control with its graph's line; every other slider is a fader
+    (asBassFader): an orange hand (what the hand sets), its number written on it at 13 px, and a click on the hand types
+    it, in percent unless told otherwise. */
 inline void asBassRail (GuardRail& r)
 {
     r.gripColour     = theme::orange;
@@ -52,28 +53,31 @@ inline void asBassRail (GuardRail& r)
     r.typedScale     = 100.0f;
 }
 
+/** THE BASS'S FADERS (the owner, 01.11): every slider on a bass block — all but COMP's THRESHOLD, one control with its
+    graph's line (asBassRail) — in the guitar MIX fader's look (GuardRail::setFaderLook): violet, its NAME over it, its
+    number under it carrying its unit ("62%", "120 Hz", "0.7 Hz", "120 ms"), a click on the number types it — in
+    `typedScale` (100: a 0..1 amount typed in percent), with `decimals`. */
+inline void asBassFader (GuardRail& r, const juce::String& name, std::function<juce::String (float)> text,
+                         float typedScale = 1.0f, int decimals = 0)
+{
+    r.setFaderLook (name, theme::violet);
+    r.textForValue = std::move (text);
+    r.typedScale   = typedScale;
+    r.typeDecimals = decimals;
+}
+
+/** A 0..1 amount, written and typed in percent: "62%". */
+inline void asBassAmount (GuardRail& r, const juce::String& name)
+{
+    asBassFader (r, name, [] (float v) { return juce::String (juce::roundToInt (v * 100.0f)) + "%"; }, 100.0f);
+}
+
 /** A HINT over a bass control (the owner, 01.11: what is this, BLEND?): its name in capitals, then in a few words what it
     does — the tooltip the window's TooltipWindow shows, at its 13 px. */
 inline void hint (juce::SettableTooltipClient& control, const juce::String& text)
 {
     control.setTooltip (text);
 }
-
-/** A knob whose right click asks for its menu. */
-class MenuKnob final : public Knob
-{
-public:
-    using Knob::Knob;
-    std::function<void()> onMenu;
-
-    void mouseDown (const juce::MouseEvent& e) override
-    {
-        if (e.mods.isPopupMenu() && onMenu)
-            onMenu();
-        else
-            Knob::mouseDown (e);
-    }
-};
 
 /** The squeeze, a thin bar falling from its top: 0 to -12 dB, read 30 times a second. */
 class GrMeter final : public juce::Component, public juce::SettableTooltipClient, private juce::Timer
@@ -143,8 +147,8 @@ public:
     }
 };
 
-/** A BLOCK'S MENU (the owner, 01.11: no settings windows on OrbitBass — its gear and its right click open this, one
-    place per block): what the block holds beyond its rail and its picture, as CHOICES — a choice parameter's choices,
+/** A BLOCK'S MENU (the owner, 01.11: no settings windows on OrbitBass — its right click opens this, one place per
+    block; no gear): what the block holds beyond its rail and its picture, as CHOICES — a choice parameter's choices,
     a number's STEPS in a submenu of its own, a switch ticked when on. Every item is one undo step: what it sets moves
     in one instant, and the history settles it as one. */
 struct Menu
@@ -276,36 +280,37 @@ inline Menu compMenu (juce::AudioProcessorValueTreeState& state, Menu m = {})
     return m;
 }
 
-/** OCTAVE's: the -2 at the slider's top, the sub's TONE and its SUB HP, the tracking GATE. */
-inline Menu octaveMenu (juce::AudioProcessorValueTreeState& state, Menu m = {})
+/** OCTAVE's: nothing past its ON (the owner, 01.11 — TONE is a rail on the block; no -2, the SUB HP and the tracking
+    gate set by the plug-in). */
+inline Menu octaveMenu (juce::AudioProcessorValueTreeState&, Menu m = {})
 {
-    addToggle (m, m.items, state, params::octaveSub2, "-2 OCTAVE AT THE TOP");
-    addStepsMenu (m, state, params::octaveToneHz,  "TONE",   { 60.0f, 90.0f, 120.0f, 200.0f, 400.0f }, hzWord);
-    addStepsMenu (m, state, params::octaveSubHpHz, "SUB HP", { 10.0f, 15.0f, 20.0f, 25.0f, 35.0f, 50.0f, 80.0f }, hzWord);
-    addStepsMenu (m, state, params::octaveGateDb,  "GATE",   { -70.0f, -60.0f, -50.0f, -40.0f, -30.0f }, dbWord);
     return m;
 }
 
-/** ENVELOPE's: LP or BP, up or down, its range and resonance, the clean lows and their corner, the follower. Its start
-    is typed on its picture. */
+/** ENVELOPE's (the owner, 01.11): LP or BP, up or down, its resonance, and its CLEAN LOWS — off or a corner, one list.
+    Its RANGE is a list on its picture, its RELEASE a rail on the block, its attack fixed. */
 inline Menu filterMenu (juce::AudioProcessorValueTreeState& state, Menu m = {})
 {
     addChoices (m, state, params::filterMode,      "MODE");
     addChoices (m, state, params::filterDirection, "DIRECTION");
-    addChoices (m, state, params::filterRange,     "RANGE");
     addStepsMenu (m, state, params::filterResonance, "RESONANCE", { 1.0f, 2.0f, 4.0f, 6.0f, 8.0f, 12.0f },
                   [] (float v) { return "Q " + juce::String (v, isWhole (v) ? 0 : 1); });
-    addToggle (m, m.items, state, params::filterKeepLows, "KEEP LOWS CLEAN");
-    addStepsMenu (m, state, params::filterKeepHz,    "KEEP LOWS AT", { 80.0f, 100.0f, 120.0f, 150.0f, 200.0f, 250.0f, 300.0f }, hzWord);
-    addStepsMenu (m, state, params::filterAttackMs,  "ATTACK",       { 1.0f, 3.0f, 10.0f, 30.0f }, msWord);
-    addStepsMenu (m, state, params::filterReleaseMs, "RELEASE",      { 60.0f, 120.0f, 250.0f, 500.0f }, msWord);
+
+    juce::PopupMenu lows;
+    const bool  keeping = plain (state, params::filterKeepLows) > 0.5f;
+    const float corner  = plain (state, params::filterKeepHz);
+    lows.addItem (m.act ([&state] { setPlain (state, params::filterKeepLows, 0.0f); }), "OFF", true, ! keeping);
+    for (const float hz : params::filterKeepItems)
+        lows.addItem (m.act ([&state, hz] { setPlain (state, params::filterKeepHz, hz); setPlain (state, params::filterKeepLows, 1.0f); }),
+                      hzWord (hz), true, keeping && std::abs (corner - hz) < 0.5f);
+    m.items.addSubMenu ("CLEAN LOWS", lows);
     return m;
 }
 
-/** CHORUS's: the centre its head swings about. Its rate and its crossover are typed on its picture. */
-inline Menu chorusMenu (juce::AudioProcessorValueTreeState& state, Menu m = {})
+/** CHORUS's: nothing past its ON (the owner, 01.11 — the RATE a rail on the block, the MONO crossover a list on its
+    picture, the centre fixed). */
+inline Menu chorusMenu (juce::AudioProcessorValueTreeState&, Menu m = {})
 {
-    addStepsMenu (m, state, params::chorusCentreMs, "CENTRE", { 6.0f, 8.0f, 10.0f, 14.0f, 20.0f }, msWord);
     return m;
 }
 

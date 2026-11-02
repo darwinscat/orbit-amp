@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "FaderPaint.h"
 #include "Theme.h"
 
 namespace orbitamp
@@ -83,7 +84,7 @@ public:
 
         // A fader's hand follows the mouse: the whole travel is the whole drag.
         if (fader)
-            setMouseDragSensitivity (juce::jmax (1, juce::roundToInt (faderTravel (faderArea()).getHeight())));
+            setMouseDragSensitivity (juce::jmax (1, juce::roundToInt (fader::travel (faderArea().toFloat()).getHeight())));
     }
 
     /** A FADER instead of a dial (Oleh, 24.10): the delay's and the reverb's MIX, a vertical slider as
@@ -101,7 +102,7 @@ public:
         repaint();
     }
 
-    static constexpr int faderW   = 46;   // the column: "100%" at 13 px under it
+    static constexpr int faderW   = fader::columnW;   // the column: "100%" at 13 px under it
     static constexpr int faderGap = 10;   // between the fader's column and what stands beside it
 
     /** How many detents to mark. The pack decides for a captured control — twenty-one for one pedal,
@@ -303,7 +304,6 @@ private:
 
     // ---- the fader (setFader) ----
     bool fader = false;
-    static constexpr float gripW = 30.0f, gripH = 12.0f, railW = 10.0f;
 
     /** Between the name and the number. */
     juce::Rectangle<int> faderArea() const
@@ -315,51 +315,10 @@ private:
         return r.reduced (0, 4);
     }
 
-    /** Where the grip's centre travels: half a grip in from either end, so it never stands half off. */
-    static juce::Rectangle<float> faderTravel (juce::Rectangle<int> area) { return area.toFloat().reduced (0.0f, gripH * 0.5f); }
-
+    /** The fader's look is the family's one painter (FaderPaint.h), the rails worn as faders share it. */
     void paintFader (juce::Graphics& g)
     {
-        const auto area   = faderArea().toFloat();
-        const auto travel = faderTravel (faderArea());
-        const float pos   = (float) valueToProportionOfLength (getValue());
-        const float y     = travel.getBottom() - pos * travel.getHeight();
-        const float cx    = area.getCentreX();
-
-        // The rail: a cut in the bezel's black, the amount flooding it from the foot, a lip round it.
-        const auto rail = juce::Rectangle<float> (railW, area.getHeight()).withCentre ({ cx, area.getCentreY() });
-        g.setColour (theme::bezel);
-        g.fillRoundedRectangle (rail, railW * 0.5f);
-
-        g.setColour (accent.withAlpha (0.55f));
-        g.fillRoundedRectangle (rail.reduced (2.0f).withTop (y), (railW - 4.0f) * 0.5f);
-
-        g.setColour (theme::violet.withAlpha (0.45f));
-        g.drawRoundedRectangle (rail.reduced (0.5f), railW * 0.5f, 1.2f);
-
-        // A tick across the rail at every quarter.
-        g.setColour (theme::hair2);
-        for (int i = 0; i <= 4; ++i)
-            g.fillRect (juce::Rectangle<float> (railW + 8.0f, 1.0f)
-                            .withCentre ({ cx, travel.getBottom() - travel.getHeight() * (float) i / 4.0f }));
-
-        // The grip: the channel lever's, the accent through it as one line — brighter under the hand.
-        const auto bar = juce::Rectangle<float> (juce::jmin (gripW, area.getWidth() - 4.0f), gripH).withCentre ({ cx, y });
-
-        g.setColour (juce::Colours::black.withAlpha (0.45f));
-        g.fillRoundedRectangle (bar.translated (0.0f, 2.0f).expanded (1.0f), gripH * 0.5f + 1.0f);
-
-        juce::ColourGradient body (juce::Colour (0xff2c2a38), 0.0f, bar.getY(),
-                                   juce::Colour (0xff111018), 0.0f, bar.getBottom(), false);
-        g.setGradientFill (body);
-        g.fillRoundedRectangle (bar, gripH * 0.5f);
-
-        const bool handled = isMouseOverOrDragging();
-        g.setColour (handled ? accent.withAlpha (0.8f) : theme::hair2);
-        g.drawRoundedRectangle (bar.reduced (0.5f), gripH * 0.5f, 1.0f);
-
-        g.setColour (handled ? accent.brighter (0.3f) : accent);
-        g.fillRect (juce::Rectangle<float> (bar.getWidth() - 10.0f, 1.5f).withCentre (bar.getCentre()));
+        fader::paint (g, faderArea().toFloat(), (float) valueToProportionOfLength (getValue()), accent, isMouseOverOrDragging());
     }
 
     /** The number under the dial: written in the face's own tracked type, a field only while typed in. */

@@ -14,29 +14,22 @@ namespace orbitamp
 
 struct CabinetBlock::BassRow
 {
-    explicit BassRow (AmpProcessor& p) : state (p.apvts) {}
+    explicit BassRow (AmpProcessor& p) : di (*p.apvts.getParameter (params::diMix), 0.0f, 100.0f) {}
 
-    juce::AudioProcessorValueTreeState& state;
-    bass::MenuKnob   di { "DI/CAB", theme::orange, 0 };
-    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> diAtt;
+    /** DI/CAB, A FADER as every BLEND and MIX on the bass's face (the owner, 01.11): its name over it, its percent under
+        it, typed there, a double click its default, one undo step a drag. No switch of its own, as the AMP's BLEND: moved, it mixes
+        and nothing else. */
+    GuardRail di;
 
-    void addTo (BlockFrame& owner)
+    void addTo (CabinetBlock& owner, AmpProcessor& p)
     {
-        // The cuts are not here: the bass has ONE pair, on the AMP's switches (EqSection::useBassCuts). DI/CAB is the
+        // The cuts are not here: the bass has ONE pair, on the AMP's switches (EqSection::setStandard). DI/CAB is the
         // cabinet's — with the cabinet out there is nothing to mix — and stands by with it.
         owner.addAndMakeVisible (di);
-
-
-        bass::hint (di, "DI/CAB: the dry DI mixed with the cabinet, 0-100 % DI");
-        di.labelFontHeight = Knob::fxLabelH;
-        di.labelTracking   = Knob::fxLabelTracking;
-        di.labelRowHeight  = Knob::fxLabelRowH;
-        di.valueInDial     = false;
-        di.setValueRowShown (true);
-        di.textForValue = [] (double v) { return juce::String (juce::roundToInt (v)) + "%"; };
-        di.valueForText = [] (const juce::String& t) { return t.getDoubleValue(); };
-        diAtt = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (state, params::diMix, di);
-        di.setHint ("DI/CAB:   the bass before the cabinet, mixed with the cabinet's");
+        bass::asBassFader (di, "DI/CAB", [] (float v) { return juce::String (juce::roundToInt (v)) + "%"; });   // percent already
+        bass::hint (di, "DI/CAB: DI with cabinet");
+        di.onGesture = [&p] (bool begin) { if (begin) p.history.beginGesture(); else p.history.endGesture(); };
+        di.onMenu    = [&owner] (juce::Point<int>) { if (owner.onBlockMenu != nullptr) owner.onBlockMenu(); };   // the CAB's menu
     }
 };
 
@@ -49,7 +42,7 @@ CabinetBlock::CabinetBlock (AmpProcessor& processor)
     if (processor.product().chain == Chain::bass)
     {
         bassRow = std::make_unique<BassRow> (processor);
-        bassRow->addTo (*this);
+        bassRow->addTo (*this, processor);
     }
 
     // The IR's name on the border beside the block's, set like a name and in the block's colour.
@@ -654,6 +647,13 @@ void CabinetBlock::layOutContent (juce::Rectangle<int> area)
         borderSlotUsed = ir.getBounds();
     }
 
+    // THE BASS'S DI/CAB at the block's right edge, the content's whole height, as COMP's BLEND stands in its block.
+    if (bassRow != nullptr)
+    {
+        bassRow->di.setBounds (area.removeFromRight (bassRow->di.columnWidth));
+        area.removeFromRight (gap);
+    }
+
     // The bottom row: HPF holds the left wall and LPF the right — each cut on its own side of the
     // spectrum, the way they stand on the curve — with the trim combo centred between them. Three
     // things, evenly. The phase used to make it four, and a row of four turned the trim, the one
@@ -688,19 +688,13 @@ void CabinetBlock::layOutContent (juce::Rectangle<int> area)
         place (switches[1], row.removeFromRight (70));   // LPF
     }
 
-    // The bass: no cut words (its one pair is the AMP's), DI/CAB's knob at the picture's right edge.
+    // The bass: no cut words (its one pair is the AMP's).
     if (bassRow != nullptr)
-    {
         for (int i = 0; i < 2; ++i)
         {
             switches[(size_t) i].sw.setVisible (false);
             switches[(size_t) i].label.setVisible (false);
         }
-
-        auto knob = area.removeFromRight (bassDiW);
-        area.removeFromRight (4);
-        bassRow->di.setBounds (knob.withSizeKeepingCentre (juce::jmin (52, knob.getWidth()), 52 + Knob::valueRowH + Knob::fxLabelRowH));
-    }
 
     trimCombo.setBounds (row.withSizeKeepingCentre (juce::jmin (90, row.getWidth() - 12),
                                                     row.getHeight()));
@@ -709,6 +703,8 @@ void CabinetBlock::layOutContent (juce::Rectangle<int> area)
 }
 
 void CabinetBlock::paintContent (juce::Graphics&) {}
+
+GuardRail* CabinetBlock::diRail() noexcept { return bassRow != nullptr ? &bassRow->di : nullptr; }
 
 /** The consoles' feeding rule, twice: a fresh window into its pane, a starve when the audio
     stopped — then one repaint, and the hook above draws both. */

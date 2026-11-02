@@ -7,6 +7,7 @@
 #include "BlockFrame.h"
 #include "GuardRail.h"
 #include "MeterRail.h"
+#include "OnFirst.h"
 #include "scope/EnvelopeView.h"
 #include "scope/TransferView.h"
 #include "../PluginProcessor.h"
@@ -89,6 +90,15 @@ public:
     /** The squeeze now, the newest column's — and the plate its number stands on, at the strip's left, centred on the
         strip's border. */
     float grNow() const { return shown > 0 ? cols[(size_t) shown - 1].gr : 0.0f; }
+
+    /** The deepest squeeze over the newest `n` columns — what a meter read at 30 Hz shows without missing a hop. */
+    float grRecent (int n) const
+    {
+        float gr = 0.0f;
+        for (int k = juce::jmax (0, shown - n); k < shown; ++k)
+            gr = juce::jmin (gr, cols[(size_t) k].gr);
+        return gr;
+    }
 
     juce::String grText() const { return dbText (grNow() < -0.05f ? (double) grNow() : 0.0); }
 
@@ -348,6 +358,17 @@ public:
         pressed = false;
     }
 
+    /** A DOUBLE CLICK sets the threshold's default back, as on its rail (the owner, 01.11): one undo step, COMP on. */
+    void mouseDoubleClick (const juce::MouseEvent& e) override
+    {
+        if (e.mods.isPopupMenu())
+            return;
+        amp.history.beginGesture();
+        thrAtt->setValueAsCompleteGesture (thresholdP.convertFrom0to1 (thresholdP.getDefaultValue()));
+        onAtt->setValueAsCompleteGesture (1.0f);
+        amp.history.endGesture();
+    }
+
     void visibilityChanged() override      { refresh(); }
     void parentHierarchyChanged() override { refresh(); }
 
@@ -436,117 +457,110 @@ struct CompRatio
     bool taken = false;
 };
 
-/** COMP'S RATIO DETENTS (the owner, 31.10): a drag near 2, 3, 4, 5, 7 or 10 : 1 — within `detentPx` of it on the control —
-    sticks to it; between them the ratio moves freely; a typed ratio is taken as typed. */
-inline constexpr double compRatioDetents[] { 2.0, 3.0, 4.0, 5.0, 7.0, 10.0 };
-inline constexpr float  compDetentPx = 4.0f;
+/** COMP'S RATIOS (the owner, 01.11): the list its combo offers, gentle to hard. */
+inline constexpr double compRatioItems[] { 1.5, 2.0, 3.0, 4.0, 5.0, 7.0, 10.0 };
 
-template <typename PositionOf>
-double snapRatio (double r, float at, PositionOf positionOf)
-{
-    // The NEAREST detent within reach, not the first: where two are within reach of each other (the square's upper
-    // ratios, a few pixels apart) the hand lands on the one it is on.
-    double best = r;
-    float  apart = compDetentPx;
-    for (const double d : compRatioDetents)
-        if (const float gap = std::abs (positionOf (d) - at); gap <= apart)
-        {
-            best  = d;
-            apart = gap;
-        }
-    return best;
-}
-
-/** COMP'S RATIO SLIDER, over the IN/OUT square: 2:1 … 10:1 along `comp_ratio`'s own travel, a lilac track and an orange
-    grip — the hand's — carrying the ratio at 13 px, the ratio's own control (the detents: compRatioDetents); moved, it sets
-    the ratio (one gesture a drag), as a drag in the square does. */
-class CompRatioSlider final : public juce::Component,
-                              public juce::SettableTooltipClient
+/** COMP'S RATIO, A COMBO over the IN/OUT square (the owner, 01.11), in the family's boxed cell (VoicingSelector's): the
+    ratio as it stands, "4.0:1", 13 px in the hand's orange, and a chevron. The chevron LISTS compRatioItems, the current
+    one ticked — a value list, not a block's menu, so no ON over it (onfirst::showList). ONLY THE LIST'S RATIOS, nothing
+    typed (the owner, 01.11): a click anywhere on the cell lists them. A pick is one gesture, COMP switched in with it,
+    one undo step; a drag in the square steps through the same list. A right click is COMP's menu. */
+class CompRatioCombo final : public juce::Component,
+                             public juce::SettableTooltipClient
 {
 public:
-    explicit CompRatioSlider (AmpProcessor& processor) : ratio (processor)
+    explicit CompRatioCombo (AmpProcessor& processor) : ratio (processor)
     {
-        for (auto* p : { &ratio.amountP, &ratio.characterP, &ratio.ratioP, &ratio.thresholdP })
-            atts.push_back (std::make_unique<juce::ParameterAttachment> (*p, [this] (float) { repaint(); }));
-        setMouseCursor (juce::MouseCursor::LeftRightResizeCursor);
+        att = std::make_unique<juce::ParameterAttachment> (ratio.ratioP, [this] (float) { repaint(); });
     }
 
-    static constexpr float gripW = 10.0f, gripH = 18.0f, textH = 18.0f;
+    static constexpr float textHeight = 13.0f, chevronW = 16.0f;
 
     std::function<void (juce::Point<int> screenPos)> onMenu;
 
     double shownRatio() const { return ratio.ratio(); }
 
-    /** The track, under the row its value is written in. */
-    juce::Rectangle<float> track() const { return getLocalBounds().toFloat().withTrimmedTop (textH).reduced (gripW * 0.5f, 0.0f); }
+    /** The ratio as the cell shows it, as the list names it: "4:1", "1.5:1" (the owner, 01.11). */
+    juce::String text() const { return itemText (shownRatio()); }
 
-    float xOfRatio (double r) const
+    /** An item as the list names it: "1.5:1", "4:1". */
+    static juce::String itemText (double r)
     {
-        const auto t = track();
-        return t.getX() + ratio.ratioP.convertTo0to1 ((float) r) * t.getWidth();
+        // A whole ratio as the parameter holds it may be 3.9999998: whole within a hundredth.
+        return (std::abs (r - std::round (r)) < 0.01 ? juce::String (juce::roundToInt (r)) : juce::String (r, 1)) + ":1";
     }
 
-    /** Where the ticks stand: at every detent, on the slider's own mapping. */
-    std::vector<float> tickXs() const
+    /** The item the ratio stands at, or -1 off the list. */
+    int tickedItem() const
     {
-        std::vector<float> xs;
-        for (const double d : compRatioDetents)
-            xs.push_back (xOfRatio (d));
-        return xs;
+        for (int i = 0; i < (int) std::size (compRatioItems); ++i)
+            if (std::abs (shownRatio() - compRatioItems[i]) < 0.005)
+                return i;
+        return -1;
     }
 
-    double ratioAtX (float x) const
+    /** The list, the current item ticked; item `i` is id i + 1. */
+    juce::PopupMenu list() const
     {
-        const auto t = track();
-        return (double) ratio.ratioP.convertFrom0to1 (juce::jlimit (0.0f, 1.0f, (x - t.getX()) / t.getWidth()));
+        juce::PopupMenu m;
+        const int ticked = tickedItem();
+        for (int i = 0; i < (int) std::size (compRatioItems); ++i)
+        {
+            juce::PopupMenu::Item item (itemText (compRatioItems[i]));
+            item.itemID   = i + 1;
+            item.isTicked = i == ticked;
+            m.addItem (item);
+        }
+        return m;
     }
 
-    /** The row the ratio is written in, over the grip. */
-    juce::Rectangle<float> textBox() const
-    {
-        constexpr float textW = 48.0f;
-        const auto b = getLocalBounds().toFloat();
-        const float x = xOfRatio (shownRatio());
-        return juce::Rectangle<float> (textW, textH).withCentre ({ juce::jlimit (b.getX() + textW * 0.5f, b.getRight() - textW * 0.5f, x),
-                                                                   b.getY() + textH * 0.5f });
-    }
-
-    /** CLICK-TO-TYPE on the ratio: taken as typed, 2..10 — one gesture. */
-    void typeRatio (double r)
+    /** A ratio set by the hand — picked: clamped to the range, one gesture, COMP switched in, one undo step. */
+    void setRatio (double r)
     {
         ratio.take();
         ratio.moveTo (r);
         ratio.letGo();
     }
 
-    void openTyping()
+    void pick (int item)
     {
-        typing.open (*this, textBox().toNearestInt(), (float) shownRatio(), theme::orange,
-                     [this] (float r) { typeRatio ((double) r); }, 1, 13.0f);
+        if (item >= 0 && item < (int) std::size (compRatioItems))
+            setRatio (compRatioItems[item]);
     }
 
-    bool isTyping() const { return typing.isOpen(); }
+    void openList()
+    {
+        onfirst::showList (list(), juce::PopupMenu::Options().withTargetComponent (this).withMinimumWidth (getWidth()),
+                           [safe = juce::Component::SafePointer<CompRatioCombo> (this)] (int choice)
+                           {
+                               if (safe != nullptr && choice > 0)
+                                   safe->pick (choice - 1);
+                           });
+    }
 
-    void beginDrag()          { ratio.take(); repaint(); }
-    void dragTo (float x)     { ratio.moveTo (snapRatio (ratioAtX (x), x, [this] (double d) { return xOfRatio (d); })); }
-    void endDrag()            { ratio.letGo(); repaint(); }
+    /** The cell, and in it the number's part and the chevron's. */
+    juce::Rectangle<float> cell() const { return getLocalBounds().toFloat().reduced (0.0f, 1.0f); }
+    juce::Rectangle<int>   chevronArea() const { return getLocalBounds().removeFromRight ((int) chevronW); }
+    juce::Rectangle<int>   numberArea() const { return getLocalBounds().withTrimmedRight ((int) chevronW); }
 
     void paint (juce::Graphics& g) override
     {
-        const auto t = track();
-        const float cy = t.getCentreY();
-        g.setColour (theme::lilac.withAlpha (0.55f));
-        g.fillRoundedRectangle (juce::Rectangle<float> (t.getX(), cy - 1.0f, t.getWidth(), 2.0f), 1.0f);
-        for (const float x : tickXs())   // a tick at every detent — where the grip catches — no numbers: the grip says it
-            g.fillRect (x - 0.5f, cy - 4.0f, 1.0f, 8.0f);
+        const auto c = cell();
+        g.setColour (juce::Colour (0xff0d0d14));
+        g.fillRoundedRectangle (c, theme::radiusSm);
+        g.setColour (hover ? theme::orange : theme::orange.withAlpha (0.45f));
+        g.drawRoundedRectangle (c.reduced (0.5f), theme::radiusSm, 1.0f);
 
-        // The grip, a solid of the hand's orange, its ratio written over it.
-        const auto  r     = shownRatio();
-        const float x     = xOfRatio (r);
-        const auto  hand  = ratio.taken ? theme::orange.brighter (0.25f) : theme::orange;
-        g.setColour (hand);
-        g.fillRoundedRectangle (juce::Rectangle<float> (gripW, gripH).withCentre ({ x, cy }), 2.0f);
-        theme::drawTracked (g, juce::String (r, 1) + ":1", textBox(), theme::displayFont (13.0f), 0.02f, juce::Justification::centred);
+        g.setColour (theme::orange);
+        theme::drawTracked (g, text(), numberArea().toFloat(), theme::displayFont (textHeight), 0.02f, juce::Justification::centred);
+
+        // The chevron that says "a list", as VoicingSelector draws it.
+        juce::Path v;
+        const float cx = (float) chevronArea().getCentreX(), cy = c.getCentreY() - 1.0f;
+        v.startNewSubPath (cx - 3.0f, cy);
+        v.lineTo (cx, cy + 3.0f);
+        v.lineTo (cx + 3.0f, cy);
+        g.strokePath (v, juce::PathStrokeType (1.2f));
     }
 
     void mouseDown (const juce::MouseEvent& e) override
@@ -557,42 +571,38 @@ public:
                 onMenu (e.getScreenPosition());
             return;
         }
-        typingClick = e.position.y < textH;   // a click on the number types it; anywhere else the grip moves
-        grab = xOfRatio (shownRatio()) - e.position.x;   // ...with the hand, from where it was taken
+        openList();
     }
 
-    void mouseDrag (const juce::MouseEvent& e) override
+    void mouseMove (const juce::MouseEvent& e) override
     {
-        if (typingClick)
-            return;
-        if (! ratio.taken && e.getDistanceFromDragStart() > 3)   // a click moves nothing: only a drag takes it
-            beginDrag();
-        if (ratio.taken)
-            dragTo (e.position.x + grab);
+        juce::ignoreUnused (e);
+        setMouseCursor (juce::MouseCursor::PointingHandCursor);
+        setHover (true);
     }
-
-    void mouseUp (const juce::MouseEvent&) override
-    {
-        if (typingClick)
-            openTyping();
-        else
-            endDrag();
-        typingClick = false;
-    }
+    void mouseExit (const juce::MouseEvent&) override { setHover (false); }
 
 private:
-    CompRatio ratio;
-    std::vector<std::unique_ptr<juce::ParameterAttachment>> atts;
-    float grab = 0.0f;
-    bool  typingClick = false;
-    meterrail::GripEditor typing;
+    void setHover (bool h)
+    {
+        if (h != hover)
+        {
+            hover = h;
+            repaint();
+        }
+    }
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (CompRatioSlider)
+    CompRatio ratio;
+    std::unique_ptr<juce::ParameterAttachment> att;
+    bool hover = false;
+
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (CompRatioCombo)
 };
 
-/** COMP'S IN/OUT SQUARE, under the ratio slider (the TRANSFER painter's square, unity and stroke): the compressor's own
-    curve in dB, -48..0 each way — the knee at the threshold, a lilac dot there, the upper segment's slope the ratio.
-    A drag up or down sets the ratio the hand HOLDS, as the slider does, and the slider follows. A right click is
+/** COMP'S IN/OUT SQUARE, under the ratio's combo (the TRANSFER painter's square, unity and stroke): the compressor's own
+    curve in dB, -48..0 each way — the soft knee at the threshold, bare, the upper segment's slope the ratio.
+    A drag up or down steps through the combo's list (compRatioItems) — the ratio whose segment end stands nearest the
+    hand; nothing between them (the owner, 01.11) — and the combo follows. A right click is
     COMP's menu. */
 class CompTransfer final : public juce::Component
 {
@@ -610,16 +620,21 @@ public:
 
     double shownRatio() const { return ratio.ratio(); }
 
-    juce::Rectangle<float> box() const { return scope::TransferView::square (getLocalBounds().toFloat().reduced (1.0f)); }
+    /** Not a square (the owner, 01.11): the output's -48..0 dB stands on the picture's levels exactly — the curve starts
+        at the levels' foot and its knee at the threshold line's height — the input's across the column. */
+    juce::Rectangle<float> box() const { return getLocalBounds().toFloat().reduced (1.0f); }
 
     /** The upper segment's end, where the input reaches 0 dB, taken to `y`: its height says the slope. */
     void beginRatioDrag()   { ratio.take(); }
     void dragRatioTo (float y)
     {
-        const auto   b   = box();
-        const double t   = ratio.thresholdDb();
-        const double out = juce::jlimit (t + 0.05, 0.0, (double) (lowDb * (y - b.getY()) / b.getHeight()));
-        ratio.moveTo (snapRatio (-t / (out - t), y, [this] (double d) { return yOfRatio (d); }));
+        if (ratio.thresholdDb() > -0.5)
+            return;   // a threshold at 0 dB leaves no segment to slope
+        double best = compRatioItems[0];
+        for (const double r : compRatioItems)
+            if (std::abs (yOfRatio (r) - y) < std::abs (yOfRatio (best) - y))
+                best = r;
+        ratio.moveTo (best);
     }
     void endRatioDrag()     { ratio.letGo(); }
 
@@ -649,10 +664,7 @@ public:
             else
                 p.lineTo (at);
         }
-        scope::TransferView::strokeCurve (g, p);
-
-        g.setColour (theme::lilac);
-        g.fillEllipse (juce::Rectangle<float> (6.0f, 6.0f).withCentre ({ xOf (t, b), yOf (t, b) }));
+        scope::TransferView::strokeCurve (g, p);   // no dot at the threshold: it hid the knee (the owner, 01.11)
     }
 
     void mouseDown (const juce::MouseEvent& e) override
@@ -698,12 +710,74 @@ private:
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (CompTransfer)
 };
 
+/** THE SQUEEZE AS A COLUMN (the owner, 01.11), between the picture and the ratio: it falls from the picture's very top
+    to its foot over the squeeze's own 24 dB (CompGraph::grRangeDb), a tick every 6 dB — halfway down is -12 dB, where it
+    turns fully orange; coloured as the squeeze's line —
+    light violet at none, fully orange from -12 dB (CompGraph::grColour), a solid, never a wash. It reads the picture's
+    columns, so it stands still when the picture does. A right click passes through to the block: COMP's menu. */
+class CompGrColumn final : public juce::Component,
+                           private juce::Timer
+{
+public:
+    explicit CompGrColumn (CompGraph& picture) : graph (picture)
+    {
+        setInterceptsMouseClicks (false, false);
+        startTimerHz (30);
+    }
+
+    static constexpr int designWidth = 8;
+
+    float shownDb() const noexcept { return shown; }
+
+    /** Shows `db` of squeeze (<= 0): what its timer does with the picture's newest columns while it is on screen — and a
+        gate's way in, off screen. */
+    void showDb (float db)
+    {
+        if (std::abs (db - shown) > 0.05f)
+        {
+            shown = db;
+            repaint();
+        }
+    }
+
+    void paint (juce::Graphics& g) override
+    {
+        const auto r = getLocalBounds().toFloat();
+        const float scale = (float) CompGraph::grRangeDb;
+        const auto yOf = [&] (double db) { return r.getY() + (float) (-db) / scale * r.getHeight(); };
+
+        g.setColour (juce::Colour (0xff121218));
+        g.fillRoundedRectangle (r, 2.0f);
+        g.setColour (theme::hair);
+        for (double db = -6.0; db > -CompGraph::grRangeDb; db -= 6.0)
+            g.fillRect (r.getX(), yOf (db), r.getWidth(), 1.0f);
+
+        if (const float depth = juce::jlimit (0.0f, scale, -shown); depth > 0.05f)
+        {
+            g.setGradientFill (juce::ColourGradient (CompGraph::grColour (0.0f), 0.0f, yOf (0.0), CompGraph::grColour (-12.0f), 0.0f, yOf (-12.0), false));
+            g.fillRoundedRectangle (r.withBottom (yOf (-depth)), 2.0f);
+        }
+    }
+
+private:
+    void timerCallback() override
+    {
+        if (graph.isShowing())
+            showDb (graph.grRecent (7));   // ~33 ms of columns a frame
+    }
+
+    CompGraph& graph;
+    float shown = 0.0f;
+
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (CompGrColumn)
+};
+
 /** THE BASS'S COMP, A BLOCK OF ITS OWN (the owner, 31.10): after the GATE and before OCTAVE on the panel, as in the
     strip. Inside, left to right (the owner, 01.11): its THRESHOLD (a rail in dB, "dB" over it, its number on the grip —
-    one control with the line on the picture), its PICTURE, its RATIO (a slider over the IN/OUT square) and its BLEND (a
-    rail, 0..100 %, parallel compression) — each control one job. ATTACK, RELEASE and CHARACTER are its menu: the gear,
-    or a right click anywhere on it. Our own DSP, so violet; its arrow in the strip switches it, and standing by it dims
-    in place, still in reach. */
+    one control with the line on the picture), its PICTURE, its RATIO (a combo over the IN/OUT square) and its BLEND (a
+    rail, 0..100 %, parallel compression) — each control one job. ATTACK, RELEASE and CHARACTER are its menu: a right
+    click anywhere on it. Our own DSP, so violet; its arrow in the strip switches it, and standing by it dims in place,
+    still in reach. */
 class CompBlock final : public BlockFrame
 {
 public:
@@ -714,15 +788,16 @@ public:
                          params::compThresholdMin, params::compThresholdMax, false),
           rail (*processor.apvts.getParameter (params::compAmount), *processor.apvts.getParameter (params::compOn), 0.0f, 1.0f, false),
           graph (processor),
-          ratioSlider (processor),
+          grColumn (graph),
+          ratioCombo (processor),
           transfer (processor)
     {
         shieldsWhenOff = false;
-        bass::asBassRail (rail);   // the fader's amount in percent, a field too
-        bass::asBassRail (thresholdRail);
-        bass::hint (thresholdRail, "THRESHOLD: the level COMP starts to squeeze at, in dB");
-        bass::hint (ratioSlider,   "RATIO: how hard COMP squeezes above the threshold, 2:1 to 10:1");
-        bass::hint (rail,          "BLEND: the compressed sound mixed with the dry one, 0-100 %");
+        bass::asBassAmount (rail, "BLEND");   // a fader, its amount in percent under it, a field too
+        bass::asBassRail (thresholdRail);      // one control with the graph's line: the plain rail's look
+        bass::hint (thresholdRail, "THRESHOLD");
+        bass::hint (ratioCombo,    "RATIO");
+        bass::hint (rail,          "BLEND: compressed with dry");
         thresholdRail.textForValue = [] (float db) { return juce::String (juce::roundToInt (db)); };   // dB, as "dB" over it says
         thresholdRail.typedScale   = 1.0f;
         const auto undoStep = [&processor] (bool begin) { if (begin) processor.history.beginGesture(); else processor.history.endGesture(); };
@@ -734,10 +809,10 @@ public:
         unit.setBorderSize ({});
         unit.setInterceptsMouseClicks (false, false);   // a right click there is the block's
         for (auto* c : { (juce::Component*) &unit, (juce::Component*) &thresholdRail, (juce::Component*) &graph,
-                         (juce::Component*) &ratioSlider, (juce::Component*) &transfer, (juce::Component*) &rail })
+                         (juce::Component*) &grColumn, (juce::Component*) &ratioCombo, (juce::Component*) &transfer, (juce::Component*) &rail })
             addAndMakeVisible (*c);
         const auto menu = [this] (juce::Point<int>) { bass::showCompMenu (state, this); };
-        thresholdRail.onMenu = rail.onMenu = graph.onMenu = ratioSlider.onMenu = transfer.onMenu = menu;
+        thresholdRail.onMenu = rail.onMenu = graph.onMenu = ratioCombo.onMenu = transfer.onMenu = menu;
         attachPower (*processor.apvts.getParameter (params::compOn));
         dimWhenIdle (graph, *processor.apvts.getParameter (params::compAmount));   // at BLEND 0 the picture stands still, dimmed
     }
@@ -749,8 +824,9 @@ public:
     }
 
     CompGraph&       picture() noexcept   { return graph; }
+    CompGrColumn&    grBar() noexcept     { return grColumn; }
     CompTransfer&    square() noexcept    { return transfer; }
-    CompRatioSlider& ratio() noexcept     { return ratioSlider; }
+    CompRatioCombo&  ratio() noexcept     { return ratioCombo; }
     GuardRail&       fader() noexcept     { return rail; }            // BLEND
     GuardRail&       threshold() noexcept { return thresholdRail; }
     juce::Label&     thresholdUnit() noexcept { return unit; }
@@ -760,11 +836,19 @@ protected:
     {
         auto left = r.removeFromLeft (GuardRail::designWidth);
         r.removeFromLeft (gap);
-        rail.setBounds (r.removeFromRight (GuardRail::designWidth));
+        rail.setBounds (r.removeFromRight (rail.columnWidth));
         r.removeFromRight (gap);
         auto column = r.removeFromRight (squareMax);
         r.removeFromRight (gap);
+        auto bar = r.removeFromRight (CompGrColumn::designWidth);
+        r.removeFromRight (barGap);
         graph.setBounds (r);
+
+        // The squeeze's column beside the picture, from the picture's top to its levels' foot.
+        const auto pl = graph.plot();
+        bar.setY (graph.getY() + juce::roundToInt (pl.getY()));
+        bar.setHeight (juce::roundToInt (graph.levels().getBottom() - pl.getY()));
+        grColumn.setBounds (bar);
 
         // The threshold rail, its hand's travel the picture's levels exactly (CompGraph::railInset): it starts where the
         // levels do less the inset, and ends at the picture's foot; "dB" over it, beside the GR strip.
@@ -772,21 +856,23 @@ protected:
         unit.setBounds (left.removeFromTop (top));
         thresholdRail.setBounds (left);
 
-        ratioSlider.setBounds (column.removeFromTop (sliderH));
-        column.removeFromTop (4);
-        const int side = juce::jmin (column.getHeight(), column.getWidth());
-        transfer.setBounds (column.removeFromTop (side).withSizeKeepingCentre (side, side));
+        // The combo over the GR strip's height; the IN/OUT box under it on the levels' own height (CompTransfer::box).
+        const int levelsTop = graph.getY() + juce::roundToInt (graph.levels().getY());
+        const int levelsFoot = graph.getY() + juce::roundToInt (graph.levels().getBottom());
+        ratioCombo.setBounds (column.withHeight (juce::jmin (comboH, levelsTop - column.getY() - 4)));
+        transfer.setBounds (column.getX(), levelsTop - 1, column.getWidth(), levelsFoot - levelsTop + 2);
     }
 
 private:
-    static constexpr int gap = 10, squareMax = 118, sliderH = 40;
+    static constexpr int gap = 10, barGap = 6, squareMax = 70, comboH = 26;
 
     juce::AudioProcessorValueTreeState& state;
     juce::Label     unit;
     GuardRail       thresholdRail;
     GuardRail       rail;
     CompGraph       graph;
-    CompRatioSlider ratioSlider;
+    CompGrColumn    grColumn;
+    CompRatioCombo  ratioCombo;
     CompTransfer    transfer;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (CompBlock)

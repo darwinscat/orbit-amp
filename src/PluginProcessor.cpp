@@ -167,17 +167,16 @@ AmpProcessor::AmpProcessor (const Product& product)
                  raw (params::ampBlend), raw (params::ampBlendHz), raw (params::ampBlendInvert), raw (params::diMix),
                  raw (params::bassHpf), raw (params::bassHpfHz4), raw (params::bassHpfHz5),
                  raw (params::bassLpf), raw (params::bassLpfHzFingers), raw (params::bassLpfHzSlap),
-                 raw (params::octaveAmount), raw (params::octaveSub2), raw (params::octaveToneHz), raw (params::octaveSubHpHz),
-                 raw (params::octaveGateDb),
+                 raw (params::octaveAmount), raw (params::octaveToneHz),
                  raw (params::filterAmount), raw (params::filterMode), raw (params::filterDirection), raw (params::filterResonance),
-                 raw (params::filterRange), raw (params::filterKeepLows), raw (params::filterKeepHz), raw (params::filterAttackMs),
+                 raw (params::filterRange), raw (params::filterKeepLows), raw (params::filterKeepHz),
                  raw (params::filterReleaseMs),
-                 raw (params::chorusAmount), raw (params::chorusRateHz), raw (params::chorusCrossoverHz), raw (params::chorusCentreMs) };
+                 raw (params::chorusAmount), raw (params::chorusRateHz), raw (params::chorusCrossoverHz) };
         bass.hpfOn         = raw (params::bassHpfOn);
         bass.lpfOn         = raw (params::bassLpfOn);
         bass.compRatio     = raw (params::compRatio);
         bass.compThreshold = raw (params::compThreshold);
-        jassert (bass.compAmount != nullptr && bass.lpfHzSlap != nullptr && bass.chorusCentreMs != nullptr && bass.compThreshold != nullptr);
+        jassert (bass.compAmount != nullptr && bass.lpfHzSlap != nullptr && bass.chorusCrossoverHz != nullptr && bass.compThreshold != nullptr);
     }
 
     gateThresholdParam = apvts.getRawParameterValue (params::gateThreshold);
@@ -1358,10 +1357,11 @@ void AmpProcessor::tellOctave() noexcept
     // The menu is the stage's current knobs — what it was last told, the law's own fields with them — and the menu's
     // fields from their parameters (the family's contract: paramsForAmount's menu is the stage's current params).
     auto menu = octaveToldValid ? octaveTold : felitronics::octave::OctaverParams {};
-    menu.sub2Top = bass.octaveSub2->load() > 0.5f ? params::octaveSub2Top : 0.0f;
+    menu.sub2Top = 0.0f;
     menu.toneHz  = bass.octaveToneHz->load();
-    menu.subHpHz = bass.octaveSubHpHz->load();
-    menu.gateDb  = bass.octaveGateDb->load();
+    menu.subHpHz = params::octaveSubHpHz;
+    menu.gateDb  = linkWorks (params::rowGate) && gateThresholdParam != nullptr
+                     ? juce::jlimit (-90.0f, -20.0f, gateThresholdParam->load()) : params::octaveGateIdleDb;
     const float amount = linkWorks (params::rowOctave) ? bass.octave->load() : 0.0f;
     octaveLive = amount > 0.0f;   // at work: its picture written (runOctave)
     octaveWorks.store (octaveLive, std::memory_order_relaxed);
@@ -1380,7 +1380,7 @@ felitronics::envfilter::EnvelopeFilterParams AmpProcessor::filterKnobsNow (felit
     if (bass.filter == nullptr)
         return menu;
     const int range = juce::jlimit (0, 2, juce::roundToInt (bass.filterRange->load()));
-    menu.attackMs   = bass.filterAttackMs->load();
+    menu.attackMs   = params::filterAttackMs;
     menu.releaseMs  = bass.filterReleaseMs->load();
     menu.sweepLoHz  = params::filterRangeHz[range][0];
     menu.sweepHiHz  = params::filterRangeHz[range][1];
@@ -1413,7 +1413,7 @@ void AmpProcessor::tellChorus() noexcept
     auto menu = chorusToldValid ? chorusTold : chorus.params();
     menu.rateHz      = bass.chorusRateHz->load();
     menu.crossoverHz = bass.chorusCrossoverHz->load();
-    menu.delayMs     = bass.chorusCentreMs->load();
+    menu.delayMs     = params::chorusCentreMs;
     const float amount = linkWorks (params::rowChorus) ? bass.chorus->load() : 0.0f;
     chorusLive = amount > 0.0f;   // at work: its picture written (runChorus)
     const auto  p = felitronics::chorus::paramsForAmount (amount, menu);

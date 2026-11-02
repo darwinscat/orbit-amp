@@ -5,6 +5,7 @@
 
 #include "../Parameters.h"
 #include "BlockFrame.h"
+#include "GuardRail.h"
 #include "VoicingSelector.h"
 #include "ZoneSwitch.h"
 
@@ -63,12 +64,10 @@ private:
 
     AmpProcessor& amp;
 
-    /** OrbitBass's own row (ui/BassControls.h): its cuts' words in the places of the cabinet's own HPF and
-        LPF — which the bass leaves off, its cuts being a stage after DI/CAB — and DI/CAB's knob at the
-        picture's edge. On the bass's chain alone. */
+    /** OrbitBass's own (ui/BassControls.h): DI/CAB's rail at the block's right edge — the cabinet's own HPF and LPF
+        left off, the bass's cuts being a stage after DI/CAB. On the bass's chain alone. */
     struct BassRow;
     std::unique_ptr<BassRow> bassRow;
-    static constexpr int bassDiW = 64;
 
     VoicingSelector ir;
     felitronics::appkit::IrWaveView wave;
@@ -76,12 +75,15 @@ private:
 public:
     juce::Component& waveView() noexcept { return wave; }
 
-    /** OrbitBass: a right click on the waveform opens the block's menu (its gear's) INSTEAD of the trim menu — one door,
+    /** OrbitBass: a right click on the waveform opens the block's menu (setBlockMenu) INSTEAD of the trim menu — one door,
         not two at once (a listener beside the picture's own handler opened both). The guitar's keeps its trim menu. */
-    void pictureMenuOpensGear() { wave.onMenuRequested = [this] { if (onGear != nullptr) onGear(); }; }
+    void pictureMenuIsBlockMenu() { wave.onMenuRequested = [this] { if (onBlockMenu != nullptr) onBlockMenu(); }; }
 
-    /** The bass's cabinet's width that leaves `waveWidth` to its waveform: the frame's insets and DI/CAB's column. */
-    static int bassWidthForWave (int waveWidth) noexcept { return waveWidth + bassDiW + 4 + 2 * contentInsetX(); }
+    /** The bass's cabinet's width that leaves `waveWidth` to its waveform: the frame's insets and DI/CAB's fader. */
+    static int bassWidthForWave (int waveWidth) noexcept { return waveWidth + fader::columnW + gap + 2 * contentInsetX(); }
+
+    /** OrbitBass's DI/CAB rail, or none on the guitar's (a gate reads it). */
+    GuardRail* diRail() noexcept;
 
 private:
 

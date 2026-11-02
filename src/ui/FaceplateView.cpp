@@ -10,7 +10,6 @@
 #include "CompBlock.h"
 #include "FilterBlock.h"
 #include "OctaveScope.h"
-#include "SpaceBlocks.h"
 
 namespace orbitamp
 {
@@ -68,11 +67,18 @@ FaceplateView::FaceplateView (AmpProcessor& processor)
         for (int k = 0; k <= 10; ++k)
             octave->marks.push_back ({ (float) k * 0.1f, k % 5 == 0 });
         octave->numbered = false;
-        bass::asBassRail (octave->valueRail());
-        bass::hint (octave->valueRail(), "OCTAVE: the octave below mixed in under your note, 0-100 %");
+        bass::asBassAmount (octave->valueRail(), "MIX");
+        bass::hint (octave->valueRail(), "OCTAVE: sub with dry");
         octave->valueRail().onGesture = [&processor] (bool begin) { if (begin) processor.history.beginGesture(); else processor.history.endGesture(); };
         octave->onMenu = [&state, raw = octave.get()] (juce::Point<int>) { bass::showOctaveMenu (state, raw); };
         octave->setPicture (std::make_unique<OctaveScope> (processor));   // the note and its sub, right of the rail
+        // TONE, the sub's low pass, a fader of its own at the block's right (the owner, 01.11), 50..500 Hz laid out as a
+        // frequency is heard, its number under it in Hz.
+        auto& tone = octave->addSideRail (*state.getParameter (params::octaveToneHz), 50.0f, 500.0f);
+        bass::asBassFader (tone, "TONE", [] (float hz) { return juce::String (juce::roundToInt (hz)) + " Hz"; });
+        tone.logScale = true;
+        bass::hint (tone, "TONE");
+        tone.onGesture = [&processor] (bool begin) { if (begin) processor.history.beginGesture(); else processor.history.endGesture(); };
         octave->dimWhenIdle (*octave->pictureShown(), *state.getParameter (params::octaveAmount));   // at 0, still and dimmed
         addAndMakeVisible (*octave);
     }
@@ -91,17 +97,7 @@ FaceplateView::FaceplateView (AmpProcessor& processor)
         addAndMakeVisible (*chorus);
     }
 
-    // The bass's DELAY and REVERB, compact: their MIX rail and their picture, the rest in their windows.
-    if (processor.product().chain == Chain::bass)
-    {
-        spaceDelay  = std::make_unique<SpaceBlock> (processor, SpacePicture::Which::delay);
-        spaceReverb = std::make_unique<SpaceBlock> (processor, SpacePicture::Which::reverb);
-        for (auto* b : { spaceDelay.get(), spaceReverb.get() })
-        {
-            b->setSwitchShown (false);
-            addChildComponent (*b);
-        }
-    }
+    // The bass's DELAY and REVERB are the guitar's own blocks (the owner, 01.11), in the cabinet's row (layOutBassRows).
 
     addAndMakeVisible (gate);
     addAndMakeVisible (limit);
@@ -121,24 +117,28 @@ FaceplateView::FaceplateView (AmpProcessor& processor)
     limit.labelDecimals = 1;
     limit.railOnLeft    = false;
 
-    // ORBITBASS: every block's GEAR at the top right of its frame, and a right click on it, open its MENU — one place per
-    // block, no settings windows (the owner, 01.11) — all but the guards: GATE and LIMIT keep their full scales and their
-    // own menus (the owner, 31.10).
+    // Their numbers in their lamps, typed there (the owner, 01.11): the gate's in whole decibels, the ceiling's to a tenth.
+    gate.setNumberDecimals (0);
+    limit.setNumberDecimals (1);
+
+    // ORBITBASS: a right click anywhere on a block opens its MENU — one place per block, no settings windows, no gear on
+    // any frame (the owner, 01.11) — all but the guards: GATE and LIMIT keep their full scales and their own menus (the
+    // owner, 31.10).
     if (processor.product().chain == Chain::bass)
     {
         bassRows = true;   // three rows by the signal's way
-        bass::hint (gate.valueRail(),  "GATE: below this level the gate closes, -80 to -30 dB; on the bottom stop it is OFF");
-        bass::hint (limit.valueRail(), "LIMIT: the ceiling the output never goes over, -3 to -0.1 dB");
-        const auto gear = [this] (BlockFrame* b, const char* name) { if (b != nullptr) b->enableGear ([this, name] { openMenu (name); }); };
-        gear (comp.get(), "COMP");
-        gear (octave.get(), "OCTAVE");
-        gear (filter.get(), "ENVELOPE");
-        gear (&preamp, "AMP");
-        gear (chorus.get(), "CHORUS");
-        gear (spaceDelay.get(), "DELAY");
-        gear (spaceReverb.get(), "REVERB");
-        gear (&cabinet, "CAB IR");
-        cabinet.pictureMenuOpensGear();   // its waveform takes its own clicks: its right click is the block's menu
+        bass::hint (gate.valueRail(),  "GATE: threshold");
+        bass::hint (limit.valueRail(), "LIMIT: ceiling");
+        const auto menu = [this] (BlockFrame* b, const char* name) { if (b != nullptr) b->setBlockMenu ([this, name] { openMenu (name); }); };
+        menu (comp.get(), "COMP");
+        menu (octave.get(), "OCTAVE");
+        menu (filter.get(), "ENVELOPE");
+        menu (&preamp, "AMP");
+        menu (chorus.get(), "CHORUS");
+        menu (&delay, "DELAY");
+        menu (&reverb, "REVERB");
+        menu (&cabinet, "CAB IR");
+        cabinet.pictureMenuIsBlockMenu();   // its waveform takes its own clicks: its right click is the block's menu
     }
 }
 
@@ -160,7 +160,7 @@ void FaceplateView::openMenu (const juce::String& block)
     lastMenu = block;
     juce::Component* at = block == "COMP" ? (juce::Component*) comp.get() : block == "OCTAVE" ? (juce::Component*) octave.get()
                         : block == "ENVELOPE" ? (juce::Component*) filter.get() : block == "CHORUS" ? (juce::Component*) chorus.get()
-                        : block == "DELAY" ? (juce::Component*) spaceDelay.get() : block == "REVERB" ? (juce::Component*) spaceReverb.get()
+                        : block == "DELAY" ? (juce::Component*) &delay : block == "REVERB" ? (juce::Component*) &reverb
                         : block == "AMP" ? (juce::Component*) &preamp : block == "CAB IR" ? (juce::Component*) &cabinet : nullptr;
     if (at != nullptr && at->isShowing())
         bass::show (bass::blockMenu (owner.apvts, block), at);
@@ -193,8 +193,8 @@ void FaceplateView::layOutBassRows()
     BlockFrame* const octaveB = in (params::rowOctave) ? (BlockFrame*) octave.get() : nullptr;
     BlockFrame* const filterB = in (params::rowFilter) ? (BlockFrame*) filter.get() : nullptr;
     BlockFrame* const chorusB = in (params::rowChorus) ? (BlockFrame*) chorus.get() : nullptr;
-    BlockFrame* const delayB  = in (params::rowDelay)  ? (BlockFrame*) spaceDelay.get() : nullptr;
-    BlockFrame* const reverbB = in (params::rowReverb) ? (BlockFrame*) spaceReverb.get() : nullptr;
+    BlockFrame* const delayB  = in (params::rowDelay)  ? (BlockFrame*) &delay : nullptr;
+    BlockFrame* const reverbB = in (params::rowReverb) ? (BlockFrame*) &reverb : nullptr;
 
     for (auto* b : { (juce::Component*) &gate, (juce::Component*) &limit, (juce::Component*) comp.get() })
         if (b != nullptr)
@@ -202,8 +202,8 @@ void FaceplateView::layOutBassRows()
     if (octave != nullptr)      octave->setVisible (octaveB != nullptr);
     if (filter != nullptr)      filter->setVisible (filterB != nullptr);
     if (chorus != nullptr)      chorus->setVisible (chorusB != nullptr);
-    if (spaceDelay != nullptr)  spaceDelay->setVisible (delayB != nullptr);
-    if (spaceReverb != nullptr) spaceReverb->setVisible (reverbB != nullptr);
+    delay.setVisible (delayB != nullptr);
+    reverb.setVisible (reverbB != nullptr);
 
     // Row 1, before the amp: GATE, COMP, OCTAVE, ENVELOPE. A wider window goes to the pictures: a third of it to COMP,
     // the rest to OCTAVE and ENVELOPE alike. With one of them out of the strip the other takes their share; with both
@@ -244,21 +244,14 @@ void FaceplateView::layOutBassRows()
     preamp.setBounds (amp);
 
     // Row 3, after the amp, in the signal's order: CHORUS, DELAY, REVERB, the cabinet (what is left), LIMIT at the end.
-    // A wider window: a quarter of what it adds to CHORUS, a sixth to DELAY and to REVERB, the rest to the cabinet.
-    delay.setVisible (false);
-    reverb.setVisible (false);
+    // Every effect there is ALWAYS fxRowWidth wide — the guitar's DELAY and REVERB fit that — and the cabinet takes the
+    // rest, so adding or taking one away moves nothing but the cabinet (the owner, 01.11).
     limit.setBounds (back.removeFromRight (GuardBlock::designWidth));
     back.removeFromRight (colGap);
-    const int spare = juce::jmax (0, back.getWidth() - 880);
-    if (chorusB != nullptr)
-    {
-        chorusB->setBounds (back.removeFromLeft (chorusWidth + spare / 4));
-        back.removeFromLeft (colGap);
-    }
-    for (auto* b : { delayB, reverbB })
+    for (auto* b : { chorusB, delayB, reverbB })
         if (b != nullptr)
         {
-            b->setBounds (back.removeFromLeft (spaceWidth + spare / 6));
+            b->setBounds (back.removeFromLeft (fxRowWidth));
             back.removeFromLeft (colGap);
         }
     cabinet.setVisible (shownFlags[(size_t) Block::cabinet]);
@@ -358,7 +351,7 @@ void FaceplateView::resized()
 
         if (chorus != nullptr)
         {
-            chorus->setBounds (row2.removeFromLeft (chorusWidth));
+            chorus->setBounds (row2.removeFromLeft (fxRowWidth));
             row2.removeFromLeft (colGap);
         }
     }

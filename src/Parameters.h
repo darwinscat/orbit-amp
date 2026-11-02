@@ -456,11 +456,11 @@ inline const juce::StringArray compCharacters { "Smooth", "Punchy" };
 
 /** COMP, EACH CONTROL ONE JOB (the owner, 31.10): `comp` is its BLEND — parallel compression, 0 none at all .. 1 all
     of the signal compressed (the strip's arrow its STANDBY); its THRESHOLD in dB and its RATIO are their own (the
-    picture's line, the ratio slider over the square); make-up automatic. Its menu: attack, release, character. */
+    picture's line, the ratio's combo over the square); make-up automatic. Its menu: attack, release, character. */
 inline constexpr const char* compThreshold = "comp_threshold";
 inline constexpr const char* compRatio     = "comp_ratio";
 inline constexpr float compThresholdMin = -48.0f, compThresholdMax = 0.0f, compThresholdDefault = -24.0f;
-inline constexpr float compRatioMin = 2.0f, compRatioMax = 10.0f;
+inline constexpr float compRatioMin = 1.5f, compRatioMax = 10.0f;
 
 /** THE BASS'S THREE EFFECTS (felitronics-core's octave, envfilter and chorus), each a block in the strip — its
     STANDBY/ON — and ONE slider, its amount 0..1 through the module's own law (<Module>Law.h, paramsForAmount): 0 is
@@ -470,11 +470,10 @@ inline constexpr float compRatioMin = 2.0f, compRatioMax = 10.0f;
     pass), SUB HP (its high pass, 10..80 Hz) and the tracking GATE. */
 inline constexpr const char* octaveOn      = "octave_on";
 inline constexpr const char* octaveAmount  = "octave";
-inline constexpr const char* octaveSub2    = "octave_sub2";
 inline constexpr const char* octaveToneHz  = "octave_tone_hz";
-inline constexpr const char* octaveSubHpHz = "octave_sub_hp_hz";
-inline constexpr const char* octaveGateDb  = "octave_gate_db";
-inline constexpr float octaveSub2Top = 1.0f;   // the -2's level at the slider's top, where the menu switches it in
+/** What OCTAVE no longer asks the player (the owner, 01.11): no -2; the sub's own high pass left to the chain's one HPF
+    (core's lowest); the tracking gate set by itself — the GATE's threshold while the GATE works, else core's default. */
+inline constexpr float octaveSubHpHz = 10.0f, octaveGateIdleDb = -50.0f;
 
 /** FILTER, after OCTAVE: the envelope filter, its detector keyed from the gated input BEFORE COMP — it follows the
     string. The menu: LP/BP, up/down, RESONANCE, RANGE, KEEP LOWS and its corner, the follower's attack and release. */
@@ -486,7 +485,10 @@ inline constexpr const char* filterResonance = "filter_resonance";
 inline constexpr const char* filterRange     = "filter_range";
 inline constexpr const char* filterKeepLows  = "filter_keep_lows";
 inline constexpr const char* filterKeepHz    = "filter_keep_hz";
-inline constexpr const char* filterAttackMs  = "filter_attack_ms";
+/** ENVELOPE's follower attacks in a fixed 3 ms (the owner, 01.11 — no bass envelope pedal asks it); its CLEAN LOWS, one
+    list: off, or the corner under which the bass stays dry. */
+inline constexpr float filterAttackMs = 3.0f;
+inline constexpr float filterKeepItems[] { 80.0f, 120.0f, 150.0f, 200.0f, 300.0f };
 inline constexpr const char* filterReleaseMs = "filter_release_ms";
 inline const juce::StringArray filterModes      { "LP", "BP" };
 inline const juce::StringArray filterDirections { "Up", "Down" };
@@ -513,7 +515,10 @@ inline constexpr double bassWetCutHz = 300.0;
 inline constexpr const char* chorusAmount      = "chorus";
 inline constexpr const char* chorusRateHz      = "chorus_rate_hz";
 inline constexpr const char* chorusCrossoverHz = "chorus_crossover_hz";
-inline constexpr const char* chorusCentreMs    = "chorus_centre_ms";
+/** CHORUS's choices (the owner, 01.11): the head's centre fixed (8 ms), the RATE a rail, the MONO crossover a list —
+    nothing under 200 Hz: lower, the chorus smears the mix's lows. */
+inline constexpr float chorusCentreMs = 8.0f;
+inline constexpr float chorusCrossoverItems[] { 200.0f, 250.0f, 300.0f, 400.0f, 500.0f };
 
 /** BLEND, in the AMP: the clean input below a frequency, the capture above it (RigPlayer's crossover
     blend) — 0 is the capture alone. The frequency and the polarity in its menu. */

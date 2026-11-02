@@ -22,7 +22,7 @@ namespace orbitamp::core
 /** OrbitBass's COMP: felitronics-core's compressor, EACH CONTROL ONE JOB (the owner, 31.10).
 
       - THE THRESHOLD, dB (-48..0), its own: the line on the picture is where the detector works, in either character.
-      - THE RATIO, 2:1..10:1, its own.
+      - THE RATIO, 1.5:1..10:1, its own.
       - THE KNOB IS BLEND — parallel compression: 0 is no compressor at all (once glided there nothing is computed and
         the signal passes bit for bit), 1 all of the signal compressed, between the compressed signal over the clean one,
         sample-aligned (no lookahead, no latency).
@@ -32,7 +32,7 @@ namespace orbitamp::core
         there keeps its level at any BLEND, at every setting; a quieter one comes up a little, a louder one goes down a
         little. It glides as the squeeze does — up at the attack's pace, down at the release's.
       - Every move GLIDES: the blend over 20 ms for its whole travel, the threshold over 20 ms for its 48 dB, the ratio
-        over 20 ms for 2:1..10:1 — a drag, a recall or automation is never a step.
+        over 20 ms for 1.5:1..10:1 — a drag, a recall or automation is never a step.
       - CHARACTER chooses the detector: SMOOTH hears the level's RMS over 10 ms, PUNCHY its peaks. (The old law raised
         PUNCHY's threshold 4 dB so the two played about as loud; with a threshold of its own the line says where it works,
         and PUNCHY at the same line squeezes harder — the player sets the line; the make-up reads the reference note as
@@ -81,7 +81,7 @@ public:
         the knob is BLEND — parallel compression, 0 none at all, 1 all of the signal compressed. Make-up is automatic,
         from the threshold and the ratio. */
     static constexpr double thresholdMinDb = -48.0, thresholdMaxDb = 0.0, defaultThresholdDb = -24.0;
-    static constexpr double ratioMin = 2.0, ratioMax = 10.0, defaultRatio = 4.0;
+    static constexpr double ratioMin = 1.5, ratioMax = 10.0, defaultRatio = 4.0;
 
     /** THE MAKE-UP'S REFERENCE: a steady note at this RMS, dBFS, comes out at its own level at any BLEND. */
     static constexpr double referenceDb = -18.0;
@@ -97,7 +97,8 @@ public:
         A LIMIT, KNOWN: the table is calibrated at the defaults (-24 dB, 4:1). How far a detector's squeeze lets go between
         peaks scales with how deep it squeezes, so away from them the reference note drifts — at the deep corner (-48 dB,
         10:1) PUNCHY with a fast release comes up about 1 dB at the full BLEND, half that at half; under the knee (-12 dB,
-        2:1) there is no make-up and nothing to drift. The gate prints the corners and holds them within 1.2 dB. */
+        2:1) there is no make-up and nothing to drift; at the gentlest ratio, 1.5:1, it stays within 0.4 dB at every
+        threshold. The gate prints the corners and holds them within 1.2 dB. */
     static constexpr double readsDb[2][3][2] = { { { -0.07, 0.11 }, { 0.01, 0.15 }, { 0.12, 0.17 } },
                                                  { {  0.29, 1.74 }, { 1.05, 2.11 }, { 1.88, 2.47 } } };
 
@@ -136,7 +137,7 @@ public:
         block     = std::max (1, maxBlock);
         cadence   = std::max (1, (int) std::lround (fs * cadenceMs * 0.001));
         glideStep = 1.0 / (amountGlideMs * 0.001 * fs);
-        ratioStep = (ratioMax - ratioMin) * (double) cadence * glideStep;                      // 2:1 to 10:1 in 20 ms
+        ratioStep = (ratioMax - ratioMin) * (double) cadence * glideStep;                      // 1.5:1 to 10:1 in 20 ms
         thrStep   = (thresholdMaxDb - thresholdMinDb) * (double) cadence * glideStep;          // the whole travel in 20 ms
         warmSamples = (3.0 * attackMedMs + warmMs) * 0.001 * fs;   // the attack's own, from the first apply
         warmFade    = warmFadeMs * 0.001 * fs;

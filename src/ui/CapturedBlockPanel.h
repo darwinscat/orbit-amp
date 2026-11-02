@@ -47,12 +47,24 @@ class AmpProcessor;
 
     A control slot with nothing behind it is hidden. A knob doing nothing is worse than a gap. */
 class CapturedBlockPanel final : public BlockFrame,
+                                 public juce::TooltipClient,
                                  private juce::Timer
 {
 public:
+    /** Over a loudness warning cut to "RAW" on the border, the whole of it (the owner, 01.11). */
+    juce::String getTooltip() override
+    {
+        return rawBox.contains (getMouseXYRelative().toFloat()) ? juce::String ("No loudness tag: plays raw") : juce::String();
+    }
+
     /** OrbitBass's knob beside the GAIN dial, BLEND, takes a column this wide — the AMP block, and the whole face,
         that much wider within the AMP's row: the picture well keeps the room its row of hands needs. */
     static constexpr int bassSideW = 66;
+
+private:
+    mutable juce::Rectangle<float> rawBox;   // where "RAW" stands on the border, or empty
+
+public:
 
     /** Its console — a gate asks whose cuts its switches are (EqSection::cutsAreBass). */
     const EqSection& console() const noexcept { return eq; }

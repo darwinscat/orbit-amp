@@ -47,6 +47,12 @@ public:
         rail.onMenu  = [this] (juce::Point<int> p) { openMenu (p); };
         lamp.onClick = [this] (juce::Point<int> p) { openMenu (p); };
 
+        // THE GUARD'S RAIL IN THE FADER'S LOOK, lilac (the owner, 01.11); its number not on the grip but in the lamp under
+        // it, typed there (setNumberDecimals) — the rail's own field, its one undo step.
+        rail.setFaderLook ({}, theme::lilac, false);
+        lamp.readout       = [this] { return rail.numberText(); };
+        lamp.onNumberClick = [this] { if (rail.typeDecimals >= 0) rail.openTypingIn (lamp, lamp.fieldBox()); };
+
         attachPower (onParam);
     }
 
@@ -54,6 +60,14 @@ public:
 
     /** The guard's menu, at the mouse. */
     std::function<void (juce::Point<int> screenPos)> onMenu;
+
+    /** How the guard's number is written in its lamp and typed there: whole decibels (the gate's "-60"), one decimal (the
+        limiter's "-1.0"). Unset, the number is a reading and a click on it the menu. */
+    void setNumberDecimals (int decimals)
+    {
+        rail.typeDecimals = decimals;
+        rail.textForValue = [decimals] (float v) { return decimals > 0 ? juce::String (v, decimals) : juce::String (juce::roundToInt (v)); };
+    }
 
     /** The scale's marks, the labelled ones numbered — unsigned, the way the columns write theirs. */
     struct Mark { float value; bool labelled; };
@@ -80,6 +94,20 @@ public:
 
     juce::Component* pictureShown() const noexcept { return picture.get(); }
 
+    /** A SECOND RAIL at the block's other edge — OCTAVE's TONE (the owner, 01.11): a rail with no switch of its own, one
+        job, its name and its number its own (a fader's look: GuardRail::setFaderLook); a click on it is the block's menu,
+        as everywhere on the block. */
+    GuardRail& addSideRail (juce::RangedAudioParameter& param, float footValue, float headValue)
+    {
+        sideRail = std::make_unique<GuardRail> (param, footValue, headValue);
+        sideRail->onMenu = [this] (juce::Point<int> p) { openMenu (p); };
+        addAndMakeVisible (*sideRail);
+        resized();
+        return *sideRail;
+    }
+
+    GuardRail* sideRailShown() noexcept { return sideRail.get(); }
+
     /** Whether the lamp stands at the block's foot — a guard's always; an effect whose picture shows it at work
         (OCTAVE's) goes without, its rail and picture down to the foot, as the bass's other blocks stand. */
     void setLampShown (bool shown)
@@ -99,12 +127,8 @@ public:
     float numeralHeight() const noexcept { return numbered ? scaleFontHeight : 0.0f; }
     static constexpr float scaleFontHeight = 9.5f;
 
-    /** Its name on the border, centred (the frame's own is not shown): the box, and the width the gear must clear. */
+    /** Its name on the border, centred (the frame's own is not shown): the box. */
     juce::Rectangle<int> titleBounds() const override { return nameBox; }
-    int borderTitleWidth() const override
-    {
-        return juce::roundToInt (theme::trackedWidth (name, theme::displayFont (titleHeight), 0.15f)) + 1;
-    }
 
     /** Its rail — for a face that gives it a look of its own (bass::asBassRail). */
     GuardRail& valueRail() noexcept { return rail; }
@@ -115,9 +139,7 @@ protected:
         // The name, centred on the top line; the frame opens the line under it.
         const auto box = boxArea();
         const int  w   = juce::roundToInt (theme::trackedWidth (name, theme::displayFont (titleHeight), 0.15f)) + 1;
-        // ...left of the gear where the block wears one (OrbitBass), so the two do not meet.
-        nameBox        = juce::Rectangle<int> (w, (int) titleHeight + 6)
-                             .withCentre ({ box.getCentreX() - (hasGear() && ! gearInside() ? gearSize / 2 + 2 : 0), box.getY() });
+        nameBox        = juce::Rectangle<int> (w, (int) titleHeight + 6).withCentre ({ box.getCentreX(), box.getY() });
         borderSlotUsed = nameBox;
 
         // The lamp across the block's whole width at its foot (Oleh, 24.10); above it the rail at the
@@ -128,8 +150,16 @@ protected:
             r.removeFromBottom (lampGap);
         }
 
-        auto col = railOnLeft ? r.removeFromLeft (GuardRail::designWidth) : r.removeFromRight (GuardRail::designWidth);
+        auto col = railOnLeft ? r.removeFromLeft (rail.columnWidth) : r.removeFromRight (rail.columnWidth);
         rail.setBounds (col);
+
+        if (sideRail != nullptr)
+        {
+            // The second rail at the other edge; the picture between.
+            const int w = sideRail->columnWidth;
+            sideRail->setBounds (railOnLeft ? r.removeFromRight (w) : r.removeFromLeft (w));
+            railOnLeft ? r.removeFromRight (sideGap) : r.removeFromLeft (sideGap);
+        }
 
         if (picture != nullptr)
         {
@@ -182,12 +212,13 @@ private:
             onMenu (screenPos);
     }
 
-    static constexpr int lampGap = 8, pictureScaleW = 10;
+    static constexpr int lampGap = 8, pictureScaleW = 10, sideGap = 8;
 
     const juce::String name;
     GuardRail rail;
     GuardLamp lamp;
     std::unique_ptr<juce::Component> picture;
+    std::unique_ptr<GuardRail> sideRail;
     juce::Rectangle<int> nameBox, scaleBox;
     bool lampShown = true;
 

@@ -803,7 +803,7 @@ int ORBITAMP_GATE_MAIN()
         }
 
         // EACH CONTROL ONE JOB (the owner, 31.10): the threshold its own (-48..0 dB, -24 by default), the ratio its own
-        // (2:1..10:1, 4:1), the knob BLEND (0..1, a half) — the defaults the processor's and the stage's alike.
+        // (1.5:1..10:1 since 01.11, 4:1), the knob BLEND (0..1, a half) — the defaults the processor's and the stage's alike.
         struct Curve { double thresholdDb, ratio, uncompressed; };
         const Curve top { BassComp::defaultThresholdDb, BassComp::defaultRatio, 0.0 };
         {
@@ -811,8 +811,9 @@ int ORBITAMP_GATE_MAIN()
             auto* rat = amp->apvts.getParameter (params::compRatio);
             check (thr != nullptr && rat != nullptr && thr->getNormalisableRange().start == -48.0f && thr->getNormalisableRange().end == 0.0f
                        && value (*amp, params::compThreshold) == (float) BassComp::defaultThresholdDb && value (*amp, params::compRatio) == (float) BassComp::defaultRatio
-                       && rat->getNormalisableRange().start == 2.0f && rat->getNormalisableRange().end == 10.0f && value (*amp, params::compAmount) == 0.5f,
-                   "COMP's three: THRESHOLD -48..0 dB at -24, RATIO 2:1..10:1 at 4:1, BLEND at half");
+                       && rat->getNormalisableRange().start == 1.5f && rat->getNormalisableRange().end == 10.0f && value (*amp, params::compAmount) == 0.5f
+                       && BassComp::ratioMin == 1.5 && BassComp::ratioMax == 10.0,
+                   "COMP's three: THRESHOLD -48..0 dB at -24, RATIO 1.5:1..10:1 at 4:1 (the parameter's and the stage's), BLEND at half");
         }
 
         // BLEND IS PARALLEL COMPRESSION, SAMPLE-ALIGNED: at half, what comes out is the dry and the all-compressed summed
@@ -1227,13 +1228,12 @@ int ORBITAMP_GATE_MAIN()
         // At 0, whatever their menus say, each is the dry bit for bit — both outputs.
         {
             auto moved = make (bass);
-            set (*moved, params::octaveSub2, 1.0f);
             set (*moved, params::octaveToneHz, 400.0f);
             set (*moved, params::filterMode, 1.0f);
             set (*moved, params::filterResonance, 12.0f);
             set (*moved, params::filterKeepLows, 0.0f);
             set (*moved, params::chorusRateHz, 2.5f);
-            set (*moved, params::chorusCentreMs, 20.0f);
+            set (*moved, params::chorusCrossoverHz, 500.0f);
             // The HPF's inner cuts are the chain's since 31.10 and not step 2b's: out here, measured on their own below.
             moved->innerCutsOut.store (true);
             set (*moved, params::compAmount, 0.0f);   // COMP at 0 as at step 2b (its BLEND is half by default since 31.10)
@@ -1449,7 +1449,7 @@ int ORBITAMP_GATE_MAIN()
             }
         }
 
-        // A MENU FIELD REACHES ITS MODULE with the slider up: LP against BP, the -2 at the top, KEEP LOWS.
+        // A MENU FIELD OR A SIDE RAIL REACHES ITS MODULE with the slider up: LP against BP, OCTAVE's TONE, CLEAN LOWS.
         {
             const auto apart = [&] (const char* amount, const char* field, float a, float b)
             {
@@ -1463,11 +1463,11 @@ int ORBITAMP_GATE_MAIN()
                 return worstApart (with (a), with (b));
             };
             const float mode = apart (params::filterAmount, params::filterMode, 0.0f, 1.0f);
-            const float sub2 = apart (params::octaveAmount, params::octaveSub2, 0.0f, 1.0f);
+            const float tone = apart (params::octaveAmount, params::octaveToneHz, 60.0f, 400.0f);
             const float keep = apart (params::filterAmount, params::filterKeepLows, 1.0f, 0.0f);
-            check (mode > 1.0e-3f && sub2 > 1.0e-3f && keep > 1.0e-3f,
-                   "the menus reach the modules, sliders up: FILTER LP/BP apart by " + juce::String (mode, 4) + ", OCTAVE's -2 by "
-                       + juce::String (sub2, 4) + ", KEEP LOWS by " + juce::String (keep, 4));
+            check (mode > 1.0e-3f && tone > 1.0e-3f && keep > 1.0e-3f,
+                   "the menus and the side rails reach the modules, sliders up: FILTER LP/BP apart by " + juce::String (mode, 4)
+                       + ", OCTAVE's TONE 60/400 Hz by " + juce::String (tone, 4) + ", CLEAN LOWS by " + juce::String (keep, 4));
         }
 
         // THE ORDER: OCTAVE before FILTER and the AMP. FILTER at the top on BP, its lows not kept, sweeps the sub with the
@@ -1652,14 +1652,14 @@ int ORBITAMP_GATE_MAIN()
                        + juce::String (graph != nullptr ? graph->thresholdDb() : 0.0, 2) + " dB");
         }
 
-        // THE RATIO'S TWO CONTROLS AND THE LAW: comp_ratio runs 2:1 .. 10:1; not held, the slider over the square and the
-        // square show the law's ratio at the knob; the slider dragged holds what it says — the square with it, one gesture
-        // a drag; the square dragged, the slider follows; given back by the menu, both show the law again.
+        // THE RATIO'S TWO CONTROLS: comp_ratio runs 1.5:1 .. 10:1; the combo over the square and the square show it; 7:1
+        // picked from the combo's list holds 7:1 — the square with it, one gesture; the square dragged to 3.3:1's height
+        // steps to the list's nearest, 3:1, and the combo follows, ticking it; set from elsewhere, both follow.
         {
             auto t = make (bass);
             set (*t, params::compAmount, 0.5f);
             std::unique_ptr<juce::AudioProcessorEditor> ed (t->createEditor());
-            auto* slider = findIn (*ed, (CompRatioSlider*) nullptr);
+            auto* combo = findIn (*ed, (CompRatioCombo*) nullptr);
             auto* square = findIn (*ed, (CompTransfer*) nullptr);
             const auto range = t->apvts.getParameter (params::compRatio)->getNormalisableRange();
             struct Gestures final : juce::AudioProcessorParameter::Listener
@@ -1668,39 +1668,43 @@ int ORBITAMP_GATE_MAIN()
                 void parameterValueChanged (int, float) override {}
                 void parameterGestureChanged (int, bool starting) override { ++(starting ? begun : ended); }
             } gestures;
-            bool lawShown = false, heldSeven = false, followed = false, back = false;
+            bool shown = false, heldSeven = false, followed = false, back = false;
             double atSeven = 0.0, atThree = 0.0;
-            if (slider != nullptr && square != nullptr)
+            juce::String said;
+            if (combo != nullptr && square != nullptr)
             {
                 const double law = (double) value (*t, params::compRatio);   // the ratio, its own parameter
-                lawShown = slider->shownRatio() == law && square->shownRatio() == law;
+                shown = combo->shownRatio() == law && square->shownRatio() == law && combo->text() == "4:1";
                 auto* ratioP = t->apvts.getParameter (params::compRatio);
                 ratioP->addListener (&gestures);
-                slider->beginDrag();
-                slider->dragTo (slider->xOfRatio (5.0));
-                slider->dragTo (slider->xOfRatio (7.0));
-                slider->endDrag();
+                std::function<void (int)> answer;
+                onfirst::catcher() = [&] (const juce::PopupMenu&, const std::function<void (int)>& a) { answer = a; return true; };
+                combo->openList();
+                onfirst::catcher() = nullptr;
+                if (answer != nullptr)
+                    answer (6);   // the sixth item, 7:1
                 ratioP->removeListener (&gestures);
-                atSeven = slider->shownRatio();
-                heldSeven = std::abs (atSeven - 7.0) < 0.02
-                         && square->shownRatio() == atSeven && std::abs (slider->xOfRatio (atSeven) - slider->xOfRatio (7.0)) <= 0.5f;
+                atSeven = combo->shownRatio();
+                heldSeven = atSeven == 7.0 && square->shownRatio() == atSeven && combo->text() == "7:1";
                 square->beginRatioDrag();
-                square->dragRatioTo (square->yOfRatio (3.0));
+                square->dragRatioTo (square->yOfRatio (3.3));
                 square->endRatioDrag();
                 atThree  = square->shownRatio();
-                followed = std::abs (atThree - 3.0) < 0.02 && slider->shownRatio() == atThree;
+                followed = atThree == 3.0 && combo->shownRatio() == atThree && combo->tickedItem() == 2 && combo->text() == "3:1";
+                said = combo->text();
                 set (*t, params::compRatio, (float) law);
-                back = std::abs (slider->shownRatio() - law) < 1.0e-6 && std::abs (square->shownRatio() - law) < 1.0e-6;
+                back = std::abs (combo->shownRatio() - law) < 1.0e-6 && std::abs (square->shownRatio() - law) < 1.0e-6;
             }
-            check (range.start == 2.0f && range.end == 10.0f && lawShown && heldSeven && gestures.begun == 1 && gestures.ended == 1
+            check (range.start == 1.5f && range.end == 10.0f && shown && heldSeven && gestures.begun == 1 && gestures.ended == 1
                        && followed && back,
-                   "COMP's ratio, 2:1 .. 10:1, its own: the slider and the square show it; the slider dragged to 7 sets "
-                       + juce::String (atSeven, 2) + ":1 in " + juce::String (gestures.begun) + " gesture, the square with it; the square dragged to 3, the slider at "
-                       + juce::String (atThree, 2) + ":1; set from elsewhere, both follow");
+                   "COMP's ratio, 1.5:1 .. 10:1, its own: the combo and the square show it; 7:1 picked from the list sets "
+                       + juce::String (atSeven, 2) + ":1 in " + juce::String (gestures.begun) + " gesture, the square with it; the square dragged to 3.3's height steps to "
+                       + juce::String (atThree, 2) + ":1, the combo reading \"" + said + "\", ticked; set from elsewhere, both follow");
         }
 
-        // EVERY NUMBER A PARAMETER SHOWS IS TYPED: the threshold on its rail's grip (a dB, clamped to its travel), the ratio
-        // over the square (held at what is typed), the fader's amount — each a field on a click, each one gesture.
+        // THE RAILS' NUMBERS ARE TYPED, THE RATIO IS PICKED (the owner, 01.11): the threshold on its rail's grip (a dB,
+        // clamped to its travel) and the fader's amount are fields, each one gesture; the ratio's combo types NOTHING — a
+        // click on its number lists its ratios, no field opens, the ratio unmoved until one is picked.
         {
             auto t = make (bass);
             std::unique_ptr<juce::AudioProcessorEditor> ed (t->createEditor());
@@ -1728,17 +1732,27 @@ int ORBITAMP_GATE_MAIN()
                 block->fader().typeValue (0.42f);
                 const float typed = value (*t, params::compAmount);
                 amountP->removeListener (&gestures);
-                block->ratio().openTyping();
-                const bool ratioField = block->ratio().isTyping();
-                block->ratio().typeRatio (6.5);
-                ok = lineField && faderField && ratioField && std::abs (atThirty + 30.0f) < 0.01f && clamped == -48.0f
-                  && std::abs (typed - 0.42f) < 0.001f && gestures.begun == 1
-                  && std::abs (value (*t, params::compRatio) - 6.5f) < 0.01f;
+                auto& combo = block->ratio();
+                const float ratioBefore = value (*t, params::compRatio);
+                int listed = 0;
+                onfirst::catcher() = [&] (const juce::PopupMenu&, const std::function<void (int)>&) { ++listed; return true; };
+                const auto number = combo.numberArea().getCentre().toFloat();
+                const juce::MouseEvent click (juce::Desktop::getInstance().getMainMouseSource(), number, juce::ModifierKeys(), 0.0f,
+                                              juce::MouseInputSource::defaultOrientation, juce::MouseInputSource::defaultRotation,
+                                              juce::MouseInputSource::defaultTiltX, juce::MouseInputSource::defaultTiltY, &combo, &combo,
+                                              juce::Time::getCurrentTime(), number, juce::Time::getCurrentTime(), 1, false);
+                combo.mouseDown (click);
+                combo.mouseUp (click);
+                onfirst::catcher() = nullptr;
+                const bool ratioField = findIn (combo, (juce::TextEditor*) nullptr) != nullptr;
+                ok = lineField && faderField && ! ratioField && listed == 1 && std::abs (atThirty + 30.0f) < 0.01f && clamped == -48.0f
+                  && std::abs (typed - 0.42f) < 0.001f && gestures.begun == 1 && value (*t, params::compRatio) == ratioBefore;
                 said = ": -30 dB typed -> " + juce::String (atThirty, 3) + ", -60 -> " + juce::String (clamped, 3) + ", the fader 0.42 -> "
-                     + juce::String (typed, 3) + " (" + juce::String (gestures.begun) + " gestures), the ratio 6.5 -> held "
+                     + juce::String (typed, 3) + " (" + juce::String (gestures.begun) + " gestures); a click on the ratio's number "
+                     + (ratioField ? "opened a field" : "opened no field") + " and listed " + juce::String (listed) + " time(s), the ratio "
                      + juce::String (value (*t, params::compRatio), 2) + ":1";
             }
-            check (ok, "COMP's numbers are fields: the threshold, the ratio, the fader" + said);
+            check (ok, "COMP's numbers: the threshold and the fader are fields, the ratio a list, nothing typed" + said);
         }
 
         // THE RATIO IS ITS OWN: 8:1 stays 8:1 with BLEND moved; moved mid-note 10:1 -> 4:1 it glides, no burst, no step; a
@@ -1931,7 +1945,7 @@ int ORBITAMP_GATE_MAIN()
                 const double offL = turn (angle (pic.dotAt (0)) - juce::MathConstants<double>::twoPi * (double) want);
                 const double offR = turn (angle (pic.dotAt (1)) - angle (pic.dotAt (0)) - juce::MathConstants<double>::halfPi);
                 const float  lawFrac = felitronics::chorus::paramsForAmount (0.6f).depthMs / felitronics::chorus::kDepthMsAtFull;
-                drawn = block->getWidth() == FaceplateView::chorusWidth && pic.voices() == t->bassBackPlanes()
+                drawn = block->getWidth() == FaceplateView::fxRowWidth && pic.voices() == t->bassBackPlanes()
                         && std::abs (pic.shownPhase() - want) < 1.0e-6f && offL < 1.0e-4 && offR < 1.0e-4
                         && std::abs (pic.radiusFraction() - lawFrac) < 1.0e-6f && std::abs (lawFrac - 0.6f) < 1.0e-6f
                         && std::abs (pic.dotAt (0).getDistanceFrom (o) - rr) < 0.01f && rr > 10.0f;
@@ -1995,8 +2009,8 @@ int ORBITAMP_GATE_MAIN()
                        + " lapped and dropped, " + juce::String (mixed) + " mixed with another's");
         }
 
-        // ITS NUMBERS ARE FIELDS: the RATE and the CROSSOVER typed in land on their parameters, each one step of the
-        // history, undone whole.
+        // ITS CROSSOVER IS A LIST (the owner, 01.11): the five crossovers, nothing under 200 Hz, the one standing ticked; a
+        // pick lands on its parameter, one step of the history, undone whole. Its RATE is a rail of its own at the right.
         {
             auto t = make (bass);
             std::unique_ptr<juce::AudioProcessorEditor> ed (t->createEditor());
@@ -2007,30 +2021,42 @@ int ORBITAMP_GATE_MAIN()
             if (block != nullptr)
             {
                 auto& pic = block->picture();
-                ok = true;
                 said.clear();
-                for (const auto& [f, id, typed, want] : { std::tuple { ChorusPicture::Field::rate, params::chorusRateHz, "1.35 Hz", 1.35f },
-                                                          std::tuple { ChorusPicture::Field::crossover, params::chorusCrossoverHz, "310", 310.0f } })
+                const auto list = pic.crossoverList();
+                juce::StringArray items;
+                int ticked = -1, n = 0;
+                for (juce::PopupMenu::MenuItemIterator it (list); it.next(); ++n)
+                {
+                    items.add (it.getItem().text);
+                    if (it.getItem().isTicked)
+                        ticked = n;
+                }
+                ok = items.joinIntoString (",") == "200 Hz,250 Hz,300 Hz,400 Hz,500 Hz" && ticked == 0;
+                said << "the list " << items.joinIntoString (",") << ", item " << ticked << " ticked; ";
+                for (const int item : { 2, 4 })
                 {
                     settle();
-                    const float before = value (*t, id);
+                    const float before = value (*t, params::chorusCrossoverHz);
                     const int   depth  = t->history.undoDepth();
-                    pic.openField (f);
-                    const bool  opened = pic.fieldEditor().isOpen();
-                    pic.fieldEditor().ed.setText (typed, false);
-                    pic.fieldEditor().takeAndHide();
+                    pic.pickCrossover (item);
                     settle();
-                    const float landed = value (*t, id);
+                    const float landed = value (*t, params::chorusCrossoverHz);
                     const int   steps  = t->history.undoDepth() - depth;
                     t->history.undo();
                     settle();
-                    const float back = value (*t, id);
-                    ok = ok && opened && std::abs (landed - want) < 1.0e-3f && steps == 1 && std::abs (back - before) < 1.0e-3f;
-                    said << id << " " << juce::String (before, 2) << " -> typed " << typed << " -> " << juce::String (landed, 2) << " in "
-                         << steps << " step(s), undone to " << juce::String (back, 2) << "; ";
+                    const float back = value (*t, params::chorusCrossoverHz);
+                    ok = ok && std::abs (landed - params::chorusCrossoverItems[item]) < 1.0e-3f && steps == 1 && std::abs (back - before) < 1.0e-3f;
+                    said << "picked " << juce::String (params::chorusCrossoverItems[item], 0) << " Hz -> " << juce::String (landed, 1) << " in "
+                         << steps << " step(s), undone to " << juce::String (back, 1) << "; ";
                 }
+                auto& rate = block->rate();
+                rate.typeValue (2.0f);
+                settle();
+                const bool rateRail = rate.isVisible() && rate.hasFaderLook() && std::abs (value (*t, params::chorusRateHz) - 2.0f) < 1.0e-3f;
+                ok = ok && rateRail;
+                said << "the RATE " << (rateRail ? "a fader of its own" : "NOT a fader on chorus_rate_hz");
             }
-            check (ok, "CHORUS's numbers are fields: " + said);
+            check (ok, "CHORUS's crossover a list, its rate a rail: " + said);
         }
     }
 
@@ -2062,7 +2088,8 @@ int ORBITAMP_GATE_MAIN()
         const auto settle = [] (AmpProcessor& a) { for (int i = 0; i < 40; ++i) a.history.tick(); };   // longer than the settle
 
         // ONE CONTROL, ONE SWITCH, ONE UNDO: COMP standing by, its line dragged — paused longer than the history settles —
-        // switches it in; one undo gives back the knob AND the switch. The ratio square and the ratio slider, the same.
+        // switches it in; one undo gives back the knob AND the switch. The ratio square dragged, the same; and the ratio's
+        // combo, a ratio picked from its list or typed in it.
         {
             auto t = make (bass);
             set (*t, params::compThreshold, -24.0f);
@@ -2071,9 +2098,9 @@ int ORBITAMP_GATE_MAIN()
             std::unique_ptr<juce::AudioProcessorEditor> ed (t->createEditor());
             auto graphs = findAll (*ed, (CompGraph*) nullptr);
             auto squares = findAll (*ed, (CompTransfer*) nullptr);
-            auto sliders = findAll (*ed, (CompRatioSlider*) nullptr);
+            auto combos = findAll (*ed, (CompRatioCombo*) nullptr);
             juce::String said;
-            bool ok = graphs.size() == 1 && squares.size() == 1 && sliders.size() == 1;
+            bool ok = graphs.size() == 1 && squares.size() == 1 && combos.size() == 1;
             if (ok)
             {
                 auto& g = *graphs[0];
@@ -2092,26 +2119,40 @@ int ORBITAMP_GATE_MAIN()
                 said << "the line: on " << (on ? "yes" : "no") << ", undone to " << juce::String (value (*t, params::compThreshold), 2) + " dB";
 
                 bool rest = true;
-                for (juce::Component* c : { (juce::Component*) squares[0], (juce::Component*) sliders[0] })
+                for (const int way : { 0, 1, 2 })   // the square dragged, a ratio picked from the combo's list, one typed in it
                 {
                     set (*t, params::compOn, 0.0f);
-                    set (*t, params::compRatio, 6.0f);   // between detents: the drag moves it freely
+                    set (*t, params::compRatio, 6.0f);
                     settle (*t);
                     const float ratioBefore = value (*t, params::compRatio);
-                    const auto start = c->getLocalBounds().toFloat().getCentre().withY (c == sliders[0] ? (float) c->getHeight() - 10.0f
-                                                                                                       : c->getLocalBounds().toFloat().getCentreY());
-                    const auto end = c == sliders[0] ? start.translated (20.0f, 0.0f) : start.translated (0.0f, 20.0f);
-                    c->mouseDown (mouse (*c, start, start));
-                    c->mouseDrag (mouse (*c, start.translated ((end.x - start.x) * 0.5f, (end.y - start.y) * 0.5f), start));
-                    settle (*t);
-                    c->mouseDrag (mouse (*c, end, start));
-                    c->mouseUp (mouse (*c, end, start));
+                    if (way == 0)
+                    {
+                        juce::Component* c = squares[0];
+                        const auto start = c->getLocalBounds().toFloat().getCentre();
+                        const auto end = start.translated (0.0f, 20.0f);
+                        c->mouseDown (mouse (*c, start, start));
+                        c->mouseDrag (mouse (*c, start.translated (0.0f, 10.0f), start));
+                        settle (*t);
+                        c->mouseDrag (mouse (*c, end, start));
+                        c->mouseUp (mouse (*c, end, start));
+                    }
+                    else
+                    {
+                        std::function<void (int)> answer;
+                        onfirst::catcher() = [&] (const juce::PopupMenu&, const std::function<void (int)>& a) { answer = a; return true; };
+                        const auto at = (way == 1 ? combos[0]->chevronArea() : combos[0]->numberArea()).getCentre().toFloat();
+                        combos[0]->mouseDown (mouse (*combos[0], at, at));
+                        combos[0]->mouseUp (mouse (*combos[0], at, at));
+                        onfirst::catcher() = nullptr;
+                        if (answer != nullptr)
+                            answer (way == 1 ? 2 : 7);   // 2:1 or 10:1
+                    }
                     settle (*t);
                     const bool switched = value (*t, params::compOn) > 0.5f && std::abs (value (*t, params::compRatio) - ratioBefore) > 0.01f;
                     t->history.undo();
                     const bool gaveBack = std::abs (value (*t, params::compRatio) - ratioBefore) < 1.0e-3f;
                     rest = rest && switched && value (*t, params::compOn) < 0.5f && gaveBack;
-                    said << (c == sliders[0] ? "; the slider " : "; the square ") << (switched ? "switched in" : "did not switch in")
+                    said << (way == 0 ? "; the square " : way == 1 ? "; a pick by the chevron " : "; a pick by the number ") << (switched ? "switched in" : "did not switch in")
                          << ", one undo " << (gaveBack ? "gave it back" : "did not give it back");
                 }
                 ok = line && rest;
@@ -2119,26 +2160,40 @@ int ORBITAMP_GATE_MAIN()
             check (ok, "COMP's line and ratio switch it in, and one undo gives back all of a paused drag: " + said);
         }
 
-        // A CLICK MOVES NOTHING: in the ratio square and on the slider's track, a press and a release where it was pressed
-        // change neither the ratio nor whether it is held; a drag takes the ratio from where the hand took it.
+        // A CLICK MOVES NOTHING: in the ratio square a press and a release where it was pressed change neither the ratio nor
+        // whether it is held; on the combo a click on its number or on its chevron lists its ratios, no field — neither
+        // moves the ratio until one is picked; a drag in the square takes the ratio from where the hand took it.
         {
             auto t = make (bass);
             set (*t, params::compAmount, 0.5f);
             std::unique_ptr<juce::AudioProcessorEditor> ed (t->createEditor());
             auto squares = findAll (*ed, (CompTransfer*) nullptr);
-            auto sliders = findAll (*ed, (CompRatioSlider*) nullptr);
-            bool ok = squares.size() == 1 && sliders.size() == 1;
+            auto combos = findAll (*ed, (CompRatioCombo*) nullptr);
+            bool ok = squares.size() == 1 && combos.size() == 1;
             double after = 0.0;
-            set (*t, params::compRatio, 6.0f);   // between detents: a drag moves it freely, a detent does not take it
+            set (*t, params::compRatio, 6.0f);
             const float ratioAtStart = value (*t, params::compRatio);
+            bool field = false, listed = false;
             if (ok)
-                for (juce::Component* c : { (juce::Component*) squares[0], (juce::Component*) sliders[0] })
-                {
-                    const auto at = c->getLocalBounds().toFloat().getCentre().translated (7.0f, c == sliders[0] ? 9.0f : 23.0f);
-                    c->mouseDown (mouse (*c, at, at));
-                    c->mouseUp (mouse (*c, at, at));
-                    ok = ok && value (*t, params::compRatio) == ratioAtStart;
-                }
+            {
+                auto& sq = *squares[0];
+                const auto at = sq.getLocalBounds().toFloat().getCentre().translated (7.0f, 23.0f);
+                sq.mouseDown (mouse (sq, at, at));
+                sq.mouseUp (mouse (sq, at, at));
+                auto& combo = *combos[0];
+                int caught = 0;
+                onfirst::catcher() = [&] (const juce::PopupMenu&, const std::function<void (int)>&) { ++caught; return true; };
+                const auto number = combo.numberArea().getCentre().toFloat();
+                combo.mouseDown (mouse (combo, number, number));
+                combo.mouseUp (mouse (combo, number, number));
+                const auto chevron = combo.chevronArea().getCentre().toFloat();
+                combo.mouseDown (mouse (combo, chevron, chevron));
+                combo.mouseUp (mouse (combo, chevron, chevron));
+                onfirst::catcher() = nullptr;
+                field = ! findAll (combo, (juce::TextEditor*) nullptr).empty();
+                listed = caught == 2;
+                ok = ! field && listed && value (*t, params::compRatio) == ratioAtStart;
+            }
             if (ok)
             {
                 auto& sq = *squares[0];
@@ -2150,14 +2205,17 @@ int ORBITAMP_GATE_MAIN()
                 sq.mouseDrag (mouse (sq, from.translated (0.0f, -6.0f), from));
                 sq.mouseUp (mouse (sq, from.translated (0.0f, -6.0f), from));
                 after = sq.shownRatio();
-                ok = still && after < before;   // up the square, a lower ratio — from where it stood (its detents may take it)
+                ok = still && after < before;   // up the square, a lower ratio — from where it stood
             }
-            check (ok, "a click in COMP's ratio square or on its slider changes nothing; a drag moves the ratio from where it was taken (now "
-                           + juce::String (after, 2) + ":1)");
+            check (ok, juce::String ("a click in COMP's ratio square changes nothing; on the combo's number and on its chevron it lists (")
+                           + (listed ? "listed both" : "not both") + (field ? ", a field opened" : ", no field")
+                           + "), the ratio unmoved; a drag moves the ratio from where it was taken (now " + juce::String (after, 2) + ":1)");
         }
 
-        // THE BASS'S RAILS — COMP, OCTAVE, FILTER, CHORUS and BLEND — write their amounts at 13 px, as percent, one format;
-        // the guards' grips as they were.
+        // THE BASS'S RAILS — COMP's threshold a plain rail, its number on the grip at 13 px; every other a FADER (the owner,
+        // 01.11: COMP's, OCTAVE's, ENVELOPE's and CHORUS's MIX, OCTAVE's TONE, ENVELOPE's RELEASE, CHORUS's RATE, BLEND and
+        // DI/CAB), its number under it at 13 px with its unit; the guards' grips as they were. DELAY and REVERB are the
+        // guitar's own blocks, their MIX the guitar's fader.
         {
             auto t = make (bass);
             set (*t, params::compAmount, 0.7f);
@@ -2166,23 +2224,31 @@ int ORBITAMP_GATE_MAIN()
             juce::StringArray wrong, seen;
             for (auto* r : findAll (*ed, (GuardRail*) nullptr))
             {
-                const bool guard = r->paramId() == params::gateThreshold || r->paramId() == params::limiterCeiling;
                 seen.add (r->paramId());
-                if (guard ? r->gripTextHeight != 11.0f : r->gripTextHeight < 13.0f)
-                    wrong.add (r->paramId() + " " + juce::String (r->gripTextHeight, 1) + " px");
+                const bool plain = r->paramId() == params::compThreshold;   // the guards' are faders too, their numbers in their lamps
+                if (plain == r->hasFaderLook())
+                    wrong.add (r->paramId() + (plain ? " a fader" : " not a fader"));
+                const float px = r->hasFaderLook() ? fader::textH : r->gripTextHeight;
+                if (px < 13.0f)
+                    wrong.add (r->paramId() + " " + juce::String (px, 1) + " px");
             }
             for (auto* r : findAll (*ed, (GuardRail*) nullptr))
             {
-                if (r->paramId() == params::compAmount && r->gripText() != "70")
+                if (r->paramId() == params::compAmount && r->gripText() != "70%")
                     wrong.add ("COMP reads " + r->gripText());
-                if (r->paramId() == params::ampBlend && r->gripText() != "40")
+                if (r->paramId() == params::ampBlend && r->gripText() != "40%")
                     wrong.add ("BLEND reads " + r->gripText());
                 if (r->paramId() == params::compThreshold && r->gripText() != "-24")
                     wrong.add ("COMP's threshold reads " + r->gripText());
+                if (r->paramId() == params::diMix && r->gripText() != "30%")
+                    wrong.add ("DI/CAB reads " + r->gripText());
+                if (r->paramId() == params::octaveToneHz && r->gripText() != "120 Hz")
+                    wrong.add ("TONE reads " + r->gripText());
             }
-            check (wrong.isEmpty() && seen.contains (params::ampBlend) && seen.contains (params::delayMix) && seen.contains (params::reverbMix)
-                       && seen.contains (params::compThreshold) && seen.size() == 10,
-                   "the bass's eight rails (DELAY's and REVERB's MIX among them) write their amounts at 13 px, in percent, COMP's threshold in dB; GATE and LIMIT as before ("
+            check (wrong.isEmpty() && seen.contains (params::ampBlend) && seen.contains (params::compThreshold) && seen.contains (params::diMix)
+                       && seen.contains (params::octaveToneHz) && seen.contains (params::filterReleaseMs) && seen.contains (params::chorusRateHz)
+                       && seen.size() == 12,
+                   "the bass's rails write their numbers at 13 px, the faders' with their units, COMP's threshold in dB on its grip; GATE and LIMIT faders, their numbers in their lamps ("
                        + juce::String (seen.size()) + " rails" + (wrong.isEmpty() ? juce::String() : ": " + wrong.joinIntoString (", ")) + ")");
         }
 
@@ -2369,7 +2435,7 @@ int ORBITAMP_GATE_MAIN()
             auto* scope = findScope (*ed);
             // THREE ROWS (the owner, 31.10): OCTAVE and ENVELOPE share what row one leaves after the GATE and COMP, alike;
             // CHORUS at least its width; the AMP the whole width of its own row.
-            check (std::abs (widths["OCTAVE"] - widths["ENVELOPE"]) <= 1 && widths["OCTAVE"] >= 170 && widths["CHORUS"] >= FaceplateView::chorusWidth
+            check (std::abs (widths["OCTAVE"] - widths["ENVELOPE"]) <= 1 && widths["OCTAVE"] >= 170 && widths["CHORUS"] >= FaceplateView::fxRowWidth
                        && scope != nullptr && scope->getWidth() > 100 && scope->getHeight() > 90,
                    "OCTAVE's block " + juce::String (widths["OCTAVE"]) + " px wide with its picture "
                        + (scope != nullptr ? juce::String (scope->getWidth()) + " x " + juce::String (scope->getHeight()) : juce::String ("missing"))
@@ -2379,55 +2445,53 @@ int ORBITAMP_GATE_MAIN()
                                    + juce::String (lamps) + " lamps)");
         }
 
-        // THE MAPPING: four notes across the bass's range, the -1 alone and then the -2 under it — the note named is the
+        // THE MAPPING: four notes across the bass's range, the -1 alone (the -2 is gone, the owner 01.11) — the note named is the
         // one played and the sub an octave down (A = 440, the tuner's reference untouched), the sub's period twice the
         // note's, two of them across, the frame standing on the sub's rising edge and standing STILL: the same shape
         // 3584 samples later (no whole number of periods).
-        for (const bool withSub2 : { false, true })
-            for (const auto& [hz, note, below] : { std::tuple<double, const char*, const char*> { 30.87, "B0", "B-1" },
-                                                   { 41.20, "E1", "E0" }, { 55.00, "A1", "A0" }, { 98.00, "G2", "G1" } })
+        for (const auto& [hz, note, below] : { std::tuple<double, const char*, const char*> { 30.87, "B0", "B-1" },
+                                               { 41.20, "E1", "E0" }, { 55.00, "A1", "A0" }, { 98.00, "G2", "G1" } })
+        {
+            auto t = make (bass);
+            set (*t, params::octaveAmount, 0.6f);
+            std::unique_ptr<juce::AudioProcessorEditor> ed (t->createEditor());
+            auto* scope = findScope (*ed);
+            if (scope == nullptr)
             {
-                auto t = make (bass);
-                set (*t, params::octaveAmount, 0.6f);
-                set (*t, params::octaveSub2, withSub2 ? 1.0f : 0.0f);
-                std::unique_ptr<juce::AudioProcessorEditor> ed (t->createEditor());
-                auto* scope = findScope (*ed);
-                if (scope == nullptr)
-                {
-                    check (false, "OCTAVE's picture is on the bass's face");
-                    break;
-                }
-                t->octaveWatched.store (true);   // as if on screen
-                auto play = player (*t, hz, -12.0f);
-                play (60);
-                scope->pull();
-                const auto a = scope->frame();
-                const auto [named, under] = scope->reading();
-                std::array<float, 64> shape {};
-                float peak = 0.0f;
-                for (size_t k = 0; k < shape.size(); ++k)
-                    peak = std::max (peak, std::abs (shape[k] = scope->subAt (a.start + a.span * (double) k / 64.0)));
-                const bool rising = a.subPeriod > 0.0 && scope->subAt (a.trigger - 0.25 * a.subPeriod) < 0.0f
-                                    && scope->subAt (a.trigger + 0.25 * a.subPeriod) > 0.0f;
-
-                play (7);
-                scope->pull();
-                const auto b = scope->frame();
-                float moved = 0.0f;
-                for (size_t k = 0; k < shape.size(); ++k)
-                    moved = std::max (moved, std::abs (scope->subAt (b.start + b.span * (double) k / 64.0) - shape[k]));
-
-                const double expected = 2.0 * a.rateHz / hz;   // the -1's period, samples
-                const double off      = a.subPeriod > 0.0 ? std::abs (a.subPeriod / expected - 1.0) : 1.0;
-                check (a.subShown && named == note && under == below && off < 0.005 && std::abs (a.span - 2.0 * a.subPeriod) < 1.0e-9
-                           && rising && peak > 0.0f && moved < 0.1f * peak && std::abs (b.trigger - a.trigger) > 1.0,
-                       juce::String (withSub2 ? "with the -2, " : "") + juce::String (hz, 2) + " Hz reads " + named + " -> " + under
-                           + " (" + note + " -> " + below + "), the sub's period " + juce::String (a.subPeriod, 1) + " samples ("
-                           + juce::String (expected, 1) + "), " + juce::String (a.span / juce::jmax (1.0, a.subPeriod), 2)
-                           + " of them across, " + (rising ? "on its rising edge" : "NOT on a rising edge") + ", moved "
-                           + juce::String (peak > 0.0f ? moved / peak : 1.0f, 3) + " of its peak 3584 samples later (its edge "
-                           + juce::String (a.trigger - b.trigger, 1) + " samples back in the ring)");
+                check (false, "OCTAVE's picture is on the bass's face");
+                break;
             }
+            t->octaveWatched.store (true);   // as if on screen
+            auto play = player (*t, hz, -12.0f);
+            play (60);
+            scope->pull();
+            const auto a = scope->frame();
+            const auto [named, under] = scope->reading();
+            std::array<float, 64> shape {};
+            float peak = 0.0f;
+            for (size_t k = 0; k < shape.size(); ++k)
+                peak = std::max (peak, std::abs (shape[k] = scope->subAt (a.start + a.span * (double) k / 64.0)));
+            const bool rising = a.subPeriod > 0.0 && scope->subAt (a.trigger - 0.25 * a.subPeriod) < 0.0f
+                                && scope->subAt (a.trigger + 0.25 * a.subPeriod) > 0.0f;
+
+            play (7);
+            scope->pull();
+            const auto b = scope->frame();
+            float moved = 0.0f;
+            for (size_t k = 0; k < shape.size(); ++k)
+                moved = std::max (moved, std::abs (scope->subAt (b.start + b.span * (double) k / 64.0) - shape[k]));
+
+            const double expected = 2.0 * a.rateHz / hz;   // the -1's period, samples
+            const double off      = a.subPeriod > 0.0 ? std::abs (a.subPeriod / expected - 1.0) : 1.0;
+            check (a.subShown && named == note && under == below && off < 0.005 && std::abs (a.span - 2.0 * a.subPeriod) < 1.0e-9
+                       && rising && peak > 0.0f && moved < 0.1f * peak && std::abs (b.trigger - a.trigger) > 1.0,
+                   juce::String (hz, 2) + " Hz reads " + named + " -> " + under
+                       + " (" + note + " -> " + below + "), the sub's period " + juce::String (a.subPeriod, 1) + " samples ("
+                       + juce::String (expected, 1) + "), " + juce::String (a.span / juce::jmax (1.0, a.subPeriod), 2)
+                       + " of them across, " + (rising ? "on its rising edge" : "NOT on a rising edge") + ", moved "
+                       + juce::String (peak > 0.0f ? moved / peak : 1.0f, 3) + " of its peak 3584 samples later (its edge "
+                       + juce::String (a.trigger - b.trigger, 1) + " samples back in the ring)");
+        }
 
         // THE NAMES: the octave by floor below MIDI 0 too — the sub of a 16 Hz note is C-1's octave down, not C-1 again.
         check (OctaveScope::noteText (16.35, 440.0) == "C0" && OctaveScope::noteText (8.18, 440.0) == "C-1"
@@ -2465,13 +2529,12 @@ int ORBITAMP_GATE_MAIN()
         }
 
         // WATCHING CHANGES NOTHING HEARD: the stage run in pieces to keep its dry (the octaver's output does not depend on
-        // how its calls are sliced) — a note, its -2, its end, bit for bit the same as with nobody watching.
+        // how its calls are sliced) — a note, its end, bit for bit the same as with nobody watching.
         {
             auto quiet = make (bass), seen = make (bass);
             for (auto* t : { quiet.get(), seen.get() })
             {
                 set (*t, params::octaveAmount, 0.7f);
-                set (*t, params::octaveSub2, 1.0f);
             }
             seen->octaveWatched.store (true);
             std::vector<float> rq, rs;
@@ -2717,33 +2780,44 @@ int ORBITAMP_GATE_MAIN()
                        + juce::String (played, 0) + " Hz against the mark's " + juce::String (drawnReach, 0) + " Hz");
         }
 
-        // THE START CORNER, A FIELD: typed, Enter — the RANGE whose resting corner is nearest, one gesture each; going down
-        // it is the range's high end, and "3" is 3K.
+        // THE START CORNER IS THE RANGE'S LIST (the owner, 01.11): LOW, MID and HIGH, each named with the corner it rests at
+        // — its low end going up, its high end going down — the one playing ticked; a pick is one gesture.
         {
             auto t = make (bass);
             std::unique_ptr<juce::AudioProcessorEditor> ed (t->createEditor());
             auto& pic = findIn (*ed, (FilterBlock*) nullptr)->picture();
             auto* rangeP = t->apvts.getParameter (params::filterRange);
+            const auto listed = [&]
+            {
+                juce::StringArray items;
+                const auto m = pic.rangeList();
+                for (juce::PopupMenu::MenuItemIterator it (m); it.next();)
+                    items.add (it.getItem().text + (it.getItem().isTicked ? "*" : ""));
+                return items.joinIntoString (",");
+            };
             Gestures gestures;
             rangeP->addListener (&gestures);
-            pic.openStartField();
-            const bool opened = pic.fieldOpen();
-            pic.startField().ed.setText ("300", false);
-            pic.startField().takeAndHide();                                      // Enter
+            pic.pickRange (2);
             const int high = juce::roundToInt (value (*t, params::filterRange));
             const double highRest = pic.restHz();
-            pic.typeStartHz (120.0f);
+            const auto upList = listed();
+            pic.pickRange (0);
             const int low = juce::roundToInt (value (*t, params::filterRange));
             set (*t, params::filterDirection, 1.0f);
-            pic.typeStartHz (3.0f);
+            pic.pickRange (1);
             const int mid = juce::roundToInt (value (*t, params::filterRange));
             const double downRest = pic.restHz();
+            const auto downList = listed();
             rangeP->removeListener (&gestures);
-            check (opened && ! pic.fieldOpen() && high == 2 && juce::approximatelyEqual (highRest, 300.0) && low == 0 && mid == 1
-                       && juce::approximatelyEqual (downRest, 3000.0) && gestures.begun == 3 && gestures.ended == 3,
-                   "ENVELOPE's start corner typed: 300 -> " + params::filterRanges[high] + " (" + juce::String (highRest, 0) + " Hz), 120 -> "
-                       + params::filterRanges[low] + ", going down 3 -> " + params::filterRanges[mid] + " (" + juce::String (downRest, 0)
-                       + " Hz); " + juce::String (gestures.begun) + " gestures begun, " + juce::String (gestures.ended) + " ended");
+            const auto word = [] (int i) { return params::filterRanges[i].toUpperCase() + "   "; };
+            check (high == 2 && juce::approximatelyEqual (highRest, (double) params::filterRangeHz[2][0]) && low == 0 && mid == 1
+                       && juce::approximatelyEqual (downRest, (double) params::filterRangeHz[1][1])
+                       && upList.startsWith (word (0)) && upList.endsWith ("*") && downList.contains (word (1)) && downList.indexOfChar ('*') > 0
+                       && gestures.begun == 3 && gestures.ended == 3,
+                   "ENVELOPE's start corner a list: HIGH -> " + params::filterRanges[high] + " (" + juce::String (highRest, 0) + " Hz), LOW -> "
+                       + params::filterRanges[low] + ", going down MID -> " + params::filterRanges[mid] + " (" + juce::String (downRest, 0)
+                       + " Hz); listed up " + upList + ", down " + downList + "; " + juce::String (gestures.begun) + " gestures begun, "
+                       + juce::String (gestures.ended) + " ended");
         }
 
         // THE TAPS: nothing written with no picture on screen — an editor up but not showing included; written while it
@@ -3144,8 +3218,8 @@ int ORBITAMP_GATE_MAIN()
             return found;
         };
 
-        // THE PICTURES' TYPED NUMBERS ARE A STEP EACH: two typed in quick succession on CHORUS's rate, its crossover and
-        // ENVELOPE's start corner — two undo steps, not one burst.
+        // THE PICTURES' LISTS ARE A STEP A PICK: two picks in quick succession on CHORUS's crossover and on ENVELOPE's
+        // start corner (its RANGE) — two undo steps, not one burst.
         {
             auto t = make (bass);
             settle (*t);
@@ -3156,29 +3230,22 @@ int ORBITAMP_GATE_MAIN()
             bool ok = chorusPic != nullptr && curve != nullptr;
             if (ok)
             {
-                for (const auto f : { ChorusPicture::Field::rate, ChorusPicture::Field::crossover })
                 {
-                    const char* id = f == ChorusPicture::Field::rate ? params::chorusRateHz : params::chorusCrossoverHz;
-                    const float before = value (*t, id);
-                    const float a = f == ChorusPicture::Field::rate ? 1.2f : 300.0f, b = f == ChorusPicture::Field::rate ? 2.2f : 500.0f;
-                    for (const float typed : { a, b })
-                    {
-                        chorusPic->openField (f);
-                        chorusPic->fieldEditor().ed.setText (juce::String (typed), false);
-                        chorusPic->fieldEditor().takeAndHide();
-                    }
+                    const float before = value (*t, params::chorusCrossoverHz);
+                    chorusPic->pickCrossover (2);
+                    chorusPic->pickCrossover (4);
                     settle (*t);
                     t->history.undo();
-                    const bool one = std::abs (value (*t, id) - a) < 0.02f * a;
+                    const bool one = std::abs (value (*t, params::chorusCrossoverHz) - params::chorusCrossoverItems[2]) < 0.5f;
                     t->history.undo();
-                    const bool two = one && std::abs (value (*t, id) - before) < 0.02f * std::max (1.0f, before);
+                    const bool two = one && std::abs (value (*t, params::chorusCrossoverHz) - before) < 0.5f;
                     ok = ok && two;
-                    said.add (juce::String (id) + (two ? " two steps" : " not two steps"));
+                    said.add (juce::String ("CHORUS's crossover") + (two ? " two steps" : " not two steps"));
                 }
                 const float before = value (*t, params::filterRange);
-                curve->typeStartHz (90.0f);
+                curve->pickRange (0);
                 const float a = value (*t, params::filterRange);
-                curve->typeStartHz (400.0f);
+                curve->pickRange (2);
                 settle (*t);
                 t->history.undo();
                 const bool one = juce::approximatelyEqual (value (*t, params::filterRange), a);
@@ -3187,7 +3254,7 @@ int ORBITAMP_GATE_MAIN()
                 ok = ok && two;
                 said.add (juce::String ("ENVELOPE's start") + (two ? " two steps" : " not two steps"));
             }
-            check (ok, "the pictures' typed numbers, two quick ones two undo steps: " + said.joinIntoString ("; "));
+            check (ok, "the pictures' lists, two quick picks two undo steps: " + said.joinIntoString ("; "));
         }
 
         // ENVELOPE'S PICTURE THROUGH A GAP: watched, a note sweeps it up; a gap of 40 blocks lets the sweep fall, and the
@@ -3234,57 +3301,156 @@ int ORBITAMP_GATE_MAIN()
         // COMP AT 0, AND STANDING BY, WRITES NOTHING (the owner, 31.10 — this reverses step 9's "IN and OUT on each other"):
         // its picture stands still. Gated with the other five under STEP 10 below.
 
-        // THE RATIO'S DETENTS: dragged to within the reach of 5:1 it lands exactly there; just outside, it does not; the
-        // square snaps the same; a typed 4.6 stays 4.6.
+        // THE RATIO'S COMBO (the owner, 01.11): its list 1.5, 2, 3, 4, 5, 7, 10 : 1, the current one ticked, no ON over it
+        // (a value list, though it opens inside COMP's block); ONLY THE LIST'S RATIOS — a click ANYWHERE on the cell (its
+        // number, its chevron, its corners) lists them, no field ever opens; a pick is ONE undo step; and a drag in the
+        // square STEPS through the same list — at every height the ratio whose segment end stands nearest, nothing between.
         {
             auto t = make (bass);
             std::unique_ptr<juce::AudioProcessorEditor> ed (t->createEditor());
-            auto* slider = first (*ed, (CompRatioSlider*) nullptr);
+            auto* combo = first (*ed, (CompRatioCombo*) nullptr);
             auto* square = first (*ed, (CompTransfer*) nullptr);
-            double in = 0.0, out = 0.0, sq = 0.0, typed = 0.0;
-            if (slider != nullptr && square != nullptr)
+            const auto settle = [&] { for (int i = 0; i < 40; ++i) t->history.tick(); };
+            juce::StringArray wrong;
+            if (combo == nullptr || square == nullptr)
+                wrong.add ("no ratio controls");
+            else
             {
-                slider->beginDrag();
-                slider->dragTo (slider->xOfRatio (5.0) + 3.0f);
-                slider->endDrag();
-                in = slider->shownRatio();
-                slider->beginDrag();
-                slider->dragTo (slider->xOfRatio (5.0) + 9.0f);
-                slider->endDrag();
-                out = slider->shownRatio();
+                juce::StringArray lines;
+                int ons = 0, lists = 0;
+                std::function<void (int)> answer;
+                onfirst::catcher() = [&] (const juce::PopupMenu& m, const std::function<void (int)>& a)
+                {
+                    lines.clear();
+                    for (juce::PopupMenu::MenuItemIterator it (m); it.next();)
+                    {
+                        const auto& item = it.getItem();
+                        ons += item.itemID == onfirst::item || item.text == "ON" ? 1 : 0;
+                        lines.add (item.isSeparator ? juce::String ("-") : item.text + (item.isTicked ? " *" : ""));
+                    }
+                    answer = a;
+                    ++lists;
+                    return true;
+                };
+                const auto click = [&] (juce::Point<float> at)
+                {
+                    const juce::MouseEvent e (juce::Desktop::getInstance().getMainMouseSource(), at, juce::ModifierKeys(), 0.0f,
+                                              juce::MouseInputSource::defaultOrientation, juce::MouseInputSource::defaultRotation,
+                                              juce::MouseInputSource::defaultTiltX, juce::MouseInputSource::defaultTiltY, combo, combo,
+                                              juce::Time::getCurrentTime(), at, juce::Time::getCurrentTime(), 1, false);
+                    combo->mouseDown (e);
+                    combo->mouseUp (e);
+                };
+                const auto cell = combo->getLocalBounds().toFloat();
+                const float ratioAtStart = value (*t, params::compRatio);
+                for (const auto at : { combo->numberArea().getCentre().toFloat(), combo->chevronArea().getCentre().toFloat(),
+                                       cell.getTopLeft().translated (1.5f, 1.5f), cell.getBottomRight().translated (-1.5f, -1.5f),
+                                       cell.getBottomLeft().translated (1.5f, -1.5f) })
+                {
+                    const int before = lists;
+                    click (at);
+                    if (lists != before + 1)
+                        wrong.add ("a click at " + at.toString() + " listed " + juce::String (lists - before) + " time(s)");
+                }
+                if (ons != 0 || lines.joinIntoString (",") != "1.5:1,2:1,3:1,4:1 *,5:1,7:1,10:1")
+                    wrong.add ("the list reads " + lines.joinIntoString (",") + (ons != 0 ? " with ON" : ""));
+                if (onfirst::switchOf (combo) == nullptr)
+                    wrong.add ("the combo is not inside COMP's block (the list's want of ON proves nothing)");
+                if (first (*combo, (juce::TextEditor*) nullptr) != nullptr || value (*t, params::compRatio) != ratioAtStart)
+                    wrong.add ("the clicks typed or moved something: the ratio " + juce::String (value (*t, params::compRatio), 3));
+
+                // A PICK, ONE UNDO STEP, from 3:1 to each end of the list.
+                settle();
+                for (const auto& [item, want, shown] : { std::tuple { 1, 1.5, "1.5:1" }, std::tuple { 7, 10.0, "10:1" }, std::tuple { 5, 5.0, "5:1" } })
+                {
+                    set (*t, params::compRatio, 3.0f);
+                    settle();
+                    answer = nullptr;
+                    click (combo->numberArea().getCentre().toFloat());
+                    if (answer != nullptr)
+                        answer (item);
+                    settle();
+                    const double got = combo->shownRatio();
+                    const auto text = combo->text();
+                    const int ticked = combo->tickedItem();
+                    t->history.undo();
+                    const float undone = value (*t, params::compRatio);
+                    if (got != want || text != shown || ticked != item - 1 || std::abs (undone - 3.0f) > 1.0e-4f)
+                        wrong.add ("item " + juce::String (item) + " picked -> " + juce::String (got, 3) + " reading \"" + text + "\", ticked "
+                                   + juce::String (ticked) + ", one undo back to " + juce::String (undone, 3));
+                }
+                onfirst::catcher() = nullptr;
+
+                // THE SQUARE STEPS: at threshold -24 and -40, every height of the box lands on a list ratio, the nearest.
+                for (const float thr : { -24.0f, -40.0f })
+                {
+                    set (*t, params::compThreshold, thr);
+                    const auto b = square->box();
+                    int off = 0;
+                    for (float y = b.getY(); y <= b.getBottom(); y += 1.0f)
+                    {
+                        set (*t, params::compRatio, 6.0f);   // off the list: a drag never leaves it there
+                        square->beginRatioDrag();
+                        square->dragRatioTo (y);
+                        square->endRatioDrag();
+                        const double got = square->shownRatio();
+                        double nearest = compRatioItems[0];
+                        for (const double r : compRatioItems)
+                            if (std::abs (square->yOfRatio (r) - y) < std::abs (square->yOfRatio (nearest) - y))
+                                nearest = r;
+                        off += got != nearest ? 1 : 0;
+                    }
+                    if (off != 0)
+                        wrong.add (juce::String (off) + " heights at " + juce::String (thr, 0) + " dB off the nearest list ratio");
+                }
+                set (*t, params::compThreshold, -24.0f);
+                set (*t, params::compRatio, 4.0f);
                 square->beginRatioDrag();
                 square->dragRatioTo (square->yOfRatio (3.0) + 2.0f);
                 square->endRatioDrag();
-                sq = square->shownRatio();
-                slider->typeRatio (4.6);
-                typed = slider->shownRatio();
+                if (square->shownRatio() != 3.0)
+                    wrong.add ("the square dragged 2 px off 3:1 lands at " + juce::String (square->shownRatio(), 3));
             }
-            check (in == 5.0 && std::abs (out - 5.0) > 0.05 && sq == 3.0 && std::abs (typed - 4.6) < 0.006,
-                   "COMP's ratio detents: 3 px from 5:1 lands " + juce::String (in, 3) + ", 9 px away " + juce::String (out, 3)
-                       + "; the square near 3:1 lands " + juce::String (sq, 3) + "; typed 4.6 stays " + juce::String (typed, 3));
+            check (wrong.isEmpty(), "COMP's ratio combo: its list 1.5, 2, 3, 4, 5, 7, 10 : 1, the current ticked, no ON; a click anywhere on it "
+                                    "lists, nothing typed; a pick one undo step; the square steps to the nearest list ratio"
+                                    + (wrong.isEmpty() ? juce::String() : ": " + wrong.joinIntoString ("; ")));
         }
 
-        // A GEAR ON EVERY BLOCK but the guards, COMP's too (the owner, 01.11) — and a right click on a block's control opens
-        // its MENU, the gear's (gated whole under STEP 12's THE MENUS).
+        // NO GEAR ON ANY FRAME (the owner, 01.11: the gears off the frames, all of them), on either face: nothing on them is
+        // the gear's "Menu"; every OrbitBass block but the guards has its MENU on a right click, COMP's too (gated whole
+        // under STEP 12's THE MENUS).
         {
             auto t = make (bass);
             std::unique_ptr<juce::AudioProcessorEditor> ed (t->createEditor());
-            juce::StringArray without;
-            int gears = 0;
+            auto g = make (products::orbitAmp());
+            std::unique_ptr<juce::AudioProcessorEditor> ged (g->createEditor());
+            int menus = 0, gears = 0;
             std::function<void (juce::Component&)> walk = [&] (juce::Component& c)
             {
-                if (auto* b = dynamic_cast<BlockFrame*> (&c); b != nullptr && b->isVisible())
-                    (b->hasGear() ? gears : (without.add (b->getName()), gears)) += b->hasGear() ? 1 : 0;
+                if (auto* b = dynamic_cast<BlockFrame*> (&c); b != nullptr && b->isVisible() && b->hasBlockMenu())
+                    ++menus;
+                gears += c.getTitle() == "Menu" ? 1 : 0;   // the gear's own name, its accessible title
                 for (auto* child : c.getChildren())
                     walk (*child);
             };
             walk (*ed);
+            const int bassMenus = menus;
+            menus = 0;
+            walk (*ged);
             auto* face = first (*ed, (FaceplateView*) nullptr);
             auto* compBlock = first (*ed, (CompBlock*) nullptr);
             if (compBlock != nullptr)
-                bass::showCompMenu (t->apvts, compBlock);
-            check (gears == 6 && compBlock != nullptr && compBlock->hasGear() && face != nullptr && face->lastMenu == "COMP",
-                   "every OrbitBass block but the guards wears a gear (" + juce::String (gears) + " of 6), COMP's too; a right click on COMP opens its menu ("
+            {
+                const juce::Point<float> corner (4.0f, 4.0f);
+                compBlock->mouseDown (juce::MouseEvent (juce::Desktop::getInstance().getMainMouseSource(), corner,
+                                                        juce::ModifierKeys (juce::ModifierKeys::rightButtonModifier), 0.0f,
+                                                        juce::MouseInputSource::defaultOrientation, juce::MouseInputSource::defaultRotation,
+                                                        juce::MouseInputSource::defaultTiltX, juce::MouseInputSource::defaultTiltY,
+                                                        compBlock, compBlock, juce::Time::getCurrentTime(), corner, juce::Time::getCurrentTime(), 1, false));
+            }
+            check (gears == 0 && bassMenus == 6 && menus == 0 && compBlock != nullptr && face != nullptr && face->lastMenu == "COMP",
+                   "no frame wears a gear, on either face (" + juce::String (gears) + " found); every OrbitBass block but the guards has its menu on a "
+                       "right click (" + juce::String (bassMenus) + " of 6, the guitar's " + juce::String (menus) + "); a right click on COMP opens its menu ("
                        + (face != nullptr ? face->lastMenu : juce::String ("no face")) + ")");
         }
     }
@@ -3467,7 +3633,8 @@ int ORBITAMP_GATE_MAIN()
         // DELAY's and REVERB's settings but MIX: in their menus, gated under STEP 12's THE MENUS.
 
         // THE CHECKLIST: the five, ticked as they stand; a pick one undo step; the strip, the face and the window's least
-        // width follow. OrbitAmp has none.
+        // width follow — DELAY and REVERB the guitar's own blocks, each fxRowWidth wide (the owner, 01.11). OrbitAmp has
+        // none.
         {
             auto t = make (bass);
             std::unique_ptr<juce::AudioProcessorEditor> ed (t->createEditor());
@@ -3489,7 +3656,11 @@ int ORBITAMP_GATE_MAIN()
                 least2 = editor->leastDesignWidth();
                 wBoth  = ed->getWidth();
                 int shownSpace = 0;
-                walkAll (*ed, [&] (juce::Component& c) { if (dynamic_cast<SpaceBlock*> (&c) != nullptr && shownIn (c, *ed)) ++shownSpace; });
+                walkAll (*ed, [&] (juce::Component& c)
+                         {
+                             if ((dynamic_cast<DelayBlock*> (&c) != nullptr || dynamic_cast<ReverbBlock*> (&c) != nullptr) && shownIn (c, *ed))
+                                 ++shownSpace;
+                         });
                 settle (*t);
                 t->history.undo();
                 follows = shownSpace == 2 && ! t->linkShown (params::rowReverb) && t->linkShown (params::rowDelay)
@@ -3500,7 +3671,7 @@ int ORBITAMP_GATE_MAIN()
             auto* gEditor = dynamic_cast<AmpEditor*> (ged.get());
             check (list == "OCTAVE+ ENVELOPE+ CHORUS+ DELAY- REVERB- " && follows && least0 == FaceplateView::designWidth
                        && least1 >= FaceplateView::designWidth && least2 > least1   // one added: the cabinet's least may widen it (step 11)
-                       && least2 <= 960 + (FaceplateView::bassCabLeast() - 226)   // ~960, and what the IR's line costs (step 10)
+                       && least2 == FaceplateView::bassLeastWidth (true, true, true, 0) + 2 * 48   // the face's row, and the IN and OUT columns
                        && gEditor != nullptr && gEditor->checklistRows().empty() && gEditor->leastDesignWidth() == FaceplateView::designWidth,
                    "the strip's checklist: " + list + "; a pick one undo step, the face and the least width following ("
                        + juce::String (least0) + ", one added " + juce::String (least1) + ", both " + juce::String (least2)
@@ -3508,8 +3679,8 @@ int ORBITAMP_GATE_MAIN()
         }
 
         // THE FACE: row three in the signal's order at the least width and at 16:9, none overlapping, the cabinet never
-        // under its least; every word of the pictures inside them; and THE GEARS — on every block but the guards, never on
-        // its name.
+        // under its least; every word of the pictures inside them; and NO GEAR on any frame — the right click is the menu,
+        // on every block but the guards.
         {
             juce::StringArray bad;
 
@@ -3569,29 +3740,22 @@ int ORBITAMP_GATE_MAIN()
                         auto* b = dynamic_cast<BlockFrame*> (&c);
                         if (b == nullptr || ! shownIn (c, *ed) || face == nullptr || b->getParentComponent() != face)
                             return;
-                        if (b->hasGear())
-                        {
-                            const auto title = b->titleBounds(), gear = b->gearBounds();
-                            if (title.intersects (gear) || ! b->getLocalBounds().contains (gear))
-                                bad.add (where + label (*b) + "'s gear " + gear.toString() + " on its name " + title.toString());
-                        }
-                        else if (dynamic_cast<GuardBlock*> (b) == nullptr)   // the guards wear none (the owner, 31.10)
-                            bad.add (where + label (*b) + " has no gear");
-                        else if (b->hasGear())
-                            bad.add (where + label (*b) + " — a guard — wears a gear");
+                        for (auto* child : b->getChildren())
+                            if (child->getTitle() == "Menu")
+                                bad.add (where + label (*b) + " wears a gear");
+                        const auto* guard = dynamic_cast<GuardBlock*> (b);   // GATE and LIMIT: no picture (OCTAVE wears one)
+                        if (b->hasBlockMenu() == (guard != nullptr && guard->pictureShown() == nullptr))   // the guards keep their own (the owner, 31.10)
+                            bad.add (where + label (*b) + (b->hasBlockMenu() ? " — a guard — opens a block's menu" : " has no menu on its right click"));
                         if (b->getY() > 300 && face != nullptr && b->getParentComponent() == face)
                             row3.emplace_back (b->getX(), dynamic_cast<GuardBlock*> (b) != nullptr ? juce::String ("LIMIT")
                                                           : dynamic_cast<ChorusBlock*> (b) != nullptr ? juce::String ("CHORUS")
                                                           : dynamic_cast<CabinetBlock*> (b) != nullptr ? juce::String ("CAB")
-                                                          : dynamic_cast<SpaceBlock*> (b) != nullptr ? juce::String ("SPACE")
+                                                          : dynamic_cast<DelayBlock*> (b) != nullptr ? juce::String ("DELAY")
+                                                          : dynamic_cast<ReverbBlock*> (b) != nullptr ? juce::String ("REVERB")
                                                           : juce::String ("?"));
-                        if (auto* sb = dynamic_cast<SpaceBlock*> (b))
-                            for (const auto& w : SpacePicture::everyHeadline (sb->getName() == "DELAY" ? SpacePicture::Which::delay
-                                                                                                      : SpacePicture::Which::reverb))
-                                if (theme::trackedWidth (w, theme::displayFont (SpacePicture::textHeight), SpacePicture::tracking)
-                                    > (float) sb->view().getWidth())
-                                    bad.add (where + w + " (" + juce::String (theme::trackedWidth (w, theme::displayFont (SpacePicture::textHeight), SpacePicture::tracking), 1)
-                                             + ") wider than " + sb->getName() + "'s picture (" + juce::String (sb->view().getWidth()) + ")");
+                        // DELAY and REVERB are the guitar's own blocks (the owner, 01.11), fxRowWidth wide: never narrower.
+                        if ((dynamic_cast<DelayBlock*> (b) != nullptr || dynamic_cast<ReverbBlock*> (b) != nullptr) && b->getWidth() != FaceplateView::fxRowWidth)
+                            bad.add (where + label (*b) + " " + juce::String (b->getWidth()) + " wide, not " + juce::String (FaceplateView::fxRowWidth));
                         if (dynamic_cast<CabinetBlock*> (b) != nullptr && b->getWidth() < FaceplateView::bassCabLeast())
                             bad.add (where + "the cabinet " + juce::String (b->getWidth()) + " wide");
                         if (auto* cb = dynamic_cast<CabinetBlock*> (b); cb != nullptr && (! irRead || (float) (cb->waveView().getWidth() - 16) < irLineW))
@@ -3604,7 +3768,7 @@ int ORBITAMP_GATE_MAIN()
                     juce::String order;
                     for (const auto& [x, n] : row3)
                         order << n << " ";
-                    const juce::String want = mode == 0 ? "CHORUS CAB LIMIT " : mode == 1 ? "CHORUS SPACE SPACE CAB LIMIT " : "SPACE SPACE CAB LIMIT ";
+                    const juce::String want = mode == 0 ? "CHORUS CAB LIMIT " : mode == 1 ? "CHORUS DELAY REVERB CAB LIMIT " : "DELAY REVERB CAB LIMIT ";
                     if (order != want)
                         bad.add (where + "row three " + order);
                     for (size_t k = 1; k < row3.size(); ++k)
@@ -3616,48 +3780,50 @@ int ORBITAMP_GATE_MAIN()
                                   "and 2.2:1, the cabinet never under its least, the IR's line \"" + irLine + "\" (" + juce::String (irLineW, 1)
                                   + " px at 13 px) under its waveform (the cabinet's least " + juce::String (FaceplateView::bassCabLeast())
                                   + ", the face's with both " + juce::String (FaceplateView::bassLeastWidth (true, true, true, 0)) + " + 2 x 48)"
-                                  + ", the pictures' words inside them; a gear on every block, "
-                                  "never on its name" + (bad.isEmpty() ? juce::String() : ": " + bad.joinIntoString ("; ")));
+                                  + ", the pictures' words inside them; no gear on any frame, a menu on every block's "
+                                  "right click but the guards'" + (bad.isEmpty() ? juce::String() : ": " + bad.joinIntoString ("; ")));
         }
     }
 
-    // ---- STEP 9b: THE RATIO'S TICKS ARE ITS DETENTS; A DRAG ONTO EACH LANDS ON IT, SLIDER AND SQUARE ----------------
+    // ---- STEP 9b, NOW THE COMBO'S (step 14): EACH ITEM PICKED FROM ITS LIST, THE COMBO AND THE SQUARE LAND ON IT, TICKED --
     {
         auto t = make (bass);
         std::unique_ptr<juce::AudioProcessorEditor> ed (t->createEditor());
-        CompRatioSlider* slider = nullptr;
+        CompRatioCombo* combo = nullptr;
         CompTransfer* square = nullptr;
         std::function<void (juce::Component&)> walk = [&] (juce::Component& c)
         {
-            if (auto* s = dynamic_cast<CompRatioSlider*> (&c)) slider = s;
+            if (auto* s = dynamic_cast<CompRatioCombo*> (&c)) combo = s;
             if (auto* q = dynamic_cast<CompTransfer*> (&c))   square = q;
             for (auto* child : c.getChildren())
                 walk (*child);
         };
         walk (*ed);
         juce::StringArray wrong;
-        if (slider == nullptr || square == nullptr)
+        if (combo == nullptr || square == nullptr)
             wrong.add ("no ratio controls");
         else
-        {
-            const auto ticks = slider->tickXs();
-            for (size_t k = 0; k < std::size (compRatioDetents); ++k)
+            for (int k = 0; k < (int) std::size (compRatioItems); ++k)
             {
-                const double d = compRatioDetents[k];
-                slider->beginDrag();
-                slider->dragTo (ticks[k]);
-                slider->endDrag();
-                const double onSlider = slider->shownRatio();
-                square->beginRatioDrag();
-                square->dragRatioTo (square->yOfRatio (d));
-                square->endRatioDrag();
-                const double onSquare = square->shownRatio();
-                if (onSlider != d || std::abs (slider->xOfRatio (onSlider) - ticks[k]) > 0.5f || onSquare != d)
-                    wrong.add (juce::String (d, 0) + ":1 -> slider " + juce::String (onSlider, 2) + ", square " + juce::String (onSquare, 2));
+                const double d = compRatioItems[k];
+                std::function<void (int)> answer;
+                onfirst::catcher() = [&] (const juce::PopupMenu&, const std::function<void (int)>& a) { answer = a; return true; };
+                combo->openList();
+                onfirst::catcher() = nullptr;
+                if (answer != nullptr)
+                    answer (k + 1);
+                const double onCombo = combo->shownRatio(), onSquare = square->shownRatio();
+                juce::String ticked;
+                const auto shownList = combo->list();
+                for (juce::PopupMenu::MenuItemIterator it (shownList); it.next();)
+                    if (it.getItem().isTicked)
+                        ticked << it.getItem().text;
+                if (onCombo != d || onSquare != d || combo->text() != CompRatioCombo::itemText (d) || ticked != CompRatioCombo::itemText (d))
+                    wrong.add (CompRatioCombo::itemText (d) + " -> combo " + juce::String (onCombo, 2) + " \"" + combo->text() + "\", square "
+                               + juce::String (onSquare, 2) + ", ticked " + ticked);
             }
-        }
-        check (wrong.isEmpty(), "the ratio's ticks are its detents: dragged onto each of 2, 3, 4, 5, 7, 10 : 1, the slider and the square land on it"
-                                    + (wrong.isEmpty() ? juce::String() : ": " + wrong.joinIntoString ("; ")));
+        check (wrong.isEmpty(), "each of COMP's ratios picked from its list — 1.5, 2, 3, 4, 5, 7, 10 : 1 — the combo and the square land on it, "
+                                "the list ticks it" + (wrong.isEmpty() ? juce::String() : ": " + wrong.joinIntoString ("; ")));
     }
 
     // ---- THE GUARDS KEEP THEIR SCALES AND THEIR MENUS (the owner, 31.10): no gear on GATE or LIMIT, their rails the
@@ -3688,7 +3854,7 @@ int ORBITAMP_GATE_MAIN()
                 find (*child);
         };
         find (*bed);
-        bool ok = face != nullptr && ! face->gateBlock().hasGear() && ! face->limitBlock().hasGear();
+        bool ok = face != nullptr && ! face->gateBlock().hasBlockMenu() && ! face->limitBlock().hasBlockMenu();
         juce::String said;
         for (const char* id : { params::gateThreshold, params::limiterCeiling })
         {
@@ -3701,7 +3867,7 @@ int ORBITAMP_GATE_MAIN()
         if (face != nullptr && face->gateBlock().onMenu != nullptr)
             face->gateBlock().onMenu ({});
         ok = ok && face != nullptr && face->lastMenu.isEmpty();
-        check (ok, "GATE and LIMIT without gears, their rails at full height:" + said + "; GATE's right click its own menu, no block's");
+        check (ok, "GATE and LIMIT without a block's menu, their rails at full height:" + said + "; GATE's right click its own menu, no block's");
     }
 
     // ---- REVIEW ROUND 8 (of steps 8-9) AND THE OWNER'S OUT ----------------------------------------------------
@@ -3769,22 +3935,40 @@ int ORBITAMP_GATE_MAIN()
             check (worst <= 0.1, "COMP's three traces on one basis: at B0 and E1 with no squeeze they lie on each other within 0.1 dB:" + said);
         }
 
-        // THE GEAR WORKS WITH ITS BLOCK STANDING BY: the AMP out, its gear still the thing under a click there.
+        // THE MENU WORKS WITH ITS BLOCK STANDING BY: the AMP out, a right click on it — whatever is under the hand there, its
+        // shield or its frame — still opens the AMP's menu.
         {
             auto t = make (bass);
             std::unique_ptr<juce::AudioProcessorEditor> ed (t->createEditor());
             set (*t, params::preampOn, 0.0f);
             CapturedBlockPanel* panel = nullptr;
+            FaceplateView* face = nullptr;
             std::function<void (juce::Component&)> walk = [&] (juce::Component& c)
             {
                 if (auto* p = dynamic_cast<CapturedBlockPanel*> (&c)) panel = p;
+                if (auto* f = dynamic_cast<FaceplateView*> (&c)) face = f;
                 for (auto* child : c.getChildren())
                     walk (*child);
             };
             walk (*ed);
-            auto* hit = panel != nullptr && panel->hasGear() ? panel->getComponentAt (panel->gearBounds().getCentre()) : nullptr;
-            check (hit != nullptr && hit->getTitle() == "Menu" && hit->getAlpha() == 1.0f,
-                   "the AMP standing by: its gear on top of its shield, undimmed — a click there opens its menu");
+            juce::Component* hit = nullptr;
+            if (panel != nullptr && face != nullptr)
+            {
+                face->lastMenu = {};
+                const juce::Point<int> corner (4, 4);
+                hit = panel->getComponentAt (corner);
+                if (hit != nullptr)
+                {
+                    const auto at = hit->getLocalPoint (panel, corner).toFloat();
+                    hit->mouseDown (juce::MouseEvent (juce::Desktop::getInstance().getMainMouseSource(), at,
+                                                      juce::ModifierKeys (juce::ModifierKeys::rightButtonModifier), 0.0f,
+                                                      juce::MouseInputSource::defaultOrientation, juce::MouseInputSource::defaultRotation,
+                                                      juce::MouseInputSource::defaultTiltX, juce::MouseInputSource::defaultTiltY,
+                                                      hit, hit, juce::Time::getCurrentTime(), at, juce::Time::getCurrentTime(), 1, false));
+                }
+            }
+            check (hit != nullptr && face != nullptr && face->lastMenu == "AMP",
+                   "the AMP standing by: a right click on it opens its menu (\"" + (face != nullptr ? face->lastMenu : juce::String()) + "\")");
         }
 
     }
@@ -3869,9 +4053,8 @@ int ORBITAMP_GATE_MAIN()
             const Pic pics[] = { { "COMP", params::compOn, params::compAmount, 0.6f },
                                  { "OCTAVE", params::octaveOn, params::octaveAmount, 0.6f },
                                  { "ENVELOPE", params::filterOn, params::filterAmount, 0.8f },
-                                 { "CHORUS", params::chorusOn, params::chorusAmount, 0.6f },
-                                 { "DELAY", params::delayOn, params::delayMix, 50.0f },
-                                 { "REVERB", params::reverbOn, params::reverbMix, 50.0f } };
+                                 { "CHORUS", params::chorusOn, params::chorusAmount, 0.6f } };
+            // (The bass's DELAY and REVERB are the guitar's own blocks since 01.11, their pictures the guitar's.)
             juce::StringArray said;
             bool ok = true;
             for (const auto& b : pics)
@@ -3892,8 +4075,6 @@ int ORBITAMP_GATE_MAIN()
                         || (name == "ENVELOPE" && dynamic_cast<FilterCurve*> (&c) != nullptr)
                         || (name == "CHORUS" && dynamic_cast<ChorusPicture*> (&c) != nullptr))
                         pic = &c;
-                    else if (auto* sb = dynamic_cast<SpaceBlock*> (&c); sb != nullptr && sb->getName() == name)
-                        pic = &sb->view();
                 });
                 const auto alpha = [&]
                 {
@@ -4026,12 +4207,14 @@ int ORBITAMP_GATE_MAIN()
                        "a quiet note up, a loud one down");
 
             // ...AND ITS KNOWN LIMIT (BassComp::readsDb): the table is the defaults'; at the threshold and ratio's corners the
-            // reference note drifts — printed, and held within 1.2 dB so a regression past that shows.
+            // reference note drifts — printed, and held within 1.2 dB so a regression past that shows. The gentlest ratio,
+            // 1.5:1 (step 14), at all three thresholds — and the stage works at it, not at 2:1.
             {
                 bool held = true;
                 double worstCorner = 0.0;
                 juce::String worstCornerAt;
-                for (const auto [thr, ratio] : { std::pair { -12.0, 2.0 }, std::pair { -24.0, 4.0 }, std::pair { -48.0, 10.0 } })
+                for (const auto [thr, ratio] : { std::pair { -12.0, 2.0 }, std::pair { -24.0, 4.0 }, std::pair { -48.0, 10.0 },
+                                                 std::pair { -12.0, 1.5 }, std::pair { -24.0, 1.5 }, std::pair { -48.0, 1.5 } })
                 {
                     std::printf ("      COMP at %g dB, %g:1 — the reference note's worst at 55..440 Hz, BLEND 100 / 50, dB:\n", thr, ratio);
                     for (const auto ch : { C::smooth, C::punchy })
@@ -4053,15 +4236,25 @@ int ORBITAMP_GATE_MAIN()
                                 if (off > worstCorner)
                                 {
                                     worstCorner   = off;
-                                    worstCornerAt = juce::String (thr, 0) + " dB " + juce::String (ratio, 0) + ":1 "
+                                    worstCornerAt = juce::String (thr, 0) + " dB " + juce::String (ratio, ratio == std::floor (ratio) ? 0 : 1) + ":1 "
                                                   + (ch == C::smooth ? "SMOOTH" : "PUNCHY");
                                 }
                             }
                         std::printf ("\n");
                     }
                 }
-                check (held, "COMP's BLEND at the threshold and ratio's corners (-12/2, -24/4, -48/10): the reference note within 1.2 dB "
-                             "(worst " + juce::String (worstCorner, 2) + " dB, " + worstCornerAt + "; the table is the defaults')");
+                BassComp gentle;
+                (void) gentle.prepare (sampleRate, blockSize);
+                gentle.snapAmount (1.0);
+                std::vector<float> x ((size_t) blockSize, 0.1f);
+                for (int b = 0; b < 20; ++b)
+                    gentle.process (x.data(), blockSize, 1.0, core::BypassFade::Span { 1.0f, 1.0f, false, 0 }, A::med, R::automatic, C::smooth,
+                                    -48.0, 1.5);
+                const double atGentle = gentle.ratioNow();
+                check (held && atGentle == 1.5 && gentle.makeupNow() > 0.0,
+                       "COMP's BLEND at the threshold and ratio's corners (-12/2, -24/4, -48/10; -12, -24 and -48 at 1.5:1): the reference "
+                       "note within 1.2 dB (worst " + juce::String (worstCorner, 2) + " dB, " + worstCornerAt + "; the table is the defaults'); "
+                       "the stage at 1.5:1 works at " + juce::String (atGentle, 2) + ":1, its make-up " + juce::String (gentle.makeupNow(), 2) + " dB");
             }
         }
 
@@ -4182,7 +4375,7 @@ int ORBITAMP_GATE_MAIN()
         }
 
         // A RIGHT CLICK ON THE CABINET'S WAVEFORM IS ITS BLOCK'S MENU, AND ONLY THAT (review 8): the picture's own handler opens
-        // the gear's menu — no trim menu popping up beside it.
+        // the block's menu — no trim menu popping up beside it.
         {
             auto t = make (bass);
             std::unique_ptr<juce::AudioProcessorEditor> ed (t->createEditor());
@@ -4494,7 +4687,7 @@ int ORBITAMP_GATE_MAIN()
             check (ok && CompGraph::spanColumns == 500, "COMP's picture shows about 2.5 s at every width: " + spans.joinIntoString (", "));
         }
 
-        // THE LAYOUT, left to right: the threshold rail ("dB" over it), the picture, the ratio (slider over square), BLEND —
+        // THE LAYOUT, left to right: the threshold rail ("dB" over it), the picture, the ratio (its combo over the square), BLEND —
         // and nothing a player reads under 13 px; the threshold's number on its grip, the picture's orange box gone.
         {
             auto t = make (bass);
@@ -4508,7 +4701,7 @@ int ORBITAMP_GATE_MAIN()
                 auto* thr = railOf (*block, params::compThreshold);
                 auto* blend = railOf (*block, params::compAmount);
                 auto& graph = block->picture();
-                auto& slider = block->ratio();
+                auto& combo = block->ratio();
                 auto& square = block->square();
                 juce::Label* unit = nullptr;
                 for (auto* c : block->getChildren())
@@ -4519,16 +4712,18 @@ int ORBITAMP_GATE_MAIN()
                                + (unit == nullptr ? " \"dB\"" : ""));
                 else
                 {
-                    if (! (thr->getRight() <= graph.getX() && graph.getRight() <= slider.getX() && graph.getRight() <= square.getX()
-                           && std::max (slider.getRight(), square.getRight()) <= blend->getX()))
+                    if (! (thr->getRight() <= graph.getX() && graph.getRight() <= combo.getX() && graph.getRight() <= square.getX()
+                           && std::max (combo.getRight(), square.getRight()) <= blend->getX() && combo.getBottom() <= square.getY()))
                         wrong.add ("the order: threshold " + thr->getBounds().toString() + ", picture " + graph.getBounds().toString()
-                                   + ", ratio " + slider.getBounds().toString() + ", BLEND " + blend->getBounds().toString());
+                                   + ", ratio " + combo.getBounds().toString() + " over the square " + square.getBounds().toString()
+                                   + ", BLEND " + blend->getBounds().toString());
                     if (! (unit->getBottom() <= thr->getY() && unit->getX() <= thr->getX() && unit->getRight() >= thr->getRight()))
                         wrong.add ("\"dB\" " + unit->getBounds().toString() + " not over the rail " + thr->getBounds().toString());
-                    if (unit->getFont().getHeight() < 13.0f || thr->gripTextHeight < 13.0f || blend->gripTextHeight < 13.0f
-                        || CompGraph::textHeight < 13.0f)
+                    // BLEND a fader (the owner, 01.11): its number under it at fader::textH, with its unit.
+                    if (unit->getFont().getHeight() < 13.0f || thr->gripTextHeight < 13.0f || ! blend->hasFaderLook() || fader::textH < 13.0f
+                        || CompGraph::textHeight < 13.0f || CompRatioCombo::textHeight < 13.0f)
                         wrong.add ("type under 13 px");
-                    if (thr->gripText() != "-24" || blend->gripText() != "50")
+                    if (thr->gripText() != "-24" || blend->gripText() != "50%")
                         wrong.add ("the grips read " + thr->gripText() + " and " + blend->gripText());
                     if (thr->typeDecimals < 0)
                         wrong.add ("the threshold's number is not typed");
@@ -4637,6 +4832,8 @@ int ORBITAMP_GATE_MAIN()
             else
             {
                 auto& g = block->picture();
+                // A picture full from its left edge (it shows ~2.5 s, whole columns a pixel): older columns first.
+                writeColumns (*t, 300, 0.5f, 0.12589f, 0.0625f, 0.0f);
                 writeColumns (*t, 300, 0.5f, 0.12589f, 0.0625f, 0.0f);   // -6, -18, -24 dB
                 writeColumns (*t, 60, 0.5f, 0.12589f, 0.0625f, -6.0f);
                 writeColumns (*t, 60, 0.5f, 0.12589f, 0.0625f, -12.0f);
@@ -4736,8 +4933,8 @@ int ORBITAMP_GATE_MAIN()
                                                   + juce::String (k) + " items" + (wrong.isEmpty() ? juce::String() : ": " + wrong.joinIntoString ("; ")) + ")");
         }
 
-        // THE MENUS: no window anywhere — every gear opens its block's menu, a right click on the block (and on COMP's every
-        // control) the same; every pick sets what it says, one undo step; together a block's picks reach exactly what its
+        // THE MENUS: no window anywhere, no gear on any frame — a right click on a block (and on COMP's every control) opens
+        // its menu; every pick sets what it says, one undo step; together a block's picks reach exactly what its
         // window held, and a value off the steps shows ticked as "(custom)".
         {
             auto t = make (bass);
@@ -4754,22 +4951,17 @@ int ORBITAMP_GATE_MAIN()
                 for (auto* c : face->getChildren())
                 {
                     auto* b = dynamic_cast<BlockFrame*> (c);
-                    if (b == nullptr || ! b->isVisible() || ! b->hasGear())
-                        continue;
-                    face->lastMenu = {};
-                    if (auto* hit = b->getComponentAt (b->gearBounds().getCentre()))
-                    {
-                        const auto at = hit->getLocalBounds().getCentre().toFloat();
-                        hit->mouseDown (mouse (*hit, at, at));
-                        hit->mouseUp (mouse (*hit, at, at));
-                    }
-                    const auto byGear = face->lastMenu;
+                    if (b == nullptr || ! b->isVisible() || (dynamic_cast<GuardBlock*> (b) != nullptr && dynamic_cast<GuardBlock*> (b)->pictureShown() == nullptr))
+                        continue;   // GATE and LIMIT keep their own menus
+                    for (auto* child : b->getChildren())
+                        if (child->getTitle() == "Menu")
+                            wrong.add (b->getName() + " wears a gear");
                     face->lastMenu = {};
                     const juce::Point<float> corner (4.0f, 4.0f);
                     b->mouseDown (mouse (*b, corner, corner, true));
-                    if (byGear.isEmpty() || face->lastMenu != byGear)
-                        wrong.add (b->getName() + ": the gear opened \"" + byGear + "\", a right click \"" + face->lastMenu + "\"");
-                    opened.add (byGear);
+                    if (face->lastMenu.isEmpty())
+                        wrong.add (b->getName() + ": a right click opened no menu");
+                    opened.add (face->lastMenu);
                 }
             if (auto* block = compOf (*ed); block != nullptr && face != nullptr)
                 for (juce::Component* c : { (juce::Component*) &block->picture(), (juce::Component*) &block->ratio(), (juce::Component*) &block->square(),
@@ -4784,15 +4976,17 @@ int ORBITAMP_GATE_MAIN()
                 }
             opened.sort (false);
             if (opened.joinIntoString (",") != "AMP,CAB IR,CHORUS,COMP,DELAY,ENVELOPE,OCTAVE,REVERB")
-                wrong.add ("the gears opened " + opened.joinIntoString (","));
+                wrong.add ("the right clicks opened " + opened.joinIntoString (","));
 
             // ...and its ON at the top (step 13).
             const std::map<juce::String, juce::StringArray> held {
+                // OCTAVE's TONE, ENVELOPE's RELEASE and CHORUS's RATE are rails on their blocks, ENVELOPE's RANGE and
+                // CHORUS's crossover lists on their pictures (01.11).
                 { "COMP",     { params::compOn, params::compAttack, params::compRelease, params::compCharacter } },
-                { "OCTAVE",   { params::octaveOn, params::octaveSub2, params::octaveToneHz, params::octaveSubHpHz, params::octaveGateDb } },
-                { "ENVELOPE", { params::filterOn, params::filterMode, params::filterDirection, params::filterRange, params::filterResonance,
-                                params::filterKeepLows, params::filterKeepHz, params::filterAttackMs, params::filterReleaseMs } },
-                { "CHORUS",   { params::chorusOn, params::chorusCentreMs } },
+                { "OCTAVE",   { params::octaveOn } },
+                { "ENVELOPE", { params::filterOn, params::filterMode, params::filterDirection, params::filterResonance,
+                                params::filterKeepLows, params::filterKeepHz } },
+                { "CHORUS",   { params::chorusOn } },
                 { "DELAY",    { params::delayOn, params::delaySync, params::delayDiv, params::delayTimeMs, params::delayHostTempo, params::delayBpm,
                                 params::delayRepeats, params::delayDark, params::delayOffset } },
                 { "REVERB",   { params::reverbOn, params::reverbType, params::reverbDecay, params::reverbPredelay } },
@@ -4862,16 +5056,16 @@ int ORBITAMP_GATE_MAIN()
                 if (reached != want)
                     wrong.add (name + " reaches " + reached.joinIntoString (" ") + " (its window held " + want.joinIntoString (" ") + ")");
             }
-            set (*t, params::chorusCentreMs, 9.3f);
+            set (*t, params::filterResonance, 5.0f);
             bool custom = false;
             {
-                auto m = bass::chorusMenu (t->apvts);
+                auto m = bass::filterMenu (t->apvts);
                 for (juce::PopupMenu::MenuItemIterator it (m.items, true); it.next();)
-                    custom = custom || (it.getItem().text == "9.3 ms (custom)" && it.getItem().isTicked && ! it.getItem().isEnabled);
+                    custom = custom || (it.getItem().text == "Q 5 (custom)" && it.getItem().isTicked && ! it.getItem().isEnabled);
             }
             if (! custom)
-                wrong.add ("CHORUS's centre at 9.3 ms not shown as custom");
-            check (wrong.isEmpty() && picks > 100, "no windows: every gear opens its block's menu and a right click the same; " + juce::String (picks)
+                wrong.add ("ENVELOPE's resonance at Q 5 not shown as custom");
+            check (wrong.isEmpty() && picks > 100, "no windows, no gears: a right click opens every block's menu; " + juce::String (picks)
                                                        + " picks, each its own and one undo step; each menu what its window held; a value off the steps ticked as custom"
                                                        + (wrong.isEmpty() ? juce::String() : ": " + wrong.joinIntoString ("; ")));
         }
@@ -4904,7 +5098,10 @@ int ORBITAMP_GATE_MAIN()
                 continue;
             }
             // The scale over the whole travel: the lowest value's place is the travel's end, half a hand off the rail's foot.
-            const float stop = rail->yOfValue (-80.0f), foot = (float) rail->getHeight() - 2.0f - meterrail::gripH * 0.5f;
+            // The guard's rail wears the fader's look since 01.11 (no name, its number in the lamp): its hand travels to half
+            // a fader's grip off the rail's foot (fader::travel), the plain rail's to half its grip over its 2 px lip.
+            const float stop = rail->yOfValue (-80.0f),
+                        foot = (float) rail->getHeight() - (rail->hasFaderLook() ? fader::gripH * 0.5f : 2.0f + meterrail::gripH * 0.5f);
             if (std::abs (stop - foot) > 0.5f)
                 wrong.add (who + ": the lowest threshold at " + juce::String (stop, 1) + ", the travel's end at " + juce::String (foot, 1));
             const auto now = juce::Time::getCurrentTime();
@@ -5005,12 +5202,14 @@ int ORBITAMP_GATE_MAIN()
         // THE EIGHT BLOCKS: each its strip arrow's switch, the rest of its menu what step 12's held (its words, and the builder's own).
         struct Block { const char* name; const char* on; std::function<bass::Menu (juce::AudioProcessorValueTreeState&)> alone; juce::StringArray words; };
         const std::vector<Block> blocks {
+            // 01.11: OCTAVE's and CHORUS's menus hold nothing past ON (their TONE and RATE rails on the blocks), ENVELOPE's
+            // RANGE is its picture's list, its RELEASE a rail.
             { "COMP",     params::compOn,   [] (auto& s) { return bass::compMenu (s); },   { "ATTACK >", "RELEASE >", "CHARACTER >" } },
-            { "OCTAVE",   params::octaveOn, [] (auto& s) { return bass::octaveMenu (s); }, { "-2 OCTAVE AT THE TOP", "TONE >", "SUB HP >", "GATE >" } },
+            { "OCTAVE",   params::octaveOn, [] (auto& s) { return bass::octaveMenu (s); }, {} },
             { "ENVELOPE", params::filterOn, [] (auto& s) { return bass::filterMenu (s); },
-              { "MODE >", "DIRECTION >", "RANGE >", "RESONANCE >", "KEEP LOWS CLEAN", "KEEP LOWS AT >", "ATTACK >", "RELEASE >" } },
+              { "MODE >", "DIRECTION >", "RESONANCE >", "CLEAN LOWS >" } },
             { "AMP",      params::preampOn, [] (auto& s) { return bass::ampMenu (s); },    { "BLEND CROSSOVER >", "INVERT POLARITY", "HPF >", "LPF >" } },
-            { "CHORUS",   params::chorusOn, [] (auto& s) { return bass::chorusMenu (s); }, { "CENTRE >" } },
+            { "CHORUS",   params::chorusOn, [] (auto& s) { return bass::chorusMenu (s); }, {} },
             { "DELAY",    params::delayOn,  [] (auto& s) { return bass::delayMenu (s); },
               { "SYNC", "DIVISION >", "TIME (FREE) >", "HOST TEMPO", "BPM >", "REPEATS >", "DARK >", "OFFSET >" } },
             { "REVERB",   params::reverbOn, [] (auto& s) { return bass::reverbMenu (s); }, { "TYPE >", "DECAY >", "PRE-DELAY >" } },
@@ -5338,7 +5537,8 @@ int ORBITAMP_GATE_MAIN()
 
         // HINTS OVER THE SLIDERS (the owner, 01.11: what is this, BLEND?): every rail and slider on OrbitBass's face — COMP's
         // threshold, ratio and BLEND, OCTAVE, ENVELOPE, CHORUS, DELAY's and REVERB's MIX, the AMP's BLEND, DI/CAB, GATE, LIMIT —
-        // a tooltip, its name in capitals first, then what it does; the window's TooltipWindow shows it at 13 px.
+        // a tooltip, its name in capitals first, then what it mixes with what, or nothing more ("THRESHOLD"); SHORT (the owner,
+        // 01.11: shorter — "BLEND: compressed with dry"), 30 characters at most; the window's TooltipWindow shows it at 13 px.
         {
             auto t = make (bass);
             set (*t, params::delayPresent, 1.0f);
@@ -5353,16 +5553,13 @@ int ORBITAMP_GATE_MAIN()
                 juce::SettableTooltipClient* tip = nullptr;
                 if (auto* r = dynamic_cast<GuardRail*> (&c))
                     tip = r;
-                else if (auto* s = dynamic_cast<CompRatioSlider*> (&c))
+                else if (auto* s = dynamic_cast<CompRatioCombo*> (&c))
                     tip = s;
-                else if (auto* k = dynamic_cast<bass::MenuKnob*> (&c))
-                    tip = k;
                 if (tip != nullptr)
                 {
                     const auto text = tip->getTooltip();
-                    const auto name = text.upToFirstOccurrenceOf (": ", false, false);
-                    if (! text.contains (": ") || name.isEmpty() || name != name.toUpperCase() || ! juce::CharacterFunctions::isLetter (name[0])
-                        || text.length() < name.length() + 12)
+                    const auto name = text.upToFirstOccurrenceOf (": ", false, false);   // a bare name is its whole hint
+                    if (name.isEmpty() || name != name.toUpperCase() || ! juce::CharacterFunctions::isLetter (name[0]) || text.length() > 30)
                         bad.add (juce::String (typeid (c).name()) + " \"" + text + "\"");
                     else
                         seen.add (name);
@@ -5373,9 +5570,363 @@ int ORBITAMP_GATE_MAIN()
             for (auto* child : ed->getChildren())
                 walk (*child);
             seen.sort (false);
-            check (bad.isEmpty() && seen.joinIntoString (",") == "BLEND,BLEND,CHORUS,DI/CAB,ENVELOPE,GATE,LIMIT,MIX,MIX,OCTAVE,RATIO,THRESHOLD" && juce::TooltipWindow().getLookAndFeel().getTooltipBounds ("BLEND: a hint", {}, { 0, 0, 2000, 2000 }).getHeight() >= 13,
-                   "every rail and slider on OrbitBass's face has a hint, its name first: " + seen.joinIntoString (", ")
+            check (bad.isEmpty() && seen.joinIntoString (",") == "BLEND,BLEND,CHORUS,DI/CAB,ENVELOPE,GATE,LIMIT,OCTAVE,RATE,RATIO,RELEASE,THRESHOLD,TONE" && juce::TooltipWindow().getLookAndFeel().getTooltipBounds ("BLEND: a hint", {}, { 0, 0, 2000, 2000 }).getHeight() >= 13,
+                   "every rail and slider on OrbitBass's face has a short hint, its name first: " + seen.joinIntoString (", ")
                    + (bad.isEmpty() ? juce::String() : "; without: " + bad.joinIntoString ("; ")));
+        }
+
+        // STEP 14: COMP'S PICTURE, ITS SQUEEZE'S COLUMN AND ITS IN/OUT BOX STAND ON ONE SCALE (the owner, 01.11). The GR
+        // column, between the picture and the ratio, runs from the picture's plot top to its levels' foot over 24 dB, so
+        // -6, -12 and -24 dB fill a quarter, a half and all of it (and deeper stays full); the box under the combo spans the
+        // levels exactly — its curve starts at their foot, its knee at the threshold line's height, every segment end at
+        // the levels' own height for its dB; nothing a player reads under 13 px, and the widest ratio, "10.0:1", fits the
+        // combo's number area.
+        {
+            auto t = make (bass);
+            std::unique_ptr<juce::AudioProcessorEditor> ed (t->createEditor());
+            CompBlock* block = nullptr;
+            std::function<void (juce::Component&)> walk = [&] (juce::Component& c)
+            {
+                if (auto* b = dynamic_cast<CompBlock*> (&c); b != nullptr && block == nullptr)
+                    block = b;
+                for (auto* child : c.getChildren())
+                    walk (*child);
+            };
+            walk (*ed);
+            juce::StringArray wrong, depths;
+            if (block == nullptr)
+                wrong.add ("no COMP block");
+            else
+            {
+                auto& graph  = block->picture();
+                auto& bar    = block->grBar();
+                auto& combo  = block->ratio();
+                auto& square = block->square();
+                const float plotTop    = (float) graph.getY() + graph.plot().getY();
+                const float levelsTop  = (float) graph.getY() + graph.levels().getY();
+                const float levelsFoot = (float) graph.getY() + graph.levels().getBottom();
+
+                if (std::abs ((float) bar.getY() - plotTop) > 0.5f || std::abs ((float) bar.getBottom() - levelsFoot) > 0.5f
+                    || graph.getRight() > bar.getX() || bar.getRight() > combo.getX() || bar.getRight() > square.getX())
+                    wrong.add ("the column " + bar.getBounds().toString() + " for the plot's top " + juce::String (plotTop, 1)
+                               + " and the levels' foot " + juce::String (levelsFoot, 1) + ", between the picture "
+                               + graph.getBounds().toString() + " and the ratio " + combo.getBounds().toString());
+
+                // The fill, read off the column painted: the rows lit at its centre, from its top.
+                const auto litRows = [&]
+                {
+                    const auto img = bar.createComponentSnapshot (bar.getLocalBounds(), false, 1.0f);
+                    const int x = img.getWidth() / 2;
+                    int lit = 0;
+                    for (int y = 0; y < img.getHeight(); ++y)
+                        if (const auto c = img.getPixelAt (x, y); std::max ({ c.getRed(), c.getGreen(), c.getBlue() }) > 0x50)
+                            lit = y + 1;
+                    return lit;
+                };
+                for (const float db : { 0.0f, -6.0f, -12.0f, -24.0f, -30.0f })
+                {
+                    bar.showDb (db);
+                    const int lit = litRows();
+                    const float want = (float) bar.getHeight() * std::min (24.0f, -db) / 24.0f;
+                    depths.add (juce::String (db, 0) + " dB " + juce::String (lit) + "/" + juce::String (bar.getHeight()) + " px");
+                    if (std::abs ((float) lit - want) > 1.0f)
+                        wrong.add ("the column at " + juce::String (db, 0) + " dB fills " + juce::String (lit) + " px, not "
+                                   + juce::String (want, 1) + " of " + juce::String (bar.getHeight()));
+                }
+                bar.showDb (0.0f);
+
+                const auto box = square.box().translated ((float) square.getX(), (float) square.getY());
+                if (std::abs (box.getY() - levelsTop) > 0.5f || std::abs (box.getBottom() - levelsFoot) > 0.5f)
+                    wrong.add ("the box spans " + juce::String (box.getY(), 1) + ".." + juce::String (box.getBottom(), 1) + ", the levels "
+                               + juce::String (levelsTop, 1) + ".." + juce::String (levelsFoot, 1));
+                for (const float thr : { -12.0f, -24.0f, -40.0f })
+                {
+                    set (*t, params::compThreshold, thr);
+                    // the box's output axis, -48 dB at its foot to 0 at its top: the curve's start and its knee
+                    const auto yInBox = [&] (double db) { return box.getBottom() - (float) ((db + 48.0) / 48.0) * box.getHeight(); };
+                    const float knee = yInBox (thr), line = (float) graph.getY() + graph.yOfDb (thr);
+                    if (std::abs (yInBox (-48.0) - levelsFoot) > 0.5f || std::abs (knee - line) > 0.5f)
+                        wrong.add ("at " + juce::String (thr, 0) + " dB the knee at " + juce::String (knee, 1) + ", the line at " + juce::String (line, 1));
+                }
+
+                const auto font = theme::displayFont (CompRatioCombo::textHeight);
+                float widest = 0.0f;
+                for (const double r : compRatioItems)
+                    widest = std::max (widest, theme::trackedWidth (juce::String (r, 1) + ":1", font, 0.02f));
+                const float room = (float) combo.numberArea().getWidth() - 4.0f;   // 2 px clear each side
+                if (theme::trackedWidth ("10.0:1", font, 0.02f) > room || widest > room
+                    || combo.cell().getHeight() < CompRatioCombo::textHeight + 4.0f)
+                    wrong.add ("\"10.0:1\" " + juce::String (theme::trackedWidth ("10.0:1", font, 0.02f), 1) + " px in "
+                               + juce::String (room, 1) + " px, the cell " + juce::String (combo.cell().getHeight(), 1) + " px high");
+                if (CompRatioCombo::textHeight < 13.0f || CompGraph::textHeight < 13.0f || block->thresholdUnit().getFont().getHeight() < 13.0f
+                    || block->threshold().gripTextHeight < 13.0f || (block->fader().hasFaderLook() ? fader::textH : block->fader().gripTextHeight) < 13.0f
+                    || ed->getLookAndFeel().getPopupMenuFont().getHeight() < 13.0f)
+                    wrong.add ("type under 13 px");
+            }
+            check (wrong.isEmpty(), "COMP's GR column from the plot's top to the levels' foot, -6/-12/-24 dB a quarter/half/all of it; the "
+                                    "IN/OUT box on the levels' span, its curve from their foot, its knee at the line; 13 px and up, \"10.0:1\" "
+                                    "fits: read " + depths.joinIntoString (", ") + (wrong.isEmpty() ? juce::String() : "; WRONG: " + wrong.joinIntoString ("; ")));
+        }
+
+        // STEP 14: A DOUBLE CLICK IS THE DEFAULT (the owner, 01.11). On every GuardRail — COMP's THRESHOLD (on its grip, where
+        // a single click types) and its BLEND, the GATE (where a click is its menu) — and on COMP's picture, a double click
+        // sets the parameter's default back in ONE undo step, the switch on, and opens no menu and no field. A SINGLE click
+        // still opens them, but only once the double click's time has passed — nothing at once. One rail on the guitar face
+        // too, OrbitAmp's GATE: the rail is shared code.
+        {
+            const int wait = juce::jmin (300, juce::MouseEvent::getDoubleClickTimeout());
+            // The message loop the gates do not run: the timers due, called until `done` or `ms` have passed.
+            const auto pump = [] (const std::function<bool()>& done, int ms)
+            {
+                const auto until = juce::Time::getMillisecondCounter() + (juce::uint32) ms;
+                while (juce::Time::getMillisecondCounter() < until)
+                {
+                    juce::Thread::sleep (10);
+                    juce::Timer::callPendingTimersSynchronously();
+                    if (done != nullptr && done())
+                        return true;
+                }
+                return done != nullptr && done();
+            };
+            const auto event = [] (juce::Component& c, juce::Point<float> at, int clicks)
+            {
+                const auto now = juce::Time::getCurrentTime();
+                return juce::MouseEvent (juce::Desktop::getInstance().getMainMouseSource(), at, juce::ModifierKeys(), 0.0f,
+                                         juce::MouseInputSource::defaultOrientation, juce::MouseInputSource::defaultRotation,
+                                         juce::MouseInputSource::defaultTiltX, juce::MouseInputSource::defaultTiltY,
+                                         &c, &c, now, at, now, clicks, false);
+            };
+            const auto doubleClick = [&] (juce::Component& c, juce::Point<float> at)
+            {
+                c.mouseDown (event (c, at, 1));
+                c.mouseUp (event (c, at, 1));
+                c.mouseDown (event (c, at, 2));
+                c.mouseDoubleClick (event (c, at, 2));
+                c.mouseUp (event (c, at, 2));
+            };
+            const auto settle = [] (AmpProcessor& a) { for (int i = 0; i < 40; ++i) a.history.tick(); };
+            const auto railOf = [] (juce::Component& root, const char* id)
+            {
+                GuardRail* found = nullptr;
+                std::function<void (juce::Component&)> walk = [&] (juce::Component& c)
+                {
+                    if (auto* r = dynamic_cast<GuardRail*> (&c); r != nullptr && r->paramId() == id && found == nullptr)
+                        found = r;
+                    for (auto* child : c.getChildren())
+                        walk (*child);
+                };
+                walk (root);
+                return found;
+            };
+            juce::StringArray wrong, said;
+
+            struct Case { const Product* product; const char* id; const char* on; float moved; bool onGrip; };
+            for (const auto& k : { Case { &bass, params::compThreshold, params::compOn, -36.0f, true },
+                                   Case { &bass, params::compAmount, params::compOn, 0.8f, false },
+                                   Case { &bass, params::gateThreshold, params::gateOn, -64.0f, false },
+                                   Case { &products::orbitAmp(), params::gateThreshold, params::gateOn, -64.0f, false } })
+            {
+                auto t = make (*k.product);
+                std::unique_ptr<juce::AudioProcessorEditor> ed (t->createEditor());
+                auto* rail = railOf (*ed, k.id);
+                const juce::String name = juce::String (k.product == &bass ? "OrbitBass's " : "OrbitAmp's ") + k.id;
+                if (rail == nullptr)
+                {
+                    wrong.add (name + ": no rail");
+                    continue;
+                }
+                int menus = 0;
+                rail->onMenu = [&menus] (juce::Point<int>) { ++menus; };
+                auto* valueP = t->apvts.getParameter (k.id);
+                const float fallback = valueP->convertFrom0to1 (valueP->getDefaultValue());
+                set (*t, k.id, k.moved);
+                set (*t, k.on, 0.0f);
+                settle (*t);
+                const float at = rail->yOfValue (k.moved), h = (float) rail->getHeight();
+                // Off the grip: an end of the rail — but a FADER's foot is its number, a field (the owner, 01.11): on a fader
+                // its middle or its name's row, clear of the grip.
+                const float off = rail->hasFaderLook() ? (at > h * 0.5f ? 6.0f : h * 0.5f) : (at > h * 0.5f ? 6.0f : h - 6.0f);
+                const auto where = juce::Point<float> ((float) rail->getWidth() * 0.5f, k.onGrip ? at : off);
+
+                // A single click: nothing at once; once the double click's time is up, the field on the grip, else the menu.
+                rail->mouseDown (event (*rail, where, 1));
+                rail->mouseUp (event (*rail, where, 1));
+                const bool nothingAtOnce = menus == 0 && ! rail->isTyping();
+                const bool landed = pump ([&] { return menus > 0 || rail->isTyping(); }, 1500);
+                const bool rightOne = k.onGrip ? rail->isTyping() && menus == 0 : menus == 1 && ! rail->isTyping();
+                const bool unmoved = std::abs (value (*t, k.id) - k.moved) < 1.0e-4f && value (*t, k.on) < 0.5f;
+                if (! (nothingAtOnce && landed && rightOne && unmoved))
+                    wrong.add (name + ": a single click " + (nothingAtOnce ? "waited" : "opened at once") + ", then "
+                               + (rail->isTyping() ? "a field" : juce::String (menus) + " menu(s)") + (unmoved ? "" : ", and moved it"));
+                ed.reset();   // the field closed with its face
+                ed.reset (t->createEditor());
+                rail = railOf (*ed, k.id);
+                menus = 0;
+                rail->onMenu = [&menus] (juce::Point<int>) { ++menus; };
+
+                // A double click: the default, the switch on, one undo step; no menu, no field — not even after the wait.
+                doubleClick (*rail, where);
+                (void) pump (nullptr, wait + 300);
+                settle (*t);
+                const float reset = value (*t, k.id);
+                const bool on = value (*t, k.on) > 0.5f;
+                const bool quiet = menus == 0 && ! rail->isTyping();
+                t->history.undo();
+                const bool undone = std::abs (value (*t, k.id) - k.moved) < 1.0e-4f && value (*t, k.on) < 0.5f;
+                said.add (name + " " + juce::String (k.moved, 2) + " -> " + juce::String (reset, 2));
+                if (std::abs (reset - fallback) > 1.0e-4f || ! on || ! quiet || ! undone)
+                    wrong.add (name + ": a double click set " + juce::String (reset, 3) + " (its default " + juce::String (fallback, 3) + "), "
+                               + (on ? "on" : "off") + ", " + juce::String (menus) + " menu(s)" + (rail->isTyping() ? ", a field" : "")
+                               + ", one undo " + (undone ? "gave it back" : "did not give it back"));
+            }
+
+            // COMP's picture: a double click sets the threshold's default, COMP on, one undo step; no menu.
+            {
+                auto t = make (bass);
+                std::unique_ptr<juce::AudioProcessorEditor> ed (t->createEditor());
+                CompGraph* graph = nullptr;
+                std::function<void (juce::Component&)> walk = [&] (juce::Component& c)
+                {
+                    if (auto* g = dynamic_cast<CompGraph*> (&c); g != nullptr && graph == nullptr)
+                        graph = g;
+                    for (auto* child : c.getChildren())
+                        walk (*child);
+                };
+                walk (*ed);
+                if (graph == nullptr)
+                    wrong.add ("no COMP picture");
+                else
+                {
+                    int menus = 0;
+                    graph->onMenu = [&menus] (juce::Point<int>) { ++menus; };
+                    set (*t, params::compThreshold, -40.0f);
+                    set (*t, params::compOn, 0.0f);
+                    settle (*t);
+                    doubleClick (*graph, graph->getLocalBounds().getCentre().toFloat());
+                    (void) pump (nullptr, wait + 300);
+                    settle (*t);
+                    const float reset = value (*t, params::compThreshold);
+                    const bool on = value (*t, params::compOn) > 0.5f;
+                    t->history.undo();
+                    const bool undone = value (*t, params::compThreshold) == -40.0f && value (*t, params::compOn) < 0.5f;
+                    said.add ("COMP's picture -40 -> " + juce::String (reset, 2));
+                    if (std::abs (reset - params::compThresholdDefault) > 1.0e-4f || ! on || menus != 0 || ! undone)
+                        wrong.add ("COMP's picture: a double click set " + juce::String (reset, 2) + " dB, " + (on ? "on" : "off") + ", "
+                                   + juce::String (menus) + " menu(s), one undo " + (undone ? "gave it back" : "did not give it back"));
+                }
+            }
+            check (wrong.isEmpty(), "a double click is the default — COMP's THRESHOLD and BLEND, the GATE on both amps, COMP's picture — "
+                                    "one undo step, no menu, no field; a single click opens them after the double click's time: "
+                                    + said.joinIntoString (", ") + (wrong.isEmpty() ? juce::String() : "; WRONG: " + wrong.joinIntoString ("; ")));
+        }
+
+        // STEP 14: THE CAB'S DI/CAB IS A RAIL (the owner, 01.11: as every other BLEND and MIX): a GuardRail at the block's
+        // right edge over the content's whole height, the waveform taking the room up to it; its orange grip writes "30" at
+        // 13 px, a click on the grip types it, a typed number ONE undo step, a double click its default (one step); a right
+        // click on it is the CAB's menu; no knob left in the block; the guitar's CAB has no rail.
+        {
+            auto t = make (bass);
+            std::unique_ptr<juce::AudioProcessorEditor> ed (t->createEditor());
+            auto g = make (products::orbitAmp());
+            std::unique_ptr<juce::AudioProcessorEditor> ged (g->createEditor());
+            const auto settle = [] (AmpProcessor& a) { for (int i = 0; i < 40; ++i) a.history.tick(); };
+            const auto find = [] (juce::Component& root, auto* none)
+            {
+                using T = std::remove_pointer_t<decltype (none)>;
+                std::vector<T*> found;
+                std::function<void (juce::Component&)> walk = [&] (juce::Component& c)
+                {
+                    if (auto* x = dynamic_cast<T*> (&c))
+                        found.push_back (x);
+                    for (auto* child : c.getChildren())
+                        walk (*child);
+                };
+                walk (root);
+                return found;
+            };
+            const auto event = [] (juce::Component& c, juce::Point<float> at, int clicks, bool right)
+            {
+                const auto now = juce::Time::getCurrentTime();
+                return juce::MouseEvent (juce::Desktop::getInstance().getMainMouseSource(), at,
+                                         right ? juce::ModifierKeys (juce::ModifierKeys::rightButtonModifier) : juce::ModifierKeys(), 0.0f,
+                                         juce::MouseInputSource::defaultOrientation, juce::MouseInputSource::defaultRotation,
+                                         juce::MouseInputSource::defaultTiltX, juce::MouseInputSource::defaultTiltY,
+                                         &c, &c, now, at, now, clicks, false);
+            };
+            const auto cabs = find (*ed, (CabinetBlock*) nullptr);
+            const auto gcabs = find (*ged, (CabinetBlock*) nullptr);
+            const auto faces = find (*ed, (FaceplateView*) nullptr);
+            juce::StringArray wrong;
+            juce::String said;
+            if (cabs.size() != 1 || gcabs.size() != 1 || faces.size() != 1)
+                wrong.add ("no cabinet or no face");
+            else
+            {
+                auto& cab = *cabs[0];
+                auto* rail = cab.diRail();
+                if (gcabs[0]->diRail() != nullptr || ! find (*gcabs[0], (GuardRail*) nullptr).empty())
+                    wrong.add ("the guitar's CAB wears a rail");
+                if (const auto knobs = find (cab, (Knob*) nullptr); ! knobs.empty())
+                    wrong.add (juce::String ((int) knobs.size()) + " knob(s) left in the CAB");
+                if (rail == nullptr || rail->getParentComponent() != &cab)
+                    wrong.add ("no DI/CAB rail in the CAB");
+                else
+                {
+                    const auto& wave = cab.waveView();
+                    said = "the rail " + rail->getBounds().toString() + ", the waveform " + wave.getBounds().toString() + " in "
+                         + cab.getLocalBounds().toString();
+                    if (rail->getRight() != cab.getWidth() - BlockFrame::contentInsetX() || rail->getWidth() != rail->columnWidth
+                        || rail->getY() != wave.getY() || rail->getBottom() < wave.getBottom() + 20 || rail->getBottom() > cab.getHeight()
+                        || wave.getRight() > rail->getX() || rail->getX() - wave.getRight() > 10)
+                        wrong.add ("the layout: " + said);
+                    // A FADER as every BLEND and MIX on the bass's face (the owner, 01.11): violet, its percent under it at 13 px.
+                    if (rail->paramId() != params::diMix || rail->gripText() != "30%" || ! rail->hasFaderLook() || fader::textH < 13.0f
+                        || rail->columnWidth != fader::columnW || rail->typeDecimals < 0 || rail->getTooltip() != "DI/CAB: DI with cabinet")
+                        wrong.add ("the rail reads \"" + rail->gripText() + "\" at " + juce::String (rail->gripTextHeight, 0) + " px, hint \""
+                                   + rail->getTooltip() + "\"");
+
+                    settle (*t);
+                    rail->typeValue (55.0f);
+                    settle (*t);
+                    const float typed = value (*t, params::diMix);
+                    t->history.undo();
+                    if (std::abs (typed - 55.0f) > 1.0e-3f || std::abs (value (*t, params::diMix) - 30.0f) > 1.0e-3f)
+                        wrong.add ("typed 55 -> " + juce::String (typed, 2) + ", one undo -> " + juce::String (value (*t, params::diMix), 2));
+
+                    set (*t, params::diMix, 70.0f);
+                    settle (*t);
+                    const juce::Point<float> grip ((float) rail->getWidth() * 0.5f, rail->yOfValue (70.0f));
+                    rail->mouseDown (event (*rail, grip, 1, false));
+                    rail->mouseUp (event (*rail, grip, 1, false));
+                    rail->mouseDown (event (*rail, grip, 2, false));
+                    rail->mouseDoubleClick (event (*rail, grip, 2, false));
+                    rail->mouseUp (event (*rail, grip, 2, false));
+                    const auto until = juce::Time::getMillisecondCounter() + (juce::uint32) (juce::jmin (300, juce::MouseEvent::getDoubleClickTimeout()) + 300);
+                    while (juce::Time::getMillisecondCounter() < until)
+                    {
+                        juce::Thread::sleep (10);
+                        juce::Timer::callPendingTimersSynchronously();
+                    }
+                    settle (*t);
+                    const float reset = value (*t, params::diMix);
+                    const bool field = rail->isTyping();
+                    t->history.undo();
+                    if (std::abs (reset - params::diMixDefault) > 1.0e-3f || field || std::abs (value (*t, params::diMix) - 70.0f) > 1.0e-3f)
+                        wrong.add ("a double click at 70 -> " + juce::String (reset, 2) + (field ? ", a field" : "") + ", one undo -> "
+                                   + juce::String (value (*t, params::diMix), 2));
+
+                    auto& face = *faces[0];
+                    face.lastMenu = {};
+                    const auto mid = rail->getLocalBounds().getCentre().toFloat();
+                    rail->mouseDown (event (*rail, mid, 1, true));
+                    rail->mouseUp (event (*rail, mid, 1, true));
+                    if (face.lastMenu != "CAB IR")
+                        wrong.add ("a right click on the rail opened \"" + face.lastMenu + "\"");
+                }
+            }
+            check (wrong.isEmpty(), "the CAB's DI/CAB a rail at its right edge, the content's height, the waveform up to it; a fader, \"30%\" "
+                                    "under it at 13 px, typed one undo step, a double click its default, a right click the CAB's menu; no knob; "
+                                    "none on the guitar's: " + said + (wrong.isEmpty() ? juce::String() : "; WRONG: " + wrong.joinIntoString ("; ")));
         }
     }
 
@@ -5511,7 +6062,7 @@ int ORBITAMP_GATE_MAIN()
             std::function<void (juce::Component&)> find = [&] (juce::Component& c)
             {
                 if (auto* x = dynamic_cast<CompBlock*> (&c)) cb = x;
-                if (auto* x = dynamic_cast<SpaceBlock*> (&c); x != nullptr && x->getName() == "DELAY") delayBlock = x;
+                if (auto* x = dynamic_cast<DelayBlock*> (&c)) delayBlock = x;
                 for (auto* child : c.getChildren())
                     find (*child);
             };
@@ -5563,6 +6114,63 @@ int ORBITAMP_GATE_MAIN()
                 on.items = editor->gateMenu();
                 menuShot (&face->gateBlock(), std::move (on), -1, "step13-gate-menu-on.png");
             }
+        }
+        // STEP 14: COMP squeezing at BLEND 60 with its ratio's combo closed, then its list open over the face; and at 1.5:1,
+        // the gentlest, its square's curve.
+        {
+            auto t = make (bass);
+            set (*t, params::compAmount, 0.6f);
+            set (*t, params::compThreshold, -30.0f);
+            std::unique_ptr<juce::AudioProcessorEditor> ed (t->createEditor());
+            t->compWatched.store (true);
+            (void) play (*t, 120, false);
+            feed (*ed);
+            CompBlock* cb = nullptr;
+            std::function<void (juce::Component&)> find = [&] (juce::Component& c)
+            {
+                if (auto* x = dynamic_cast<CompBlock*> (&c)) cb = x;
+                for (auto* child : c.getChildren())
+                    find (*child);
+            };
+            find (*ed);
+            if (cb != nullptr)
+            {
+                const auto blockArea = ed->getLocalArea (cb, cb->getLocalBounds());
+                write ("step14-comp-combo-closed.png", ed->createComponentSnapshot (blockArea, true, 3.0f));
+                auto& combo = cb->ratio();
+                const int before = ed->getNumChildComponents();
+                combo.list().showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&combo).withMinimumWidth (combo.getWidth())
+                                                                      .withParentComponent (ed.get()));
+                if (ed->getNumChildComponents() > before)
+                {
+                    auto area = blockArea;
+                    for (int i = before; i < ed->getNumChildComponents(); ++i)
+                        area = area.getUnion (ed->getChildComponent (i)->getBounds());
+                    write ("step14-comp-combo-open.png", ed->createComponentSnapshot (area.expanded (8).getIntersection (ed->getLocalBounds()), true, 3.0f));
+                }
+                juce::PopupMenu::dismissAllActiveMenus();
+                set (*t, params::compRatio, 1.5f);
+                (void) play (*t, 120, false);
+                feed (*ed);
+                write ("step14-comp-ratio-1.5.png", ed->createComponentSnapshot (blockArea, true, 3.0f));
+            }
+        }
+        // STEP 14: the CAB block with DI/CAB its rail, a phrase played through it.
+        {
+            auto t = make (bass);
+            std::unique_ptr<juce::AudioProcessorEditor> ed (t->createEditor());
+            (void) play (*t, 120, false);
+            feed (*ed);
+            CabinetBlock* cab = nullptr;
+            std::function<void (juce::Component&)> find = [&] (juce::Component& c)
+            {
+                if (auto* x = dynamic_cast<CabinetBlock*> (&c)) cab = x;
+                for (auto* child : c.getChildren())
+                    find (*child);
+            };
+            find (*ed);
+            if (cab != nullptr)
+                write ("step14-cab-rail.png", ed->createComponentSnapshot (ed->getLocalArea (cab, cab->getLocalBounds()), true, 3.0f));
         }
         for (const auto* g : { &products::orbitAmp(), &bass })
         {

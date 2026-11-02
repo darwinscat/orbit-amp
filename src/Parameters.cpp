@@ -81,12 +81,7 @@ void addBassParameters (juce::AudioProcessorValueTreeState::ParameterLayout& lay
     const juce::NormalisableRange<float> unit { 0.0f, 1.0f, 0.001f };
     layout.add (std::make_unique<Bool>   (juce::ParameterID { octaveOn, 1 },       "Octave", true),
                 std::make_unique<Float>  (juce::ParameterID { octaveAmount, 1 },   "Octave Amount", unit, 0.0f),
-                std::make_unique<Bool>   (juce::ParameterID { octaveSub2, 1 },     "Octave -2", false),
-                std::make_unique<Float>  (juce::ParameterID { octaveToneHz, 1 },   "Octave Tone Hz", hz (30.0f, 2000.0f, 120.0f), 120.0f),
-                std::make_unique<Float>  (juce::ParameterID { octaveSubHpHz, 1 },  "Octave Sub HP Hz",
-                                          juce::NormalisableRange<float> (10.0f, 80.0f, 0.1f), 25.0f),
-                std::make_unique<Float>  (juce::ParameterID { octaveGateDb, 1 },   "Octave Gate dB",
-                                          juce::NormalisableRange<float> (-90.0f, -20.0f, 0.1f), -50.0f));
+                std::make_unique<Float>  (juce::ParameterID { octaveToneHz, 1 },   "Octave Tone Hz", hz (30.0f, 2000.0f, 120.0f), 120.0f));
     layout.add (std::make_unique<Bool>   (juce::ParameterID { filterOn, 1 },        "Envelope", true),
                 std::make_unique<Float>  (juce::ParameterID { filterAmount, 1 },    "Envelope Amount", unit, 0.0f),
                 std::make_unique<Choice> (juce::ParameterID { filterMode, 1 },      "Envelope Mode", filterModes, 0),
@@ -97,8 +92,6 @@ void addBassParameters (juce::AudioProcessorValueTreeState::ParameterLayout& lay
                 std::make_unique<Bool>   (juce::ParameterID { filterKeepLows, 1 },  "Envelope Keep Lows", true),
                 std::make_unique<Float>  (juce::ParameterID { filterKeepHz, 1 },    "Envelope Keep Lows Hz",
                                           juce::NormalisableRange<float> (80.0f, 300.0f, 1.0f), 150.0f),
-                std::make_unique<Float>  (juce::ParameterID { filterAttackMs, 1 },  "Envelope Attack ms",
-                                          juce::NormalisableRange<float> (0.1f, 100.0f, 0.1f, 0.4f), 3.0f),
                 std::make_unique<Float>  (juce::ParameterID { filterReleaseMs, 1 }, "Envelope Release ms",
                                           juce::NormalisableRange<float> (5.0f, 2000.0f, 1.0f, 0.4f), 120.0f));
     layout.add (std::make_unique<Bool>   (juce::ParameterID { chorusOn, 1 },          "Chorus", true),
@@ -106,9 +99,7 @@ void addBassParameters (juce::AudioProcessorValueTreeState::ParameterLayout& lay
                 std::make_unique<Float>  (juce::ParameterID { chorusRateHz, 1 },      "Chorus Rate Hz",
                                           juce::NormalisableRange<float> (0.05f, 10.0f, 0.01f, 0.4f), 0.7f),
                 std::make_unique<Float>  (juce::ParameterID { chorusCrossoverHz, 1 }, "Chorus Crossover Hz",
-                                          hz (100.0f, 1000.0f, 200.0f), 200.0f),
-                std::make_unique<Float>  (juce::ParameterID { chorusCentreMs, 1 },    "Chorus Centre ms",
-                                          juce::NormalisableRange<float> (5.0f, 25.0f, 0.1f), 8.0f));
+                                          hz (200.0f, 500.0f, 300.0f), 200.0f));
 
     // IN THE STRIP OR NOT (Parameters.h): the three effects in, the echo and the room out — a player adds them through
     // the strip's checklist.

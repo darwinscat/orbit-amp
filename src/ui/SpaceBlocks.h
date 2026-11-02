@@ -261,8 +261,8 @@ private:
 
 /** THE BASS'S DELAY OR REVERB, A COMPACT BLOCK (the owner, 31.10): before the cabinet, after CHORUS, as on the guitar.
     Its RAIL on the left — MIX, the bass's rails' look (an orange hand, its percent at 13 px, a click types it, one undo
-    step a drag) — and its PICTURE beside it. Everything else is in its GEAR's menu (bass::blockMenu), which a click
-    anywhere else on it, or a right click, opens too. Out of the strip it is not on the face at all. */
+    step a drag) — and its PICTURE beside it. Everything else is in its menu (bass::blockMenu), which a click anywhere
+    else on it, or a right click, opens. Out of the strip it is not on the face at all. */
 class SpaceBlock final : public BlockFrame
 {
 public:
@@ -277,8 +277,7 @@ public:
         setName (name);
         shieldsWhenOff = false;
         bass::asBassRail (rail);
-        bass::hint (rail, w == SpacePicture::Which::delay ? "MIX: how loud the echoes are against the dry sound, 0-100 %"
-                                                          : "MIX: how loud the room is against the dry sound, 0-100 %");
+        bass::hint (rail, w == SpacePicture::Which::delay ? "MIX: echoes with dry" : "MIX: reverb with dry");
         rail.textForValue = [] (float v) { return juce::String (juce::roundToInt (v)); };   // MIX is percent already
         rail.typedScale   = 1.0f;
         rail.onGesture = [&processor] (bool begin) { if (begin) processor.history.beginGesture(); else processor.history.endGesture(); };

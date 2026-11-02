@@ -210,36 +210,14 @@ public:
             paintSwitch (g, sw);
     }
 
-    /** ORBITBASS: a GEAR on the frame's border at the top right, opposite the title, opening the block's MENU — and a
-        right click on the frame opens the same. Off unless asked: the guitar faces have neither. */
-    void enableGear (std::function<void()> open)
-    {
-        onGear = std::move (open);
-        gear = std::make_unique<Gear>();
-        gear->onClick = [this] { if (onGear != nullptr) onGear(); };
-        addAndMakeVisible (*gear);
-        keepOutsideStandby (*gear);   // a block standing by still opens its menu
-        if (! getLocalBounds().isEmpty())
-            resized();
-    }
+    /** ORBITBASS: the block's MENU on a right click anywhere on the frame, in place of the power menu — the one door to
+        it: no frame wears a gear (the owner, 01.11). Off unless asked: the guitar faces keep the power menu. */
+    void setBlockMenu (std::function<void()> open) { onBlockMenu = std::move (open); }
 
-    bool hasGear() const noexcept { return gear != nullptr; }
+    bool hasBlockMenu() const noexcept { return onBlockMenu != nullptr; }
 
     /** How far the content stands in from each side of the box. */
     static constexpr int contentInsetX() noexcept { return padX; }
-
-    /** WHERE THE GEAR STANDS: on the border at the top right, opposite the name — or, where the line is too short for
-        the name and the gear both (GATE's and LIMIT's 80), INSIDE the box under that corner, and the block's content
-        starts below it. The name and the gear never meet, at any width. */
-    bool gearInside() const
-    {
-        if (gear == nullptr)
-            return false;
-        const int need = 2 * borderInset + borderTitleWidth() + 2 * juce::roundToInt (legendGap) + gearSize;
-        return need > boxArea().getWidth();
-    }
-
-    juce::Rectangle<int> gearBounds() const { return gear != nullptr ? gear->getBounds() : juce::Rectangle<int>(); }
 
     /** The name's box on the border, in the block's own coordinates; empty where it writes none there. */
     virtual juce::Rectangle<int> titleBounds() const
@@ -250,12 +228,6 @@ public:
     void resized() override final
     {
         shield.setBounds (getLocalBounds());
-        if (gear != nullptr)
-            gear->setBounds (gearInside()
-                                 ? juce::Rectangle<int> (gearSize, gearSize)
-                                       .withPosition (boxArea().getRight() - gearInsideInset - gearSize, boxArea().getY() + gearInsideTop())
-                                 : juce::Rectangle<int> (gearSize, gearSize)
-                                       .withCentre ({ boxArea().getRight() - borderInset - gearSize / 2, boxArea().getY() }));
         layOutHeader (headerWidgetArea());
         layOutContent (contentArea());
     }
@@ -266,8 +238,8 @@ public:
         // never need hunting for a target.
         if (e.mods.isPopupMenu())
         {
-            if (onGear != nullptr)
-                onGear();
+            if (onBlockMenu != nullptr)
+                onBlockMenu();
             else
                 showPowerMenu (e.getScreenPosition());
             return;
@@ -329,15 +301,9 @@ protected:
     juce::Rectangle<int> contentArea() const
     {
         auto r = boxArea().reduced (padX, padY);
-        if (gearInside())   // the gear under the top right corner, below the name: the content starts below it
-            r.removeFromTop (gearInsideTop() + gearSize + 2 - padY);
         const int h = headerHeight();
         return h > 0 ? r.withTrimmedTop (h + headerGap) : r;
     }
-
-    /** How wide the name stands on the border — 0 where it writes none there. A block that writes its own name there (a
-        guard's) says its own width. */
-    virtual int borderTitleWidth() const { return showTitle && titleInBorder ? titleArea().getWidth() : 0; }
 
     /** The first row, minus whatever is still living in it. With both the title and the switch moved
         onto the border, a block's header widget gets the full width. */
@@ -428,14 +394,11 @@ private:
             return;
 
         const int last = getNumChildComponents() - 1;
-        if (getChildComponent (last) == &shield
-            || (gear != nullptr && getChildComponent (last) == gear.get() && last > 0 && getChildComponent (last - 1) == &shield))
+        if (getChildComponent (last) == &shield)
             return;
 
         shieldRaising = true;
         shield.toFront (false);
-        if (gear != nullptr)
-            gear->toFront (false);   // the gear over the shield: standing by, the block's settings are still in reach
         shieldRaising = false;
     }
 
@@ -502,8 +465,7 @@ protected:
             return {};
 
         const int left  = (showTitle ? titleArea().getRight() : boxArea().getX() + borderInset) + borderInset / 2;
-        const int right = (hasSwitch ? switchArea().getX() : boxArea().getRight() - borderInset) - borderInset / 2
-                        - (gear != nullptr ? gearSize + borderInset / 2 : 0);   // the gear keeps its corner of the line
+        const int right = (hasSwitch ? switchArea().getX() : boxArea().getRight() - borderInset) - borderInset / 2;
 
         return juce::Rectangle<int> (left, 0, juce::jmax (0, right - left), switchH)
                  .withCentre ({ (left + right) / 2, boxArea().getY() });
@@ -586,40 +548,8 @@ protected:
         guards', whose rails switch them on when dragged (GuardBlock.h). */
     bool shieldsWhenOff = true;
 
-    /** The gear (enableGear): a small wheel of lilac lines on a plate of the frame's own top colour, so the
-        border line stops behind it as it does behind the title. */
-    struct Gear final : public juce::Component
-    {
-        std::function<void()> onClick;
-        Gear() { setMouseCursor (juce::MouseCursor::PointingHandCursor); setTitle ("Menu"); }
-        void paint (juce::Graphics& g) override
-        {
-            const auto r = getLocalBounds().toFloat();
-            g.setColour (theme::dspTop);
-            g.fillEllipse (r);
-            const auto c = r.getCentre();
-            const float outer = r.getWidth() * 0.42f, inner = r.getWidth() * 0.30f;
-            juce::Path teeth;
-            for (int k = 0; k < 8; ++k)
-            {
-                const float a = juce::MathConstants<float>::twoPi * (float) k / 8.0f;
-                teeth.addLineSegment ({ c.x + inner * std::cos (a), c.y + inner * std::sin (a), c.x + outer * std::cos (a), c.y + outer * std::sin (a) }, 2.2f);
-            }
-            g.setColour (isMouseOver() ? theme::lilac.brighter (0.3f) : theme::lilac);
-            g.fillPath (teeth);
-            g.drawEllipse (juce::Rectangle<float> (inner * 2.0f, inner * 2.0f).withCentre (c), 1.6f);
-            g.drawEllipse (juce::Rectangle<float> (inner * 0.8f, inner * 0.8f).withCentre (c), 1.2f);
-        }
-        void mouseEnter (const juce::MouseEvent&) override { repaint(); }
-        void mouseExit (const juce::MouseEvent&) override  { repaint(); }
-        void mouseDown (const juce::MouseEvent&) override  { if (onClick != nullptr) onClick(); }
-    };
-    std::unique_ptr<Gear> gear;
-    std::function<void()> onGear;
-    static constexpr int gearSize = 18;
-    static constexpr int gearInsideInset = 5;   // the gear inside the box: this far from its right...
-    /** ...and below the name riding the line, whose box reaches half its height under it. */
-    int gearInsideTop() const noexcept { return juce::roundToInt (titleHeight * 0.5f) + 3 + 3; }
+    /** The block's menu, a right click's (setBlockMenu). */
+    std::function<void()> onBlockMenu;
 
 private:
 

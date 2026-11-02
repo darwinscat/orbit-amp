@@ -42,7 +42,6 @@ public:
     explicit OctaveScope (AmpProcessor& processor)
         : amp (processor),
           amountP (*processor.apvts.getParameter (params::octaveAmount)),
-          sub2P (*processor.apvts.getParameter (params::octaveSub2)),
           dry ((size_t) core::OctaveTap::capacity),
           sub ((size_t) core::OctaveTap::capacity)
     {
@@ -168,8 +167,10 @@ public:
         for (int x = px - 1; x >= 0; --x)
             band.lineTo (x0 + (float) x, bottom[(size_t) x]);
         band.closeSubPath();
-        g.setColour (noteGrey);
-        g.fillPath (band);
+        // The note in the hand's orange (the owner, 01.11: the family's colours, not a grey) — its outline, a LINE: orange
+        // is never a wash on the violet panel.
+        g.setColour (theme::orange.withAlpha (0.8f));
+        g.strokePath (band, juce::PathStrokeType (0.5f));   // THIN (the owner, 01.11): a hair, the sub's line over it reads
 
         // THE SUB, a violet line over it — none until the octaver has the note.
         if (shown.subShown)
@@ -235,11 +236,8 @@ private:
                 std::sort (iv, iv + m);
                 const double spacing = m % 2 == 1 ? iv[m / 2] : 0.5 * (iv[m / 2 - 1] + iv[m / 2]);
 
-                // The -1 flips on every edge of the note: its edges are two note periods apart. With the -2 under it the
-                // sum's come every two or every four, and the note itself repeating at a quarter of them says four.
-                double notePeriod = spacing * 0.5;
-                if (sub2Plays() && repeatsAt (n, spacing * 0.25, spacing))
-                    notePeriod = spacing * 0.25;
+                // The -1 flips on every edge of the note: its edges are two note periods apart.
+                const double notePeriod = spacing * 0.5;
 
                 const double hz = rate / notePeriod;
                 if (hz >= 15.0 && hz <= 600.0)
@@ -292,26 +290,6 @@ private:
         return f;
     }
 
-    /** Whether the input repeats after `lag` samples over the newest `len`: their mean difference small against their
-        mean size. A note shifted half its period is the opposite of itself; shifted a whole one, itself. */
-    bool repeatsAt (int n, double lag, double len) const
-    {
-        const int l = juce::roundToInt (lag), w = juce::jmax (16, juce::roundToInt (len));
-        double diff = 0.0, size = 0.0;
-        for (int t = juce::jmax (0, n - 1 - l - w); t < n - 1 - l; ++t)
-        {
-            diff += std::abs ((double) dry[(size_t) t] - (double) dry[(size_t) (t + l)]);
-            size += std::abs ((double) dry[(size_t) t]) + std::abs ((double) dry[(size_t) (t + l)]);
-        }
-        return size > 0.0 && diff < 0.35 * size;
-    }
-
-    /** The -2 under the sub now: the menu has it at the slider's top, the slider is up and OCTAVE is on. */
-    bool sub2Plays() const
-    {
-        return sub2P.getValue() > 0.5f && amountP.convertFrom0to1 (amountP.getValue()) > 0.0f;
-    }
-
     float sampleAt (const std::vector<float>& v, double i) const noexcept
     {
         if (shown.count < 1)
@@ -331,12 +309,14 @@ private:
         // "E1 → E0": the two names in the face's type, the arrow drawn between them (no glyph to miss in the font).
         const auto  font = theme::displayFont (textHeight);
         const float wa = theme::trackedWidth (note, font, 0.04f), wb = theme::trackedWidth (below, font, 0.04f);
-        const float arrowW = 18.0f, gap = 6.0f;
+        // A narrow picture takes a shorter arrow and tighter gaps before it lets a name run off its edge.
+        const bool  tight  = wa + wb + 30.0f > r.getWidth();
+        const float arrowW = tight ? 10.0f : 18.0f, gap = tight ? 3.0f : 6.0f;
         const float total = wa + gap + arrowW + gap + wb;
         float x = r.getCentreX() - total * 0.5f;
         const float cy = r.getCentreY();
 
-        g.setColour (theme::tx);
+        g.setColour (theme::orange);   // the note, as its trace (the owner, 01.11)
         theme::drawTracked (g, note, { x, r.getY(), wa + 2.0f, r.getHeight() }, font, 0.04f, juce::Justification::centredLeft);
         x += wa + gap;
         g.setColour (theme::txDim);
@@ -362,11 +342,10 @@ private:
             pull();
     }
 
-    inline static const juce::Colour well { 0xff121218 }, noteGrey { juce::Colour (0xffb4b2c2).withAlpha (0.45f) };
+    inline static const juce::Colour well { 0xff121218 };
 
     AmpProcessor& amp;
     juce::RangedAudioParameter& amountP;
-    juce::RangedAudioParameter& sub2P;
     std::vector<float>  dry, sub;
     std::vector<double> crossings;
     std::vector<float>  bandTop, bandBottom;   // the note's band, per pixel column (paint's)

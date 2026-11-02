@@ -72,4 +72,13 @@ inline void show (const juce::PopupMenu& m, juce::Component* from, const juce::P
     menu.showMenuAsync (options, answer);
 }
 
+/** Shows a VALUE LIST — a control's own choices, COMP's ratios — as it is, no ON over it, wherever it opens: a list of
+    values is not a block's menu. Through the gate's catcher too. */
+inline void showList (juce::PopupMenu m, const juce::PopupMenu::Options& options, std::function<void (int)> done)
+{
+    if (auto& c = catcher(); c != nullptr && c (m, done))
+        return;
+    m.showMenuAsync (options, std::move (done));
+}
+
 } // namespace orbitamp::onfirst

@@ -19,7 +19,6 @@ namespace orbitamp
 class CompBlock;
 class FilterBlock;
 class ChorusBlock;
-class SpaceBlock;
 
 class AmpProcessor;
 
@@ -40,8 +39,8 @@ public:
     explicit FaceplateView (AmpProcessor&);
     ~FaceplateView() override;
 
-    /** ORBITBASS: a block's MENU (ui/BassControls.h, bass::blockMenu) at the block — its gear's and its right click's,
-        one place per block (the owner, 01.11: no settings windows). `lastMenu` says which was asked for last (a gate
+    /** ORBITBASS: a block's MENU (ui/BassControls.h, bass::blockMenu) at the block — its right click's, one place per
+        block (the owner, 01.11: no settings windows). `lastMenu` says which was asked for last (a gate
         reads it). */
     void openMenu (const juce::String& block) override;
     juce::String lastMenu;
@@ -138,14 +137,13 @@ public:
 
     /** OrbitBass's CHORUS block, at the head of the cabinet's row: its slider and its picture (ui/ChorusBlock.h). The
         row's width is the AMP's, so the cabinet gives up what it takes. */
-    static constexpr int chorusWidth = 200;
+    /** OrbitBass's CHORUS, DELAY and REVERB in the cabinet's row: each always this wide (the owner, 01.11 — the guitar's
+        DELAY and REVERB stand in that), the cabinet taking the rest. */
+    static constexpr int fxRowWidth = 256;
 
     /** ORBITBASS'S FACE, THREE ROWS by the signal's way (the owner, 31.10): GATE, COMP, OCTAVE and ENVELOPE before the
         amp; the AMP across the whole width; CHORUS, CAB IR and LIMIT after it (the cabinet takes what is left — room for
         one more block). Its least width is the guitar's; a wider window widens the pictures, every knob keeps its size. */
-    /** OrbitBass's DELAY and REVERB, compact (ui/SpaceBlocks.h): after CHORUS in the cabinet's row, each this wide at the
-        least — its MIX rail and its picture — and the cabinet never narrower than `bassCabLeast` beside them. */
-    static constexpr int spaceWidth   = 150;
 
     /** THE CABINET'S LEAST on the bass: never under the guitar face's cabinet at its least (226, three in a row), and wide
         enough that appkit's IrWaveView — which writes the IR's line itself ("85ms  |  48.0kHz  |  24-bit  |  mono", at
@@ -160,9 +158,9 @@ public:
     static int bassLeastWidth (bool chorusIn, bool delayIn, bool reverbIn, int fallback)
     {
         int row = GuardBlock::designWidth + colGap + bassCabLeast();
-        if (chorusIn) row += chorusWidth + colGap;
-        if (delayIn)  row += spaceWidth + colGap;
-        if (reverbIn) row += spaceWidth + colGap;
+        for (const bool in : { chorusIn, delayIn, reverbIn })
+            if (in)
+                row += fxRowWidth + colGap;
         return juce::jmax (fallback, row);
     }
 
@@ -215,10 +213,6 @@ private:
     std::unique_ptr<GuardBlock>  octave;
     std::unique_ptr<FilterBlock> filter;
     std::unique_ptr<ChorusBlock> chorus;
-
-    /** OrbitBass's DELAY and REVERB, compact, after CHORUS (ui/SpaceBlocks.h); none on a guitar amp — the guitar's own
-        blocks above stand hidden on the bass. On the face only while in the strip (AmpProcessor::linkShown). */
-    std::unique_ptr<SpaceBlock> spaceDelay, spaceReverb;
 
     /** OrbitBass's COMP, a block of its own (ui/CompBlock.h); none on a guitar amp. */
     std::unique_ptr<CompBlock> comp;

@@ -7,6 +7,7 @@
 #include "BlockFrame.h"
 #include "GuardRail.h"
 #include "MeterRail.h"
+#include "OnFirst.h"
 #include "../PluginProcessor.h"
 #include "../core/ChorusTap.h"
 
@@ -26,8 +27,8 @@ namespace orbitamp
     mono bus the stage makes one voice: one dot.
 
     Under the circle a lilac line and the CROSSOVER: below it the voice falls away and the bass stays untouched,
-    centred, mono. Both numbers on it — the RATE at the top, the crossover at the bottom — are its menu's parameters,
-    so a click types them (Enter takes it, one undo step); a click anywhere else, or a right click, is its menu.
+    centred, mono. Its number is a LIST (params::chorusCrossoverItems, the owner, 01.11 — nothing under 200 Hz): a click
+    on it lists them, the current ticked, a pick one undo step; a click anywhere else, or a right click, is its menu.
 
     The phase is the processor's tap (core::ChorusTap): read on its own timer only while it is on screen — the timer
     asks every tick, so a hidden ancestor stops it too, and the audio thread writes it only then — and it moves only
@@ -41,10 +42,9 @@ public:
         : amp (processor),
           state (processor.apvts),
           amountP (*processor.apvts.getParameter (params::chorusAmount)),
-          rateP (*processor.apvts.getParameter (params::chorusRateHz)),
           crossP (*processor.apvts.getParameter (params::chorusCrossoverHz))
     {
-        for (auto* p : { &amountP, &rateP, &crossP })
+        for (auto* p : { &amountP, &crossP })
             atts.push_back (std::make_unique<juce::ParameterAttachment> (*p, [this] (float) { repaint(); }));
         startTimerHz (50);   // its look, every tick: on screen or not (look)
     }
@@ -55,11 +55,9 @@ public:
         amp.chorusWatched.store (false, std::memory_order_relaxed);
     }
 
-    static constexpr float textHeight = 13.0f, rowH = 18.0f, dotR = 4.5f, labelGap = 12.0f;
+    static constexpr float textHeight = 13.0f, rowH = 18.0f, footH = 34.0f, dotR = 4.5f, labelGap = 12.0f;
     static constexpr double trailSeconds = 0.2;
     static constexpr int    trailHops = (int) (trailSeconds / core::ChorusTap::hopSeconds + 0.5);
-
-    enum class Field { rate, crossover };
 
     std::function<void (juce::Point<int> screenPos)> onMenu;
 
@@ -88,36 +86,49 @@ public:
     /** Where voice `v` (0 the left, 1 the right) stands, in its own coordinates. */
     juce::Point<float> dotAt (int v) const { return pointAt (nowPhase, v, reach() * radiusFraction()); }
 
-    /** The two numbers' boxes, each a field. */
-    juce::Rectangle<float> fieldBox (Field f) const
+    /** The foot, under the lilac line: "MONO" and under it "200 Hz" and a chevron, both centred (the owner, 01.11) — a
+        click anywhere on it lists the crossovers. */
+    juce::Rectangle<float> crossoverBox() const
     {
         const auto r = getLocalBounds().toFloat();
-        if (f == Field::rate)
-            return r.withHeight (rowH).withTrimmedLeft (r.getWidth() * 0.4f);
-        return r.withTop (r.getBottom() - rowH).withTrimmedLeft (r.getWidth() * 0.45f);
+        return r.withTop (r.getBottom() - footH);
     }
 
-    /** A field opened as a click opens it; its editor (a gate types into it and takes it). */
-    void openField (Field f)
+    float crossoverHz() const { return crossP.convertFrom0to1 (crossP.getValue()); }
+
+    /** The crossovers, the current one ticked; item `i` is id i + 1. */
+    juce::PopupMenu crossoverList() const
     {
-        auto& p = param (f);
-        const float v = p.convertFrom0to1 (p.getValue());
-        editing = f;
-        editor.open (*this, fieldBox (f).toNearestInt(), v, f == Field::rate ? theme::orange : theme::lilac,
-                     [this, f] (float typed)
-                     {
-                         // A typed number is ONE undo step of its own: two typed in quick succession stay two.
-                         amp.history.beginGesture();
-                         bass::setPlain (state, f == Field::rate ? params::chorusRateHz : params::chorusCrossoverHz, typed);
-                         amp.history.endGesture();
-                     });
-        // The house's grip editor opens on a whole number; these are not whole, and they read at 13 px.
-        editor.ed.setFont (theme::displayFont (textHeight));
-        editor.ed.setText (numberText (f, v), false);
-        editor.ed.selectAll();
+        juce::PopupMenu m;
+        for (int i = 0; i < (int) std::size (params::chorusCrossoverItems); ++i)
+        {
+            juce::PopupMenu::Item item (juce::String (juce::roundToInt (params::chorusCrossoverItems[i])) + " Hz");
+            item.itemID   = i + 1;
+            item.isTicked = std::abs (crossoverHz() - params::chorusCrossoverItems[i]) < 0.5f;
+            m.addItem (item);
+        }
+        return m;
     }
 
-    meterrail::GripEditor& fieldEditor() noexcept { return editor; }
+    /** A crossover picked: one undo step. */
+    void pickCrossover (int item)
+    {
+        if (item < 0 || item >= (int) std::size (params::chorusCrossoverItems))
+            return;
+        amp.history.beginGesture();
+        bass::setPlain (state, params::chorusCrossoverHz, params::chorusCrossoverItems[item]);
+        amp.history.endGesture();
+    }
+
+    void openCrossoverList()
+    {
+        onfirst::showList (crossoverList(), juce::PopupMenu::Options().withTargetScreenArea (localAreaToGlobal (crossoverBox().toNearestInt())),
+                           [safe = juce::Component::SafePointer<ChorusPicture> (this)] (int choice)
+                           {
+                               if (safe != nullptr && choice > 0)
+                                   safe->pickCrossover (choice - 1);
+                           });
+    }
 
     /** What the taps hold, the newest last — the timer's work, and a picture's made off screen. */
     void pull()
@@ -189,23 +200,30 @@ public:
             }
         }
 
-        // The RATE, top right: the hand's, orange.
-        paintField (g, Field::rate, theme::orange, juce::Justification::centredRight);
-
-        // THE CROSSOVER: a lilac line across the foot, the number under it — below it the bass stays mono.
-        const auto foot = getLocalBounds().toFloat().removeFromBottom (rowH);
-        g.setColour (theme::lilac);
-        g.fillRect (foot.getX(), foot.getY() - 2.0f, foot.getWidth(), 1.5f);
+        // THE CROSSOVER at the foot — below it the bass stays mono.
+        // Two lines, centred: the word dim over the number and a chevron in the line's lilac — a list.
+        const auto font   = theme::displayFont (textHeight);
+        const auto number = juce::String (juce::roundToInt (crossoverHz())) + " Hz";
+        const float numW  = theme::trackedWidth (number, font, 0.04f), chevW = 12.0f;
+        auto box = crossoverBox();
+        const auto top = box.removeFromTop (box.getHeight() * 0.5f);
         g.setColour (theme::lilac.withAlpha (0.75f));
-        theme::drawTracked (g, "MONO", foot.withRight (fieldBox (Field::crossover).getX()), theme::displayFont (textHeight), 0.06f,
-                            juce::Justification::centredLeft);
-        paintField (g, Field::crossover, theme::lilac, juce::Justification::centredRight);
+        theme::drawTracked (g, "MONO", top, font, 0.06f, juce::Justification::centred);
+        const float x = box.getCentreX() - (numW + chevW) * 0.5f;
+        g.setColour (hovered ? theme::lilac.brighter (0.35f) : theme::lilac);
+        theme::drawTracked (g, number, { x, box.getY(), numW + 1.0f, box.getHeight() }, font, 0.04f, juce::Justification::centredLeft);
+        juce::Path v;
+        const float cx = x + numW + chevW * 0.5f + 1.0f, cy = box.getCentreY() - 1.0f;
+        v.startNewSubPath (cx - 3.0f, cy);
+        v.lineTo (cx, cy + 3.0f);
+        v.lineTo (cx + 3.0f, cy);
+        g.strokePath (v, juce::PathStrokeType (1.2f));
     }
 
     void mouseMove (const juce::MouseEvent& e) override
     {
-        const auto over = fieldAt (e.position);
-        setMouseCursor (over != nullptr ? juce::MouseCursor::IBeamCursor : juce::MouseCursor::NormalCursor);
+        const bool over = crossoverBox().contains (e.position);
+        setMouseCursor (over ? juce::MouseCursor::PointingHandCursor : juce::MouseCursor::NormalCursor);
         if (over != hovered)
         {
             hovered = over;
@@ -215,18 +233,17 @@ public:
 
     void mouseExit (const juce::MouseEvent&) override
     {
-        hovered = nullptr;
+        hovered = false;
         repaint();
     }
 
     void mouseDown (const juce::MouseEvent& e) override
     {
-        if (! e.mods.isPopupMenu())
-            if (const auto* f = fieldAt (e.position))
-            {
-                openField (*f);
-                return;
-            }
+        if (! e.mods.isPopupMenu() && crossoverBox().contains (e.position))
+        {
+            openCrossoverList();
+            return;
+        }
         if (onMenu != nullptr)
             onMenu (e.getScreenPosition());
     }
@@ -242,12 +259,10 @@ public:
     }
 
 private:
-    juce::RangedAudioParameter& param (Field f) const { return f == Field::rate ? rateP : crossP; }
-
-    /** The circle's room: under the rate's row, over the crossover's. */
+    /** The circle's room: over the crossover's row. */
     juce::Rectangle<float> circleArea() const
     {
-        return getLocalBounds().toFloat().withTrimmedTop (rowH * 0.5f).withTrimmedBottom (rowH + 4.0f);
+        return getLocalBounds().toFloat().withTrimmedBottom (footH + 2.0f);   // all the room over the foot (the owner, 01.11)
     }
 
     /** Voice v's angle at `phase`, counter-clockwise from three o'clock: the left voice's swing is sin, the right's
@@ -267,59 +282,26 @@ private:
     /** The same angle as juce::Path's arcs count it: clockwise from twelve o'clock. */
     static float arcAngle (float phase, int v) { return (float) (juce::MathConstants<double>::halfPi - angleOf (phase, v)); }
 
-    static juce::String numberText (Field f, float v)
-    {
-        if (f == Field::crossover)
-            return juce::String (juce::roundToInt (v));
-        auto s = juce::String (v, 2);
-        while (s.containsChar ('.') && (s.endsWithChar ('0') || s.endsWithChar ('.')))
-            s = s.dropLastCharacters (1);
-        return s;
-    }
-
-    const Field* fieldAt (juce::Point<float> p) const
-    {
-        static constexpr Field all[] { Field::rate, Field::crossover };
-        for (const auto& f : all)
-            if (fieldBox (f).contains (p))
-                return &f;
-        return nullptr;
-    }
-
-    void paintField (juce::Graphics& g, Field f, juce::Colour colour, juce::Justification just)
-    {
-        if (editor.isOpen() && editing == f)
-            return;
-        auto& p = param (f);
-        const bool over = hovered != nullptr && *hovered == f;
-        g.setColour (over ? colour.brighter (0.35f) : colour);
-        theme::drawTracked (g, numberText (f, p.convertFrom0to1 (p.getValue())) + " Hz", fieldBox (f).reduced (2.0f, 0.0f),
-                            theme::displayFont (textHeight), 0.04f, just);
-    }
-
     void timerCallback() override { look(); }
 
     AmpProcessor& amp;
     juce::AudioProcessorValueTreeState& state;
     juce::RangedAudioParameter& amountP;
-    juce::RangedAudioParameter& rateP;
     juce::RangedAudioParameter& crossP;
     std::vector<std::unique_ptr<juce::ParameterAttachment>> atts;
     std::array<core::ChorusTap::Entry, (size_t) trailHops + 1> trail {};
     int   shown = 0;
     float nowPhase = 0.0f;
     std::uint32_t lastWritten = 0;
-    meterrail::GripEditor editor;
-    Field editing = Field::rate;
-    const Field* hovered = nullptr;
+    bool hovered = false;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ChorusPicture)
 };
 
 /** THE BASS'S CHORUS, A BLOCK WITH ITS PICTURE (the owner, 31.10): at the head of the cabinet's row, as in the strip.
     Its SLIDER on the left (a rail over CHORUS's one knob, 0..1: the swing 0 … 3 ms and the voice's level with it),
-    its PICTURE right of it — the slider seen another way. RATE, CROSSOVER and CENTRE are its menu, on a click anywhere
-    on it but the picture's numbers. Our own DSP, so violet; its arrow in the strip switches it, and standing by it
+    its PICTURE right of it — the slider seen another way — and its RATE a second rail at the right, 0.1 … 5 Hz laid out
+    as a rate is felt; both faders, each number under its fader with its unit (the owner, 01.11). The MONO crossover is a list on the picture; its menu is its ON. Our own DSP, so violet; its arrow in the strip switches it, and standing by it
     dims in place, still in reach. */
 class ChorusBlock final : public BlockFrame
 {
@@ -328,16 +310,22 @@ public:
         : BlockFrame ("CHORUS", Kind::dsp),
           state (processor.apvts),
           rail (*processor.apvts.getParameter (params::chorusAmount), *processor.apvts.getParameter (params::chorusOn), 0.0f, 1.0f, false),
+          rateRail (*processor.apvts.getParameter (params::chorusRateHz), 0.1f, 5.0f),
           circle (processor)
     {
         shieldsWhenOff = false;
-        bass::asBassRail (rail);   // the amount in percent, a field too
-        bass::hint (rail, "CHORUS: how much of the swirl is mixed in, 0-100 %");
+        bass::asBassAmount (rail, "MIX");   // the amount in percent, a field too
+        bass::hint (rail, "CHORUS: chorus with dry");
         rail.onGesture = [&processor] (bool begin) { if (begin) processor.history.beginGesture(); else processor.history.endGesture(); };   // one undo step a drag, as COMP's
+        bass::asBassFader (rateRail, "RATE", [] (float hz) { return juce::String (hz, hz < 9.95f ? 1 : 0) + " Hz"; }, 1.0f, 1);
+        rateRail.logScale = true;
+        bass::hint (rateRail, "RATE");
+        rateRail.onGesture = rail.onGesture;
         addAndMakeVisible (rail);
         addAndMakeVisible (circle);
+        addAndMakeVisible (rateRail);
         const auto menu = [this] (juce::Point<int>) { bass::showChorusMenu (state, this); };
-        rail.onMenu = circle.onMenu = menu;
+        rail.onMenu = rateRail.onMenu = circle.onMenu = menu;
         attachPower (*processor.apvts.getParameter (params::chorusOn));
         dimWhenIdle (circle, *processor.apvts.getParameter (params::chorusAmount));
     }
@@ -346,12 +334,15 @@ public:
 
     ChorusPicture& picture() noexcept { return circle; }
     GuardRail&     fader() noexcept   { return rail; }
+    GuardRail&     rate() noexcept    { return rateRail; }
 
 protected:
     void layOutContent (juce::Rectangle<int> r) override
     {
-        rail.setBounds (r.removeFromLeft (GuardRail::designWidth));
+        rail.setBounds (r.removeFromLeft (rail.columnWidth));
         r.removeFromLeft (gap);
+        rateRail.setBounds (r.removeFromRight (rateRail.columnWidth));
+        r.removeFromRight (gap);
         circle.setBounds (r);
     }
 
@@ -360,6 +351,7 @@ private:
 
     juce::AudioProcessorValueTreeState& state;
     GuardRail     rail;
+    GuardRail     rateRail;
     ChorusPicture circle;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ChorusBlock)

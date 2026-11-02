@@ -25,34 +25,26 @@ struct CapturedBlockPanel::BassKnobs
 
     juce::AudioProcessorValueTreeState& state;
     GuardRail   blend;
-    juce::Label name { {}, "BLEND" };
 
     void addTo (BlockFrame& owner)
     {
-        // BLEND, a rail as the bass's others are (the owner, 31.10): its amount in percent on its hand, 13 px, typed on
-        // a click; its menu on a right click.
-        bass::asBassRail (blend);
-        bass::hint (blend, "BLEND: the clean DI lows mixed in under the amp, 0-100 %");
-        blend.onMenu = [this] (juce::Point<int>) { bass::showAmpMenu (state, &blend); };   // the AMP's menu, its gear's
-        name.setFont (theme::displayFont (13.0f));
-        name.setColour (juce::Label::textColourId, theme::txDim);
-        name.setJustificationType (juce::Justification::centred);
-        name.setInterceptsMouseClicks (false, false);
+        // BLEND, a fader as the bass's others are (the owner, 01.11): its name over it, its amount in percent under it,
+        // 13 px, typed on a click; its menu on a right click.
+        bass::asBassAmount (blend, "BLEND");
+        bass::hint (blend, "BLEND: clean lows with amp");
+        blend.onMenu = [this] (juce::Point<int>) { bass::showAmpMenu (state, &blend); };   // the AMP's menu, the block's
         owner.addAndMakeVisible (blend);
-        owner.addAndMakeVisible (name);
     }
 
-    /** BLEND's name over its rail, in the column beside the dial (COMP is a block of its own: ui/CompBlock.h). */
+    /** BLEND's fader in the column beside the dial (COMP is a block of its own: ui/CompBlock.h). */
     void layOut (juce::Rectangle<int> right)
     {
-        name.setBounds (right.removeFromTop (18));
-        blend.setBounds (right.withSizeKeepingCentre (GuardRail::designWidth, right.getHeight() - 4));
+        blend.setBounds (right.withSizeKeepingCentre (blend.columnWidth, right.getHeight()));
     }
 
     void setVisible (bool v)
     {
         blend.setVisible (v);
-        name.setVisible (v);
     }
 };
 
@@ -992,15 +984,14 @@ void CapturedBlockPanel::layOutContent (juce::Rectangle<int> area)
         const int rows     = (int) widths.size();
         const int reserved = juce::jmax (2, rows);
         auto column = column1;
+
+        // The bass's BLEND stands beside the dial, after it, by the GAIN it blends with — down to the section's foot, as
+        // every rail on the bass's face (the owner, 01.11); the dial and its picks share what is left.
+        if (bassKnobs != nullptr)
+            bassKnobs->layOut (column.removeFromRight (bassSideW));
+
         auto strip1 = column.removeFromBottom (reserved * pickRowH + (reserved - 1) * pickRowGap);
         column.removeFromBottom (dialGap);
-
-        // The bass's BLEND stands beside the dial, after it, by the GAIN it blends with.
-        if (bassKnobs != nullptr)
-        {
-            bassKnobs->layOut (column.removeFromRight (bassSideW));
-            strip1.removeFromRight (bassSideW);
-        }
 
         const int gainSide = juce::jmin (maxGainSide, juce::jmin (column.getWidth(), column.getHeight() - Knob::valueRowH));
         gain.setBounds (column.withSizeKeepingCentre (gainSide, gainSide + Knob::valueRowH));
@@ -1149,8 +1140,8 @@ void CapturedBlockPanel::mouseDown (const juce::MouseEvent& e)
     // is a scope's.
     if (widgetArea.contains (e.getPosition()))
     {
-        if (e.mods.isPopupMenu() && bassKnobs != nullptr && onGear != nullptr)
-            onGear();   // OrbitBass: a right click on the AMP is its menu, the picture's too
+        if (e.mods.isPopupMenu() && bassKnobs != nullptr && onBlockMenu != nullptr)
+            onBlockMenu();   // OrbitBass: a right click on the AMP is its menu, the picture's too
         else if (e.mods.isPopupMenu())
             showVizMenu (e.getScreenPosition());
         else
@@ -1380,8 +1371,13 @@ void CapturedBlockPanel::paintContent (juce::Graphics& g)
                                                            : "no loudness tag - plays raw");
         if (theme::trackedWidth (text, font, 0.09f) + 1.0f > room)
             text = tag.tagged ? juce::String (tag.db, 1) + " dB tagged" : juce::String ("no loudness tag - plays raw");
+        // Still too long for the run the device's name leaves (the owner, 01.11): the warning in one word, the whole of it
+        // in the block's hint.
+        if (! tag.tagged && theme::trackedWidth (text, font, 0.09f) + 1.0f > room)
+            text = "RAW";
         const float w = theme::trackedWidth (text, font, 0.09f) + 1.0f;
         const auto line = juce::Rectangle<float> (w, 18.0f).withCentre ({ run.getRight() - w * 0.5f, run.getCentreY() });
+        rawBox = text == "RAW" ? line : juce::Rectangle<float>();
         g.setColour (theme::capTop);
         g.fillRect (line.expanded (legendGap, 0.0f).withHeight (theme::blockBorder + 2.0f).withCentre (line.getCentre()));
         g.setColour (tag.tagged ? theme::txFaint.withAlpha (0.55f) : theme::orange);

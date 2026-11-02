@@ -1444,10 +1444,7 @@ private:
         std::atomic<float>* lpfHzFingers = nullptr;
         std::atomic<float>* lpfHzSlap = nullptr;
         std::atomic<float>* octave = nullptr;
-        std::atomic<float>* octaveSub2 = nullptr;
         std::atomic<float>* octaveToneHz = nullptr;
-        std::atomic<float>* octaveSubHpHz = nullptr;
-        std::atomic<float>* octaveGateDb = nullptr;
         std::atomic<float>* filter = nullptr;
         std::atomic<float>* filterMode = nullptr;
         std::atomic<float>* filterDirection = nullptr;
@@ -1455,12 +1452,10 @@ private:
         std::atomic<float>* filterRange = nullptr;
         std::atomic<float>* filterKeepLows = nullptr;
         std::atomic<float>* filterKeepHz = nullptr;
-        std::atomic<float>* filterAttackMs = nullptr;
         std::atomic<float>* filterReleaseMs = nullptr;
         std::atomic<float>* chorus = nullptr;
         std::atomic<float>* chorusRateHz = nullptr;
         std::atomic<float>* chorusCrossoverHz = nullptr;
-        std::atomic<float>* chorusCentreMs = nullptr;
         std::atomic<float>* compRatio = nullptr;
         std::atomic<float>* compThreshold = nullptr;
         std::atomic<float>* hpfOn = nullptr;
