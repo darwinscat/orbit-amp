@@ -5,6 +5,8 @@
 
 #include "Stage.h"
 #include "../core/TunerEar.h"
+#include "../core/TunerPoly.h"
+#include "../core/TunerStrobe.h"
 
 #include <felitronics/appkit/Brand.h>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -618,11 +620,20 @@ private:
     Its state it writes in its corner, always — ON; OFF: it is not listening, and shows no note; MUTE: it
     listens, and the amp is silent while it does — since the screen is the switch: a click throws it.
     Over the note it writes the pitch its A is tuned to, when that is not 440: a needle that reads a
-    tuned guitar flat wants a reason as well. */
+    tuned guitar flat wants a reason as well.
+
+    While the player reads by the STROBE (core::TunerStrobe — the processor pumps it only then), its bands
+    stand where the ruler stood — big on the screen, thin in the strip — and on a dial its disc turns in
+    the needle's place; the note is the strobe's, the ink the needle's (ui/StrobeView.h).
+
+    While the player reads by POLY (core::TunerPoly — pumped only then), a lane for every string stands
+    where the note and the ruler stood (ui/PolyView.h): on the screen a row of big ones over its state, in
+    the strip a row after its state, on a dial a little grid of two columns over the pivot, its state under
+    it and the A in its window. No HUM label: the analysis models the mains itself. */
 class TunerFace final : public juce::Component, private juce::Timer
 {
 public:
-    explicit TunerFace (const core::TunerEar&);
+    TunerFace (const core::TunerEar&, const core::TunerStrobe&, const core::TunerPoly&);
     void setState (bool listening, bool muting);
     void paint (juce::Graphics&) override;
 
@@ -654,12 +665,35 @@ public:
     static constexpr float idleAlpha = 0.35f, quietAlpha = 0.8f, numberAlpha = 0.6f;
     static constexpr float majorAlpha = 0.9f, minorAlpha = 0.4f, warmCents = 25.0f;
 
+    /** MAINS HUM (core::TunerEar::humMains): HUM and its mains — HUM 50, HUM 60 — as one label where the
+        note's name stands, in the note's ink; the needle at `humAlpha` of its light, never gone. On the
+        big screen the label is `humPx` high. Where a note's slot is too narrow for it, the label takes the
+        room it needs: the strip's ruler gives way, the dial's window is overrun. */
+    static constexpr float humAlpha = 0.4f, humPx = 24.0f;
+
+    /** THE STROBE's stripe — the fundamental's — on the screen and in the strip, px; the dial's disc has
+        `discSegments` round its fundamental ring, between `discInner` and `discOuter` of its reach. */
+    static constexpr float screenPeriod = 48.0f, stripPeriod = 32.0f;
+    static constexpr int   discSegments = 12;
+    static constexpr float discInner = 0.28f, discOuter = 0.86f;
+
+    /** POLY's lanes: `polyGap` apart in a row; on a dial, two columns of `gridCell` of its reach each,
+        `gridGap` of it apart — the hub between them — inside the ticks' arc. */
+    static constexpr float polyGap = 8.0f, gridCell = 0.5f, gridGap = 0.16f;
+
 private:
     const core::TunerEar& ear;
+    const core::TunerStrobe& strobe;
+    const core::TunerPoly& poly;
     bool listening = true, muting = false, strip = false;
     Dial dial;
     void paintStrip (juce::Graphics&);
     void paintDial (juce::Graphics&);
+    void paintPoly (juce::Graphics&);                   // POLY, on whichever of the three it is
+    int  hum() const;                                   // the mains the reading is taken for, 0 = a note
+    core::PitchTracker::Note shownNote() const;         // the ear's nearest — or, strobing, the strobe's note
+    juce::Colour needleColour() const;
+    juce::Colour strobeInk() const;                     // the needle's colour — lilac, dimmed, under HUM
     void timerCallback() override { repaint(); }
 };
 

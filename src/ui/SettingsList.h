@@ -86,12 +86,12 @@ public:
             }
 
             if (choice)
-                paintChoices (g, choiceArea (cell), row);
+                paintChoices (g, choiceArea (cell, row), row);
             else
                 paintSwitch (g, cell.withTrimmedLeft (cell.getWidth() - (switchW + 14))
                                     .withSizeKeepingCentre (switchW, switchH).toFloat(), on);
 
-            cell.removeFromRight (choice ? choiceArea (cell).getWidth() + 21 : switchW + 14);
+            cell.removeFromRight (choice ? choiceArea (cell, row).getWidth() + 21 : switchW + 14);
 
             auto text = cell.reduced (12, 4);
 
@@ -127,7 +127,7 @@ public:
         {
             const auto& row = rows[(size_t) i];
             const auto cell = getLocalBounds().withY (i * rowH).withHeight (rowH);
-            const auto area = choiceArea (cell);
+            const auto area = choiceArea (cell, row);
 
             if (area.contains (e.getPosition()) && row.choose != nullptr)
             {
@@ -250,13 +250,25 @@ private:
         return (char) (row.get != nullptr && row.get());
     }
 
-    /** A choice row's values, at the right edge where a switch would stand. */
-    static juce::Rectangle<int> choiceArea (juce::Rectangle<int> cell)
+    /** A choice row's values, at the right edge where a switch would stand — four cells wide, or as wide
+        as its longest value needs, whichever is wider: the cells share the width. */
+    static juce::Rectangle<int> choiceArea (juce::Rectangle<int> cell, const Row& row)
     {
+        const int w = juce::jmax (choiceW * 4, row.choices.size() * cellNeeds (row));
+
         // Its right edge where a switch's stands: a switch sits centred in the last switchW + 14.
-        return cell.withTrimmedLeft (cell.getWidth() - (choiceW * 4 + 7))
+        return cell.withTrimmedLeft (cell.getWidth() - (w + 7))
                    .withTrimmedRight (7)
-                   .withSizeKeepingCentre (choiceW * 4, choiceH);
+                   .withSizeKeepingCentre (w, choiceH);
+    }
+
+    /** The cell the longest of a row's values needs, its chosen pill's inset and air included. */
+    static int cellNeeds (const Row& row)
+    {
+        float widest = 0.0f;
+        for (const auto& c : row.choices)
+            widest = juce::jmax (widest, juce::GlyphArrangement::getStringWidth (juce::Font (juce::FontOptions (13.0f)), c));
+        return (int) std::ceil (widest) + 12;
     }
 
     /** The values as one pill cut into cells — the switch's track and its fill, the chosen cell

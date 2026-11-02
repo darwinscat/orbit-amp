@@ -42,6 +42,7 @@
 
 #include <cstdio>
 #include <memory>
+#include <cstring>
 #include <set>
 #include <vector>
 
@@ -373,6 +374,23 @@ int ORBITAMP_GATE_MAIN()
         prefs::setTunerFloor (products::redPawAmp(), -50);
         check (prefs::tunerFloor (products::catpitAmp()) == -80 && prefs::tunerFloor (products::redPawAmp()) == -50,
                "a switch thrown in the cockpit stays the cockpit's");
+
+        // The tuner's display and the strings POLY reads: the needle and a guitar's standard until the player
+        // chooses, each product's own, kept in its store; a tuning the product does not offer is its standard.
+        check (prefs::tunerDisplay (products::amberPawAmp()) == prefs::TunerDisplay::needle
+                   && std::strcmp (prefs::tunerTuning (products::amberPawAmp()).id, "guitar") == 0,
+               "the tuner shows a needle and reads a guitar's standard until the player chooses");
+        prefs::setTunerDisplay (products::catpitAmp(), prefs::TunerDisplay::poly);
+        prefs::setTunerTuning (products::catpitAmp(), core::PolyTuner::tunings[1]);
+        prefs::setTunerTuning (products::redPawAmp(), core::PolyTuner::tunings[5]);   // a bass's, on a guitar amp
+        check (prefs::tunerDisplay (products::catpitAmp()) == prefs::TunerDisplay::poly
+                   && prefs::tunerDisplay (products::redPawAmp()) == prefs::TunerDisplay::needle
+                   && (int) prefs::store (products::catpitAmp()).get (prefs::tunerDisplayKey, -1) == (int) prefs::TunerDisplay::poly,
+               "POLY chosen in the cockpit is the cockpit's, and kept");
+        check (std::strcmp (prefs::tunerTuning (products::catpitAmp()).id, "guitar-drop-d") == 0
+                   && prefs::store (products::catpitAmp()).get (prefs::tunerTuningKey, juce::String()).toString() == "guitar-drop-d"
+                   && std::strcmp (prefs::tunerTuning (products::redPawAmp()).id, "guitar") == 0,
+               "...and its tuning; a bass's tuning on a guitar amp is its standard");
     }
 
     // THE ROWS (face/Strip.h): every face's tone knobs, and the rovers' keys right of the filters, laid by

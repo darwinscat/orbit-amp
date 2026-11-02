@@ -2053,10 +2053,26 @@ target_link_libraries(orbitamp_eqlink_test PRIVATE felitronics::eq)
 target_compile_features(orbitamp_eqlink_test PRIVATE cxx_std_20)
 
 # Same gate for the tuner's ear, and JUCE-free for the same reason: signals with a KNOWN pitch go
-# in, the cents error comes out. Links nothing at all — core::PitchTracker is plain C++.
+# in, the cents error comes out — and the strobe's stripes. Links nothing but threads — core::PitchTracker,
+# TunerEar and TunerStrobe are plain C++.
 add_executable(orbitamp_tuner_test tests/TunerTests.cpp)
 target_include_directories(orbitamp_tuner_test PRIVATE src)
 target_compile_features(orbitamp_tuner_test PRIVATE cxx_std_20)
+find_package(Threads REQUIRED)   # the strobe's tap is read while another thread laps it
+target_link_libraries(orbitamp_tuner_test PRIVATE Threads::Threads)
+
+# Same gate for the polyphonic tuner's analysis: synthetic strums with a KNOWN detune per string go
+# in — every tuning, three rates, a muted string, one far off, mains hum, a single pluck — and each
+# string's cents come out. core::PolyTuner is plain C++ too.
+add_executable(orbitamp_polytuner_test tests/PolyTunerTests.cpp)
+target_include_directories(orbitamp_polytuner_test PRIVATE src)
+target_compile_features(orbitamp_polytuner_test PRIVATE cxx_std_20)
+
+# ... and against strings that are NOT the analysis's model: partials off the formula, two planes of vibration,
+# two-stage decay, the pick, a slow settle, mains hum to the 12th — every reading of the timer judged.
+add_executable(orbitamp_polytuner_hard_test tests/PolyTunerHardTests.cpp)
+target_include_directories(orbitamp_polytuner_hard_test PRIVATE src)
+target_compile_features(orbitamp_polytuner_hard_test PRIVATE cxx_std_20)
 
 # The tuner on a BASS, the same way: every string a bassist tunes, through the processor's own path
 # (tap, 30 Hz ear, default floor and reference). A characterisation — it prints the tables and

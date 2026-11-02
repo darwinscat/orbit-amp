@@ -148,7 +148,7 @@ Console::Console (AmpProcessor& p, std::unique_ptr<Picture> pic, const Places& w
                     [this] { return -amp.limiterGrDb.load (std::memory_order_relaxed) / 3.0f; }, 300.0, 400.0),   // full at 3 dB squeezed
       gateDoor (stage::px13),
       limiterDoor (stage::px13),
-      tuner (p.tunerEar),
+      tuner (p.tunerEar, p.tunerStrobe, p.tunerPoly),
       emblem (where.emblemFace, where.emblemMark),
       version (stage::px13),
       about (p.updateChecker(), aboutTheProduct (p.product(), look.mark, p.wrapperType == juce::AudioProcessor::wrapperType_Standalone), p.pluginFormat()),
@@ -1387,6 +1387,27 @@ void Console::showTunerMenu()
     for (const int hz : prefs::tunerReferences)
         addChoice (reference, juce::String (hz) + " Hz", hz == a4, [hz] (Console& c) { prefs::setTunerReference (c.amp.product(), hz); });
     menu.addSubMenu ("Reference  A = " + juce::String (a4) + " Hz", reference);
+
+    // How it shows the note — the needle, a strobe, or every string of a strum — the machine's too: it is
+    // about who reads it. And the strings the polyphonic one reads: the product's own tunings.
+    using Display = prefs::TunerDisplay;
+    const auto shown = prefs::tunerDisplay (amp.product());
+    juce::PopupMenu display;
+    for (const auto& choice : { std::pair { Display::needle, "Needle" }, std::pair { Display::strobe, "Strobe" },
+                                std::pair { Display::poly, "Poly" } })
+    {
+        const auto d = choice.first;
+        addChoice (display, choice.second, shown == d, [d] (Console& c) { prefs::setTunerDisplay (c.amp.product(), d); });
+    }
+    menu.addSubMenu (juce::String ("Display  ") + (shown == Display::poly ? "Poly" : shown == Display::strobe ? "Strobe" : "Needle"),
+                     display);
+
+    const auto& tuned = prefs::tunerTuning (amp.product());
+    juce::PopupMenu tuning;
+    for (const auto& t : core::polyTunings (prefs::tunesBass (amp.product())))
+        addChoice (tuning, core::polyTuningName (t).menu, &t == &tuned,
+                   [tp = &t] (Console& c) { prefs::setTunerTuning (c.amp.product(), *tp); });
+    menu.addSubMenu (juce::String ("Tuning  ") + core::polyTuningName (tuned).menu, tuning);
 
     menu.showMenuAsync (juce::PopupMenu::Options().withMousePosition());
 }
