@@ -679,10 +679,49 @@ void EqSection::layOutRow (juce::Rectangle<int> row)
     // The cut cells are a fixed width and the bands share what is left, however many there are: a
     // device that measured one Tone control gets one big centred dial rather than one dial and
     // three holes where our other three used to be.
+    // A block's own switches stand inside the cuts, where it asked for room (setInnerCells): HPF, the first, the dials,
+    // the second, LPF.
     const int n     = juce::jmax (1, (int) bandKnobs.size());
-    const int knobW = (row.getWidth() - 2 * cutW) / n;
+
+    // ON THE BASS WITH A PACK'S SWITCHES, every switch on ONE LINE and two lines a side of the dials (the owner, 02.11):
+    // HPF over the pack's first, LPF over its second — the name, the switch, the choice beside it.
+    if (bassStandard() && (innerW[0] > 0 || innerW[1] > 0))
+    {
+        constexpr int nameW = 32, swW = 30, gap = 4, choiceW = 80, lineH = 18;
+        constexpr int cutLineW = nameW + gap + swW + gap + choiceW;
+        const int leftW  = juce::jmax (cutLineW, innerW[0]);
+        const int rightW = juce::jmax (cutLineW, innerW[1]);
+        const int bandW  = (row.getWidth() - leftW - rightW) / n;
+
+        const auto left  = row.removeFromLeft (leftW);
+        const auto right = row.removeFromRight (rightW);
+        for (auto& knob : bandKnobs)
+            knob->setBounds (row.removeFromLeft (bandW));
+
+        const auto lineOf = [] (juce::Rectangle<int> side, int which)
+        {
+            const int centre = side.getY() + (which == 0 ? side.getHeight() / 3 : 2 * side.getHeight() / 3);
+            return juce::Rectangle<int> (side.getX(), centre - lineH / 2, side.getWidth(), lineH);
+        };
+        const auto cutLine = [] (juce::Rectangle<int> line, ZoneSwitch& sw, juce::Label& label, SlopeCombo& combo)
+        {
+            label.setBounds (line.removeFromLeft (nameW));
+            line.removeFromLeft (gap);
+            sw.setBounds (line.removeFromLeft (swW).withSizeKeepingCentre (swW, 16));
+            line.removeFromLeft (gap);
+            combo.setBounds (line);
+        };
+        cutLine (lineOf (left, 0), hpfSw, hpfLabel, hpfSlopeBox);
+        cutLine (lineOf (right, 0), lpfSw, lpfLabel, lpfSlopeBox);
+        innerCells[0] = innerW[0] > 0 ? lineOf (left, 1) : juce::Rectangle<int>();
+        innerCells[1] = innerW[1] > 0 ? lineOf (right, 1) : juce::Rectangle<int>();
+        return;
+    }
+
+    const int knobW = (row.getWidth() - 2 * cutW - innerW[0] - innerW[1]) / n;
 
     const auto hpfCell = row.removeFromLeft (cutW);
+    innerCells[0] = row.removeFromLeft (innerW[0]);
 
     juce::Rectangle<int> firstCell = row;
 
@@ -699,6 +738,7 @@ void EqSection::layOutRow (juce::Rectangle<int> row)
     }
 
     const auto lpfCell = row.removeFromRight (cutW);
+    innerCells[1] = row.removeFromRight (innerW[1]);
 
     // The cuts hang off the first knob's geometry, so an empty row still has to put them somewhere.
     const auto first = bandKnobs.empty() ? firstCell : bandKnobs.front()->getBounds();
@@ -719,6 +759,12 @@ void EqSection::layOutRow (juce::Rectangle<int> row)
 
     switchCell (hpfCell, hpfSw, hpfLabel, hpfSlopeBox);
     switchCell (lpfCell, lpfSw, lpfLabel, lpfSlopeBox);
+
+    // The block's own switches from the names' line down to the cuts' switches' foot: the line under is the cuts'
+    // choices', which may run over them (FINGERS).
+    for (auto& cell : innerCells)
+        if (! cell.isEmpty())
+            cell.setBottom (hpfSw.getBottom());
 
     // The bass's choices may run left of their cells (FINGERS): over the knob beside them, not under it.
     if (bassStandard())

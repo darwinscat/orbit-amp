@@ -10,6 +10,7 @@
 #include "scope/DeviceScope.h"
 #include "Knob.h"
 #include "VSwitch.h"
+#include "ToggleSwitch.h"
 #include "ChannelLever.h"
 #include "LatchKey.h"
 #include "VoicingSelector.h"
@@ -38,7 +39,8 @@ class AmpProcessor;
     The dial is what the amp is set to, the lever which of its channels plays, the well what it does —
     the EQ curve among the pictures it can show, so the console's row of hands is the third strip and
     no longer a second storey of the block. The two narrow meters stand at the well's edges: what goes
-    in at its left, what comes out at its right.
+    in at its left, what comes out at its right. On the bass a pack's tone switches stand in the third
+    strip, among the dials (switchesInRow), not under SMOOTH.
 
     The pack says what this device HAS: how many positions its gain was captured at, which of its
     knobs were measured instead, whether one of them is a two-position switch, and what the circuit
@@ -68,6 +70,10 @@ public:
 
     /** Its console — a gate asks whose cuts its switches are (EqSection::cutsAreBass). */
     const EqSection& console() const noexcept { return eq; }
+
+    /** Its three sections as the last layout left them, left to right, tier and strip together — a gate reads the
+        bass's narrower GAIN and lever sections, and the guitar's widths kept. Empty while a picture is thrown open. */
+    const std::array<juce::Rectangle<int>, 3>& sections() const noexcept { return sectionAreas; }
 
     using Block = core::CapturedBlock;
 
@@ -133,6 +139,11 @@ private:
         the lever, BRIGHT 2 beside its switch. */
     static constexpr int section1W  = 160;   // GAIN, and SMOOTH with the picks under it — the dial's notches clear of the edges
     static constexpr int section2W  = 150;   // the channel lever, and BOOST under it
+
+    /** ...and the bass's, narrower: no BOOST and no pick there, so its GAIN column is only as wide as the dial its height
+        allows or SMOOTH under it, BLEND right after it (layOutContent), and its lever's names are short — SVT, B15 at
+        13 px and the lever (the owner, 02.11). What they give up goes to the picture well and its row of hands. */
+    static constexpr int bassSection2W = 80;
     static constexpr int sectionGap = 16;    // a hairline down its middle
     static constexpr int tierGap    = 2;     // between a section's tier and its strip — 6 -> 2, the EQ's names closer under the curve
     static constexpr int leverGap   = 12;    // between the channel lever's foot and BOOST
@@ -273,6 +284,7 @@ private:
     struct PickSlot
     {
         std::unique_ptr<VSwitch> steps;
+        std::unique_ptr<ToggleSwitch> toggle;   // ...or, on the bass, a toggle in the row under the tone's dials
         std::unique_ptr<juce::ParameterAttachment> attachment;
         juce::String         name;     // the control — written beside the switch when it is an off/on
         juce::StringArray    values;   // its positions — the chosen one written beside the switch, all of them in the hint
@@ -296,6 +308,13 @@ private:
     static float pickWordWidth (const PickSlot&);
 
     std::array<PickSlot, (size_t) params::numSelectors> selectors;
+
+    /** ON THE BASS, A PACK'S TONE SWITCHES ARE CELLS OF THE CONSOLE'S ROW — ULTRA LO and ULTRA HI, the SGT-DI's (the
+        owner, 02.11): they are the tone's, not the GAIN's, so not under SMOOTH. The first stands between HPF and BASS,
+        the second between TREBLE and LPF, each a cell as wide as its words and never narrower than a cut's, looking as
+        the cuts' switches do (ToggleSwitch); the dials share what is left. The picture well keeps its height. A pack
+        with no switch has the row as it was, five cells. A guitar amp's stay the dial's picks. */
+    bool switchesInRow() const noexcept { return bassKnobs != nullptr; }
 
     /** The visualizations: one scope per way of looking, and exactly ONE page of the well on screen —
         a scope, or the EQ curve, which is a page like the others now rather than a storey of its own.
@@ -327,6 +346,7 @@ private:
 
     /** Where the hairlines between the sections stand, for paintContent. */
     std::array<int, 2> dividerX { -1, -1 };
+    std::array<juce::Rectangle<int>, 3> sectionAreas;   // sections()
 
     /** Whether the loaded pack ships a photograph of its box. Most do not — the field is newer than
         the packs — and a page with nothing behind it is the gap this face already refuses to have

@@ -6597,6 +6597,378 @@ int ORBITAMP_GATE_MAIN()
         }
     }
 
+    // ---- A PACK'S TONE SWITCHES AS CELLS OF THE AMP'S TONE ROW (the owner, 02.11): ULTRA LO and ULTRA HI, the SGT-DI's —
+    //      HPF, ULTRA LO, BASS, MIDDLE, TREBLE, ULTRA HI, LPF — and no longer under GAIN: inside the AMP and clear of all
+    //      else at the least width and at 16:9, the well and the dials as with no switch; a pack with none, the row's five
+    //      cells as they were; the bass's GAIN and lever sections narrower, the well wider by them; each a hand's toggle on
+    //      its selector's parameter, a click or a drag one position and one gesture; a position called off written 0; and
+    //      a guitar amp's picks under its GAIN, its sections as wide as ever. ----
+    {
+        // A FAKE PACK: the set's ReVolt Clean with Ultra Lo (-, off, +) and Ultra Hi (off, +) in place of its Boost, every
+        // combination on a capture it has — Ultra Hi's + on the Boost's; or, `switches` false, its Gain alone.
+        const auto fake = [] (AmpProcessor& t, bool switches)
+        {
+            int at = -1;
+            for (int i = 0; i < t.preamp.packs.size() && at < 0; ++i)
+                if (t.preamp.packs.getReference (i).location.getFileName().startsWith ("Two Notes ReVolt Clean"))
+                    at = i;
+            if (at < 0)
+                return false;
+            auto pack = t.preamp.packs.getReference (at);
+            auto* stage = const_cast<namz::rig::Stage*> (pack.rig.firstKnown());
+            if (stage == nullptr)
+                return false;
+            auto& dev = stage->device;
+            std::vector<namz::rig::Control> controls;
+            if (switches)
+            {
+                controls.push_back ({ "Ultra Lo", namz::rig::Role::Generic, { "-", "off", "+" }, {}, 0 });
+                controls.push_back ({ "Ultra Hi", namz::rig::Role::Generic, { "off", "+" }, {}, 0 });
+            }
+            for (const auto& c : dev.controls)
+                if (c.role == namz::rig::Role::Gain)
+                    controls.push_back (c);
+            std::vector<namz::rig::FileEntry> files;
+            for (const auto& f : dev.files)
+            {
+                const auto boost = f.settings.find ("Boost");
+                const bool on = boost != f.settings.end() && boost->second == "on";
+                for (const char* lo : { "-", "off", "+" })
+                    for (const char* hi : { "off", "+" })
+                        if ((std::string (hi) == "+") == on && (switches || (std::string (lo) == "-" && ! on)))
+                        {
+                            auto g = f;
+                            g.settings.erase ("Boost");
+                            if (switches)
+                            {
+                                g.settings["Ultra Lo"] = lo;
+                                g.settings["Ultra Hi"] = hi;
+                            }
+                            files.push_back (g);
+                        }
+            }
+            dev.controls = controls;
+            dev.files = files;
+            t.preamp.packs.set (at, pack);
+            set (t, params::preampDevice, (float) at);
+            t.preamp.select (at);
+            t.pumpDeviceWork();
+            return t.preamp.selectors().size() == (switches ? 2 : 0);
+        };
+
+        const auto panelIn = [] (juce::Component& root)
+        {
+            CapturedBlockPanel* found = nullptr;
+            std::function<void (juce::Component&)> walk = [&] (juce::Component& c)
+            {
+                if (auto* p = dynamic_cast<CapturedBlockPanel*> (&c); p != nullptr && found == nullptr)
+                    found = p;
+                for (auto* child : c.getChildren())
+                    walk (*child);
+            };
+            walk (root);
+            return found;
+        };
+
+        // What one AMP shows: its toggles and the tone row's dials and cut switches left to right, its picks (any VSwitch),
+        // the picture well, GAIN (its tallest knob), SMOOTH and BLEND.
+        struct Look
+        {
+            CapturedBlockPanel* panel = nullptr;
+            std::vector<ToggleSwitch*> toggles;
+            std::vector<VSwitch*> picks;
+            std::vector<juce::Rectangle<int>> dials, cuts;
+            juce::Rectangle<int> well, gain, smooth, blend;
+        };
+        const auto look = [&] (juce::Component& ed)
+        {
+            Look l;
+            l.panel = panelIn (ed);
+            if (l.panel == nullptr)
+                return l;
+            for (auto* c : l.panel->getChildren())
+                if (dynamic_cast<DeviceScope*> (c) != nullptr)
+                    l.well = c->getBounds();
+            std::vector<juce::Rectangle<int>> knobs;
+            for (auto* c : l.panel->getChildren())
+            {
+                if (! c->isVisible())
+                    continue;
+                if (auto* s = dynamic_cast<ToggleSwitch*> (c))
+                    l.toggles.push_back (s);
+                if (auto* v = dynamic_cast<VSwitch*> (c))
+                    l.picks.push_back (v);
+                if (dynamic_cast<Knob*> (c) != nullptr)
+                    knobs.push_back (c->getBounds());
+                if (dynamic_cast<ZoneSwitch*> (c) != nullptr && c->getY() >= l.well.getBottom())
+                    l.cuts.push_back (c->getBounds());
+                if (auto* t = dynamic_cast<juce::SettableTooltipClient*> (c); t != nullptr && (t->getTooltip().startsWith ("SMOOTH:") || t->getTooltip().startsWith ("STEP:")))
+                    l.smooth = c->getBounds();
+                if (dynamic_cast<GuardRail*> (c) != nullptr)
+                    l.blend = c->getBounds();
+            }
+            for (const auto& k : knobs)
+            {
+                if (k.getHeight() > l.gain.getHeight())
+                    l.gain = k;
+                if (k.getY() >= l.well.getBottom())
+                    l.dials.push_back (k);
+            }
+            const auto byX = [] (const auto& a, const auto& b) { return a.getX() < b.getX(); };
+            std::sort (l.dials.begin(), l.dials.end(), byX);
+            std::sort (l.cuts.begin(), l.cuts.end(), byX);
+            std::sort (l.toggles.begin(), l.toggles.end(), [] (auto* a, auto* b) { return a->getX() < b->getX(); });
+            return l;
+        };
+        const auto mouse = [] (juce::Component& c, juce::Point<float> at, juce::Point<float> down)
+        {
+            const auto now = juce::Time::getCurrentTime();
+            return juce::MouseEvent (juce::Desktop::getInstance().getMainMouseSource(), at, juce::ModifierKeys(), 0.0f,
+                                     juce::MouseInputSource::defaultOrientation, juce::MouseInputSource::defaultRotation,
+                                     juce::MouseInputSource::defaultTiltX, juce::MouseInputSource::defaultTiltY,
+                                     &c, &c, now, down, now, 1, at != down);
+        };
+        struct Gestures final : juce::AudioProcessorParameter::Listener
+        {
+            int begun = 0;
+            void parameterValueChanged (int, float) override {}
+            void parameterGestureChanged (int, bool starting) override { begun += starting ? 1 : 0; }
+        };
+        static_assert (ToggleSwitch::fontH >= 13.0f, "a toggle's words at reading size");
+        const float middleW = theme::trackedWidth ("MIDDLE", theme::displayFont (13.0f), 0.15f);   // the widest dial's name
+
+        auto withSwitches = make (bass), plainPack = make (bass), stock = make (bass);
+        const bool faked = fake (*withSwitches, true) && fake (*plainPack, false);
+        std::unique_ptr<juce::AudioProcessorEditor> ed (withSwitches->createEditor()), plainEd (plainPack->createEditor()),
+                                                    stockEd (stock->createEditor());
+        const int h = ed->getHeight();
+        juce::StringArray inRow, asBefore, narrower;
+        juce::String cells;   // the row's cells at the least width, for the line
+        for (const int width : { -1, juce::roundToInt ((float) h * 16.0f / 9.0f) })
+        {
+            for (auto* e : { ed.get(), plainEd.get(), stockEd.get() })
+                e->setSize (width < 0 ? 10 : width, h);   // narrower than the least: laid out at the least
+            const juce::String where = "at " + juce::String (ed->getWidth()) + " px: ";
+            const auto l = look (*ed), plain = look (*plainEd), bare = look (*stockEd);
+            if (l.panel == nullptr || plain.panel == nullptr || bare.panel == nullptr)
+            {
+                inRow.add (where + "no AMP");
+                continue;
+            }
+
+            // WITH SWITCHES: HPF, ULTRA LO, the three dials, ULTRA HI, LPF, in that order, nothing over anything.
+            if (l.toggles.size() != 2 || l.dials.size() != 3 || l.cuts.size() != 2 || ! l.picks.empty())
+            {
+                inRow.add (where + juce::String ((int) l.toggles.size()) + " toggles, " + juce::String ((int) l.dials.size()) + " dials, "
+                           + juce::String ((int) l.cuts.size()) + " cuts, " + juce::String ((int) l.picks.size()) + " picks");
+                continue;
+            }
+            std::vector<juce::Rectangle<int>> row { l.cuts[0], l.toggles[0]->getBounds(), l.dials[0], l.dials[1], l.dials[2],
+                                                    l.toggles[1]->getBounds(), l.cuts[1] };
+            for (size_t k = 1; k < row.size(); ++k)
+                if (row[k].getX() < row[k - 1].getRight())
+                    inRow.add (where + "cell " + juce::String ((int) k) + " " + row[k].toString() + " left of " + row[k - 1].toString());
+            for (size_t k = 0; k < 2; ++k)
+            {
+                auto* s = l.toggles[k];
+                const auto b = s->getBounds();
+                const juce::String which = s->getTooltip().upToFirstOccurrenceOf (":", false, false);
+                if (which != (k == 0 ? "ULTRA LO" : "ULTRA HI"))
+                    inRow.add (where + "toggle " + juce::String ((int) k) + " is " + which);
+                if (b != l.panel->console().innerCell ((int) k) || b.getY() != l.dials[0].getY() || b.getBottom() != l.cuts[0].getBottom())
+                    inRow.add (where + which + " at " + b.toString() + ": not from the names' line " + juce::String (l.dials[0].getY())
+                               + " to the cuts' foot " + juce::String (l.cuts[0].getBottom()));
+                if (b.getWidth() < s->idealWidth() || b.getWidth() < EqSection::cutW)
+                    inRow.add (where + which + " " + juce::String (b.getWidth()) + " wide, its words " + juce::String (s->idealWidth()));
+                if (! l.panel->sections()[2].contains (b) || ! l.panel->getLocalBounds().reduced (1).contains (b))
+                    inRow.add (where + which + " outside the AMP's tone row");
+                for (auto* c : l.panel->getChildren())
+                    if (c != s && c->isVisible() && c->getBounds().intersects (b))
+                        inRow.add (where + which + " over " + juce::String (typeid (*c).name()) + " " + c->getBounds().toString());
+            }
+            for (size_t k = 0; k < 3 && k < plain.dials.size(); ++k)
+                if (l.dials[k].getY() != plain.dials[k].getY() || l.dials[k].getHeight() != plain.dials[k].getHeight()
+                    || (float) l.dials[k].getWidth() < juce::jmax ((float) Knob::smallSide, middleW))
+                    inRow.add (where + "dial " + juce::String ((int) k) + " " + l.dials[k].toString() + ", with no switch " + plain.dials[k].toString());
+            if (l.well != plain.well)
+                inRow.add (where + "the well " + l.well.toString() + ", with no switch " + plain.well.toString());
+            if (width < 0)
+                cells << "HPF 64, ULTRA LO " << l.toggles[0]->getWidth() << ", dials " << l.dials[0].getWidth() << ", ULTRA HI "
+                      << l.toggles[1]->getWidth() << ", LPF 64, the well " << l.well.getWidth() << " x " << l.well.getHeight();
+
+            // WITHOUT: the five cells as the row always laid them — the cuts a cut's width each side of three equal dials
+            // edge to edge — the same for a pack of no switch and ReVolt's, whose only one is BOOST, none on the bass.
+            for (const auto* p : { &plain, &bare })
+            {
+                const juce::String who = p == &plain ? "no switch: " : "ReVolt's: ";
+                if (! p->toggles.empty() || p->dials.size() != 3 || p->cuts.size() != 2 || ! p->picks.empty()
+                    || ! p->panel->console().innerCell (0).isEmpty() || ! p->panel->console().innerCell (1).isEmpty())
+                {
+                    asBefore.add (where + who + juce::String ((int) p->toggles.size()) + " toggles, " + juce::String ((int) p->dials.size()) + " dials");
+                    continue;
+                }
+                const auto s3 = p->panel->sections()[2];
+                const int knobW = (s3.getWidth() - 2 * EqSection::cutW) / 3;
+                for (int k = 0; k < 3; ++k)
+                    if (p->dials[(size_t) k] != juce::Rectangle<int> (s3.getX() + EqSection::cutW + k * knobW, p->dials[0].getY(), knobW, p->dials[0].getHeight()))
+                        asBefore.add (where + who + "dial " + juce::String (k) + " at " + p->dials[(size_t) k].toString());
+                if (std::abs (p->cuts[0].getCentreX() - (s3.getX() + EqSection::cutW / 2)) > 1
+                    || std::abs (p->cuts[1].getCentreX() - (s3.getRight() - EqSection::cutW / 2)) > 1)
+                    asBefore.add (where + who + "the cuts' switches at " + p->cuts[0].toString() + " and " + p->cuts[1].toString());
+            }
+            if (plain.dials != bare.dials || plain.well != bare.well)
+                asBefore.add (where + "no switch and ReVolt's apart");
+
+            // THE BASS'S NARROWER SECTIONS: GAIN's column as wide as its dial or SMOOTH, BLEND right after it, the lever's 80
+            // (the owner, 02.11); the well and its row of hands take the rest.
+            for (const auto* p : { &l, &plain })
+            {
+                const auto& s = p->panel->sections();
+                const int gainW = juce::jmax (p->gain.getWidth(), p->smooth.getWidth());
+                if (s[1].getWidth() != 80 || s[0].getWidth() != gainW + CapturedBlockPanel::bassSideW || p->smooth.isEmpty()
+                    || p->blend.getX() < s[0].getRight() - CapturedBlockPanel::bassSideW || p->blend.getRight() > s[0].getRight()
+                    || p->well.getX() != s[2].getX() || p->well.getRight() != s[2].getRight())
+                    narrower.add (where + "GAIN's section " + s[0].toString() + " (its dial " + p->gain.toString() + ", SMOOTH " + p->smooth.toString()
+                                  + ", BLEND " + p->blend.toString() + "), the lever's " + s[1].toString() + ", the well " + p->well.toString()
+                                  + " in " + s[2].toString());
+            }
+        }
+        check (faked && inRow.isEmpty(), "a pack's tone switches are cells of the AMP's tone row (HPF, ULTRA LO, BASS, MIDDLE, TREBLE, ULTRA HI, "
+                                         "LPF) at the least width and 16:9: from the names' line to the cuts' foot, as wide as their words, "
+                                         "inside the AMP and over nothing, no pick under GAIN; the well and the dials as with no switch ("
+                                         + cells + ")" + (inRow.isEmpty() ? juce::String() : ": " + inRow.joinIntoString ("; ")));
+        check (faked && asBefore.isEmpty(), "with no switch the tone row is its five cells as before: HPF, three equal dials edge to edge, LPF"
+                                            + (asBefore.isEmpty() ? juce::String() : ": " + asBefore.joinIntoString ("; ")));
+        check (faked && narrower.isEmpty(), "the bass's GAIN section as wide as its dial or SMOOTH, BLEND right after it, the lever's section "
+                                            "80, the well and its row of hands the rest" + (narrower.isEmpty() ? juce::String() : ": " + narrower.joinIntoString ("; ")));
+
+        // Each moves its selector: a click one position toward where it lands, back from the end it is against; a drag
+        // one position its way; one gesture each; the parameter moved from elsewhere moves the dot; the hint all of it.
+        {
+            juce::StringArray wrong;
+            const auto l = look (*ed);
+            for (size_t k = 0; k < l.toggles.size(); ++k)
+            {
+                auto& s = *l.toggles[k];
+                const auto id = params::selectorId (params::preampId, (int) k);
+                auto* p = withSwitches->apvts.getParameter (id);
+                Gestures gestures;
+                p->addListener (&gestures);
+                const auto at = [&] { return juce::roundToInt (value (*withSwitches, id.toRawUTF8())); };
+                const float lineY = (float) s.getHeight() - (float) ToggleSwitch::ovalH * 0.5f;
+                const auto click = [&] (float x)
+                {
+                    const juce::Point<float> pt (x, lineY);
+                    s.mouseDown (mouse (s, pt, pt));
+                    s.mouseUp (mouse (s, pt, pt));
+                    withSwitches->pumpDeviceWork();
+                };
+                const auto drag = [&] (float dx)
+                {
+                    const juce::Point<float> from ((float) s.getWidth() * 0.5f, lineY);
+                    s.mouseDown (mouse (s, from, from));
+                    s.mouseDrag (mouse (s, from.translated (dx * 0.5f, 0.0f), from));
+                    s.mouseDrag (mouse (s, from.translated (dx, 0.0f), from));
+                    s.mouseUp (mouse (s, from.translated (dx, 0.0f), from));
+                    withSwitches->pumpDeviceWork();
+                };
+                const float right = (float) s.getWidth() - 2.0f;
+                juce::String path (at());
+                click (right);              // one up
+                path << " " << at();
+                drag (-40.0f);              // one down, however far
+                path << " " << at();
+                click (right);
+                click (right);              // to the last, or back from it
+                path << " " << at();
+                const juce::String want = s.count() == 3 ? "0 1 0 2" : "0 1 0 0";
+                if (path != want || gestures.begun != 4)
+                    wrong.add (s.getTooltip() + ": " + path + " (want " + want + "), " + juce::String (gestures.begun) + " gestures");
+                set (*withSwitches, id, 1.0f);
+                if (s.selectedIndex() != 1)
+                    wrong.add (s.getTooltip() + ": the parameter at 1, the dot at " + juce::String (s.selectedIndex()));
+                const auto hint = s.getTooltip();
+                for (const char* word : { "ULTRA", "-", "OFF", "+" })
+                    if (! hint.contains (word) && ! (k == 1 && juce::String (word) == "-"))
+                        wrong.add ("the hint \"" + hint + "\" names no " + word);
+                p->removeListener (&gestures);
+            }
+            check (l.toggles.size() == 2 && wrong.isEmpty(), "each tone switch moves its selector, a click or a drag one position "
+                                                             "and one gesture, the parameter its dot; its hint names it and every "
+                                                             "position" + (wrong.isEmpty() ? juce::String() : ": " + wrong.joinIntoString ("; ")));
+        }
+
+        // A POSITION CALLED OFF IS WRITTEN 0, as the pedal marks it (the owner, 02.11), in any case, and so is a 0; every
+        // other word as the pack has it. On the face ULTRA HI, whose pack says off, draws as a switch whose pack said 0.
+        {
+            juce::StringArray wrong;
+            for (const auto& [in, out] : std::vector<std::pair<juce::String, juce::String>> {
+                     { "OFF", "0" }, { "off", "0" }, { "Off", "0" }, { "0", "0" }, { "+", "+" }, { "-", "-" }, { "OFFSET", "OFFSET" }, { "ON", "ON" } })
+                if (ToggleSwitch::markFor (in) != out)
+                    wrong.add (in + " -> " + ToggleSwitch::markFor (in));
+            const auto l = look (*ed);
+            if (l.toggles.size() == 2)
+            {
+                auto& hi = *l.toggles[1];
+                const auto shot = [] (juce::Component& c) { return c.createComponentSnapshot (c.getLocalBounds(), true, 1.0f); };
+                const auto same = [] (const juce::Image& a, const juce::Image& b)
+                {
+                    if (a.getBounds() != b.getBounds())
+                        return false;
+                    for (int y = 0; y < a.getHeight(); ++y)
+                        for (int x = 0; x < a.getWidth(); ++x)
+                            if (a.getPixelAt (x, y) != b.getPixelAt (x, y))
+                                return false;
+                    return true;
+                };
+                set (*withSwitches, params::selectorId (params::preampId, 1), 0.0f);   // at off, lit as the mark it is
+                ToggleSwitch zero;   // a pack that says 0
+                zero.setItems ("ULTRA HI", { "0", "+" }, 0);
+                zero.setBounds (hi.getLocalBounds());
+                if (! same (shot (hi), shot (zero)))
+                    wrong.add ("ULTRA HI on the face does not read 0 ( ) +");
+            }
+            else
+                wrong.add ("no ULTRA HI");
+            check (wrong.isEmpty(), "a tone switch's position called off is written 0, in any case; every other word as the pack has it"
+                                    + (wrong.isEmpty() ? juce::String() : ": " + wrong.joinIntoString ("; ")));
+        }
+
+        // A GUITAR AMP'S stay picks under its GAIN dial: no toggle, the same pack's switches under the dial in its section,
+        // the tone row and the well as with no switch, its sections as wide as ever — 160 and 150.
+        {
+            juce::StringArray wrong;
+            auto guitar = make (products::orbitAmp()), guitarPlain = make (products::orbitAmp());
+            const bool fakedGuitar = fake (*guitar, true) && fake (*guitarPlain, false);
+            std::unique_ptr<juce::AudioProcessorEditor> ge (guitar->createEditor()), gp (guitarPlain->createEditor());
+            const int gh = ge->getHeight();
+            for (const int width : { -1, juce::roundToInt ((float) gh * 16.0f / 9.0f) })
+            {
+                ge->setSize (width < 0 ? 10 : width, gh);
+                gp->setSize (width < 0 ? 10 : width, gh);
+                const auto l = look (*ge), plain = look (*gp);
+                const juce::String where = "at " + juce::String (ge->getWidth()) + " px: ";
+                if (l.panel == nullptr || plain.panel == nullptr || ! l.toggles.empty() || l.picks.size() != 2)
+                {
+                    wrong.add (where + juce::String ((int) l.toggles.size()) + " toggles, " + juce::String ((int) l.picks.size()) + " picks");
+                    continue;
+                }
+                const auto& s = l.panel->sections();
+                for (auto* v : l.picks)
+                    if (v->getY() < l.gain.getBottom() || ! s[0].contains (v->getBounds()))
+                        wrong.add (where + v->getTooltip().upToFirstOccurrenceOf (":", false, false) + " at " + v->getBounds().toString()
+                                   + ", GAIN at " + l.gain.toString());
+                if (s[0].getWidth() != 160 || s[1].getWidth() != 150 || plain.panel->sections() != s)
+                    wrong.add (where + "sections " + s[0].toString() + ", " + s[1].toString() + ", " + s[2].toString());
+                if (l.well != plain.well || l.dials != plain.dials || l.cuts != plain.cuts
+                    || ! l.panel->console().innerCell (0).isEmpty() || ! l.panel->console().innerCell (1).isEmpty())
+                    wrong.add (where + "the well " + l.well.toString() + " against " + plain.well.toString() + ", or the tone row moved");
+            }
+            check (fakedGuitar && wrong.isEmpty(), "OrbitAmp: the same pack's switches stay picks under GAIN, the tone row and the well as "
+                                                   "without them, its sections 160 and 150 as ever" + (wrong.isEmpty() ? juce::String() : ": " + wrong.joinIntoString ("; ")));
+        }
+    }
+
     std::printf ("%s\n", failed == 0 ? "PASSED" : "FAILED");
     return failed == 0 ? 0 : 1;
 }
