@@ -5,6 +5,7 @@
 
 #include "BassCuts.h"
 #include "BypassFade.h"
+#include "CompCharacters.h"
 #include "CompTap.h"
 
 #include <felitronics/dynamics/Compressor.h>
@@ -36,7 +37,11 @@ namespace orbitamp::core
       - CHARACTER chooses the detector: SMOOTH hears the level's RMS over 10 ms, PUNCHY its peaks. (The old law raised
         PUNCHY's threshold 4 dB so the two played about as loud; with a threshold of its own the line says where it works,
         and PUNCHY at the same line squeezes harder — the player sets the line; the make-up reads the reference note as
-        each detector does, so the two play it as loud.)
+        each detector does, so the two play it as loud.) OPTO, FET and SQUASH are our own (the owner, 01.11 — not copies;
+        CompCharacters.h): OPTO fed back on the RMS, its release in two stages with a memory of the squeeze, clean; FET fast
+        on the peaks, a grain of odd harmonics growing with the squeeze; SQUASH fed back on the peaks, its attack letting
+        the pluck through, its release long, the top let down as it squeezes. Each its own times (attackTable,
+        releaseTable); a switch between core's compressor and ours crosses over in characterFadeMs, both fed.
 
     STANDBY (the strip's arrow) is the house's crossfade (BypassFade, 15 ms), handed in per block. While the link stands
     by with BLEND up the compressor is still FED, so switching it in fades to a compressor already settled. Only with
@@ -55,7 +60,8 @@ class BassComp
 public:
     enum class Attack    { slow, med, fast };
     enum class Release   { automatic, fast, slow };
-    enum class Character { smooth, punchy };
+    enum class Character { smooth, punchy, opto, fet, squash };
+    static constexpr int characterCount = 5;
 
     static constexpr double kneeDb            = 8.0;
     static constexpr double attackSlowMs      = 30.0,  attackMedMs = 15.0, attackFastMs = 5.0;
@@ -66,6 +72,46 @@ public:
     static constexpr double cadenceMs         = 1.0;    // how often the knob and the release reach the compressor
     static constexpr double warmMs            = 30.0;   // a fresh start is fed, not heard, three attacks and this long...
     static constexpr double warmFadeMs        = 15.0;   // ...then fades in over BypassFade's length
+    static constexpr double characterFadeMs   = 15.0;   // a switch between core's compressor and ours
+
+    /** EACH CHARACTER'S TIMES, ms: ATTACK slow / med / fast, RELEASE fast / slow (AUTO between them as the hold says) —
+        OPTO's release is its memory's, its first stage optoFirstMs. */
+    static constexpr double attackTable[characterCount][3]  = { { attackSlowMs, attackMedMs, attackFastMs },
+                                                                { attackSlowMs, attackMedMs, attackFastMs },
+                                                                { 20.0, 10.0, 5.0 }, { 3.0, 1.0, 0.3 }, { 12.0, 6.0, 3.0 } };
+    static constexpr double releaseTable[characterCount][2] = { { releaseFastMs, releaseSlowMs }, { releaseFastMs, releaseSlowMs },
+                                                                { 400.0, 2000.0 }, { 50.0, 500.0 }, { 250.0, 900.0 } };
+    static constexpr double optoFirstMs = 60.0, optoChargeMs = 800.0;
+    static constexpr double fetGrain = 0.16, squashGrain = 0.08, squashDarkHz = 3000.0;
+
+    /** Whether the character is ours (CompCharacters.h) rather than core's compressor; fed back; on the RMS. */
+    static bool ours     (Character c) noexcept { return c == Character::opto || c == Character::fet || c == Character::squash; }
+    static bool fedBack  (Character c) noexcept { return c == Character::opto || c == Character::squash; }
+    static bool hearsRms (Character c) noexcept { return c == Character::smooth || c == Character::opto; }
+
+    /** Our character's voice at an ATTACK and a release time (ms, as AUTO has it now). */
+    static CharacterComp::Voice voiceOf (Character c, Attack a, double releaseMs) noexcept
+    {
+        CharacterComp::Voice v;
+        v.attackMs  = attackMsOf (c, a);
+        v.releaseMs = releaseMs;
+        v.rms       = hearsRms (c);
+        v.feedback  = fedBack (c);
+        if (c == Character::opto)
+        {
+            v.releaseMs = optoFirstMs;
+            v.memoryMs  = releaseMs;
+            v.chargeMs  = optoChargeMs;
+        }
+        else if (c == Character::fet)
+            v.grain = fetGrain;
+        else if (c == Character::squash)
+        {
+            v.grain  = squashGrain;
+            v.darkHz = squashDarkHz;
+        }
+        return v;
+    }
 
 
     /** The key's high-pass: this one, or another for a comparison — the first version's was 40 Hz, two
@@ -93,19 +139,23 @@ public:
         itself, within a fifth of a decibel; PUNCHY's peaks a steady tone's crest (3 dB) less what its squeeze lets go
         between them — much with a fast release, little with a fast attack. AUTO's release lies between, by the same
         fraction of its hold that apply() gives its time. The key's 30 Hz high-pass reads B0 and E1 low: those notes come
-        up 1.5..3 dB at the full BLEND (the gate says how much).
+        up 1.5..3 dB at the full BLEND (the gate says how much). OPTO, FET and SQUASH measured the same way, on our
+        compressor (CompCharacters.h), FET's and SQUASH's colour in what they read; OPTO on its own fed-back curve.
         A LIMIT, KNOWN: the table is calibrated at the defaults (-24 dB, 4:1). How far a detector's squeeze lets go between
         peaks scales with how deep it squeezes, so away from them the reference note drifts — at the deep corner (-48 dB,
         10:1) PUNCHY with a fast release comes up about 1 dB at the full BLEND, half that at half; under the knee (-12 dB,
         2:1) there is no make-up and nothing to drift; at the gentlest ratio, 1.5:1, it stays within 0.4 dB at every
         threshold. The gate prints the corners and holds them within 1.2 dB. */
-    static constexpr double readsDb[2][3][2] = { { { -0.07, 0.11 }, { 0.01, 0.15 }, { 0.12, 0.17 } },
-                                                 { {  0.29, 1.74 }, { 1.05, 2.11 }, { 1.88, 2.47 } } };
+    static constexpr double readsDb[characterCount][3][2] = { { { -0.07, 0.11 }, { 0.01, 0.15 }, { 0.12, 0.17 } },
+                                                              { {  0.29, 1.74 }, { 1.05, 2.11 }, { 1.88, 2.47 } },
+                                                              { {  0.03, 0.08 }, { 0.09, 0.13 }, { 0.13, 0.14 } },
+                                                              { {  1.97, 2.62 }, { 2.43, 2.74 }, { 2.65, 2.80 } },
+                                                              { {  1.94, 2.45 }, { 2.27, 2.61 }, { 2.50, 2.71 } } };
 
     /** ...for a release `slowness` of the way from FAST (0) to SLOW (1). */
     static double readingDb (Character character, Attack attack, double slowness) noexcept
     {
-        const auto& r = readsDb[character == Character::punchy ? 1 : 0][std::clamp ((int) attack, 0, 2)];
+        const auto& r = readsDb[std::clamp ((int) character, 0, characterCount - 1)][std::clamp ((int) attack, 0, 2)];
         return r[0] + (r[1] - r[0]) * std::clamp (slowness, 0.0, 1.0);
     }
 
@@ -115,6 +165,9 @@ public:
     static double makeupDbFor (double thresholdDb, double ratio, Character character, Attack attack = Attack::med,
                                double slowness = 1.0) noexcept
     {
+        if (fedBack (character))   // the fed-back curve, its knee wider (CharacterComp::staticDeltaDb)
+            return -CharacterComp::staticDeltaDb (true, referenceDb + readingDb (character, attack, slowness), thresholdDb,
+                                                  ratio, kneeDb);
         felitronics::dynamics::GainComputer curve;
         curve.setMode (felitronics::dynamics::Mode::DownCompress);
         curve.setThresholdDb (thresholdDb);
@@ -127,6 +180,24 @@ public:
     static double attackMsOf (Attack a) noexcept
     {
         return a == Attack::slow ? attackSlowMs : a == Attack::fast ? attackFastMs : attackMedMs;
+    }
+
+    static double attackMsOf (Character c, Attack a) noexcept
+    {
+        return attackTable[std::clamp ((int) c, 0, characterCount - 1)][std::clamp ((int) a, 0, 2)];
+    }
+
+    /** The release, ms, a `slowness` of the way from the character's FAST (0) to its SLOW (1). */
+    static double releaseMsOf (Character c, double slowness) noexcept
+    {
+        const auto& r = releaseTable[std::clamp ((int) c, 0, characterCount - 1)];
+        return r[0] + (r[1] - r[0]) * std::clamp (slowness, 0.0, 1.0);
+    }
+
+    /** The static curve the character's detector works on, dB (0 or below) — the picture's square draws it. */
+    static double staticDeltaDb (Character c, double levelDb, double thresholdDb, double ratio) noexcept
+    {
+        return CharacterComp::staticDeltaDb (fedBack (c), levelDb, thresholdDb, ratio, kneeDb);
     }
 
     [[nodiscard]] bool prepare (double sampleRate, int maxBlock) { return prepare (sampleRate, maxBlock, KeyCut {}); }
@@ -146,6 +217,8 @@ public:
         dry.assign ((size_t) block, 0.0f);
         work.assign ((size_t) block, 0.0f);
         gr.assign ((size_t) block, 0.0f);
+        alt.assign ((size_t) block, 0.0f);
+        grAlt.assign ((size_t) block, 0.0f);
         shown.assign ((size_t) block, 0.0f);
         path.assign ((size_t) block, 0.0f);
 
@@ -154,6 +227,8 @@ public:
             b.design (true, cut.hz, fs);
 
         ready = comp.prepare (fs, block, 1, 0.0);
+        ours_.prepare (fs);
+        famStep = 1.0 / (characterFadeMs * 0.001 * fs);
         reset();
         return ready;
     }
@@ -162,6 +237,9 @@ public:
     void reset() noexcept
     {
         comp.reset();
+        ours_.reset();
+        oursRunning = false;
+        famValid    = false;
         for (auto& b : keyCut)
             b.reset();
         heldDb      = 0.0;
@@ -212,6 +290,7 @@ public:
 
         std::copy (x, x + n, dry.data());
         std::copy (x, x + n, work.data());
+        std::copy (x, x + n, alt.data());
 
         const int   ramp     = std::clamp (link.ramp, 1, n);
         const float linkStep = (link.to - link.from) / (float) ramp;
@@ -234,12 +313,28 @@ public:
                 key[(size_t) k] = v;
             }
 
+            // OUR CHARACTERS beside core's compressor, both fed while a switch crosses between them; idle, ours takes
+            // over the squeeze core's holds, without a step.
+            const bool oursWanted = famTarget > 0.0 || fam > 0.0;
+            if (oursWanted && ! oursRunning)
+                ours_.seed (-comp.gainReductionDb());
+            oursRunning = oursWanted;
+
             float* io[] = { work.data() + i };
             const float* keyIn[] = { key.data() + i };
             (void) comp.process (io, 1, len, keyIn, 1, felitronics::dynamics::GainReductionTap { gr.data() + i, len });
 
+            if (oursRunning)
+                ours_.process (alt.data() + i, key.data() + i, len, grAlt.data() + i);
+
             for (int k = i; k < i + len; ++k)
             {
+                if (oursRunning)
+                {
+                    fam = famTarget > fam ? std::min (famTarget, fam + famStep) : std::max (famTarget, fam - famStep);
+                    work[(size_t) k] += (float) fam * (alt[(size_t) k] - work[(size_t) k]);
+                    gr[(size_t) k]   += (float) fam * (grAlt[(size_t) k] - gr[(size_t) k]);
+                }
                 heldDb += holdK * (std::max (0.0, -(double) gr[(size_t) k]) - heldDb);
                 amt = target > amt ? std::min (target, amt + glideStep) : std::max (target, amt - glideStep);
 
@@ -282,7 +377,7 @@ public:
         {
             if (! tapWrote)
                 tap->breakTrace();
-            tap->write (dry.data(), path.data(), shown.data(), gr.data(), n, character == Character::smooth);
+            tap->write (dry.data(), path.data(), shown.data(), gr.data(), n, hearsRms (character));
         }
         tapWrote = write;
     }
@@ -323,7 +418,17 @@ private:
 
         // The release's slowness, FAST 0 .. SLOW 1 — AUTO's by how deep the squeeze has been held.
         const double slowness  = release == Release::fast ? 0.0 : release == Release::slow ? 1.0 : std::clamp (heldDb / holdFullDb, 0.0, 1.0);
-        const double releaseMs = releaseFastMs + (releaseSlowMs - releaseFastMs) * slowness;
+        const double releaseMs = releaseMsOf (character, slowness);
+
+        // Which compressor is heard — core's or ours — a fresh start on it at once, a switch crossing over.
+        famTarget = ours (character) ? 1.0 : 0.0;
+        if (! famValid)
+        {
+            fam      = famTarget;
+            famValid = true;
+        }
+        if (ours (character))
+            ours_.set (voiceOf (character, attack, releaseMs), thrAt, ratioAt, kneeDb);
 
         felitronics::dynamics::CompressorParams p;
         p.thresholdDb = thrAt;   // the line is where the detector works, in either character (no offset any more)
@@ -331,9 +436,9 @@ private:
         // The make-up's number — what the curve takes from the reference note, as this character's detector reads it
         // (level-neutral: see the class comment) — and the paces it glides at.
         makeupTargetDb = makeupDbFor (thrAt, ratioAt, character, attack, slowness);
-        makeupUpK      = 1.0 - std::exp (-1.0 / (attackMsOf (attack) * 0.001 * fs));
+        makeupUpK      = 1.0 - std::exp (-1.0 / (attackMsOf (character, attack) * 0.001 * fs));
         makeupDownK    = 1.0 - std::exp (-1.0 / (releaseMs * 0.001 * fs));
-        warmSamples    = (3.0 * attackMsOf (attack) + warmMs) * 0.001 * fs;
+        warmSamples    = (3.0 * attackMsOf (character, attack) + warmMs) * 0.001 * fs;
         if (snapMakeup)
         {
             makeupNowDb = makeupTargetDb;
@@ -341,10 +446,9 @@ private:
         }
         p.ratio       = ratioAt;
         p.kneeDb      = kneeDb;
-        p.attackMs    = attackMsOf (attack);
+        p.attackMs    = attackMsOf (character, attack);
         p.releaseMs   = releaseMs;
-        p.detector    = character == Character::smooth ? felitronics::dynamics::Detector::Rms
-                                                       : felitronics::dynamics::Detector::Peak;
+        p.detector    = hearsRms (character) ? felitronics::dynamics::Detector::Rms : felitronics::dynamics::Detector::Peak;
         p.rmsWindowMs = 10.0;
         p.autoMakeup  = false;   // the make-up is ours (above)
         p.makeupDb    = 0.0;
@@ -368,9 +472,12 @@ private:
 
     felitronics::dynamics::Compressor       comp;
     felitronics::dynamics::CompressorParams set;
+    CharacterComp ours_;
+    double fam = 0.0, famTarget = 0.0, famStep = 0.001;   // 0 core's compressor heard, 1 ours
+    bool   famValid = false, oursRunning = false;
     std::array<CutBiquad, 2> keyCut;
     int    keySections = 1;
-    std::vector<float> key, dry, work, gr, shown, path;
+    std::vector<float> key, dry, work, alt, gr, grAlt, shown, path;
     double fs = 48000.0, heldDb = 0.0, amt = 0.0, glideStep = 0.001, holdK = 0.001;
     double thrWant = defaultThresholdDb, thrAt = defaultThresholdDb, thrStep = 0.05;
     double ratioWant = defaultRatio, ratioAt = defaultRatio, ratioStep = 0.4;

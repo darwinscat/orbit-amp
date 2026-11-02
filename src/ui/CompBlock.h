@@ -32,6 +32,13 @@ namespace orbitamp
     It reads the processor's taps (core::CompTap) on its own timer, and only while it is on screen — the audio thread
     writes them only then — and it freezes in silence: the tap writes no column of it. Standing by or at BLEND 0 COMP writes
     nothing either: the picture stands still, dimmed with its block (the owner, 31.10). Every number on it is 13 px. */
+/** COMP's CHARACTER as its parameter stands. */
+inline core::BassComp::Character compCharacterOf (const juce::RangedAudioParameter& p)
+{
+    return static_cast<core::BassComp::Character> (juce::jlimit (0, core::BassComp::characterCount - 1,
+                                                                 juce::roundToInt (p.convertFrom0to1 (p.getValue()))));
+}
+
 class CompGraph final : public juce::Component,
                         private juce::Timer
 {
@@ -122,7 +129,7 @@ public:
 
     core::BassComp::Character character() const
     {
-        return characterP.getValue() > 0.5f ? core::BassComp::Character::punchy : core::BassComp::Character::smooth;
+        return compCharacterOf (characterP);
     }
 
     /** Where the line stands: the detector's threshold at the knob as it is, dB. */
@@ -418,6 +425,8 @@ struct CompRatio
         return (double) ratioP.convertFrom0to1 (ratioP.getValue());   // the ratio, its own parameter
     }
 
+    core::BassComp::Character character() const { return compCharacterOf (characterP); }
+
     /** Taken: from the ratio where it stands, so the grip does not jump — and COMP switched in, as
         its line and its rail do: one gesture, and one undo step, until let go. */
     void take()
@@ -641,9 +650,7 @@ public:
     /** Where the segment's end stands for a ratio — the inverse of dragRatioTo, for a gate. */
     float yOfRatio (double r) const
     {
-        const auto b = box();
-        const double t = ratio.thresholdDb();
-        return yOf (t - t / r, b);
+        return yOf (curve (0.0, ratio.thresholdDb(), r), box());
     }
 
     void paint (juce::Graphics& g) override
@@ -654,7 +661,7 @@ public:
         scope::TransferView::paintUnity (g, b);
 
         const double t = ratio.thresholdDb(), r = ratio.ratio();
-        juce::Path p;
+        juce::Path p;   // the character's own curve: fed back (OPTO, SQUASH), its knee is the wider
         for (int i = 0; i <= 96; ++i)
         {
             const double in = lowDb + (double) i * (-lowDb / 96.0);
@@ -692,15 +699,11 @@ private:
     static float xOf (double db, juce::Rectangle<float> b) { return b.getX() + (float) ((db - lowDb) / -lowDb) * b.getWidth(); }
     static float yOf (double db, juce::Rectangle<float> b) { return b.getBottom() - (float) ((db - lowDb) / -lowDb) * b.getHeight(); }
 
-    /** The compressor's static curve with core's soft knee (core::BassComp::kneeDb wide). */
-    static double curve (double in, double t, double r)
+    /** The compressor's static curve, as the CHARACTER's detector works on it (core::BassComp::staticDeltaDb: core's
+        soft knee, kneeDb wide, or the fed-back one). */
+    double curve (double in, double t, double r) const
     {
-        const double w = core::BassComp::kneeDb, over = in - t;
-        if (2.0 * over < -w)
-            return in;
-        if (2.0 * std::abs (over) <= w)
-            return in + (1.0 / r - 1.0) * (over + w * 0.5) * (over + w * 0.5) / (2.0 * w);
-        return t + over / r;
+        return in + core::BassComp::staticDeltaDb (ratio.character(), in, t, r);
     }
 
     CompRatio ratio;

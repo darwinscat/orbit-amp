@@ -2123,7 +2123,7 @@ void AmpProcessor::processChunk (juce::AudioBuffer<float>& buffer)
         bassComp.process (channels[0], numSamples, amount, span,
                           static_cast<core::BassComp::Attack>    (juce::jlimit (0, 2, juce::roundToInt (bass.compAttack->load()))),
                           static_cast<core::BassComp::Release>   (juce::jlimit (0, 2, juce::roundToInt (bass.compRelease->load()))),
-                          static_cast<core::BassComp::Character> (juce::jlimit (0, 1, juce::roundToInt (bass.compCharacter->load()))),
+                          static_cast<core::BassComp::Character> (juce::jlimit (0, core::BassComp::characterCount - 1, juce::roundToInt (bass.compCharacter->load()))),
                           (double) bass.compThreshold->load(), (double) bass.compRatio->load());
         compGrDb.store (bassComp.grDb.load (std::memory_order_relaxed), std::memory_order_relaxed);
         innerCut (1);   // after COMP

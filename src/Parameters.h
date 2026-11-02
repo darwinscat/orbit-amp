@@ -452,7 +452,7 @@ inline constexpr const char* compRelease   = "comp_release";
 inline constexpr const char* compCharacter = "comp_character";
 inline const juce::StringArray compAttacks    { "Slow", "Med", "Fast" };
 inline const juce::StringArray compReleases   { "Auto", "Fast", "Slow" };
-inline const juce::StringArray compCharacters { "Smooth", "Punchy" };
+inline const juce::StringArray compCharacters { "Smooth", "Punchy", "Opto", "FET", "Squash" };
 
 /** COMP, EACH CONTROL ONE JOB (the owner, 31.10): `comp` is its BLEND — parallel compression, 0 none at all .. 1 all
     of the signal compressed (the strip's arrow its STANDBY); its THRESHOLD in dB and its RATIO are their own (the

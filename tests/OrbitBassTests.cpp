@@ -4161,17 +4161,22 @@ int ORBITAMP_GATE_MAIN()
             // THE WHOLE MATRIX (review 9): every CHARACTER x ATTACK x RELEASE, the reference note at A1..A4 within half a
             // decibel at BLEND 50 and 100 % (BLEND 0 is the signal bit for bit); B0 and E1 — the key's 30 Hz high-pass reads
             // them low — said, not judged.
+            // Every character CompCharacters.h and core give COMP (the owner, 01.11: OPTO, FET and SQUASH beside SMOOTH and
+            // PUNCHY), each its own row of BassComp::readsDb.
+            static constexpr C everyCharacter[] { C::smooth, C::punchy, C::opto, C::fet, C::squash };
+            static_assert (std::size (everyCharacter) == (size_t) BassComp::characterCount, "a character the matrix does not cover");
+            const auto chName = [] (C c) { return c == C::smooth ? "SMOOTH" : c == C::punchy ? "PUNCHY" : c == C::opto ? "OPTO  " : c == C::fet ? "FET   " : "SQUASH"; };
             bool ok = true;
             double worst = 0.0, lowB = -99.0, lowE = -99.0;
             juce::String worstAt;
             std::printf ("      COMP, a -18 dBFS RMS note at BLEND 100 / 50, out dB:      31 Hz        41 Hz        55 Hz        82 Hz       110 Hz       220 Hz       440 Hz\n");
-            for (const auto ch : { C::smooth, C::punchy })
+            for (const auto ch : everyCharacter)
                 for (const auto at : { A::slow, A::med, A::fast })
                     for (const auto rel : { R::automatic, R::fast, R::slow })
                     {
                         const char* atName  = at == A::slow ? "SLOW" : at == A::med ? "MED " : "FAST";
                         const char* relName = rel == R::automatic ? "AUTO" : rel == R::fast ? "FAST" : "SLOW";
-                        std::printf ("      %s attack %s release %s:", ch == C::smooth ? "SMOOTH" : "PUNCHY", atName, relName);
+                        std::printf ("      %s attack %s release %s:", chName (ch), atName, relName);
                         for (const double hz : { 30.9, 41.2, 55.0, 82.4, 110.0, 220.0, 440.0 })
                         {
                             const double full = gainDb (-18.0, 1.0, ch, at, rel, hz), half = gainDb (-18.0, 0.5, ch, at, rel, hz);
@@ -4186,7 +4191,7 @@ int ORBITAMP_GATE_MAIN()
                             if (off > worst)
                             {
                                 worst   = off;
-                                worstAt = juce::String (ch == C::smooth ? "SMOOTH " : "PUNCHY ") + atName + " attack " + relName + " release at "
+                                worstAt = juce::String (chName (ch)).trimEnd() + " " + atName + " attack " + relName + " release at "
                                         + juce::String (hz, 1) + " Hz";
                             }
                             ok = ok && off <= 0.5;
@@ -4195,14 +4200,14 @@ int ORBITAMP_GATE_MAIN()
                     }
 
             // ...and where it leaves the rest: a quieter note comes up, a louder one goes down — toward each other.
-            for (const auto ch : { C::smooth, C::punchy })
+            for (const auto ch : everyCharacter)
             {
                 const double q50 = gainDb (-36.0, 0.5, ch, A::med, R::automatic, 110.0), q100 = gainDb (-36.0, 1.0, ch, A::med, R::automatic, 110.0);
                 const double l50 = gainDb (-6.0, 0.5, ch, A::med, R::automatic, 110.0),  l100 = gainDb (-6.0, 1.0, ch, A::med, R::automatic, 110.0);
                 ok = ok && q100 > q50 && q50 > 0.5 && l100 < l50 && l50 < -0.5;
             }
             check (ok, "COMP's BLEND level-neutral: a -18 dBFS RMS note at 55..440 Hz within 0.5 dB at BLEND 50 and 100 % for every "
-                       "CHARACTER x ATTACK x RELEASE (worst " + juce::String (worst, 2) + " dB, " + worstAt + "); B0 off by up to "
+                       "CHARACTER (all five) x ATTACK x RELEASE (worst " + juce::String (worst, 2) + " dB, " + worstAt + "); B0 off by up to "
                        + juce::String (lowB, 2) + " dB and E1 by " + juce::String (lowE, 2) + " (the key's 30 Hz high-pass, not judged); "
                        "a quiet note up, a loud one down");
 
@@ -4217,9 +4222,9 @@ int ORBITAMP_GATE_MAIN()
                                                  std::pair { -12.0, 1.5 }, std::pair { -24.0, 1.5 }, std::pair { -48.0, 1.5 } })
                 {
                     std::printf ("      COMP at %g dB, %g:1 — the reference note's worst at 55..440 Hz, BLEND 100 / 50, dB:\n", thr, ratio);
-                    for (const auto ch : { C::smooth, C::punchy })
+                    for (const auto ch : everyCharacter)
                     {
-                        std::printf ("        %s", ch == C::smooth ? "SMOOTH" : "PUNCHY");
+                        std::printf ("        %s", chName (ch));
                         for (const auto at : { A::slow, A::med, A::fast })
                             for (const auto rel : { R::automatic, R::fast, R::slow })
                             {
@@ -4237,7 +4242,7 @@ int ORBITAMP_GATE_MAIN()
                                 {
                                     worstCorner   = off;
                                     worstCornerAt = juce::String (thr, 0) + " dB " + juce::String (ratio, ratio == std::floor (ratio) ? 0 : 1) + ":1 "
-                                                  + (ch == C::smooth ? "SMOOTH" : "PUNCHY");
+                                                  + juce::String (chName (ch)).trimEnd();
                                 }
                             }
                         std::printf ("\n");
@@ -5725,6 +5730,15 @@ int ORBITAMP_GATE_MAIN()
                     const float knee = yInBox (thr), line = (float) graph.getY() + graph.yOfDb (thr);
                     if (std::abs (yInBox (-48.0) - levelsFoot) > 0.5f || std::abs (knee - line) > 0.5f)
                         wrong.add ("at " + juce::String (thr, 0) + " dB the knee at " + juce::String (knee, 1) + ", the line at " + juce::String (line, 1));
+                    // ...each ratio's segment end where the CHARACTER's own curve (BassComp::staticDeltaDb, the owner 01.11 —
+                    // OPTO's fed back, its knee the wider) puts 0 dB in.
+                    const auto character = static_cast<core::BassComp::Character> (juce::roundToInt (value (*t, params::compCharacter)));
+                    for (const double r : compRatioItems)
+                        if (const float end = (float) square.getY() + square.yOfRatio (r),
+                                        level = (float) graph.getY() + graph.yOfDb (core::BassComp::staticDeltaDb (character, 0.0, (double) thr, r));
+                            std::abs (end - level) > 0.5f)
+                            wrong.add ("at " + juce::String (thr, 0) + " dB " + CompRatioCombo::itemText (r) + "'s segment end at "
+                                       + juce::String (end, 1) + ", its level on the picture at " + juce::String (level, 1));
                 }
 
                 const auto font = theme::displayFont (CompRatioCombo::textHeight);
