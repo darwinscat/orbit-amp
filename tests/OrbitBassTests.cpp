@@ -5277,9 +5277,10 @@ int ORBITAMP_GATE_MAIN()
             }
             // The scale over the whole travel: the lowest value's place is the travel's end, half a hand off the rail's foot.
             // The guard's rail wears the fader's look since 01.11 (no name, its number in the lamp): its hand travels to half
-            // a fader's grip off the rail's foot (fader::travel), the plain rail's to half its grip over its 2 px lip.
+            // a fader's grip off its fader area's foot (fader::travel; the area stands 4 px in from the rail's ends, as GuardRail::
+            // faderArea draws it), the plain rail's to half its grip over its 2 px lip.
             const float stop = rail->yOfValue (-80.0f),
-                        foot = (float) rail->getHeight() - (rail->hasFaderLook() ? fader::gripH * 0.5f : 2.0f + meterrail::gripH * 0.5f);
+                        foot = (float) rail->getHeight() - (rail->hasFaderLook() ? 4.0f + fader::gripH * 0.5f : 2.0f + meterrail::gripH * 0.5f);
             if (std::abs (stop - foot) > 0.5f)
                 wrong.add (who + ": the lowest threshold at " + juce::String (stop, 1) + ", the travel's end at " + juce::String (foot, 1));
             const auto now = juce::Time::getCurrentTime();
