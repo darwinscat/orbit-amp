@@ -178,7 +178,11 @@ namespace
        #if defined (__APPLE__) && defined (__aarch64__)
         ref.recorder = juce::String (__VERSION__) == "Apple LLVM 21.0.0 (clang-2100.1.1.101)";
        #endif
-        ref.allowed = ref.recorder ? 0.0f : 1.0e-6f;   // gcc reads 6.7e-8 off the recording compiler
+        // gcc read 6.7e-8 off the recording compiler. Since 02.11 the bass's AMP console is the bass's standard EQ (its MIDDLE
+        // held to its span, the second bell and the scalpel out of its sound: AmpProcessor::updateEqSettings), whose stages at
+        // 0 dB are not the step's to the last bit: 1.28e-6 measured on Apple clang here, with that one branch taken out 0.
+        // Within 5e-6 (-106 dB) on every compiler.
+        ref.allowed = 5.0e-6f;
         return ref;
     }
 
@@ -507,8 +511,9 @@ int ORBITAMP_GATE_MAIN()
             auto dry = asBefore();
             set (*dry, params::cabOn, 0.0f);
             const auto heard = play (*dry, blocks, false);
+            // ...within 5e-6: the two consoles are each its chain's standard EQ (02.11), at 0 dB not the same to the last bit.
             const float worst = twin (*dry, heard, "the cabinets out");
-            check (worst == 0.0f, "...plays what OrbitBass plays at BLEND 0, bit for bit (worst apart " + juce::String (worst, 9) + ")");
+            check (worst <= 5.0e-6f, "...plays what OrbitBass plays at BLEND 0, within 5e-6 (worst apart " + juce::String (worst, 9) + ")");
 
             // BLEND's three reach the player — by the message thread alone: a pump from another thread (a host's
             // prepare elsewhere) leaves them to the next tick.
@@ -543,7 +548,7 @@ int ORBITAMP_GATE_MAIN()
             auto cabOnly = asBefore();
             const auto heard = play (*cabOnly, blocks, false);
             const float worst = twin (*cabOnly, heard, "the cabinets in, DI/CAB 0 %");
-            check (worst == 0.0f,
+            check (worst <= 5.0e-6f,   // each chain's standard EQ, as above
                    "...plays what OrbitBass plays, the cabinet alone (worst apart " + juce::String (worst, 9) + " of peak " + juce::String (peak (heard.l), 4) + ")");
         }
     }
@@ -1247,7 +1252,7 @@ int ORBITAMP_GATE_MAIN()
             check (stepTwoB.was.size() == (size_t) (stepTwoB.blocks * blockSize) && apartL <= stepTwoB.allowed
                        && apartR <= stepTwoB.allowed && apartPlain <= stepTwoB.allowed,
                    "the three at 0, their menus moved — and at their defaults: what step 2b (78e037a) played, "
-                       + juce::String (stepTwoB.recorder ? "bit for bit" : "within 1e-6") + ", both sides (worst "
+                       + juce::String ("within 5e-6") + ", both sides (worst "
                        + juce::String (apartL, 9) + " / " + juce::String (apartR, 9) + ", defaults " + juce::String (apartPlain, 9) + ")");
         }
         // Each turned up is heard.

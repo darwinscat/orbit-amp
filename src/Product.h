@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "Parameters.h"
 #include "PerProduct.h"
 #include "core/PitchTracker.h"
 
@@ -94,6 +95,15 @@ struct Product
         stays at the guitar's, which reaches a bass's low E and costs a guitar nothing more; OrbitBass
         reaches its low B and a drop-A's A0. */
     double tunerLowestHz = core::PitchTracker::guitarLowestHz;
+
+    /** WHICH STANDARD EQ ITS AMP'S CONSOLE IS (params::EqStandard): the bass's on the bass's chain, the guitar's on
+        every other. Read from the chain for now, and asked HERE and nowhere else — the console's face
+        (EqSection::setStandard) and the processor's EQ (AmpProcessor::bassEq) both come to this one question — so the
+        later step that lets a rig say its own standard (a word in its pack) replaces this one body and nothing else. */
+    params::EqStandard eqStandard() const noexcept
+    {
+        return chain == Chain::bass ? params::EqStandard::bass : params::EqStandard::guitar;
+    }
 };
 
 /** EVERY AMP OF THE FAMILY, each defined in its own file (above). A binary links the ones it plays. */

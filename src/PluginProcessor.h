@@ -1045,6 +1045,11 @@ private:
         a stack only redesigns when something actually moved. */
     void updateEqSettings() noexcept;
 
+    /** WHETHER THE AMP'S CONSOLE IS THE BASS'S STANDARD EQ (Product::eqStandard, params::EqStandard) — the one reading
+        every EQ decision here goes by: its tone always ours, its MIDDLE in its span, its second bell and scalpel out,
+        the console's own cuts out of the sound because the bass's are its own stage. */
+    bool bassEq() const noexcept { return ownProduct.eqStandard() == params::EqStandard::bass; }
+
     /** The bass's own cuts as its parameters stand (params::bassHpf, bassLpf) — what its stage glides and fades
         to (core::BassCuts). Audio thread, per block. */
     core::BassCuts::Settings bassCutSettings() const noexcept;

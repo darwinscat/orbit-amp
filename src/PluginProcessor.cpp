@@ -792,7 +792,7 @@ void AmpProcessor::pumpDeviceWork()
         const auto mode = static_cast<params::EqMode> (juce::roundToInt (
             apvts.getRawParameterValue (params::blockEqMode (blk))->load()));
 
-        block.setRaw (mode == params::EqMode::ours);
+        block.setRaw (mode == params::EqMode::ours || bassEq());   // the bass's standard's tone is always ours
         block.applySelectors (selectors);
         block.setGain (gainParam->load(), smoothParam->load() > 0.5f, turbo);
 
@@ -1592,7 +1592,7 @@ void AmpProcessor::updateEqSettings() noexcept
         const auto& p = eqParams[(size_t) l];
 
         core::EqLink::Settings s;
-        s.hpfOn    = ownProduct.chain != Chain::bass && p.hpfOn->load() > 0.5f;   // the bass's HPF is its own (bassCuts)
+        s.hpfOn    = ! bassEq() && p.hpfOn->load() > 0.5f;   // the bass's HPF is its own (bassCuts)
         s.hpfHz    = (double) p.hpfHz->load();
         s.hpfSlope = slope (p.hpfSlope->load());
         s.loDb     = (double) p.loDb->load();
@@ -1609,7 +1609,7 @@ void AmpProcessor::updateEqSettings() noexcept
         s.b3Q      = (double) p.bellQ[2]->load();
         s.hiDb     = (double) p.hiDb->load();
         s.hiHz     = (double) p.hiHz->load();
-        s.lpfOn    = ownProduct.chain != Chain::bass && p.lpfOn->load() > 0.5f;   // ...and its LPF
+        s.lpfOn    = ! bassEq() && p.lpfOn->load() > 0.5f;   // ...and its LPF
         s.lpfHz    = (double) p.lpfHz->load();
         s.lpfSlope = slope (p.lpfSlope->load());
 
@@ -1632,7 +1632,16 @@ void AmpProcessor::updateEqSettings() noexcept
 
         const auto& blockFor = blockAt ((size_t) l);
 
-        if (mode == params::EqMode::native && blockFor.hasWearableTone())
+        // THE BASS'S EQ IS THE SGT-DI'S (params::bassMidMinHz): ours always, BASS, MIDDLE at its swept frequency and
+        // TREBLE — the second bell and the scalpel are held out of its sound.
+        if (bassEq())
+        {
+            s.b1Hz = juce::jlimit ((double) params::bassMidMinHz, (double) params::bassMidMaxHz, s.b1Hz);
+            s.b2Db = 0.0;
+            s.b3On = false;
+            s.b3Db = 0.0;
+        }
+        else if (mode == params::EqMode::native && blockFor.hasWearableTone())
         {
             s.loDb = 0.0;
             s.b1Db = 0.0;

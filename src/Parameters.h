@@ -112,6 +112,16 @@ inline juce::String blockEqMode (const char* blk) { return juce::String (blk) + 
 inline const juce::StringArray eqModes { "Device Tone", "Universal EQ" };
 enum class EqMode { native, ours };
 
+/** WHICH STANDARD EQ THE AMP'S CONSOLE IS — "ours", the EqMode above, comes in two, and a console is one of them.
+
+    THE GUITAR'S: our four bands (LO, L MID, H MID, HI), the scalpel the curve summons, and the console's own HPF and
+    LPF with their slopes, cutting inside the AMP. THE BASS'S, the SGT-DI's: BASS, MIDDLE with its frequency under it
+    (bassMidMinHz) and TREBLE — no second bell, no scalpel — and its cuts are the bass's one pair, 5 STR / 4 STR and
+    FINGERS / SLAP (bassHpf, bassLpf), working across the whole chain rather than inside the AMP.
+
+    A product says which it plays (Product::eqStandard); the console's face and the processor's EQ both read it there. */
+enum class EqStandard { guitar, bass };
+
 /** A device's OTHER selecting controls — the ones that pick a file and are not the gain dial. Two
     slots, like the measured ones: a fixed set a host can see, filled by whatever the pack declares.
     Fur Coat needs one of them for its octave; most pedals need none. */
@@ -554,6 +564,11 @@ inline constexpr float bassHpfDefaultHz4 = 32.0f, bassHpfDefaultHz5 = 22.0f;
 inline constexpr float bassHpfMenuHz5[] { 18.0f, 20.0f, 22.0f, 25.0f, 28.0f };
 inline constexpr float bassHpfMenuHz4[] { 28.0f, 30.0f, 32.0f, 35.0f, 40.0f };
 inline constexpr float bassLpfDefaultHzFingers = 4500.0f, bassLpfDefaultHzSlap = 9500.0f;
+
+/** The bass's AMP EQ is the SGT-DI's (the owner, 01.11): BASS (the low shelf), MIDDLE (bell 1) with its frequency swept
+    by a slider under it, TREBLE (the high shelf) — always ours, the bell 2 and the scalpel out of its sound. MIDDLE's
+    frequency is held to this span, in the sound and on the face alike. */
+inline constexpr float bassMidMinHz = 200.0f, bassMidMaxHz = 3000.0f;
 
 /** OrbitBass's own parameters, after the engine's. */
 void addBassParameters (juce::AudioProcessorValueTreeState::ParameterLayout&);

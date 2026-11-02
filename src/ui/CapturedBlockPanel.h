@@ -310,6 +310,14 @@ private:
     void showVizMenu (juce::Point<int> screenPos);
     void setViz (int which);
 
+    /** THE CURVE PAGE, WEARING `mode` — EQ RIG (the device's own tone) or EQ (our standard), as the view menu
+        offers them where the pack brought a tone of its own. The mode is the sound's, one undo step; the page is
+        only which picture is up. */
+    void showEq (params::EqMode mode);
+
+    /** The curve page's name: EQ RIG while the device's own tone sounds, EQ while ours does. */
+    juce::String eqPageName() const { return eq.wearsNative() ? "EQ RIG" : "EQ"; }
+
     /** The scope that stands for the page on the whole monitor: the EQ curve's is TONE, the same
         curve over the same spectrum, read rather than handled. */
     DeviceScope::Mode modeOfPage (int page) const

@@ -134,6 +134,10 @@ CapturedBlockPanel::CapturedBlockPanel (AmpProcessor& processor, Block& b,
     // its curve is the block's own output tap — the same one the TONE picture reads, because after
     // the chain rework they are the same point in the signal.
     eq.spectraShown = &prefs::spectraCache (processor.product());
+    // WHICH STANDARD EQ the AMP's console is, asked of the product once: on the bass the SGT-DI's — BASS, MIDDLE with
+    // its frequency under it, TREBLE — and its HPF and LPF the bass's one pair, working across the chain, so live with
+    // the AMP standing by. Before addTo: the row it builds is the one handed over.
+    eq.setStandard (processor.product().eqStandard(), *this);
     eq.addTo (*this);
 
     addAndMakeVisible (device);
@@ -143,8 +147,6 @@ CapturedBlockPanel::CapturedBlockPanel (AmpProcessor& processor, Block& b,
     {
         bassKnobs = std::make_unique<BassKnobs> (processor);
         bassKnobs->addTo (*this);
-        eq.useBassCuts();   // the AMP's HPF and LPF are the bass's one pair...
-        eq.keepCutsOutsideStandby (*this);   // ...working across the chain, so live with the AMP standing by
     }
 
     device.fontHeight = 16.0f;   // the device's NAME, set exactly like the block's own beside it
@@ -225,20 +227,13 @@ CapturedBlockPanel::CapturedBlockPanel (AmpProcessor& processor, Block& b,
             resetToneSlotsToPackDefaults();
     };
 
-    eq.onModePicked = [this] (int i)
-    {
-        eqModeAttachment->setValueAsCompleteGesture ((float) i);
-
-        // ...and apply it here, because the attachment will NOT call back for its own write: it
-        // sets `ignoreCallbacks` while it writes, so the lambda above never runs from a pick. The
-        // parameter moved, the processor's pump read it and the SOUND changed — while the row went
-        // on showing the other set until something else happened to rebuild it. Which reads as a
-        // switch that misses the first click. The device combo two lines up already does exactly
-        // this, for exactly this reason.
-        applyEqMode();
-        resized();
-        repaint();
-    };
+    // THE CURVE IS A PAGE LIKE THE OTHERS: its right click opens the same view menu, EQ RIG / EQ and RESET in it, and
+    // a plain click on an empty spot of it walks the loop on (EqSection::onCurveClick) — it used to take every click,
+    // and the loop stuck there. OrbitBass's picture answers a right click with the AMP's own menu; its curve keeps
+    // what it had, RESET alone (EqSection::showResetMenu), with no tone of the rig's to choose.
+    if (bassKnobs == nullptr)
+        eq.onCurveMenu = [this] (juce::Point<int> at) { showVizMenu (at); };
+    eq.onCurveClick = [this] { setViz (nextViz (vizPick)); };
 
     attachPower (*amp.apvts.getParameter (params::blockOn (blk)));
 
@@ -663,7 +658,8 @@ std::vector<EqSection::Band> CapturedBlockPanel::nativeBands() const
 
 void CapturedBlockPanel::applyEqMode()
 {
-    const auto native = nativeBands();
+    // The bass's standard's tone is never captured: its console is always ours, with no EQ RIG to offer.
+    const auto native = eq.standard() == params::EqStandard::bass ? decltype (nativeBands()) {} : nativeBands();
     // The PARAMETER, not the apvts atomic. Called from an attachment callback — a host automating
     // this, a session restoring — the atomic has not been written yet at that moment, and reading
     // it there leaves the face exactly one change behind for good.
@@ -675,8 +671,7 @@ void CapturedBlockPanel::applyEqMode()
     const bool wearsNative = native.empty() ? false
                                             : want == (int) params::EqMode::native;
 
-    eq.setModes (params::eqModes, wearsNative ? (int) params::EqMode::native : (int) params::EqMode::ours,
-                 ! native.empty());
+    eq.setModes (wearsNative ? (int) params::EqMode::native : (int) params::EqMode::ours, ! native.empty());
 
     if (wearsNative)
     {
@@ -955,14 +950,15 @@ void CapturedBlockPanel::layOutContent (juce::Rectangle<int> area)
     dividerX = { s1.getRight() + sectionGap / 2, s2.getRight() + sectionGap / 2 };
 
     // One line across the block where the tiers end and the strips begin.
-    const auto strip = [] (juce::Rectangle<int>& s)
+    const auto strip = [] (juce::Rectangle<int>& s, int h)
     {
-        auto r = s.removeFromBottom (stripH);
+        auto r = s.removeFromBottom (h);
         s.removeFromBottom (tierGap);
         return r;
     };
 
-    auto strip2 = strip (s2), strip3 = strip (s3);
+    // The console's strip is its row's height: on the bass a lane taller, for MID FREQ under MIDDLE.
+    auto strip2 = strip (s2, stripH), strip3 = strip (s3, eq.rowHeight());
 
     // ---- section 3: the picture well, the console's row under it. ----
     eq.layOutRow (strip3);
@@ -1080,7 +1076,7 @@ void CapturedBlockPanel::setPictureShown (bool shown)
 
 /** One page of the well, filling what it is handed, wearing its corner glyphs: the page's name at the
     top left, the one way to throw it open at the top right — and on WAVE, its half-wave switch beside
-    that; on the EQ curve, whose tone it wears beside that. */
+    that. On the EQ curve the name itself says whose tone it wears, EQ RIG or EQ. */
 void CapturedBlockPanel::layPicture (juce::Rectangle<int> area)
 {
     widgetArea = area;
@@ -1101,7 +1097,7 @@ void CapturedBlockPanel::layPicture (juce::Rectangle<int> area)
     int right = expandTag.getX() - 4;
 
     if (vizPick == eqPage)
-        eq.layOutCurve (area, area.getRight() - right);
+        eq.layOutCurve (area);
 
     const bool isWave = vizPick == (int) DeviceScope::Mode::wave;
     halfTag.setVisible (isWave);
@@ -1113,7 +1109,7 @@ void CapturedBlockPanel::layPicture (juce::Rectangle<int> area)
 
     static const char* const names[numPages] = { "SHAPE", "ENVELOPE", "TRANSFER", "TONE", "WAVE",
                                                 "DEVICE", "PHOTO", "EQ" };
-    pageTag.text = names[vizPick];
+    pageTag.text = vizPick == eqPage ? eqPageName() : juce::String (names[vizPick]);   // the curve's: EQ RIG or EQ, what sounds
     pageTag.setBounds (area.getX() + inset, area.getY() + 4, pageTag.idealWidth(), 20);
     pageTag.setVisible (true);
     pageTag.toFront (false);
@@ -1223,7 +1219,10 @@ bool CapturedBlockPanel::pairsAsCard() const
     are — and a click that lands on a blank page is a click the player has to undo. And wherever the
     room seats the pair, DEVICE and PHOTO draw the SAME card, so a loop that visited both would stop
     twice on one picture and read as a stutter. DEVICE is the one that survives the pair: every pack
-    has paper, and only some have a photograph. */
+    has paper, and only some have a photograph.
+
+    The curve is ONE stop, whichever tone it wears — EQ RIG or EQ, the one that sounds. A click walks
+    pictures and never the mode: going round the loop must never change what is heard. */
 int CapturedBlockPanel::nextViz (int from) const
 {
     for (int i = 1; i <= numPages; ++i)
@@ -1237,6 +1236,19 @@ int CapturedBlockPanel::nextViz (int from) const
     }
 
     return from;
+}
+
+/** EQ RIG or EQ from the view menu: the mode first — the parameter, one undo step, nothing written where it
+    already stands — then the page. Applied here as well, because the attachment will NOT call back for its own
+    write: it sets `ignoreCallbacks` while it writes, so its callback never runs from a pick. The parameter
+    moved, the processor's pump read it and the SOUND changed — while the row went on showing the other set until
+    something else happened to rebuild it, which reads as a switch that misses the first click. The device combo
+    does exactly this, for exactly this reason. */
+void CapturedBlockPanel::showEq (params::EqMode mode)
+{
+    eqModeAttachment->setValueAsCompleteGesture ((float) (int) mode);
+    applyEqMode();
+    setViz (eqPage);   // resized and repainted there
 }
 
 /** Both ways of choosing land here, so the choice is remembered whichever was used. */
@@ -1313,7 +1325,21 @@ void CapturedBlockPanel::showVizMenu (juce::Point<int> screenPos)
     m.addSeparator();
 
     m.addSectionHeader ("PICTURE");
-    m.addItem (eqPage + 1, names[eqPage], true, vizPick == eqPage);
+
+    // THE CURVE, BY THE TONE ON IT — ONE DIMENSION OF NAVIGATION (the owner, 02.11). The page used to be EQ, and on
+    // it a second chooser, DEVICE TONE in the curve's corner: two ways round one picture. Where the pack brought a
+    // tone of its own the curve is offered twice now, EQ RIG (the device's own) and EQ (our standard), and picking
+    // either is the page AND the sound. A pack with none, and the bass always, has the one: EQ.
+    static constexpr int eqRigItem = numPages + 2, resetItem = numPages + 3;
+    const bool onEq    = vizPick == eqPage;
+    const bool offered = eq.offersNative();
+    if (offered)
+    {
+        m.addItem (eqRigItem, "EQ RIG", true, onEq && eq.wearsNative());
+        m.addItem (eqPage + 1, names[eqPage], true, onEq && ! eq.wearsNative());
+    }
+    else
+        m.addItem (eqPage + 1, names[eqPage], true, onEq);
 
     for (int i = 0; i < numViz; ++i)
     {
@@ -1326,9 +1352,17 @@ void CapturedBlockPanel::showVizMenu (juce::Point<int> screenPos)
         m.addItem (i + 1, names[i], i != photoIdx || hasPicture(), ticked);
     }
 
+    // The console's RESET, ruled off at the foot while the curve is the page — what the curve's own right click
+    // offered before it opened this menu.
+    if (onEq)
+    {
+        m.addSeparator();
+        m.addItem (resetItem, "RESET");
+    }
+
     onfirst::show (m, this, juce::PopupMenu::Options()
                          .withTargetScreenArea ({ screenPos.x, screenPos.y, 1, 1 }),
-                     [safe = juce::Component::SafePointer<CapturedBlockPanel> (this)] (int r)
+                     [safe = juce::Component::SafePointer<CapturedBlockPanel> (this), offered] (int r)
                      {
                          if (r == 0 || safe == nullptr)
                              return;
@@ -1336,6 +1370,19 @@ void CapturedBlockPanel::showVizMenu (juce::Point<int> screenPos)
                          if (r == numPages + 1)
                          {
                              safe->openTheater();
+                             return;
+                         }
+
+                         if (r == resetItem)
+                         {
+                             safe->eq.reset();
+                             return;
+                         }
+
+                         // Two curve entries: the mode with the page. One: the page alone, the mode left as it stands.
+                         if (offered && (r == eqRigItem || r == eqPage + 1))
+                         {
+                             safe->showEq (r == eqRigItem ? params::EqMode::native : params::EqMode::ours);
                              return;
                          }
 

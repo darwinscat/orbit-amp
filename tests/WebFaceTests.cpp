@@ -178,7 +178,7 @@ int ORBITAMP_GATE_MAIN()
                 missing.add (path);
         };
         for (const auto* p : { "amp.block", "amp.device", "amp.channelRow", "amp.gain", "amp.gainKnob", "amp.smooth",
-                               "amp.picture", "amp.shapeBand", "amp.tones", "amp.eqCurve", "amp.eqMode", "amp.inWall",
+                               "amp.picture", "amp.shapeBand", "amp.tones", "amp.eqCurve", "amp.inWall",
                                "amp.loudnessTag", "delay.block", "delay.time", "delay.field", "delay.mix",
                                "delay.repeats", "delay.dark", "delay.offset", "delay.comb", "reverb.block",
                                "reverb.character", "reverb.mix", "reverb.decay", "reverb.pre", "reverb.picture",

@@ -114,9 +114,20 @@ EqSection::EqSection (juce::AudioProcessorValueTreeState& s, int eqLink,
     hpfSlopeBox.setIndex = [this] (int i) { hpfSlopeAtt->setValueAsCompleteGesture ((float) i); };
     lpfSlopeBox.setIndex = [this] (int i) { lpfSlopeAtt->setValueAsCompleteGesture ((float) i); };
 
-    modeBtn.onClick = [this] (juce::Point<int> screenPos) { showModeMenu (screenPos); };
-
-    curve.onContextMenu = [this] (juce::Point<int> at) { showModeMenu (at); };
+    // The curve's right click and its empty click are the well's (onCurveMenu, onCurveClick); asked when they happen,
+    // so the block may hand them over after it built the console.
+    curve.onContextMenu = [this] (juce::Point<int> at)
+    {
+        if (onCurveMenu != nullptr)
+            onCurveMenu (at);
+        else
+            showResetMenu (at);
+    };
+    curve.onEmptyClick = [this]
+    {
+        if (onCurveClick != nullptr)
+            onCurveClick();
+    };
 
     curve.onHandleDrag       = [this] (int i, double hz, double db) { handleDragged (i, hz, db); };
     curve.onDragActive       = [this] (int i, bool a) { handleDragActive (i, a); };
@@ -135,6 +146,12 @@ EqSection::~EqSection() = default;
     name had to give up — the knob wears the same one as its point on the curve. */
 std::vector<EqSection::Band> EqSection::ourBands() const
 {
+    // The bass's three, the SGT-DI's: TREBLE wears HI's colour, the same hand as its point on the curve.
+    if (bassStandard())
+        return { { "BASS",   theme::eqNode[0], params::eqLoDb (link) },
+                 { "MIDDLE", theme::eqNode[1], params::eqBellDb (link, 0) },
+                 { "TREBLE", theme::eqNode[3], params::eqHiDb (link) } };
+
     return { { "LO",    theme::eqNode[0], params::eqLoDb (link) },
              { "L MID", theme::eqNode[1], params::eqBellDb (link, 0) },
              { "H MID", theme::eqNode[2], params::eqBellDb (link, 1) },
@@ -195,59 +212,38 @@ void EqSection::buildBands (std::vector<Band> newBands)
         host->resized();
 }
 
-void EqSection::setModes (const juce::StringArray& names, int selected, bool nativeAvailable)
+void EqSection::setModes (int selected, bool nativeAvailable)
 {
-    modeNames     = names;
-    modeIndex     = juce::jlimit (0, juce::jmax (0, names.size() - 1), selected);
+    // NO CHOICE, NO CHOOSER — and since the choice moved to the well's menu, no chooser on the curve
+    // at all. The button that stood in the curve's corner and wore DEVICE TONE was a second way of
+    // getting round the same pictures, and the owner wanted one: the page's own name says whose tone
+    // sounds, EQ RIG or EQ, and the view menu is where it is changed.
+    modeIndex     = juce::jlimit (0, params::eqModes.size() - 1, selected);
     nativeOffered = nativeAvailable;
-    modeBtn.text  = modeNames[modeIndex].toUpperCase();
-
-    // NO CHOICE, NO CHOOSER. A pack that measured no tone leaves the console only ours to wear, and
-    // a button that can be pressed to reach one option is furniture — on the curve's best corner at
-    // that. It used to stay and grey the device's side «so the row still says what it could have
-    // been»; what it actually said was that something here is unavailable, on every device that
-    // never had it, forever.
-    modeBtn.setVisible (nativeOffered && curve.isVisible());
-    modeBtn.repaint();
 }
 
-/** Whose bands the console wears — from the button in the curve's corner, or by right-clicking
-    the curve: the same menu either way, so there is one place the answer changes.
+/** RESET closes every list it stands in — the console's own knobs back to flat, and, through the
+    block, the device's slots back to where the pack starts them. */
+void EqSection::reset()
+{
+    resetLink();
+    if (onReset != nullptr)
+        onReset();
+}
 
-    A pack that brought no tone knobs offers no choice at all: the button goes, and this menu is
-    RESET alone. RESET closes the list either way — the console's own knobs back to flat, and,
-    through the block, the device's slots back to where the pack starts them. */
-void EqSection::showModeMenu (juce::Point<int> screenPos)
+/** Where the block keeps no menu of pages for the curve, its right click is still worth something:
+    RESET alone, as it always was there. */
+void EqSection::showResetMenu (juce::Point<int> screenPos)
 {
     juce::PopupMenu m;
-
-    // The same rule as the button: with one set to wear there is nothing to pick, and the menu is
-    // RESET alone — which is still worth a right-click.
-    if (nativeOffered)
-    {
-        for (int i = 0; i < modeNames.size(); ++i)
-            m.addItem (i + 1, modeNames[i].toUpperCase(), true, i == modeIndex);
-
-        m.addSeparator();
-    }
-
     m.addItem (100, "RESET");
 
     onfirst::show (m, &curve, juce::PopupMenu::Options()
                          .withTargetScreenArea ({ screenPos.x, screenPos.y, 1, 1 }),
                      [safe = juce::Component::SafePointer<juce::Component> (&curve), this] (int r)
                      {
-                         if (safe == nullptr)
-                             return;
-
-                         if (r == 100)
-                         {
-                             resetLink();
-                             if (onReset != nullptr)
-                                 onReset();
-                         }
-                         else if (r > 0 && onModePicked != nullptr)
-                             onModePicked (r - 1);
+                         if (safe != nullptr && r == 100)
+                             reset();
                      });
 }
 
@@ -307,25 +303,6 @@ std::unique_ptr<juce::ParameterAttachment> EqSection::attach (const juce::String
                                                         [this] (float) { refreshCurve(); });
 }
 
-void EqSection::ModeButton::paint (juce::Graphics& g)
-{
-    auto r = getLocalBounds().toFloat().reduced (0.5f);
-    g.setColour (theme::panel.withAlpha (0.85f));
-    g.fillRoundedRectangle (r, r.getHeight() * 0.5f);
-    g.setColour (theme::hair2);
-    g.drawRoundedRectangle (r, r.getHeight() * 0.5f, 1.0f);
-    g.setColour (theme::txDim);
-    theme::drawTracked (g, text, r.withTrimmedRight (14.0f), theme::displayFont (13.0f), 0.14f,
-                        juce::Justification::centred);
-
-    juce::Path v;
-    const float cx = r.getRight() - 13.0f, cy = r.getCentreY() - 1.0f;
-    v.startNewSubPath (cx - 3.0f, cy);
-    v.lineTo (cx, cy + 3.0f);
-    v.lineTo (cx + 3.0f, cy);
-    g.strokePath (v, juce::PathStrokeType (1.2f));
-}
-
 juce::StringArray EqSection::linkParamIds() const
 {
     // Everything the link owns — except the power: that is the frame's.
@@ -359,7 +336,6 @@ void EqSection::resetLink()
 void EqSection::addTo (juce::Component& parent)
 {
     parent.addAndMakeVisible (curve);
-    parent.addAndMakeVisible (modeBtn);
     host = &parent;
 
     for (auto& k : bandKnobs)
@@ -388,7 +364,6 @@ void EqSection::setCurveVisible (bool v)
     setSpectrumRunning (v);
 
     curve.setVisible (v);
-    modeBtn.setVisible (v && nativeOffered);   // ...and only when there is a choice to make
 }
 
 void EqSection::setRowVisible (bool v)
@@ -407,8 +382,25 @@ void EqSection::setRowVisible (bool v)
 void EqSection::refreshCurve()
 {
     auto s = eqSettingsFor (state, link);   // the one reading every face shares
-    if (bassCuts)
-        s.hpfOn = s.lpfOn = false;           // the guitar's cuts are not in the bass's sound
+    if (bassStandard())
+    {
+        // THE BASS'S CUTS on its curve (the owner, 01.11): not the guitar's — its own one HPF's main cut and its LPF at
+        // the frequencies their positions choose, 12 dB/oct as core::BassCuts runs them.
+        const bool four = juce::roundToInt (raw (params::bassHpf)) == (int) params::BassHpf::four;
+        const bool slap = juce::roundToInt (raw (params::bassLpf)) == (int) params::BassLpf::slap;
+        s.hpfOn    = raw (params::bassHpfOn) > 0.5f;
+        s.hpfHz    = (double) raw (four ? params::bassHpfHz4 : params::bassHpfHz5);
+        s.hpfSlope = 12;
+        s.lpfOn    = raw (params::bassLpfOn) > 0.5f;
+        s.lpfHz    = (double) raw (slap ? params::bassLpfHzSlap : params::bassLpfHzFingers);
+        s.lpfSlope = 12;
+
+        // ...and its tone the SGT-DI's, as the processor plays it: MIDDLE in its span, the second bell and the scalpel out.
+        s.b1Hz = juce::jlimit ((double) params::bassMidMinHz, (double) params::bassMidMaxHz, s.b1Hz);
+        s.b2Db = 0.0;
+        s.b3On = false;
+        s.b3Db = 0.0;
+    }
 
     display.setSettings (s);
     refreshHandles();
@@ -418,12 +410,20 @@ void EqSection::refreshCurve()
     curve.repaint();
 }
 
-void EqSection::useBassCuts()
+void EqSection::setStandard (params::EqStandard standard, BlockFrame& owner)
 {
-    bassCuts = true;
+    eqStandard = standard;
+    if (! bassStandard())
+        return;   // the guitar's is what the console was built as
+
+    // THE TONE: the SGT-DI's three on the row (ourBands asks the standard).
+    buildBands (ourBands());
+
+    // THE CUTS: the switches become the bass's one pair, the combos under them its choices.
     hpfSw.attach (*state.getParameter (params::bassHpfOn));
     lpfSw.attach (*state.getParameter (params::bassLpfOn));
-    for (const char* id : { params::bassHpf, params::bassLpf })
+    for (const char* id : { params::bassHpf, params::bassLpf, params::bassHpfOn, params::bassLpfOn, params::bassHpfHz4,
+                            params::bassHpfHz5, params::bassLpfHzFingers, params::bassLpfHzSlap })
         refreshAtts.push_back (attach (id));
     hpfSlopeBox.getText  = [this] { return bass::hpfWord (juce::roundToInt (raw (params::bassHpf))); };
     lpfSlopeBox.getText  = [this] { return bass::lpfWord (juce::roundToInt (raw (params::bassLpf))); };
@@ -433,14 +433,13 @@ void EqSection::useBassCuts()
     hpfSlopeBox.setPaintingIsUnclipped (true);
     lpfSlopeBox.setPaintingIsUnclipped (true);
     lpfSlopeBox.openMenu = [this] { bass::showLpfMenu (state, &lpfSlopeBox); };
-    refreshCurve();
-}
 
-void EqSection::keepCutsOutsideStandby (BlockFrame& owner)
-{
+    // ...and they work across the chain, so they stay live with the block they stand on standing by.
     for (auto* c : { (juce::Component*) &hpfSw, (juce::Component*) &lpfSw, (juce::Component*) &hpfLabel, (juce::Component*) &lpfLabel,
                      (juce::Component*) &hpfSlopeBox, (juce::Component*) &lpfSlopeBox })
         owner.keepOutsideStandby (*c);
+
+    refreshCurve();
 }
 
 void EqSection::SlopeCombo::paint (juce::Graphics& g)
@@ -528,6 +527,15 @@ void EqSection::refreshHandles()
         h.getReference (hB2) = { s.b2Hz, s.b2Db, H::Freedom::both, true,   theme::eqNode[2] };
         h.getReference (hB3) = { s.b3Hz, s.b3Db, H::Freedom::both, s.b3On, theme::eqNode[4] };
         h.getReference (hHi) = { s.hiHz, s.hiDb, H::Freedom::both, true,   theme::eqNode[3] };
+
+        // The bass has BASS, MIDDLE and TREBLE only: no second bell, no scalpel to summon. MIDDLE's point moves sideways
+        // — its frequency, 200 Hz … 3 kHz, the SGT-DI's swept mid (the owner, 01.11: the point is the control, no rail);
+        // BASS and TREBLE stand at their frequencies, up and down only.
+        if (bassStandard())
+        {
+            h.getReference (hB2).visible = h.getReference (hB3).visible = false;
+            h.getReference (hLo).freedom = h.getReference (hHi).freedom = H::Freedom::gain;
+        }
     }
     else
     {
@@ -556,6 +564,9 @@ void EqSection::refreshHandles()
     // chain would be a control over nothing. Orange HPF, violet LPF, same as their switches.
     h.getReference (hHpf) = { s.hpfHz, 0.0, H::Freedom::freq, s.hpfOn, theme::orange };
     h.getReference (hLpf) = { s.lpfHz, 0.0, H::Freedom::freq, s.lpfOn, theme::violet };
+    // The bass's cuts are drawn, not dragged here: their frequencies are their switches' menus' steps.
+    if (bassStandard())
+        h.getReference (hHpf).visible = h.getReference (hLpf).visible = false;
 
     curve.setHandles (std::move (h));
 }
@@ -571,10 +582,13 @@ void EqSection::handleDragged (int index, double hz, double db)
         case hLo: setBandDb (0, db); break;
         case hB1: setBandDb (1, db); break;
         case hB2: setBandDb (2, db); break;
-        case hHi: setBandDb (3, db); break;
+        case hHi: setBandDb (bassStandard() ? 2 : 3, db); break;   // the bass's TREBLE is its third
         case hB3: b3DbAtt->setValueAsPartOfGesture ((float) clampDb (db)); break;
         default: break;
     }
+
+    if (bassStandard() && index == hB1)
+        hz = juce::jlimit ((double) params::bassMidMinHz, (double) params::bassMidMaxHz, hz);   // MID FREQ's span
 
     freqAtt[index]->setValueAsPartOfGesture ((float) hz);
     refreshCurve();
@@ -629,7 +643,7 @@ void EqSection::curveDoubleClicked (double hz)
     // summoning the scalpel there was a gesture with no consequence — and now that the device's
     // dots are markers, a double-click ON one of them reads as a double-click on empty curve,
     // which would have made that silent gesture easy to trip over by accident.
-    if (nativeDb != nullptr)
+    if (nativeDb != nullptr || bassStandard())   // the bass has no scalpel
         return;
 
     // The surgical bell lands where you asked for it, switched on, flat — pull it down.
@@ -707,7 +721,7 @@ void EqSection::layOutRow (juce::Rectangle<int> row)
     switchCell (lpfCell, lpfSw, lpfLabel, lpfSlopeBox);
 
     // The bass's choices may run left of their cells (FINGERS): over the knob beside them, not under it.
-    if (bassCuts)
+    if (bassStandard())
     {
         hpfSlopeBox.toFront (false);
         lpfSlopeBox.toFront (false);
@@ -715,14 +729,10 @@ void EqSection::layOutRow (juce::Rectangle<int> row)
 
 }
 
-void EqSection::layOutCurve (juce::Rectangle<int> area, int cornerReserve)
+void EqSection::layOutCurve (juce::Rectangle<int> area)
 {
-    // The curve is the whole well it was given; whose tone it wears rides its top-right corner, left
-    // of whatever the block keeps there for itself.
+    // The curve is the whole well it was given; whose tone it wears is the page's name, in the well's corner.
     curve.setBounds (area);
-
-    modeBtn.setBounds (area.getRight() - cornerReserve - 6 - modeBtnW, area.getY() + 4, modeBtnW, 22);
-    modeBtn.toFront (false);
 }
 
 } // namespace orbitamp
