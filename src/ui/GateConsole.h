@@ -94,6 +94,11 @@ public:
     /** THE ON ITEM's id (OrbitBass's face): ON first, ruled off. */
     static constexpr int onItem = 20;
 
+    /** RESET at the foot, ruled off (OrbitBass's face, the owner 01.11): the threshold, the decay and where it mutes back
+        to their defaults; the switch kept. */
+    static constexpr int resetItem = 30;
+    bool offersReset = false;
+
     /** The gate's whole console, as showMenu shows it. `withVolume` is gone with the column it belonged to: the trim's
         RESET was the COLUMN's item, and the column has its own door now.
 
@@ -152,6 +157,11 @@ public:
         where.addItem (12, params::gatePositions[0].toUpperCase(), true, ! preReverb);
         where.addItem (13, params::gatePositions[1].toUpperCase(), true, preReverb);
         m.addSubMenu ("MUTES AT", where);
+        if (offersReset)
+        {
+            m.addSeparator();
+            m.addItem (resetItem, "RESET");
+        }
         return m;
     }
 
@@ -187,6 +197,17 @@ public:
             if (onAt.has_value())
                 thAtt->setValueAsCompleteGesture (*onAt);
             onAtt->setValueAsCompleteGesture (1.0f);
+            return;
+        }
+
+        if (choice == resetItem)
+        {
+            for (auto* p : { &thP, &decayP, &posP })
+            {
+                p->beginChangeGesture();
+                p->setValueNotifyingHost (p->getDefaultValue());
+                p->endChangeGesture();
+            }
             return;
         }
 

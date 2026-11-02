@@ -5021,6 +5021,8 @@ int ORBITAMP_GATE_MAIN()
                     const auto& item = it.getItem();
                     if (item.subMenu != nullptr || item.itemID <= 0 || ! item.isEnabled)
                         continue;
+                    if (item.text == "RESET")   // every parameter of the block's: proved on its own below
+                        continue;
                     const auto before = snapshot();
                     if (item.itemID > (int) m.acts.size() || ! m.acts[(size_t) item.itemID - 1])
                     {
@@ -5065,6 +5067,69 @@ int ORBITAMP_GATE_MAIN()
             }
             if (! custom)
                 wrong.add ("ENVELOPE's resonance at Q 5 not shown as custom");
+
+            // RESET AT EVERY MENU'S FOOT (the owner, 01.11): every parameter of the block back to its default in one
+            // instant, one undo step — its switch, its place in the strip and the AMP's channel kept.
+            for (const auto& [name, ids] : held)
+            {
+                auto r = make (bass);
+                settle (*r);
+                const auto resetIds = bass::resetIdsOf (r->apvts, name);
+                if (resetIds.isEmpty())
+                {
+                    wrong.add (name + "'s RESET sets nothing back");
+                    continue;
+                }
+                for (const auto& id : resetIds)
+                    if (id.endsWith ("_on") || id.endsWith ("_present") || id.endsWith ("_device"))
+                        wrong.add (name + "'s RESET takes " + id);
+                std::map<juce::String, float> moved;
+                for (const auto& id : resetIds)
+                {
+                    auto* p = r->apvts.getParameter (id);
+                    p->setValueNotifyingHost (p->getDefaultValue() < 0.5f ? 0.9f : 0.1f);
+                }
+                const char* onId = bass::onParamOf (name);
+                auto* on = onId != nullptr ? r->apvts.getParameter (onId) : nullptr;
+                const float onBefore = on != nullptr ? on->getValue() : 0.0f;
+                settle (*r);
+                for (const auto& id : resetIds)   // as they stand once settled: what one undo must bring back
+                    moved[id] = r->apvts.getParameter (id)->getValue();
+                const int depth = r->history.undoDepth();
+                auto m = bass::blockMenu (r->apvts, name);
+                int resetId = 0;
+                for (juce::PopupMenu::MenuItemIterator it (m.items); it.next();)
+                    if (it.getItem().text == "RESET")
+                        resetId = it.getItem().itemID;
+                if (resetId <= 0 || resetId > (int) m.acts.size())
+                {
+                    wrong.add (name + "'s menu has no RESET");
+                    continue;
+                }
+                m.acts[(size_t) resetId - 1]();
+                settle (*r);
+                juce::StringArray off;
+                for (const auto& id : resetIds)
+                    if (auto* p = r->apvts.getParameter (id); std::abs (p->getValue() - p->getDefaultValue()) > 1.0e-6f)
+                        off.add (id);
+                const int steps = r->history.undoDepth() - depth;
+                r->history.undo();
+                settle (*r);
+                int back = 0;
+                juce::StringArray stuck;
+                for (const auto& id : resetIds)
+                    if (auto* p = r->apvts.getParameter (id);
+                        p->isDiscrete() ? p->getText (p->getValue(), 64) != p->getText (moved[id], 64)   // a switch's 0.9 is its 1
+                                        : std::abs (p->getValue() - moved[id]) > 1.0e-4f)
+                    {
+                        ++back;
+                        stuck.add (id + " " + juce::String (moved[id], 3) + " -> " + juce::String (r->apvts.getParameter (id)->getValue(), 3));
+                    }
+                if (! off.isEmpty() || steps != 1 || back != 0 || (on != nullptr && on->getValue() != onBefore))
+                    wrong.add (name + "'s RESET: " + (off.isEmpty() ? juce::String ("all back") : "left " + off.joinIntoString (" ")) + ", "
+                               + juce::String (steps) + " undo step(s), " + juce::String (back) + " not undone"
+                               + (stuck.isEmpty() ? juce::String() : " (" + stuck.joinIntoString (", ") + ")"));
+            }
             check (wrong.isEmpty() && picks > 100, "no windows, no gears: a right click opens every block's menu; " + juce::String (picks)
                                                        + " picks, each its own and one undo step; each menu what its window held; a value off the steps ticked as custom"
                                                        + (wrong.isEmpty() ? juce::String() : ": " + wrong.joinIntoString ("; ")));
@@ -5203,7 +5268,7 @@ int ORBITAMP_GATE_MAIN()
         struct Block { const char* name; const char* on; std::function<bass::Menu (juce::AudioProcessorValueTreeState&)> alone; juce::StringArray words; };
         const std::vector<Block> blocks {
             // 01.11: OCTAVE's and CHORUS's menus hold nothing past ON (their TONE and RATE rails on the blocks), ENVELOPE's
-            // RANGE is its picture's list, its RELEASE a rail.
+            // RANGE is its picture's list, its RELEASE a rail. RESET at every menu's foot (checked as `withReset` below).
             { "COMP",     params::compOn,   [] (auto& s) { return bass::compMenu (s); },   { "ATTACK >", "RELEASE >", "CHARACTER >" } },
             { "OCTAVE",   params::octaveOn, [] (auto& s) { return bass::octaveMenu (s); }, {} },
             { "ENVELOPE", params::filterOn, [] (auto& s) { return bass::filterMenu (s); },
@@ -5216,6 +5281,14 @@ int ORBITAMP_GATE_MAIN()
             { "CAB IR",   params::cabOn,    [] (auto& s) { return bass::cabMenu (s); },    { "DI / CAB >", "TRIM", "TRIM KEEPS >" } } };
         juce::StringArray wrong;
         int menus = 0, picks = 0;
+        // RESET at the foot of every OrbitBass menu (the owner, 01.11), ruled off from what stands over it.
+        const auto withReset = [] (juce::StringArray a)
+        {
+            if (! a.isEmpty())
+                a.add ("-");
+            a.add ("RESET");
+            return a;
+        };
         {
             auto t = make (bass);
             for (const auto& b : blocks)
@@ -5236,7 +5309,7 @@ int ORBITAMP_GATE_MAIN()
                     ++menus;
                     if (id == 0 || lines[0] != (was > 0.5f ? "ON *" : "ON") || lines[1] != "-")
                         wrong.add (juce::String (b.name) + (was > 0.5f ? " on" : " off") + ": opens with \"" + lines[0] + "\", \"" + lines[1] + "\"");
-                    if (top (rest) != b.words || rest != read (b.alone (t->apvts).items))
+                    if (top (rest) != withReset (b.words) || rest != withReset (read (b.alone (t->apvts).items)))
                         wrong.add (juce::String (b.name) + ": the rest reads " + top (rest).joinIntoString (", "));
                     if (id <= 0 || id > (int) m.acts.size() || ! m.acts[(size_t) id - 1])
                         continue;
@@ -5287,6 +5360,11 @@ int ORBITAMP_GATE_MAIN()
                 const juce::StringArray limitHead { on ? "ON *" : "ON", "-", on ? "[LIMITER  -1.0 DB]" : "[LIMITER  OFF]" };
                 gate  = [&] { auto a = gateHead;  a.addArray (gate);  return a; }();
                 limit = [&] { auto a = limitHead; a.addArray (limit); return a; }();
+                if (isBass)   // RESET at the foot of OrbitBass's guards' menus too (01.11); OrbitAmp's as they were
+                {
+                    gate  = withReset (gate);
+                    limit = withReset (limit);
+                }
                 ++menus;
                 ++menus;
                 if (const auto g = read (editor->gateMenu()); g != gate)
@@ -5422,7 +5500,7 @@ int ORBITAMP_GATE_MAIN()
                     const auto lines = read (m.items), before = read (old.items);
                     const int  id    = onItemOf (m.items);
                     ++menus;
-                    if (id == 0 || lines[0] != (was > 0.5f ? "ON *" : "ON") || lines[1] != "-" || from (lines, 2) != before || before.size() < 12)
+                    if (id == 0 || lines[0] != (was > 0.5f ? "ON *" : "ON") || lines[1] != "-" || from (lines, 2) != withReset (before) || before.size() < 12)
                         wrong.add (juce::String (c.on) + "'s menu reads " + lines.joinIntoString (" | "));
                     if (id <= 0 || id > (int) m.acts.size() || ! m.acts[(size_t) id - 1])
                         continue;

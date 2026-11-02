@@ -378,6 +378,49 @@ inline const char* onParamOf (const juce::String& block)
 
 /** A block's menu by its name on the face: ON first, ruled off — its STANDBY/ON, ticked while it is on, a pick turning it
     over as its strip arrow does (the owner, 01.11) — then what the block holds. */
+/** WHAT A BLOCK'S RESET SETS BACK (the owner, 01.11): every parameter of the block, by the ids' heads — its switches
+    (`_on`), its place in the strip (`_present`) and the AMP's channel (`_device`) kept. */
+inline juce::StringArray resetIdsOf (juce::AudioProcessorValueTreeState& state, const juce::String& block)
+{
+    const juce::StringArray heads = block == "COMP" ? juce::StringArray { "comp" } : block == "OCTAVE" ? juce::StringArray { "octave" }
+                                  : block == "ENVELOPE" ? juce::StringArray { "filter" } : block == "CHORUS" ? juce::StringArray { "chorus" }
+                                  : block == "DELAY" ? juce::StringArray { "delay" } : block == "REVERB" ? juce::StringArray { "reverb" }
+                                  : block == "AMP" ? juce::StringArray { "preamp_", "amp_blend", "bass_hpf", "bass_lpf" }
+                                  : block == "CAB IR" ? juce::StringArray { "di_mix", "cab_trim" }
+                                  : block == "HPF" ? juce::StringArray { "bass_hpf" } : block == "LPF" ? juce::StringArray { "bass_lpf" }
+                                  : juce::StringArray {};
+    juce::StringArray ids;
+    for (auto* p : state.processor.getParameters())
+        if (auto* withId = dynamic_cast<juce::AudioProcessorParameterWithID*> (p))
+        {
+            const auto& id = withId->paramID;
+            const bool kept = id.endsWith ("_on") || id.endsWith ("_present") || id.endsWith ("_device");
+            if (! kept && std::any_of (heads.begin(), heads.end(), [&id] (const juce::String& h) { return id.startsWith (h); }))
+                ids.add (id);
+        }
+    return ids;
+}
+
+/** RESET at the menu's foot, ruled off: the block's parameters back to their defaults in one instant — one undo step. */
+inline void addReset (Menu& m, juce::AudioProcessorValueTreeState& state, const juce::String& block)
+{
+    const auto ids = resetIdsOf (state, block);
+    if (ids.isEmpty())
+        return;
+    m.items.addSeparator();
+    m.items.addItem (m.act ([&state, ids]
+                            {
+                                for (const auto& id : ids)
+                                    if (auto* p = state.getParameter (id))
+                                    {
+                                        p->beginChangeGesture();
+                                        p->setValueNotifyingHost (p->getDefaultValue());
+                                        p->endChangeGesture();
+                                    }
+                            }),
+                     "RESET");
+}
+
 inline Menu blockMenu (juce::AudioProcessorValueTreeState& state, const juce::String& block)
 {
     Menu m;
@@ -386,10 +429,12 @@ inline Menu blockMenu (juce::AudioProcessorValueTreeState& state, const juce::St
         addToggle (m, m.items, state, on, "ON");
         m.items.addSeparator();
     }
-    return block == "COMP" ? compMenu (state, std::move (m)) : block == "OCTAVE" ? octaveMenu (state, std::move (m))
-         : block == "ENVELOPE" ? filterMenu (state, std::move (m)) : block == "CHORUS" ? chorusMenu (state, std::move (m))
-         : block == "DELAY" ? delayMenu (state, std::move (m)) : block == "REVERB" ? reverbMenu (state, std::move (m))
-         : block == "AMP" ? ampMenu (state, std::move (m)) : block == "CAB IR" ? cabMenu (state, std::move (m)) : Menu {};
+    auto built = block == "COMP" ? compMenu (state, std::move (m)) : block == "OCTAVE" ? octaveMenu (state, std::move (m))
+               : block == "ENVELOPE" ? filterMenu (state, std::move (m)) : block == "CHORUS" ? chorusMenu (state, std::move (m))
+               : block == "DELAY" ? delayMenu (state, std::move (m)) : block == "REVERB" ? reverbMenu (state, std::move (m))
+               : block == "AMP" ? ampMenu (state, std::move (m)) : block == "CAB IR" ? cabMenu (state, std::move (m)) : Menu {};
+    addReset (built, state, block);
+    return built;
 }
 
 /** A block's menu from one of its controls: through the face, which shows it at the block (and says which it was);
@@ -414,6 +459,7 @@ inline Menu hpfMenu (juce::AudioProcessorValueTreeState& state)
     addToggle (m, m.items, state, params::bassHpfOn, "ON");
     m.items.addSeparator();
     addHpf (m, m.items, state);
+    addReset (m, state, "HPF");
     return m;
 }
 
@@ -426,6 +472,7 @@ inline Menu lpfMenu (juce::AudioProcessorValueTreeState& state)
     addToggle (m, m.items, state, params::bassLpfOn, "ON");
     m.items.addSeparator();
     addLpf (m, m.items, state);
+    addReset (m, state, "LPF");
     return m;
 }
 

@@ -56,6 +56,7 @@ AmpEditor::AmpEditor (AmpProcessor& p)
 
     // THE GUARDS' MENUS open from their blocks on the panel (GuardBlock); a look clears the dot that
     // said the guard worked unseen.
+    gateConsole.offersReset = amp.product().chain == Chain::bass;   // RESET at the foot of every menu (the owner, 01.11)
     faceplate.gateBlock().onMenu  = [this] (juce::Point<int> pos) { amp.gateWorked.store (false);    gateConsole.showMenu (pos, gateOnAt()); };
     faceplate.limitBlock().onMenu = [this] (juce::Point<int> pos) { amp.limiterWorked.store (false); showLimiterMenu (pos); };
     if constexpr (features::hum)   // the input column's menu is HUM's in the build that has it (Features.h)
@@ -445,6 +446,12 @@ juce::PopupMenu AmpEditor::limiterMenu() const
     m.addItem (2, "SAFETY  -0.3",  true, matches (-0.3f));
     m.addItem (3, "NORMAL  -1.0",  true, matches (-1.0f));
     m.addItem (4, "TIGHT   -3.0",  true, matches (-3.0f));
+    // RESET at the foot, ruled off (OrbitBass, the owner 01.11): the ceiling back to its default, the switch kept.
+    if (amp.product().chain == Chain::bass)
+    {
+        m.addSeparator();
+        m.addItem (limiterResetItem, "RESET");
+    }
     return m;
 }
 
@@ -459,6 +466,12 @@ void AmpEditor::applyLimiter (juce::RangedAudioParameter& on, juce::RangedAudioP
         p.setValueNotifyingHost (p.convertTo0to1 (plain));
         p.endChangeGesture();
     };
+
+    if (r == limiterResetItem)
+    {
+        set (ceil, ceil.convertFrom0to1 (ceil.getDefaultValue()));
+        return;
+    }
 
     // ON (OrbitBass): turned over, as the strip's arrow turns it.
     if (r == limiterOnItem)

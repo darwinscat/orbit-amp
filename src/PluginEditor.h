@@ -105,7 +105,7 @@ private:
 
     /** The limiter's menu item `item` picked — through its parameters, which outlive this window. */
     static void applyLimiter (juce::RangedAudioParameter& on, juce::RangedAudioParameter& ceil, int item);
-    static constexpr int limiterOnItem = 20;
+    static constexpr int limiterOnItem = 20, limiterResetItem = 30;
     std::vector<std::unique_ptr<juce::ParameterAttachment>> presenceAtts;
     static constexpr double maxAspect      = 2.2;
 
