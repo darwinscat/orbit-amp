@@ -107,10 +107,17 @@ namespace
         heard. Both channels out, `blocks` blocks of it. */
     struct Out { std::vector<float> l, r; };
 
-    Out play (AmpProcessor& amp, int blocks, bool wide)
+    Out play (AmpProcessor& amp, int blocks, bool wide, bool throughGuitarCut = false)
     {
         Out out;
         juce::AudioBuffer<float> buf (2, blockSize);
+        // `throughGuitarCut`: the phrase through the guitar amps' input cut (params::guitarInputCutHz) on its way in — what
+        // every guitar chain does first — so the bass can be held against a guitar amp set as it is, bit for bit.
+        core::BassCuts guitarCut;
+        guitarCut.prepare (sampleRate);
+        core::BassCuts::Settings cutAt;
+        cutAt.hpfOn = true;
+        cutAt.hpfHz = params::guitarInputCutHz;
         juce::MidiBuffer midi;
         const double tau = juce::MathConstants<double>::twoPi;
         long long at = 0;
@@ -128,6 +135,8 @@ namespace
                 buf.setSample (0, i, s);
                 buf.setSample (1, i, wide ? (float) (0.25 * env * std::sin (tau * 3.7 * f * t)) : s);
             }
+            if (throughGuitarCut)
+                guitarCut.process (buf.getArrayOfWritePointers(), 2, blockSize, cutAt);
             amp.processBlock (buf, midi);
             amp.pumpDeviceWork();
             out.l.insert (out.l.end(), buf.getReadPointer (0), buf.getReadPointer (0) + blockSize);
@@ -511,9 +520,18 @@ int ORBITAMP_GATE_MAIN()
             auto dry = asBefore();
             set (*dry, params::cabOn, 0.0f);
             const auto heard = play (*dry, blocks, false);
-            // ...within 5e-6: the two consoles are each its chain's standard EQ (02.11), at 0 dB not the same to the last bit.
-            const float worst = twin (*dry, heard, "the cabinets out");
-            check (worst <= 5.0e-6f, "...plays what OrbitBass plays at BLEND 0, within 5e-6 (worst apart " + juce::String (worst, 9) + ")");
+            // The guitar's one difference is its input cut (the owner, 02.11): always on its chain, never on the bass's —
+            // the bass fed the phrase through the same cut plays what the guitar amp plays, bit for bit.
+            auto dryCut = asBefore();
+            set (*dryCut, params::cabOn, 0.0f);
+            const auto heardCut = play (*dryCut, blocks, false, true);
+            // ...within 5e-6: the two consoles are each its chain's standard EQ (02.11), at 0 dB not the same to the last bit
+            // (4.1e-6 measured; 0 with the bass's standard's branch taken out of AmpProcessor::updateEqSettings).
+            const float worst = twin (*dry, heardCut, "the cabinets out");
+            const float uncut = worstApart (heard.l, heardCut.l);
+            check (worst <= 5.0e-6f && uncut > 1.0e-4f,
+                   "...plays what OrbitBass plays at BLEND 0 through the guitar's 50 Hz input cut, within 5e-6 (worst apart "
+                       + juce::String (worst, 9) + "), the cut heard (" + juce::String (uncut, 6) + " from the bass uncut)");
 
             // BLEND's three reach the player — by the message thread alone: a pump from another thread (a host's
             // prepare elsewhere) leaves them to the next tick.
@@ -546,10 +564,10 @@ int ORBITAMP_GATE_MAIN()
         // The cabinets in, on the same IR's bytes, at DI/CAB 0 %: the cabinet alone, bit for bit.
         {
             auto cabOnly = asBefore();
-            const auto heard = play (*cabOnly, blocks, false);
+            const auto heard = play (*cabOnly, blocks, false, true);   // through the guitar's input cut, as above
             const float worst = twin (*cabOnly, heard, "the cabinets in, DI/CAB 0 %");
             check (worst <= 5.0e-6f,   // each chain's standard EQ, as above
-                   "...plays what OrbitBass plays, the cabinet alone (worst apart " + juce::String (worst, 9) + " of peak " + juce::String (peak (heard.l), 4) + ")");
+                   "...plays what OrbitBass plays through the guitar's input cut, the cabinet alone (worst apart " + juce::String (worst, 9) + " of peak " + juce::String (peak (heard.l), 4) + ")");
         }
     }
 

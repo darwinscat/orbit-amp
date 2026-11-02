@@ -472,6 +472,11 @@ inline constexpr const char* compRatio     = "comp_ratio";
 inline constexpr float compThresholdMin = -48.0f, compThresholdMax = 0.0f, compThresholdDefault = -24.0f;
 inline constexpr float compRatioMin = 1.5f, compRatioMax = 10.0f;
 
+/** THE GUITAR'S INPUT CUT (the owner, 02.11): a 2nd-order high-pass at the input of every guitar amp's chain, always,
+    under the lowest note (a low E loses half a decibel), so rumble, thumps and DC reach neither the gate, nor COMP, nor
+    the AMP. */
+inline constexpr double guitarInputCutHz = 50.0;
+
 /** THE BASS'S THREE EFFECTS (felitronics-core's octave, envfilter and chorus), each a block in the strip — its
     STANDBY/ON — and ONE slider, its amount 0..1 through the module's own law (<Module>Law.h, paramsForAmount): 0 is
     the dry bit for bit, nothing computed. Everything else is the block's menu — the menu's fields, never the law's.

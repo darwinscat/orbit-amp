@@ -1418,6 +1418,9 @@ private:
     core::BassComp bassComp;
     core::BassCuts bassCuts;
 
+    /** THE GUITAR'S INPUT CUT (params::guitarInputCutHz) — every guitar amp's, always on. */
+    core::BassCuts guitarInputCut;
+
     /** THE BASS'S HPF ACROSS THE CHAIN (the owner, 31.10): besides the main cut at the END (bassCuts), gentle ones —
         2nd order, an octave under the chosen frequency — at the input (before the gate and the keys), after COMP, after
         OCTAVE and after the AMP (after BLEND's sum: both legs the same phase). They clear DC, sub thumps and the subs a

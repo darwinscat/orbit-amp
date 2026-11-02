@@ -1061,6 +1061,8 @@ void AmpProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     delayReady  = chainHolds (params::rowDelay)  && delay.prepare (sampleRate, block, channels);
     reverbReady = chainHolds (params::rowReverb) && reverb.prepare (sampleRate, block, channels);
     preamp.prepare (sampleRate, block, channels);
+    if (ownProduct.chain != Chain::bass)   // the guitar's input cut: snapped where it stands at the first block
+        guitarInputCut.prepare (sampleRate);
     if (ownProduct.chain == Chain::bass)
     {
         (void) bassComp.prepare (sampleRate, block);   // a refusal leaves it a wire (BassComp::process)
@@ -2086,6 +2088,16 @@ void AmpProcessor::processChunk (juce::AudioBuffer<float>& buffer)
     // THE BASS'S INPUT CUT (innerCuts) — after the IN meter, which reads the jack (a DI's rumble that clips shows there),
     // and before the gate's key and FILTER's: no detector pumps on sub rumble.
     innerCut (0);
+
+    // THE GUITAR'S INPUT CUT (params::guitarInputCutHz), every guitar amp's, always: at the same place — after the IN meter,
+    // before every key and every stage.
+    if (ownProduct.chain != Chain::bass && nch > 0)
+    {
+        core::BassCuts::Settings in;
+        in.hpfOn = true;
+        in.hpfHz = params::guitarInputCutHz;
+        guitarInputCut.process (channels, nch, numSamples, in);
+    }
 
     gate.analyse (channels, nch, numSamples,
                   linkWorks (params::rowGate), gateThresholdParam->load());
