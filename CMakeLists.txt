@@ -976,23 +976,24 @@ foreach(folder IN LISTS ORBITAMP_SET_FOLDERS)
 endforeach()
 add_custom_target(OrbitAmpSetPacks DEPENDS ${ORBITAMP_SET_PACKS})
 
-# WHAT ORBITAMP PLAYS: every pack in resources/set/Devices — every folder there, zipped — the X88-IR's,
-# the IR-X's, the ReVolt's and the V4's, each one file in the family's folder whichever amps play it. A
-# pack added there is OrbitAmp's from the next build on, with nobody to remember to list it; a pack the
-# tree keeps but OrbitAmp should not play has no place in resources/set/Devices.
+# THE BASS'S PACKS, which no guitar amp plays — a guitar amp's packs and a bass amp's never cross, as their
+# cabinets do not (resources/cabinets.txt). OrbitBass plays them and opens on the first; RedGrooveBass's two
+# channels, B15 and SVT, are the SGT-DI's two voices (src/redgroove/RedGrooveLineup.cpp).
+set(ORBITBASS_SET   "Ampeg SGT-DI")
+set(REDGROOVEBASS_SET "Ampeg SGT-DI")
+
+# WHAT ORBITAMP PLAYS: every pack in resources/set/Devices but the bass's — every folder there, zipped — the
+# X88-IR's, the IR-X's, the ReVolt's and the V4's, each one file in the family's folder whichever amps play it. A
+# guitar pack added there is OrbitAmp's from the next build on, with nobody to remember to list it; a pack the
+# tree keeps but OrbitAmp should not play has no place in resources/set/Devices, or is a bass amp's.
 set(ORBITAMP_PLAYS ${ORBITAMP_SET_NAMES})
+list(REMOVE_ITEM ORBITAMP_PLAYS ${ORBITBASS_SET} ${REDGROOVEBASS_SET})
 
 # WHAT EACH OTHER AMP PLAYS of the set, said once — its row in THE AMPS names it by these.
 set(CATPITAMP_SET   "Soldano X88-IR Normal" "Soldano X88-IR Altered" "Soldano X88-IR Crunch" "Soldano X88-IR Overdrive")
 set(REDPAWAMP_SET   "Friedman IR-X Ch1 PowerAmp" "Friedman IR-X Ch2 PowerAmp")
 set(FROSTPAWAMP_SET "Two Notes ReVolt Clean PowerAmp" "Two Notes ReVolt Crunch PowerAmp" "Two Notes ReVolt Lead PowerAmp")
 set(AMBERPAWAMP_SET "Victory V4 Copper (clean)" "Victory V4 Sheriff (crunch)" "Victory V4 Kraken (hi-gain)")
-# OrbitBass plays bass packs alone — and until the bass captures are trained, ONE TEMPORARY PACK, a clean
-# guitar amp's, to play its chain through. The bass packs replace this line; it opens on the first.
-set(ORBITBASS_SET   "Ampeg SGT-DI")
-# RedGrooveBass's two channels, B15 and SVT, play the same way until the bass captures are trained: TWO
-# TEMPORARY PACKS, the ReVolt's clean and crunch, each with its Boost held off (src/redgroove/RedGrooveLineup.cpp).
-set(REDGROOVEBASS_SET "Ampeg SGT-DI")
 
 # A RELEASE SHIPS NO PACK OF AN AMP IT LEAVES OUT. A release (ORBITAMP_DEV_FACTORY OFF) carries the amps
 # installer/family.ini names; the packs only an amp it leaves out plays — today AmberPawAmp's V4 — are not
