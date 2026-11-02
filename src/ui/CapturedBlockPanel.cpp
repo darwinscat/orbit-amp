@@ -564,11 +564,13 @@ void CapturedBlockPanel::deviceChanged()
         slot.measuredIndex = -1;
 
         // A swept tone knob is a band of the console (nativeBands), not a knob on the face. A tone
-        // SWITCH — SM7's Sharp/Smooth, a V4's bass cut — has no place on the face yet and stays at
-        // its default until the console's row learns to hold one.
+        // SWITCH — SM7's Sharp/Smooth, a V4's bass cut — has no place on a guitar's face yet and stays at
+        // its default until the console's row learns to hold one; on the bass it is a toggle in the row
+        // (buildToneSwitches).
     }
 
     buildSelectors();
+    buildToneSwitches();
     applyEqMode();
 
     resized();
@@ -611,6 +613,15 @@ std::vector<EqSection::Band> CapturedBlockPanel::nativeBands() const
                                       params::blockMeasured (blk, i),
                                       (int) m.positions.size(),
                                       false };
+
+        // A FREQUENCY knob (the bass's FREQ, moving MID's band) reads where it puts that band, in hertz.
+        if (namz::rig::isFrequencyKnob (m))
+            band.reading = [m] (double v)
+            {
+                double hz = 0.0, q = 0.0;
+                const auto at = std::to_string (juce::roundToInt (juce::jlimit (0.0, 1.0, v) * (double) m.sweep));
+                return felitronics::rigplayer::frequencyAt (m, at, hz, q) ? bass::hzWord ((float) hz) : juce::String();
+            };
 
         // The knob's point on the curve: where it acts hardest, from the manifest alone — the
         // extremes of its measured travel diffed on the shipped grid, or the strongest section's
@@ -658,8 +669,10 @@ std::vector<EqSection::Band> CapturedBlockPanel::nativeBands() const
 
 void CapturedBlockPanel::applyEqMode()
 {
-    // The bass's standard's tone is never captured: its console is always ours, with no EQ RIG to offer.
-    const auto native = eq.standard() == params::EqStandard::bass ? decltype (nativeBands()) {} : nativeBands();
+    // ON THE BASS, NO CHOICE (the owner, 02.11): a pack with a tone of its own wears it, its dials on the row, and one
+    // with none the bass's standard — as the processor plays it (core::CapturedBlock::hasWearableTone).
+    const bool bass   = eq.standard() == params::EqStandard::bass;
+    const auto native = nativeBands();
     // The PARAMETER, not the apvts atomic. Called from an attachment callback — a host automating
     // this, a session restoring — the atomic has not been written yet at that moment, and reading
     // it there leaves the face exactly one change behind for good.
@@ -668,10 +681,11 @@ void CapturedBlockPanel::applyEqMode()
 
     // A device that measured nothing has no native set, so the choice collapses to ours on its own
     // rather than showing an empty row and asking the player to work out why.
-    const bool wearsNative = native.empty() ? false
-                                            : want == (int) params::EqMode::native;
+    const bool wearsNative = bass ? block.hasWearableTone()
+                                  : native.empty() ? false
+                                                   : want == (int) params::EqMode::native;
 
-    eq.setModes (wearsNative ? (int) params::EqMode::native : (int) params::EqMode::ours, ! native.empty());
+    eq.setModes (wearsNative ? (int) params::EqMode::native : (int) params::EqMode::ours, ! native.empty() && ! bass);
 
     if (wearsNative)
     {
@@ -965,6 +979,55 @@ void CapturedBlockPanel::buildSelectors()
     }
 }
 
+void CapturedBlockPanel::buildToneSwitches()
+{
+    for (auto& sw : toneSwitches)
+    {
+        sw.attachment.reset();
+        sw.toggle.reset();
+    }
+
+    if (! switchesInRow())
+        return;
+
+    const auto tones = block.tones();
+    size_t k = 0;
+
+    for (int i = 0; i < Block::numMeasured && i < (int) tones.size() && k < toneSwitches.size(); ++i)
+    {
+        const auto& m = tones[(size_t) i];
+        if (m.sweep > 0 || ! Block::switchCarriesBands (m))
+            continue;
+
+        juce::StringArray labels;
+        for (const auto& p : m.positions)
+            labels.add (juce::String (p.value).toUpperCase());
+        const auto name = juce::String (m.name).toUpperCase();
+        const int  n    = labels.size();
+        const auto which = k++;
+        auto& sw = toneSwitches[which];
+
+        sw.toggle = std::make_unique<ToggleSwitch>();
+        sw.toggle->oneLine = true;   // a line of its own under the cut beside it (EqSection::layOutRow)
+        sw.toggle->setItems (name, labels, 0);
+        sw.toggle->setTooltip (name + ":   " + labels.joinIntoString (juce::String::fromUTF8 ("   \xc2\xb7   ")));
+        sw.toggle->onChange = [this, which, n] (int at)
+        {
+            toneSwitches[which].attachment->setValueAsCompleteGesture (n > 1 ? (float) at / (float) (n - 1) : 0.0f);
+        };
+        addAndMakeVisible (*sw.toggle);
+
+        sw.attachment = std::make_unique<juce::ParameterAttachment> (
+            *amp.apvts.getParameter (params::blockMeasured (blk, i)),
+            [this, which, n] (float v)
+            {
+                if (auto* t = toneSwitches[which].toggle.get())
+                    t->setSelectedIndex (juce::jlimit (0, n - 1, juce::roundToInt (v * (float) (n - 1))), juce::dontSendNotification);
+            });
+        sw.attachment->sendInitialUpdate();
+    }
+}
+
 void CapturedBlockPanel::blockOnChanged (bool)
 {
     setCornerAlpha (cornerAlpha);   // the frame has just dimmed — or lit — every child, the glyphs too
@@ -1031,9 +1094,13 @@ void CapturedBlockPanel::layOutContent (juce::Rectangle<int> area)
     //      narrower than a cut. ----
     {
         std::array<ToggleSwitch*, 2> inner {};
-        for (size_t k = 0, i = 0; i < selectors.size() && k < inner.size(); ++i)
+        size_t k = 0;
+        for (size_t i = 0; i < selectors.size() && k < inner.size(); ++i)
             if (selectors[i].toggle != nullptr)
                 inner[k++] = selectors[i].toggle.get();
+        for (size_t i = 0; i < toneSwitches.size() && k < inner.size(); ++i)     // ...then the pack's tone switches
+            if (toneSwitches[i].toggle != nullptr)
+                inner[k++] = toneSwitches[i].toggle.get();
 
         const auto width = [] (const ToggleSwitch* t) { return t != nullptr ? t->idealWidth() : 0; };
         eq.setInnerCells (width (inner[0]), width (inner[1]));
@@ -1147,6 +1214,10 @@ void CapturedBlockPanel::setControlsVisible (bool v)
         if (sel.steps != nullptr)  sel.steps->setVisible (v);
         if (sel.toggle != nullptr) sel.toggle->setVisible (v);
     }
+
+    for (auto& sw : toneSwitches)
+        if (sw.toggle != nullptr)
+            sw.toggle->setVisible (v);
 }
 
 void CapturedBlockPanel::setPictureShown (bool shown)

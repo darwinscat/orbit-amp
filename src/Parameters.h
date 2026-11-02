@@ -184,10 +184,11 @@ inline constexpr const char* preampDevice = "preamp_device";
 inline constexpr const char* preampGain   = "preamp_gain";
 
 /** The preamp's TONE controls — the ones a player computes rather than selects. How many a device
-    has varies (SM7 has three: EQ-Lo, EQ-Hi and a two-position Edge; a Victory V4 preamp five), but a
-    host needs a fixed set of parameters, so five slots are reserved and the loaded pack decides what
-    each one drives. A slot with nothing behind it is hidden rather than shown doing nothing. */
-inline constexpr int preampNumMeasured = 5;
+    has varies (SM7 has three: EQ-Lo, EQ-Hi and a two-position Edge; a Victory V4 preamp five; the SGT-DI six:
+    Bass, Mid, its Freq, Treble and the two Ultra switches), but a host needs a fixed set of parameters, so six
+    slots are reserved and the loaded pack decides what each one drives. A slot with nothing behind it is hidden
+    rather than shown doing nothing. */
+inline constexpr int preampNumMeasured = 6;
 inline juce::String preampMeasured (int i) { return "preamp_meas" + juce::String (i + 1); }
 
 /** The EQ, one per captured block and BELONGING to it — there is one captured block, the preamp,
@@ -722,6 +723,11 @@ struct Opening
     // otherwise (RedGrooveBass's MID FREQ, at 1 kHz: the owner, 02.11). A default, not a hold: the player moves it, and
     // INIT and a double click bring it back here (engineDefault leaves it its declared default).
     float midHz = 400.0f;
+
+    // WHERE ITS PACK'S TONE OPENS: the tone slots where the pack it plays first starts them (device::PackOpening), not
+    // where the engine's pack does — a product whose list has no engine pack (the bass's) would have them all at their
+    // middle otherwise, a two-way switch thrown.
+    bool packTones = false;
 };
 
 /** The bass's own parameters (above), each declaring as its default where `opening` says a fresh instance of the

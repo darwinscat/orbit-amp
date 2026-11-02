@@ -107,6 +107,25 @@ namespace
     }
     float midHz (float travel) { return params::bassMidMinHz * std::pow (params::bassMidMaxHz / params::bassMidMinHz, travel); }
 
+    /** A PACK'S DIAL in decibels where its tone slot stands (0..1): its first band's gain at that travel, as the rig
+        player plays it (felitronics::rigplayer::sectionAt). */
+    float dialDb (const namz::rig::Tone& tone, float v)
+    {
+        if (tone.sections.empty())
+            return 0.0f;
+        const double t = felitronics::rigplayer::travelOf (tone, (double) v);
+        const auto& band = tone.sections.front();
+        return (float) (t < 0.0 ? -t * band.dbAtMin : t * band.dbAtMax);
+    }
+
+    /** ...and a pack's FREQUENCY knob where its slot stands: where it puts the band it moves (frequencyAt). */
+    float knobHz (const namz::rig::Tone& tone, float v)
+    {
+        double hz = 0.0, q = 0.0;
+        const auto at = std::to_string (juce::roundToInt (juce::jlimit (0.0f, 1.0f, v) * (float) tone.sweep));
+        return felitronics::rigplayer::frequencyAt (tone, at, hz, q) ? (float) hz : 0.0f;
+    }
+
     /** ...a title, from its left edge at `at.x`, as the layout's drawing sets its panels' names. */
     void printFromLeft (juce::Graphics& g, const juce::String& text, juce::Point<float> at, float em, juce::Colour colour)
     {
@@ -396,14 +415,22 @@ RedGrooveEditor::RedGrooveEditor (AmpProcessor& p)
                               &readout (under (layout::effectX[1], layout::valueY, 90.0f)),
                               &readout (under (layout::effectX[2], layout::valueY, 90.0f)) };
 
-    // ...DRIVE's as its dial reads, 0 to 10; the tones' in decibels — the bass's standard's three, the same on every
-    // gear (Channels::toneOf); the levers' in decibels.
+    // ...DRIVE's as its dial reads, 0 to 10; the tones' in decibels — the pack's dials, its BASS, MID and TREBLE, each
+    // its band's gain where it stands, or on a pack with no tone the bass's standard's three (Channels::toneOf); the
+    // levers' in decibels.
     auto* gain = amp.apvts.getParameter (params::preampGain);
     follow (params::preampGain, [gain, &driveValue] (float v) { driveValue.set (juce::String (gain->convertTo0to1 (v) * 10.0f, 1)); })->sendInitialUpdate();
+    const auto dials = channels.tonesOf (channels.active());
     for (int t = 0; t < 3; ++t)
     {
         auto& value = readout (under (layout::toneX[(size_t) t], layout::toneValueY, 100.0f));
-        follow (channels.toneOf (channels.active(), t).toRawUTF8(), [&value] (float v) { value.set (dbTenth (v)); })->sendInitialUpdate();
+        const auto id = channels.toneOf (channels.active(), t);
+        if (id.isEmpty())
+            continue;
+        if (t < (int) dials.size())
+            follow (id.toRawUTF8(), [&value, tone = dials[(size_t) t]] (float v) { value.set (dbTenth (dialDb (tone, v))); })->sendInitialUpdate();
+        else
+            follow (id.toRawUTF8(), [&value] (float v) { value.set (dbTenth (v)); })->sendInitialUpdate();
     }
     follow (params::inTrim,  [&inValue]  (float v) { inValue.set (dbTenth (v)); })->sendInitialUpdate();
     follow (params::outTrim, [&outValue] (float v) { outValue.set (dbTenth (v)); })->sendInitialUpdate();
@@ -424,9 +451,21 @@ RedGrooveEditor::RedGrooveEditor (AmpProcessor& p)
                     [&value] (float v) { value.set (percent (v)); });
         sayLever (*effectFaders[i], effectNames[i], [this, id = effectIds[i]] { return 100.0f * getParam (id); });
     }
-    const auto midId = params::eqBellHz (0, 0);
-    bindTravel (midFreq, midId, midTravel, midHz, [&midValue] (float hz) { midValue.set (hertz (juce::jlimit (params::bassMidMinHz, params::bassMidMaxHz, hz))); });
-    sayLever (midFreq, "MIDDLE", [this, midId] { return getParam (midId.toRawUTF8()); });
+    // MID FREQ: the pack's frequency knob, its travel the knob's (Channels::frequencyOf) — or, on a pack with none, the
+    // standard MIDDLE's frequency on a logarithmic travel.
+    if (namz::rig::Tone freq; channels.frequencyToneOf (channels.active(), freq))
+    {
+        const auto freqId = channels.frequencyOf (channels.active());
+        bindTravel (midFreq, freqId, [] (float v) { return v; }, [] (float t) { return t; },
+                    [&midValue, freq] (float v) { midValue.set (hertz (knobHz (freq, v))); });
+        sayLever (midFreq, "MIDDLE", [this, freqId, freq] { return knobHz (freq, getParam (freqId.toRawUTF8())); });
+    }
+    else
+    {
+        const auto midId = params::eqBellHz (0, 0);
+        bindTravel (midFreq, midId, midTravel, midHz, [&midValue] (float hz) { midValue.set (hertz (juce::jlimit (params::bassMidMinHz, params::bassMidMaxHz, hz))); });
+        sayLever (midFreq, "MIDDLE", [this, midId] { return getParam (midId.toRawUTF8()); });
+    }
 
     // THE CHANNEL LEVER: B15 or SVT — the gear and everything it was left with.
     addToStage (lever);
@@ -459,7 +498,26 @@ RedGrooveEditor::RedGrooveEditor (AmpProcessor& p)
     lineAt (ultraHi, 3);
     bindSwitch (lowCut, params::bassHpf);
     bindSwitch (highCut, params::bassLpf);
-    ultraLo.setPosition (1, false);
+
+    // U-LO and U-HI: the pack's tone switches (Channels::toneSwitchOf), Ultra Lo and Ultra Hi — each on its tone slot,
+    // a position its place in the pack's list. A pack with none has nothing for them to throw, and they are not there.
+    const auto bindUltra = [this] (SlideSwitch& sw, int which)
+    {
+        namz::rig::Tone tone;
+        const auto id = channels.toneSwitchOf (channels.active(), which);
+        const bool plays = id.isNotEmpty() && channels.toneSwitchToneOf (channels.active(), which, tone);
+        sw.setVisible (plays);
+        if (! plays)
+            return;
+        const int n = juce::jmax (1, (int) tone.positions.size() - 1);
+        auto* a = follow (id.toRawUTF8(), [&sw, n] (float v) { sw.setPosition (juce::roundToInt (v * (float) n), false); });
+        sw.onFlip = [a, n] (int to) { a->setValueAsCompleteGesture ((float) to / (float) n); };
+        a->sendInitialUpdate();
+    };
+    bindUltra (ultraLo, 0);
+    bindUltra (ultraHi, 1);
+    ultraLo.setComponentID ("ultraLo");
+    ultraHi.setComponentID ("ultraHi");
     lowCut.onMenu  = [this] { bass::Menu m; bass::addHpf (m, m.items, amp.apvts); bass::show (std::move (m), &lowCut); };
     highCut.onMenu = [this] { bass::Menu m; bass::addLpf (m, m.items, amp.apvts); bass::show (std::move (m), &highCut); };
     lowCut.setComponentID ("lowCut");

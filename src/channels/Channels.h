@@ -55,15 +55,29 @@ public:
         them have no knob. toneOf is empty for a knob past the pack's list, and for every knob of a
         channel whose pack is not installed; toneId is the parameter a knob turns on the channel that
         is playing.
-        ...BUT ON A PRODUCT WHOSE CONSOLE IS THE BASS'S STANDARD (Product::eqStandard) the knobs are the
-        standard's three, on every channel and whatever its pack: Bass, Middle and Treble — the AMP's console's
-        low shelf, first bell and high shelf, the tone the bass's chain plays — and tonesOf is empty, since none
-        of them is a tone the pack states. A rig that says a standard of its own will be asked here. */
+        ...BUT ON A PRODUCT WHOSE CONSOLE IS THE BASS'S STANDARD (Product::eqStandard) the knobs are the pack's DIALS
+        alone, where its pack states a tone: its swept tones that are not a frequency knob — the SGT-DI's Bass, Mid and
+        Treble — its frequency knob (Freq, moving Mid's band) and its tone switches (Ultra Lo, Ultra Hi) each asked for
+        apart (frequencyOf, toneSwitchOf), since a bass face stands them elsewhere than its knobs. On a pack with no tone
+        of its own the knobs are the standard's three: Bass, Middle and Treble — the AMP's console's low shelf, first
+        bell and high shelf — and tonesOf is empty, since none of them is a tone the pack states. */
     static constexpr int maxTones = params::preampNumMeasured;
     juce::StringArray toneNamesOf (int channel) const;
     std::vector<namz::rig::Tone> tonesOf (int channel) const;      // ...and the tones themselves, as the pack states them
     juce::String toneId (int knob) const { return toneOf (active(), knob); }
     juce::String toneOf (int channel, int knob) const;
+
+    /** ON THE BASS, THE PACK'S FREQUENCY KNOB — the tone a dial's band names as its frequency (`hz_by`), the SGT-DI's
+        Freq — as the tone slot it plays from (params::preampMeasured), and the tone itself; empty, and false, where
+        its pack has none or the console is not the bass's. */
+    juce::String frequencyOf (int channel) const;
+    bool frequencyToneOf (int channel, namz::rig::Tone& out) const;
+
+    /** ON THE BASS, THE PACK'S TONE SWITCHES — its tones of positions, no sweep, in its order: the SGT-DI's Ultra Lo
+        and Ultra Hi — the `which`-th as the tone slot it plays from, and the tone itself; empty, and false, past the
+        pack's list or where the console is not the bass's. */
+    juce::String toneSwitchOf (int channel, int which) const;
+    bool toneSwitchToneOf (int channel, int which, namz::rig::Tone& out) const;
 
     /** THE PACK'S SWITCHES: its controls that pick a capture and are not the gain dial, in the order the
         pack lists them — the IR-X Ch1's Boost and three-way Bright, the Ch2's Tight/Fat and Boost; most
@@ -224,6 +238,7 @@ private:
     const Lineup& line;
     juce::StringArray kept;      // the parameters a channel remembers
     juce::StringArray tones;     // ...of them, the places every channel's pack has its tones in
+    std::vector<namz::rig::Tone> packTonesOf (int channel) const;   // the pack's whole list, place i its tone i
     juce::Array<juce::File> irs; // the product's cabinets, in order
     int factory = 0;             // how many of them, from the front, are the build's own
     void  hold (int channel);                                           // its held switch where the lineup puts it

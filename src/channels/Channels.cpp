@@ -70,9 +70,9 @@ namespace
                                                    : juce::Array<juce::File>());
     }
 
-    /** THE TONE KNOBS OF A PRODUCT WHOSE CONSOLE IS THE BASS'S STANDARD (Product::eqStandard): the standard's own
-        three, whatever the pack — BASS the console's low shelf, MIDDLE its first bell (its frequency swept apart),
-        TREBLE its high shelf — the tone that sounds on the bass's chain, where a pack's own never does
+    /** THE TONE KNOBS OF A PRODUCT WHOSE CONSOLE IS THE BASS'S STANDARD (Product::eqStandard), on a pack with no tone
+        of its own: the standard's three — BASS the console's low shelf, MIDDLE its first bell (its frequency swept
+        apart), TREBLE its high shelf — the tone that sounds on the bass's chain where the pack states none
         (AmpProcessor::bassEq). The console is the AMP's, the only one. */
     constexpr int ampConsole = 0;
     const juce::StringArray bassStandardTones { "Bass", "Middle", "Treble" };
@@ -91,6 +91,37 @@ namespace
             case 2:  return params::eqHiDb (ampConsole);
             default: return {};
         }
+    }
+
+    /** THE ROLES OF A BASS PACK'S TONES, by their places in its list: its DIALS — swept, and no frequency knob — its
+        FREQUENCY KNOB (namz::rig::isFrequencyKnob: the one a dial's band names by `hz_by`), and its tone SWITCHES, no
+        sweep and a filter on its positions. A pack with a dial or a switch PLAYS A TONE OF ITS OWN on the bass, and
+        the bass's standard stands back (AmpProcessor::bassEq). */
+    struct BassTones
+    {
+        std::vector<int> dials, switches;
+        int frequency = -1;
+
+        bool playsTone() const noexcept { return ! dials.empty() || ! switches.empty(); }
+    };
+
+    BassTones bassTonesOf (const std::vector<namz::rig::Tone>& tones)
+    {
+        BassTones out;
+        for (int t = 0; t < (int) tones.size(); ++t)
+        {
+            const auto& tone = tones[(size_t) t];
+            if (namz::rig::isFrequencyKnob (tone))
+            {
+                if (out.frequency < 0)
+                    out.frequency = t;
+            }
+            else if (tone.sweep > 0)
+                out.dials.push_back (t);
+            else if (core::CapturedBlock::switchCarriesBands (tone))
+                out.switches.push_back (t);
+        }
+        return out;
     }
 
     /** A channel's record in the node; made if `create` and it is not there. */
@@ -116,6 +147,14 @@ Channels::Channels (AmpProcessor& p, const Lineup& l) : amp (p), line (l)
             if (const auto id = toneOf (c, t); id.isNotEmpty())
                 tones.addIfNotAlreadyThere (id);
     kept.addArray (tones);
+    for (int c = 0; c < count(); ++c)                   // ...and on the bass, its pack's frequency knob and tone switches
+    {
+        if (const auto id = frequencyOf (c); id.isNotEmpty())
+            kept.addIfNotAlreadyThere (id);
+        for (int w = 0; w < maxTones; ++w)
+            if (const auto id = toneSwitchOf (c, w); id.isNotEmpty())
+                kept.addIfNotAlreadyThere (id);
+    }
     for (int s = 0; s < params::numSelectors; ++s)      // where its pack's switches stand
         kept.add (params::selectorId (params::preampId, s));
     kept.add (params::cabHpfOn);
@@ -396,7 +435,16 @@ int Channels::packFor (int channel) const
 juce::StringArray Channels::toneNamesOf (int channel) const
 {
     if (onBassStandard (amp))
-        return bassStandardTones;
+    {
+        const auto all = packTonesOf (channel);
+        const auto roles = bassTonesOf (all);
+        if (! roles.playsTone())
+            return bassStandardTones;
+        juce::StringArray names;            // the pack's dials, its frequency knob and switches stand elsewhere
+        for (const int t : roles.dials)
+            names.add (juce::String (all[(size_t) t].name).trim());
+        return names;
+    }
 
     juce::StringArray names;
     if (const int pack = packFor (channel); pack >= 0)
@@ -413,9 +461,60 @@ juce::StringArray Channels::toneNamesOf (int channel) const
 
 std::vector<namz::rig::Tone> Channels::tonesOf (int channel) const
 {
+    if (! onBassStandard (amp))
+        return packTonesOf (channel);
+
+    std::vector<namz::rig::Tone> out;      // the standard's knobs are no tone of the pack's; a pack's dials are
+    const auto all = packTonesOf (channel);
+    for (const int t : bassTonesOf (all).dials)
+        out.push_back (all[(size_t) t]);
+    return out;
+}
+
+juce::String Channels::frequencyOf (int channel) const
+{
+    if (! onBassStandard (amp))
+        return {};
+    const int t = bassTonesOf (packTonesOf (channel)).frequency;
+    return t >= 0 ? params::preampMeasured (t) : juce::String();
+}
+
+bool Channels::frequencyToneOf (int channel, namz::rig::Tone& out) const
+{
+    if (! onBassStandard (amp))
+        return false;
+    const auto all = packTonesOf (channel);
+    const int t = bassTonesOf (all).frequency;
+    if (t < 0)
+        return false;
+    out = all[(size_t) t];
+    return true;
+}
+
+juce::String Channels::toneSwitchOf (int channel, int which) const
+{
+    if (! onBassStandard (amp))
+        return {};
+    const auto roles = bassTonesOf (packTonesOf (channel));
+    return which >= 0 && which < (int) roles.switches.size() ? params::preampMeasured (roles.switches[(size_t) which])
+                                                              : juce::String();
+}
+
+bool Channels::toneSwitchToneOf (int channel, int which, namz::rig::Tone& out) const
+{
+    if (! onBassStandard (amp))
+        return false;
+    const auto all = packTonesOf (channel);
+    const auto roles = bassTonesOf (all);
+    if (which < 0 || which >= (int) roles.switches.size())
+        return false;
+    out = all[(size_t) roles.switches[(size_t) which]];
+    return true;
+}
+
+std::vector<namz::rig::Tone> Channels::packTonesOf (int channel) const
+{
     std::vector<namz::rig::Tone> out;
-    if (onBassStandard (amp))
-        return out;         // the standard's knobs are no tone of the pack's
     if (const int pack = packFor (channel); pack >= 0)
         for (const auto& stage : amp.preamp.packs.getReference (pack).rig.chain)
         {
@@ -430,9 +529,15 @@ std::vector<namz::rig::Tone> Channels::tonesOf (int channel) const
 
 juce::String Channels::toneOf (int channel, int knob) const
 {
-    // Knob i is the pack's tone i: there while its list goes that far. On the bass's standard, its own three.
+    // Knob i is the pack's tone i: there while its list goes that far. On the bass, the pack's i-th dial — or, on a
+    // pack with no tone of its own, the bass's standard's i-th.
     if (onBassStandard (amp))
-        return bassStandardTone (knob);
+    {
+        const auto roles = bassTonesOf (packTonesOf (channel));
+        if (! roles.playsTone())
+            return bassStandardTone (knob);
+        return knob >= 0 && knob < (int) roles.dials.size() ? params::preampMeasured (roles.dials[(size_t) knob]) : juce::String();
+    }
     return knob >= 0 && knob < toneNamesOf (channel).size() ? params::preampMeasured (knob) : juce::String();
 }
 
@@ -714,7 +819,7 @@ float Channels::defaultOf (int channel, const juce::String& paramId) const
     // A tone of its pack where the pack starts it (core::CapturedBlock::defaultNorm, as OrbitAmp's panel
     // opens it): a sweep at its reference, the middle of it on every pack here — and a tone of positions on
     // its reference position, not on the parameter's middle, which on a three-way switch is the second.
-    const auto packTones = tonesOf (memoryOf (juce::jlimit (0, count() - 1, channel)));
+    const auto packTones = packTonesOf (memoryOf (juce::jlimit (0, count() - 1, channel)));
     for (size_t t = 0; t < packTones.size(); ++t)
         if (paramId == params::preampMeasured ((int) t))
             return (float) core::CapturedBlock::defaultNorm (packTones[t]);

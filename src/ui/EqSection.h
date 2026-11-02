@@ -114,6 +114,9 @@ public:
             MARKER — it says where the knob works, and the knob says how much. 0 = no dot (ours
             place their own handles). */
         double anchorHz = 0.0;
+        /** ...and a device's knob that reads in a unit of its own: the bass's FREQ, in hertz, the place its band
+            stands at. None: the reading above. */
+        std::function<juce::String (double)> reading {};
     };
 
 

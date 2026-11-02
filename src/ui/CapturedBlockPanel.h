@@ -103,6 +103,7 @@ private:
 
     /** Builds a switch for each selecting control the device has beyond its gain dial. */
     void buildSelectors();
+    void buildToneSwitches();
 
     /** A HAND'S PICK — a device out of the menu, a place of the channel lever: the channel the amp
         leaves keeps what it was set to, and the one it plays comes back as it was left
@@ -316,6 +317,17 @@ private:
         the cuts' switches do (ToggleSwitch); the dials share what is left. The picture well keeps its height. A pack
         with no switch has the row as it was, five cells. A guitar amp's stay the dial's picks. */
     bool switchesInRow() const noexcept { return bassKnobs != nullptr; }
+
+    /** ...AND ITS TONE SWITCHES — the SGT-DI's Ultra Lo and Ultra Hi, tones of positions and no sweep (the owner,
+        02.11): each a toggle there too, after the pack's own selectors, on its tone slot (params::blockMeasured) as a
+        dial is on its own, so the state, undo, presets and automation hold it. The slot's 0..1 is the position's
+        place in the pack's list, as the block plays it (core::CapturedBlock::updateToneIfMoved). */
+    struct ToneSwitch
+    {
+        std::unique_ptr<ToggleSwitch> toggle;
+        std::unique_ptr<juce::ParameterAttachment> attachment;
+    };
+    std::array<ToneSwitch, 2> toneSwitches;
 
     /** The visualizations: one scope per way of looking, and exactly ONE page of the well on screen —
         a scope, or the EQ curve, which is a page like the others now rather than a storey of its own.
