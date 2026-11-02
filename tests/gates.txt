@@ -45,6 +45,9 @@ webface            orbitamp_gates  skip=macos,windows
 # The sea's CPU half (AmberPawAmp's windscreen), against the prototype it was ported from.
 titan-world        titan_world_test
 
+# The walker's world (RedGrooveBass's dome), against the prototype it was ported from, to the last bit.
+walker-world       walker_world_test
+
 # The GPU's refusals, written down: the line a world sent to the CPU leaves in the family's log, and its cap.
 gpu-log            orbitamp_gates
 

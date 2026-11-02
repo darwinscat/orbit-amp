@@ -44,6 +44,9 @@ public:
         how far the sound's top jumped (worlds/Ear.h) — what the world lights by (worlds/Play.h). A world that
         answers nothing takes no notice. */
     virtual void hear (float /*peak*/, float /*pick*/) {}
+    /** The host's tempo, beats a minute, 0 when there is none: a world that walks to it (the walker's footfalls
+        fall on the beat) takes its pace from it; any other takes no notice. */
+    virtual void setTempo (double /*bpm*/) {}
     /** Whether the view is lit by the guitar at all (prefs::viewLit): off, the world is the one it was before
         it could hear — what only the guitar lights, a beacon or a lamp, is not there either. */
     virtual void setLit (bool /*on*/) {}

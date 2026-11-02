@@ -12,6 +12,11 @@
 #include <cstring>
 #include <limits>
 
+// The JS compares doubles exactly where it does (a hypot's zero, a dt of 0, Math.round's halves), so this does too.
+#if defined (__GNUC__)
+ #pragma GCC diagnostic ignored "-Wfloat-equal"
+#endif
+
 namespace orbitamp::redgroove
 {
 
@@ -651,10 +656,11 @@ WalkerWorld::WalkerWorld() noexcept
     touched.assign ((size_t) maxDiscs, 0);
 }
 
-void WalkerWorld::startAt (double x, double z) noexcept
+void WalkerWorld::startAt (double x, double z, double heading) noexcept
 {
     s.x = s.eyeX = x;
     s.z = s.eyeZ = z;
+    s.heading = heading;
 }
 
 void WalkerWorld::build()

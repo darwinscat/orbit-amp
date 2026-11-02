@@ -187,8 +187,9 @@ public:
 
     WalkerWorld() noexcept;
 
-    /** Where the walk starts, instead of the world's own start: call before build(). */
-    void startAt (double x, double z) noexcept;
+    /** Where the walk starts, instead of the world's own start, and the heading it starts on (the sun's, 0,
+        stays the one it drifts home to): call before build(). */
+    void startAt (double x, double z, double heading = 0) noexcept;
 
     /** Makes the textures and stands the walker on the ground. Once, tens of milliseconds. */
     void build();

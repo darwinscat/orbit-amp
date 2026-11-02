@@ -1224,6 +1224,15 @@ set(FROSTPAW_VIEW_SOURCES
 set(AMBERPAW_VIEW_SOURCES
     src/amberpaw/view/TitanWorld.cpp
     src/amberpaw/view/TitanGl.cpp)
+# RedGrooveBass's: the walker's dome over the glowing forest (src/redgroove/view), the walk handed to it as a
+# WalkerDrive. Its world is matched to its prototype to the last bit, which a fused multiply-add would undo:
+# compiled without contraction (MSVC contracts nothing unless asked).
+set(REDGROOVE_VIEW_SOURCES
+    src/redgroove/view/WalkerWorld.cpp
+    src/redgroove/view/WalkerGl.cpp)
+if(NOT MSVC)
+    set_source_files_properties(src/redgroove/view/WalkerWorld.cpp PROPERTIES COMPILE_OPTIONS "-ffp-contract=off")
+endif()
 
 # A world's demo: a bare window with the windscreen in it over one world — the sea's in the canopy's
 # shape — for looking at it and measuring it. Built only when asked for by name. No audio.
@@ -1246,12 +1255,23 @@ view_demo(frostpaw_view_demo "FrostPawViewDemo" SOURCES ${REDPAW_VIEW_SOURCES} $
     DEFINITIONS ORBITAMP_VIEW_DEMO_ICE=1)
 view_demo(amberpaw_view_demo "AmberPawViewDemo" SOURCES ${REDPAW_VIEW_SOURCES} ${AMBERPAW_VIEW_SOURCES}
     DEFINITIONS ORBITAMP_VIEW_DEMO_TITAN=1)
+view_demo(walker_view_demo   "WalkerViewDemo"   SOURCES ${REDPAW_VIEW_SOURCES} ${REDGROOVE_VIEW_SOURCES}
+    DEFINITIONS ORBITAMP_VIEW_DEMO_WALKER=1)
 
 # The sea's CPU half against the prototype it was ported from: the start, five scripted flights, the
 # gears, Saturn, the wipers' panes. JUCE-free, links only the world.
 add_executable(titan_world_test tests/TitanWorldTests.cpp src/amberpaw/view/TitanWorld.cpp)
 target_include_directories(titan_world_test PRIVATE src)
 target_compile_features(titan_world_test PRIVATE cxx_std_20)
+
+# The walker's world against its prototype, walker-world.js, to the last bit: the noise, the meshes, the forest,
+# the walks at every gear free and on the beat, the bass, the steering, three dense clusters, the wrap — compared
+# with the prototype's own dump (tests/fixtures/walker). JUCE-free, links only the world.
+add_executable(walker_world_test tests/WalkerWorldTests.cpp src/redgroove/view/WalkerWorld.cpp)
+target_include_directories(walker_world_test PRIVATE src)
+target_compile_features(walker_world_test PRIVATE cxx_std_20)
+target_compile_definitions(walker_world_test PRIVATE
+    WALKER_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/walker/walker-world.txt")
 
 # THE ROVER'S FACE IS WORN BY MORE THAN ONE PRODUCT (src/redpaw/RedPawSkin.h): what every rover is made
 # of is said once here — the renders by the file names the face asks for, as bake-art made them, the

@@ -117,9 +117,15 @@ inline GLuint attributeless (GLuint& buffer)
     return vao;
 }
 
+/** An attribute's name and the location a program is linked with it at, for a renderer whose vertex arrays are
+    shared by several programs (the walker's instance lists feed its mushrooms, their glow and their halos). */
+struct Attribute { const char* name; GLuint location; };
+
 /** A program out of a vertex and a fragment shader's source: its id, or 0 when either would not compile or
-    the two would not link — the driver's words in `log`. The shaders go with the program. */
-inline GLuint program (const std::string& vertex, const std::string& fragment, std::string& log)
+    the two would not link — the driver's words in `log`. The shaders go with the program; `attributes` are
+    bound where they say before it links. */
+inline GLuint program (const std::string& vertex, const std::string& fragment, std::string& log,
+                       const std::vector<Attribute>& attributes = {})
 {
     const GLuint id = glCreateProgram();
     const auto stage = [&] (GLenum type, const std::string& source)
@@ -152,6 +158,8 @@ inline GLuint program (const std::string& vertex, const std::string& fragment, s
         // says so), and an instanced one might otherwise get its cells there.
         glBindAttribLocation (id, 0, "aPos");
         glBindAttribLocation (id, 0, "aZero");
+        for (const auto& a : attributes)
+            glBindAttribLocation (id, a.location, a.name);
         glLinkProgram (id);
         glGetProgramiv (id, GL_LINK_STATUS, &linked);
         if (linked == GL_FALSE)

@@ -15,10 +15,15 @@
 // quality ladder, as --fixed does alone), --quit=seconds ends the run. The guitar (worlds/Play.h): --play=peak picks a
 // note of that peak (linear) every second, ringing down, for watching the world answer; --hit=peak takes the STILL at the
 // instant such a note is picked. --lights throws both searchlights on, where the world has them. Built three times: as RedPaw's windscreen over the Plains, (ORBITAMP_VIEW_DEMO_ICE) as
-// FrostPaw's over the ice, and (ORBITAMP_VIEW_DEMO_TITAN) as the canopy over Titan's sea — each in its product's gears unless --gears says otherwise.
+// FrostPaw's over the ice, (ORBITAMP_VIEW_DEMO_TITAN) as the canopy over Titan's sea, and (ORBITAMP_VIEW_DEMO_WALKER) as the
+// walker's dome over the glowing forest, the whole cabin's stage — each in its product's gears unless --gears says otherwise. The
+// walker starts where its world starts it unless --at says otherwise, walks to --bpm=beats a minute where given, and puts its
+// horizon --horizon=fraction of the frame from the top (the cabin's 0.40 unless said).
 
 #include "Windscreen.h"
-#if ORBITAMP_VIEW_DEMO_TITAN
+#if ORBITAMP_VIEW_DEMO_WALKER
+ #include "../../redgroove/view/WalkerDrive.h"
+#elif ORBITAMP_VIEW_DEMO_TITAN
  #include "../../amberpaw/view/TitanDrive.h"
 #elif ORBITAMP_VIEW_DEMO_ICE
  #include "../../frostpaw/view/IceDrive.h"
@@ -32,7 +37,9 @@
 
 namespace
 {
-   #if ORBITAMP_VIEW_DEMO_TITAN
+   #if ORBITAMP_VIEW_DEMO_WALKER
+    constexpr int glassWidth = 1672, glassHeight = 941, lineHeight = 26;    // the dome's whole stage: the view is behind all of it
+   #elif ORBITAMP_VIEW_DEMO_TITAN
     constexpr int glassWidth = 1672, glassHeight = 418, lineHeight = 26;    // the cabin's whole canopy, not a rover's windscreen
    #else
     constexpr int glassWidth = 1440, glassHeight = 270, lineHeight = 26;
@@ -41,7 +48,9 @@ namespace
     using Mode = orbitamp::redpaw::Windscreen::Mode;
 
     /** The product's gears, as its lever has them (redpaw/RedPawLineup.h): the demo has no lineup. */
-   #if ORBITAMP_VIEW_DEMO_TITAN
+   #if ORBITAMP_VIEW_DEMO_WALKER
+    constexpr int productGears = 2;     // RedGrooveBass
+   #elif ORBITAMP_VIEW_DEMO_TITAN
     constexpr int productGears = 4;     // the Titan face
    #elif ORBITAMP_VIEW_DEMO_ICE
     constexpr int productGears = 3;     // FrostPawAmp
@@ -63,6 +72,7 @@ namespace
         void setGear (int g) override                                 { inner->setGear (g); }
         void setTurbo (bool on) override                              { inner->setTurbo (on); }
         void setSteer (float amount) override                         { inner->setSteer (amount); }
+        void setTempo (double bpm) override                           { inner->setTempo (bpm); }
         void setWipers (int speed) override                           { inner->setWipers (speed); }
         void setLights (bool l, bool r) override                      { inner->setLights (l, r); }
         void hear (float p, float k) override                         { inner->hear (p, k); }
@@ -98,6 +108,7 @@ namespace
         bool report = false, placed = false, clocked = false, fixed = false;
         double x = 0, z = 0, heading = 0, clockSeconds = 0, clockMetres = 0, driveSeconds = 0, quitSeconds = 0, findMetres = 0;
         float play = 0.0f, hit = 0.0f;
+        double bpm = 0, horizon = 0.40;
         bool lights = false;
         juce::String stillFile;
 
@@ -126,6 +137,8 @@ namespace
                 else if (a.startsWith ("--play="))   play = value.getFloatValue();
                 else if (a.startsWith ("--hit="))    hit = value.getFloatValue();
                 else if (a == "--lights")            lights = true;
+                else if (a.startsWith ("--bpm="))    bpm = value.getDoubleValue();
+                else if (a.startsWith ("--horizon=")) horizon = value.getDoubleValue();
             }
             if (stress > 1)
                 fixed = true;
@@ -134,21 +147,27 @@ namespace
         /** The drive, placed and driven as asked before the view takes it. */
         std::unique_ptr<orbitamp::redpaw::Drive> makeDrive() const
         {
-           #if ORBITAMP_VIEW_DEMO_TITAN
+           #if ORBITAMP_VIEW_DEMO_WALKER
+            std::unique_ptr<orbitamp::redpaw::Drive> d = std::make_unique<orbitamp::redgroove::WalkerDrive> (gears, horizon);
+            constexpr bool ownStart = true;     // the walker's world has its own start
+           #elif ORBITAMP_VIEW_DEMO_TITAN
             std::unique_ptr<orbitamp::redpaw::Drive> d = std::make_unique<orbitamp::amberpaw::TitanDrive> (gears);
            #elif ORBITAMP_VIEW_DEMO_ICE
             std::unique_ptr<orbitamp::redpaw::Drive> d = std::make_unique<orbitamp::frostpaw::IceDrive> (gears);
            #else
             std::unique_ptr<orbitamp::redpaw::Drive> d = std::make_unique<orbitamp::redpaw::PlainsDrive> (gears);
            #endif
-            d->setGear (gear); d->setTurbo (turbo); d->setLights (lights, lights);
+           #if ! ORBITAMP_VIEW_DEMO_WALKER
+            constexpr bool ownStart = false;
+           #endif
+            d->setGear (gear); d->setTurbo (turbo); d->setLights (lights, lights); d->setTempo (bpm);
             if (placed)
                 d->placeAt (x, z, heading);
             if (clocked)
                 d->setClock (clockSeconds, clockMetres);
             if (driveSeconds > 0)
             {
-                if (! placed)
+                if (! placed && ! ownStart)
                     d->placeAt (31500, 3000, 0);
                 d->setSteer (steer);
                 for (int i = 0, n = juce::roundToInt (driveSeconds * 60); i < n; ++i)
@@ -157,7 +176,7 @@ namespace
             d->setRepeats (stress);
             if (findMetres > 0)
             {
-                if (! placed && driveSeconds <= 0)
+                if (! placed && driveSeconds <= 0 && ! ownStart)
                     d->placeAt (31500, 3000, 0);
                 std::cout << d->landmarks (findMetres);
             }
@@ -264,7 +283,9 @@ namespace
     class Demo final : public juce::JUCEApplication
     {
     public:
-       #if ORBITAMP_VIEW_DEMO_TITAN
+       #if ORBITAMP_VIEW_DEMO_WALKER
+        const juce::String getApplicationName() override    { return "RedGrooveBass dome"; }
+       #elif ORBITAMP_VIEW_DEMO_TITAN
         const juce::String getApplicationName() override    { return "Titan canopy"; }
        #elif ORBITAMP_VIEW_DEMO_ICE
         const juce::String getApplicationName() override    { return "FrostPawAmp windscreen"; }
