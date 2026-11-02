@@ -86,17 +86,22 @@ private:
     juce::Rectangle<float> capAt (float y) const noexcept;
 };
 
-/** A TWO-WAY SWITCH: a cap that sits at one end of its slot or the other — the slot is the picture's — and over it
-    the two positions' words, the one it stands at lit. A click throws it to the other; a right click asks for its
-    menu. */
+/** A SWITCH ON ONE LINE: its name, then its end positions' words either side of a slot — the one it stands at lit —
+    and a cap in the slot at one end, or in its middle for a three-way's middle (`STR 4 ( o) 5`, `U-LO - ( o ) +`).
+    The slot is the cuts' slot as the picture paints it, cut out and set where the switch stands; `reversed` shows the
+    positions right to left. A click moves it one position toward the side it lands on — a two-way's to the other —
+    and a right click asks for its menu. */
 class SlideSwitch final : public juce::Component
 {
 public:
-    SlideSwitch (const face::Ink&, juce::String left, juce::String right);
+    SlideSwitch (const face::Ink&, juce::String name, juce::String left, juce::String right, int positions = 2,
+                 bool reversed = false);
 
-    /** Where the slot is, in its own space. */
+    /** Where the slot is, in its own space, and the slot as the picture paints it. */
     juce::Rectangle<float> slot;
-    float wordsY = 0.0f, wordRoom = 78.0f;
+    juce::Image slotPicture;
+    float wordsY = 0.0f, wordRoom = 38.0f, nameRoom = 40.0f;
+    float em = face::stage::px13;   // its words' size: the column's a size down (the owner, 02.11)
     juce::Colour handLight;
 
     int  position() const noexcept { return at; }
@@ -112,8 +117,12 @@ public:
 
 private:
     const face::Ink ink;
-    const juce::String words[2];
+    const juce::String name, words[2];
+    const int count;
+    const bool reversed;
     int at = 0;
+
+    int shown() const noexcept { return reversed ? count - 1 - at : at; }   // where the cap stands, left to right
 };
 
 /** THE CABINET'S SCREEN: the name of the cabinet that plays — OFF while it is out of the sound — and a chevron at its

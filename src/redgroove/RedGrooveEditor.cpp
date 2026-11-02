@@ -248,6 +248,26 @@ void Cabin::paintStatic (juce::Graphics& g, float scale) const
     const auto ends = cabinInk().at (words, 0.8f);
     writeAsIs (g, cabinInk(), "200 Hz", around ({ midFreqSlot.getX() - 48.0f, midFreqSlot.getCentreY() }, 90.0f, 28.0f), px13, ends);
     writeAsIs (g, cabinInk(), "3 kHz", around ({ midFreqSlot.getRight() + 40.0f, midFreqSlot.getCentreY() }, 80.0f, 28.0f), px13, ends);
+
+    // The picture's own two slots for the cuts' switches go under plain panel — the switches stand one a line now
+    // (switchLineY), each its slot cut out of the picture where it stands. The plain is the panel between the two.
+    if (const auto& bg = Art::of().bg; bg.isValid())
+    {
+        const float k = (float) bg.getWidth() / width;
+        for (const auto slot : { lowCutSlot, highCutSlot })
+        {
+            const auto over  = slot.expanded (7.0f);
+            const auto plain = over.withY (lowCutSlot.getBottom() + 4.0f);
+            g.drawImage (bg.getClippedImage ((plain * k).toNearestInt()), over);
+        }
+    }
+
+    // ...and a line cut into the panel between DI/CAB and them: a shadow, and its lit edge beside it.
+    const float top = cabinetScreen.getBottom() + 10.0f, bottom = switchLineY.back() + 0.5f * switchSlotH + 6.0f;
+    g.setColour (juce::Colours::black.withAlpha (0.55f));
+    g.fillRect (juce::Rectangle<float> (switchRuleX - 0.75f, top, 1.5f, bottom - top));
+    g.setColour (juce::Colours::white.withAlpha (0.10f));
+    g.fillRect (juce::Rectangle<float> (switchRuleX + 0.75f, top, 1.0f, bottom - top));
 }
 
 /** THE PLAYING CHANNEL'S TONES' NAMES over their knobs, each in its row — its sockets are the picture's own. */
@@ -268,8 +288,10 @@ RedGrooveEditor::RedGrooveEditor (AmpProcessor& p)
       octave (Art::of().faderCap), envelope (Art::of().faderCap), chorus (Art::of().faderCap), midFreq (Art::of().faderCap),
       squeeze ([&p] { return p.compGrDb.load (std::memory_order_relaxed); }),
       lever (cabinInk(), { "B15", "SVT" }, layout::leverPlaces, layout::leverX, layout::leverNames, layout::leverBox.getPosition()),
-      lowCut (cabinInk(), "5 STR", "4 STR"),
-      highCut (cabinInk(), "FINGERS", "SLAP"),
+      lowCut (cabinInk(), "STR", "4", "5", 2, true),
+      highCut (cabinInk(), {}, "FING", "SLAP"),
+      ultraLo (cabinInk(), "U-LO", "-", "+", 3),
+      ultraHi (cabinInk(), "U-HI", "0", "+", 2),
       cabinet (cabinInk())
 {
     // Everything this constructor sets is the face settling onto the state, not a player's edit.
@@ -416,24 +438,33 @@ RedGrooveEditor::RedGrooveEditor (AmpProcessor& p)
 
     // THE CUTS' SWITCHES: the HPF by the strings, the LPF by the hand — both always in (channels::Lineup::pinned), the
     // switch choosing between their positions; a right click on either its positions' frequencies.
-    const auto switchAt = [this] (SlideSwitch& sw, juce::Rectangle<float> slot, const char* id)
+    // One line a switch, in a column right of DI/CAB: the name, the end positions' words either side of the slot.
+    const auto lineAt = [this] (SlideSwitch& sw, int line)
     {
-        const auto box = juce::Rectangle<float> (2.0f * layout::cutWordRoom + 10.0f, slot.getHeight() + 2.0f * layout::cutWordsAbove + 6.0f)
-                             .withCentre ({ slot.getCentreX(), slot.getCentreY() - layout::cutWordsAbove });
+        const auto slot = juce::Rectangle<float> (layout::switchSlotW, layout::switchSlotH)
+                              .withCentre ({ layout::switchSlotX + 0.5f * layout::switchSlotW, layout::switchLineY[(size_t) line] });
+        const float left = sw.nameRoom + sw.wordRoom + 6.0f, right = sw.wordRoom + 6.0f;
+        const auto box = juce::Rectangle<float> (slot.getX() - left, slot.getY() - 3.0f, left + slot.getWidth() + right, slot.getHeight() + 6.0f);
         sw.slot = slot - box.getPosition();
-        sw.wordsY = slot.getY() - layout::cutWordsAbove - box.getY();
-        sw.wordRoom = layout::cutWordRoom;
+        const auto& bg = Art::of().bg;
+        sw.slotPicture = bg.getClippedImage ((layout::lowCutSlot * ((float) bg.getWidth() / face::stage::width)).toNearestInt());
+        sw.em = face::stage::px13 * 12.0f / 13.0f;
         sw.handLight = handLight;
         addToStage (sw);
         sw.setBounds (box.toNearestInt());
-        bindSwitch (sw, id);
     };
-    switchAt (lowCut, layout::lowCutSlot, params::bassHpf);
-    switchAt (highCut, layout::highCutSlot, params::bassLpf);
+    lineAt (lowCut, 0);
+    lineAt (highCut, 1);
+    lineAt (ultraLo, 2);
+    lineAt (ultraHi, 3);
+    bindSwitch (lowCut, params::bassHpf);
+    bindSwitch (highCut, params::bassLpf);
+    ultraLo.setPosition (1, false);
     lowCut.onMenu  = [this] { bass::Menu m; bass::addHpf (m, m.items, amp.apvts); bass::show (std::move (m), &lowCut); };
     highCut.onMenu = [this] { bass::Menu m; bass::addLpf (m, m.items, amp.apvts); bass::show (std::move (m), &highCut); };
     lowCut.setComponentID ("lowCut");
     highCut.setComponentID ("highCut");
+
 
     // THE CABINET'S SCREEN: the cabinet that plays, by its name — OFF while it is out of the sound.
     cabinet.name = [this]

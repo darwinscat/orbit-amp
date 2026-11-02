@@ -171,14 +171,15 @@ void ChannelLever::mouseUp (const juce::MouseEvent& e)
 }
 
 //==============================================================================
-SlideSwitch::SlideSwitch (const face::Ink& i, juce::String left, juce::String right)
-    : ink (i), words { std::move (left), std::move (right) }
+SlideSwitch::SlideSwitch (const face::Ink& i, juce::String n, juce::String left, juce::String right, int positions, bool rev)
+    : ink (i), name (std::move (n)), words { std::move (left), std::move (right) }, count (juce::jlimit (2, 3, positions)),
+      reversed (rev)
 {
 }
 
 void SlideSwitch::setPosition (int to, bool notify)
 {
-    to = juce::jlimit (0, 1, to);
+    to = juce::jlimit (0, count - 1, to);
     if (to == at)
         return;
     at = to;
@@ -189,13 +190,22 @@ void SlideSwitch::setPosition (int to, bool notify)
 
 void SlideSwitch::paint (juce::Graphics& g)
 {
-    for (int i = 0; i < 2; ++i)
-        writeInto (g, ink, words[i], { slot.getCentreX() + (i == 0 ? -1.0f : 1.0f) * (0.5f * wordRoom + 3.0f), wordsY }, wordRoom,
-                   face::stage::px13, i == at ? ink.values : ink.at (ink.words, 0.5f));
+    if (slotPicture.isValid())
+        g.drawImage (slotPicture, slot);
+
+    // One line: the name, then the end positions' words either side of the slot — the one it stands at lit, a
+    // three-way's middle lighting neither.
+    const float y = slot.getCentreY();
+    const auto dim = ink.at (ink.words, 0.5f);
+    writeInto (g, ink, words[0], { slot.getX() - 0.5f * wordRoom - 3.0f, y }, wordRoom, em, shown() == 0 ? ink.values : dim);
+    writeInto (g, ink, words[1], { slot.getRight() + 0.5f * wordRoom + 3.0f, y }, wordRoom, em,
+               shown() == count - 1 ? ink.values : dim);
+    if (name.isNotEmpty())
+        writeInto (g, ink, name, { slot.getX() - wordRoom - 3.0f - 0.5f * nameRoom, y }, nameRoom, em, ink.words);
 
     const float d = slot.getHeight() - 6.0f;
-    const auto cap = juce::Rectangle<float> (d, d).withCentre ({ at == 0 ? slot.getX() + 3.0f + 0.5f * d : slot.getRight() - 3.0f - 0.5f * d,
-                                                                 slot.getCentreY() });
+    const float x = slot.getX() + 3.0f + 0.5f * d + (slot.getWidth() - 6.0f - d) * (float) shown() / (float) (count - 1);
+    const auto cap = juce::Rectangle<float> (d, d).withCentre ({ x, y });
     g.setColour (capFill);
     g.fillEllipse (cap);
     g.setColour (capRim);
@@ -218,7 +228,13 @@ void SlideSwitch::mouseDown (const juce::MouseEvent& e)
             onMenu();
         return;
     }
-    setPosition (1 - at, true);
+    if (count == 2)
+    {
+        setPosition (1 - at, true);
+        return;
+    }
+    const int towardRight = e.position.x < slot.getCentreX() ? -1 : 1;
+    setPosition (at + (reversed ? -towardRight : towardRight), true);
 }
 
 //==============================================================================
