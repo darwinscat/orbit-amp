@@ -603,10 +603,157 @@ void RedGrooveEditor::stripsLaid (const face::Strips& laid)
 }
 
 /** The walker's own part of the site's demo (Console::webExtras): the dome — the box the world is drawn in — the
-    still it ships, and a poster for each channel, that still through the glass. */
-void RedGrooveEditor::webExtras (const juce::File& dir, juce::DynamicObject& kit, juce::DynamicObject&)
+    still it ships, a poster for each channel, the dome's first frame through the glass; and under places.json's
+    "world" (and on its own, walker.json) every control the console has not already said: the channel lever, the
+    bass's knobs and their rings, the three effects' columns, MIDDLE's frequency across, the cuts' two switches, the
+    squeeze's column, the cabinet's screen and every reading, each with the parameter it moves and how. Every box is
+    the control's own where it stands on the stage, so a new layout exports itself. */
+void RedGrooveEditor::webExtras (const juce::File& dir, juce::DynamicObject& kit, juce::DynamicObject& world)
 {
     writeForWeb (dir.getChildFile ("still.webp"), Art::still());
+
+    using Obj = juce::DynamicObject;
+    const auto rect = [] (juce::Rectangle<float> r)
+    {
+        auto* o = new Obj();
+        o->setProperty ("x", r.getX()); o->setProperty ("y", r.getY());
+        o->setProperty ("w", r.getWidth()); o->setProperty ("h", r.getHeight());
+        return juce::var (o);
+    };
+    const auto point = [] (juce::Point<float> p) { auto* o = new Obj(); o->setProperty ("x", p.x); o->setProperty ("y", p.y); return juce::var (o); };
+    const auto boxOf = [] (const juce::Component& c) { return c.getBoundsInParent().toFloat(); };
+    const auto list = [] (std::initializer_list<juce::var> items) { juce::Array<juce::var> a; for (const auto& v : items) a.add (v); return juce::var (a); };
+
+    auto* o = new Obj();
+    o->setProperty ("dome", rect (layout::dome));
+    o->setProperty ("gears", 2);
+    o->setProperty ("channelGears", list ({ 1, 2 }));       // B15 walks in gear 1, SVT in gear 2; no TURBO
+    o->setProperty ("horizon", 0.57);                      // a fraction of the dome from its top (WalkerDrive)
+
+    // THE CHANNEL LEVER: its places top to bottom, the slot it runs in, each name where it stands.
+    {
+        auto* l = new Obj();
+        l->setProperty ("box", rect (boxOf (lever)));
+        l->setProperty ("slotX", layout::leverX);
+        juce::Array<juce::var> stops, names;
+        for (const float y : layout::leverPlaces) stops.add (y);
+        const char* const words[] { "B15", "SVT" };
+        for (size_t i = 0; i < layout::leverNames.size(); ++i)
+        {
+            auto* n = new Obj();
+            n->setProperty ("name", words[i]); n->setProperty ("at", point (layout::leverNames[i]));
+            names.add (juce::var (n));
+        }
+        l->setProperty ("stops", stops);
+        l->setProperty ("names", names);
+        l->setProperty ("capWidth", ChannelLever::capWidth);
+        l->setProperty ("capHeight", ChannelLever::capHeight);
+        l->setProperty ("does", "the channel: place i is channel i (the lineup's), its gear i + 1");
+        o->setProperty ("lever", l);
+    }
+
+    // THE BASS'S KNOBS (DRIVE and the tones are the console's): the tone knob's render, a pointer drawn on it.
+    {
+        struct K { const char* id; const char* name; const juce::Component* c; const char* param; const char* travel; };
+        const K knobs[] {
+            { "comp",  "COMP",   &comp,  params::compThreshold, "travel = threshold / -48 dB: 0 dB fully left, -48 dB fully right" },
+            { "blend", "BLEND",  &blend, params::ampBlend,      "travel = the value, 0..1" },
+            { "diCab", "DI/CAB", &diCab, params::diMix,         "travel = the value / 100, 0..100" } };
+        juce::Array<juce::var> a;
+        for (const auto& k : knobs)
+        {
+            auto* v = new Obj();
+            v->setProperty ("id", k.id); v->setProperty ("name", k.name); v->setProperty ("box", rect (boxOf (*k.c)));
+            v->setProperty ("sprite", "knob-tone"); v->setProperty ("param", k.param); v->setProperty ("travel", k.travel);
+            a.add (juce::var (v));
+        }
+        o->setProperty ("knobs", a);
+        auto* r = new Obj();           // a ring round every knob, lit along its travel: inset from its socket's edge
+        r->setProperty ("inset", layout::ringInset); r->setProperty ("width", layout::ringWidth); r->setProperty ("driveWidth", layout::driveRingWidth);
+        r->setProperty ("sockets", list ({ juce::var ("drive"), juce::var ("comp"), juce::var ("blend"), juce::var ("diCab"), juce::var ("tones") }));
+        o->setProperty ("rings", r);
+        o->setProperty ("knobNameY", layout::knobNameY);
+        o->setProperty ("diCabNameY", layout::diCabNameY);
+    }
+
+    // THE COLUMNS: the three effects' amounts, upright, the fader cap's render; MIDDLE's frequency across.
+    {
+        struct F { const char* id; const char* name; const juce::Component* c; const char* param; };
+        const F faders[] { { "octave", "OCTAVE", &octave, params::octaveAmount }, { "envelope", "ENVELOPE", &envelope, params::filterAmount },
+                           { "chorus", "CHORUS", &chorus, params::chorusAmount } };
+        juce::Array<juce::var> a;
+        for (const auto& f : faders)
+        {
+            auto* v = new Obj();
+            v->setProperty ("id", f.id); v->setProperty ("name", f.name); v->setProperty ("box", rect (boxOf (*f.c)));
+            v->setProperty ("sprite", "fader-cap"); v->setProperty ("capLength", layout::faderCapLength);
+            v->setProperty ("param", f.param); v->setProperty ("travel", "the value, 0..1, bottom to top"); v->setProperty ("reading", "percent");
+            a.add (juce::var (v));
+        }
+        o->setProperty ("columns", a);
+        auto* m = new Obj();
+        m->setProperty ("box", rect (boxOf (midFreq))); m->setProperty ("slot", rect (layout::midFreqSlot));
+        m->setProperty ("sprite", "fader-cap"); m->setProperty ("capLength", layout::midFreqCap); m->setProperty ("across", true);
+        m->setProperty ("param", params::eqBellHz (0, 0));
+        auto* map = new Obj();
+        map->setProperty ("kind", "log"); map->setProperty ("minHz", params::bassMidMinHz); map->setProperty ("maxHz", params::bassMidMaxHz);
+        map->setProperty ("travel", "log (hz / minHz) / log (maxHz / minHz), left to right");
+        m->setProperty ("map", map);
+        m->setProperty ("reading", "hertz");
+        o->setProperty ("midFreq", m);
+    }
+
+    // THE CUTS' SWITCHES: two positions each, a word over each, the one it stands at lit; the parameter's value is the position.
+    {
+        struct S { const char* id; const SlideSwitch* sw; const char* left; const char* right; const char* param; };
+        const S switches[] { { "lowCut", &lowCut, "5 STR", "4 STR", params::bassHpf }, { "highCut", &highCut, "FINGERS", "SLAP", params::bassLpf } };
+        juce::Array<juce::var> a;
+        for (const auto& w : switches)
+        {
+            auto* v = new Obj();
+            const auto box = boxOf (*w.sw);
+            v->setProperty ("id", w.id); v->setProperty ("box", rect (box)); v->setProperty ("slot", rect (w.sw->slot + box.getPosition()));
+            v->setProperty ("wordsY", w.sw->wordsY + box.getY()); v->setProperty ("wordRoom", w.sw->wordRoom);
+            v->setProperty ("words", list ({ juce::var (w.left), juce::var (w.right) }));
+            v->setProperty ("param", w.param); v->setProperty ("values", list ({ 0, 1 }));
+            a.add (juce::var (v));
+        }
+        o->setProperty ("switches", a);
+    }
+
+    // THE SQUEEZE: COMP's gain reduction as a column filling down, its full span; the cabinet's screen.
+    {
+        auto* g = new Obj();
+        g->setProperty ("box", rect (boxOf (squeeze))); g->setProperty ("slot", rect (layout::grSlot));
+        g->setProperty ("rangeDb", GrColumn::rangeDb); g->setProperty ("reads", "COMP's gain reduction in dB (AmpProcessor::compGrDb)");
+        o->setProperty ("squeeze", g);
+        auto* c = new Obj();
+        c->setProperty ("box", rect (boxOf (cabinet))); c->setProperty ("shows", "the playing cabinet's name, a list on a click");
+        o->setProperty ("cabinetScreen", c);
+    }
+
+    // THE READINGS, each under its control, in the order the face makes them: the box and how it writes the value.
+    {
+        struct R { const char* id; const char* format; };
+        const R names[] { { "drive", "the dial, 0.0..10.0" }, { "comp", "whole dB: -24 dB" }, { "blend", "percent: 30%" },
+                          { "midFreq", "hertz: 400 Hz, 1.25 kHz" }, { "diCab", "percent of 100: 30%" }, { "in", "dB, a tenth: +1.5 dB, 0.0 dB" },
+                          { "out", "dB, a tenth" }, { "octave", "percent" }, { "envelope", "percent" }, { "chorus", "percent" },
+                          { "tone0", "dB, a tenth" }, { "tone1", "dB, a tenth" }, { "tone2", "dB, a tenth" } };
+        jassert (readouts.size() == std::size (names));
+        juce::Array<juce::var> a;
+        for (size_t i = 0; i < readouts.size() && i < std::size (names); ++i)
+        {
+            auto* v = new Obj();
+            v->setProperty ("id", names[i].id); v->setProperty ("box", rect (boxOf (*readouts[i]))); v->setProperty ("format", names[i].format);
+            a.add (juce::var (v));
+        }
+        o->setProperty ("readings", a);
+        o->setProperty ("readingPx", stage::px13);
+    }
+
+    for (const auto& p : o->getProperties())       // all of it in places.json's "world", which is all the site reads...
+        world.setProperty (p.name, p.value);
+    dir.getChildFile ("walker.json").replaceWithText (juce::JSON::toString (juce::var (o)));     // ...and on its own
 
     auto* window = new juce::DynamicObject();
     window->setProperty ("x", layout::dome.getX());
