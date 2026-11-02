@@ -1104,6 +1104,19 @@ void CapturedBlockPanel::layOutContent (juce::Rectangle<int> area)
 
         const auto width = [] (const ToggleSwitch* t) { return t != nullptr ? t->idealWidth() : 0; };
         eq.setInnerCells (width (inner[0]), width (inner[1]));
+
+        // ON THE BASS, the switches stand beside the picture, two lines a side (the owner, 03.11), and the dials have
+        // the row under it to themselves.
+        juce::Rectangle<int> leftColumn, rightColumn;
+        if (bassKnobs != nullptr && (inner[0] != nullptr || inner[1] != nullptr))
+        {
+            constexpr int besideGap = 10;
+            leftColumn  = s3.removeFromLeft (juce::jmax (EqSection::cutLineW, width (inner[0])));
+            s3.removeFromLeft (besideGap);
+            rightColumn = s3.removeFromRight (juce::jmax (EqSection::cutLineW, width (inner[1])));
+            s3.removeFromRight (besideGap);
+        }
+        eq.setCutColumns (leftColumn, rightColumn);
         eq.layOutRow (strip3);
 
         for (size_t k = 0; k < inner.size(); ++k)

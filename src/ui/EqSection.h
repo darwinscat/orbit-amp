@@ -213,6 +213,15 @@ public:
         dials share whatever the cuts and these leave. */
     void setInnerCells (int firstW, int secondW) { innerW = { firstW, secondW }; }
 
+    /** ON THE BASS, THE SWITCHES BESIDE THE PICTURE (the owner, 03.11): two columns either side of the well, each two
+        lines — HPF over the pack's first switch on the left, LPF over its second on the right — and the row under the
+        well is the dials alone, across it. Empty columns: the switches stand in the row (layOutRow). */
+    void setCutColumns (juce::Rectangle<int> left, juce::Rectangle<int> right) { cutColumns = { left, right }; }
+
+    /** A cut's one line: its name, its switch, its choice — what a column beside the well must hold. */
+    static constexpr int cutNameW = 32, cutSwitchW = 30, cutGap = 4, cutChoiceW = 80, cutLineH = 18;
+    static constexpr int cutLineW = cutNameW + cutGap + cutSwitchW + cutGap + cutChoiceW;
+
     /** Where layOutRow left that room: from the row's top, where the names stand, down to the cuts' switches' foot — a
         switch put there has its name on the names' line and its oval on the cuts'. Empty where none was asked. */
     juce::Rectangle<int> innerCell (int which) const { return innerCells[(size_t) which]; }
@@ -291,6 +300,7 @@ private:
 
     std::array<int, 2> innerW { 0, 0 };                    // setInnerCells
     std::array<juce::Rectangle<int>, 2> innerCells;        // ...and where layOutRow left them
+    std::array<juce::Rectangle<int>, 2> cutColumns;        // setCutColumns
 
     std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>> bandAtts;
 

@@ -692,8 +692,35 @@ void EqSection::layOutRow (juce::Rectangle<int> row)
     // HPF over the pack's first, LPF over its second — the name, the switch, the choice beside it.
     if (bassStandard() && (innerW[0] > 0 || innerW[1] > 0))
     {
-        constexpr int nameW = 32, swW = 30, gap = 4, choiceW = 80, lineH = 18;
-        constexpr int cutLineW = nameW + gap + swW + gap + choiceW;
+        constexpr int lineH = cutLineH;
+        const auto cutLine = [] (juce::Rectangle<int> line, ZoneSwitch& sw, juce::Label& label, SlopeCombo& combo)
+        {
+            label.setBounds (line.removeFromLeft (cutNameW));
+            line.removeFromLeft (cutGap);
+            sw.setBounds (line.removeFromLeft (cutSwitchW).withSizeKeepingCentre (cutSwitchW, 16));
+            line.removeFromLeft (cutGap);
+            combo.setBounds (line);
+        };
+
+        // Beside the picture, when the block gave columns for them: the dials have the whole row.
+        if (! cutColumns[0].isEmpty() || ! cutColumns[1].isEmpty())
+        {
+            const int bandW = row.getWidth() / n;
+            for (auto& knob : bandKnobs)
+                knob->setBounds (row.removeFromLeft (bandW));
+
+            const auto lineIn = [] (juce::Rectangle<int> column, int which)
+            {
+                const int centre = column.getCentreY() + (which == 0 ? -1 : 1) * (lineH / 2 + 7);
+                return juce::Rectangle<int> (column.getX(), centre - lineH / 2, column.getWidth(), lineH);
+            };
+            cutLine (lineIn (cutColumns[0], 0), hpfSw, hpfLabel, hpfSlopeBox);
+            cutLine (lineIn (cutColumns[1], 0), lpfSw, lpfLabel, lpfSlopeBox);
+            innerCells[0] = innerW[0] > 0 ? lineIn (cutColumns[0], 1) : juce::Rectangle<int>();
+            innerCells[1] = innerW[1] > 0 ? lineIn (cutColumns[1], 1) : juce::Rectangle<int>();
+            return;
+        }
+
         const int leftW  = juce::jmax (cutLineW, innerW[0]);
         const int rightW = juce::jmax (cutLineW, innerW[1]);
         const int bandW  = (row.getWidth() - leftW - rightW) / n;
@@ -707,14 +734,6 @@ void EqSection::layOutRow (juce::Rectangle<int> row)
         {
             const int centre = side.getY() + (which == 0 ? side.getHeight() / 3 : 2 * side.getHeight() / 3);
             return juce::Rectangle<int> (side.getX(), centre - lineH / 2, side.getWidth(), lineH);
-        };
-        const auto cutLine = [] (juce::Rectangle<int> line, ZoneSwitch& sw, juce::Label& label, SlopeCombo& combo)
-        {
-            label.setBounds (line.removeFromLeft (nameW));
-            line.removeFromLeft (gap);
-            sw.setBounds (line.removeFromLeft (swW).withSizeKeepingCentre (swW, 16));
-            line.removeFromLeft (gap);
-            combo.setBounds (line);
         };
         cutLine (lineOf (left, 0), hpfSw, hpfLabel, hpfSlopeBox);
         cutLine (lineOf (right, 0), lpfSw, lpfLabel, lpfSlopeBox);
