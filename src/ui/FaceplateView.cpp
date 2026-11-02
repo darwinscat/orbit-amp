@@ -140,6 +140,9 @@ FaceplateView::FaceplateView (AmpProcessor& processor)
         menu (&cabinet, "CAB IR");
         cabinet.pictureMenuIsBlockMenu();   // its waveform takes its own clicks: its right click is the block's menu
     }
+    // OrbitAmp's COMP (Product::guitarComp): the bass's block, its menu the bass's too.
+    else if (comp != nullptr)
+        comp->setBlockMenu ([this] { openMenu ("COMP"); });
 }
 
 int FaceplateView::bassCabLeast()
@@ -316,8 +319,10 @@ void FaceplateView::resized()
     for (auto* fx : { (BlockFrame*) octave.get(), (BlockFrame*) filter.get() })
         if (fx != nullptr)
             fx->setVisible (! row1.isEmpty());
+    // OrbitAmp's COMP, after the GATE, while it stands in the strip (its checklist): out, it leaves no hole.
+    const bool compIn = comp != nullptr && owner.linkShown (params::rowComp);
     if (comp != nullptr)
-        comp->setVisible (! row1.isEmpty());
+        comp->setVisible (compIn && ! row1.isEmpty());
     if (chorus != nullptr)
         chorus->setVisible (! row2.isEmpty());
 
@@ -326,7 +331,7 @@ void FaceplateView::resized()
         gate.setBounds (row1.removeFromLeft (GuardBlock::designWidth));
         row1.removeFromLeft (colGap);
 
-        if (comp != nullptr)
+        if (compIn)
         {
             comp->setBounds (row1.removeFromLeft (compWidth));
             row1.removeFromLeft (colGap);

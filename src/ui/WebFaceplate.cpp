@@ -220,6 +220,9 @@ void WebFaceplate::playAndShoot (const juce::File& riffFile)
     for (size_t i = 0; i < pre.eq.bands.size() && i < std::size (tones); ++i)
         standParam (pre.eq.bands[i].param, tones[i]);
     standPlain (params::delayMix, 22.0f);
+    // ORBITAMP_LIVE_SHOT_COMP=1: OrbitAmp's COMP in the strip, as its checklist puts it there.
+    if (juce::SystemStats::getEnvironmentVariable ("ORBITAMP_LIVE_SHOT_COMP", {}) == "1" && amp.linkRemovable (params::rowComp))
+        standPlain (params::compPresent, 1.0f);
     pre.showsLoudnessTag = true;
     prefs::spectraCache (amp.product()).store (true);
     editor.applyStripChoice();

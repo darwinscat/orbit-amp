@@ -85,8 +85,10 @@ private:
         their least (31.10) — wider by what its DELAY and REVERB take when both are in the strip. */
     static int minDesignWidthFor (const AmpProcessor& p)
     {
+        // A guitar amp's: the design's, wider by COMP where it stands in the strip (OrbitAmp's), the AMP kept whole.
         if (p.product().chain != Chain::bass)
-            return FaceplateView::designWidth;
+            return FaceplateView::designWidth
+                 + (p.linkShown (params::rowComp) ? FaceplateView::compWidth + FaceplateView::colGap : 0);
         const int sides = 2 * (VolumeColumn::designWidth + chromeGap);   // the in and out columns, as resized() stands them
         return juce::jmax ((int) FaceplateView::designWidth,
                            FaceplateView::bassLeastWidth (p.linkShown (params::rowChorus), p.linkShown (params::rowDelay),

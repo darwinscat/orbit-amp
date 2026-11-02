@@ -782,7 +782,7 @@ private:
     rail, 0..100 %, parallel compression) — each control one job. Its CHARACTER a combo on the top border, centred in the
     run after its name, as the AMP's device stands (the owner, 02.11); ATTACK and RELEASE are its menu: a right click
     anywhere on it. Our own DSP, so violet; its arrow in the strip switches it, and standing by it dims in place, still
-    in reach. */
+    in reach. OrbitAmp's COMP is this block too. */
 class CompBlock final : public BlockFrame
 {
 public:

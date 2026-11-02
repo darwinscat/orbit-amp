@@ -383,12 +383,22 @@ int ORBITAMP_GATE_MAIN()
     check (arrows (AmpEditor::stripRows (*guitar)) == "GATE > AMP > DELAY > REVERB > CAB IR > LIMIT",
            "OrbitAmp's, as it was: " + arrows (AmpEditor::stripRows (*guitar)));
     {
-        bool none = ! guitar->chainHolds (params::rowComp) && ! guitar->chainHolds (params::rowOctave)
-                 && ! guitar->chainHolds (params::rowFilter) && ! guitar->chainHolds (params::rowChorus);
-        for (const char* id : { params::compOn, params::compAmount, params::ampBlend, params::diMix, params::bassHpf, params::bassLpf,
+        // OrbitAmp's COMP (the owner, 02.11): the bass's, its parameters the same, out of the strip until the player adds
+        // it, on OPTO; none of the bass's other links or parameters. The cockpit's face has no COMP at all.
+        bool none = ! guitar->chainHolds (params::rowOctave) && ! guitar->chainHolds (params::rowFilter) && ! guitar->chainHolds (params::rowChorus);
+        for (const char* id : { params::ampBlend, params::diMix, params::bassHpf, params::bassLpf,
                                 params::octaveAmount, params::filterAmount, params::chorusAmount })
             none = none && guitar->apvts.getParameter (id) == nullptr;
-        check (none, "OrbitAmp has no COMP and none of the bass's parameters");
+        bool comp = guitar->chainHolds (params::rowComp) && guitar->linkRemovable (params::rowComp) && ! guitar->linkShown (params::rowComp);
+        for (const char* id : { params::compOn, params::compAmount, params::compAttack, params::compRelease, params::compCharacter,
+                                params::compThreshold, params::compRatio, params::compPresent })
+            comp = comp && guitar->apvts.getParameter (id) != nullptr;
+        comp = comp && juce::roundToInt (value (*guitar, params::compCharacter)) == params::compCharacters.indexOf ("Opto")
+                    && value (*guitar, params::compPresent) < 0.5f;
+        auto cockpit = make (products::catpitAmp());
+        const bool cockpitNone = ! cockpit->chainHolds (params::rowComp) && cockpit->apvts.getParameter (params::compAmount) == nullptr;
+        check (none && comp && cockpitNone,
+               "OrbitAmp has a COMP — the bass's parameters, out of its strip, on OPTO — and none of the bass's others; the cockpit none");
     }
 
     // ---- ITS SOUND -----------------------------------------------------------------------------------
@@ -445,6 +455,31 @@ int ORBITAMP_GATE_MAIN()
         set (*twin, params::stereoMode, (float) params::StereoMode::stereo);
         const auto apart = play (*twin, blocks, true);
         check (worstApart (apart.l, apart.r) > 1.0e-3f, "...where OrbitAmp at STEREO plays two");
+    }
+
+    // ---- ORBITAMP'S COMP (the owner, 02.11): the bass's, before the AMP; out of the strip it changes nothing, bit for bit,
+    // whatever its BLEND; added, it squeezes — at STEREO both sides, the right through its own twin ----------------------
+    {
+        constexpr int blocks = 120;
+        const auto run = [&] (bool present, float blend, bool stereo)
+        {
+            auto g = make (products::orbitAmp());
+            set (*g, params::stereoMode, (float) (stereo ? params::StereoMode::stereo : params::StereoMode::mono));
+            set (*g, params::compPresent, present ? 1.0f : 0.0f);
+            set (*g, params::compAmount, blend);
+            set (*g, params::compThreshold, -36.0f);
+            g->prepareToPlay (sampleRate, blockSize);
+            g->pumpDeviceWork();
+            return play (*g, blocks, stereo);
+        };
+        const auto outFull = run (false, 1.0f, false), outNone = run (false, 0.0f, false), inFull = run (true, 1.0f, false);
+        const auto wideOut = run (false, 1.0f, true), wideIn = run (true, 1.0f, true);
+        const float standing = worstApart (outFull.l, outNone.l), heard = worstApart (inFull.l, outFull.l);
+        const float left = worstApart (wideIn.l, wideOut.l), right = worstApart (wideIn.r, wideOut.r);
+        check (standing == 0.0f && heard > 1.0e-3f && left > 1.0e-3f && right > 1.0e-3f && worstApart (wideIn.l, wideIn.r) > 1.0e-3f,
+               "OrbitAmp's COMP: out of the strip at BLEND 100 % plays as at 0, bit for bit (" + juce::String (standing, 9)
+                   + "); added, heard (" + juce::String (heard, 4) + "); at STEREO both sides squeezed (left " + juce::String (left, 4)
+                   + ", right " + juce::String (right, 4) + "), still two");
     }
 
     // OrbitAmp's links in OrbitAmp's order, less the delay and the reverb: an OrbitAmp on the same pack,
@@ -3658,8 +3693,8 @@ int ORBITAMP_GATE_MAIN()
         // DELAY's and REVERB's settings but MIX: in their menus, gated under STEP 12's THE MENUS.
 
         // THE CHECKLIST: the five, ticked as they stand; a pick one undo step; the strip, the face and the window's least
-        // width follow — DELAY and REVERB the guitar's own blocks, each fxRowWidth wide (the owner, 01.11). OrbitAmp has
-        // none.
+        // width follow — DELAY and REVERB the guitar's own blocks, each fxRowWidth wide (the owner, 01.11). OrbitAmp's holds
+        // its COMP alone (02.11), out until added, the least width growing by COMP's block with it.
         {
             auto t = make (bass);
             std::unique_ptr<juce::AudioProcessorEditor> ed (t->createEditor());
@@ -3694,13 +3729,24 @@ int ORBITAMP_GATE_MAIN()
             auto g = make (products::orbitAmp());
             std::unique_ptr<juce::AudioProcessorEditor> ged (g->createEditor());
             auto* gEditor = dynamic_cast<AmpEditor*> (ged.get());
+            juce::String gList;
+            int gLeast0 = -1, gLeast1 = -1;
+            if (gEditor != nullptr)
+            {
+                for (const auto& [row, in] : gEditor->checklistRows())
+                    gList << params::chainLinks[(size_t) row].name << (in ? "+ " : "- ");
+                gLeast0 = gEditor->leastDesignWidth();
+                gEditor->setLinkPresent (params::rowComp, true);
+                gLeast1 = gEditor->leastDesignWidth();
+            }
             check (list == "OCTAVE+ ENVELOPE+ CHORUS+ DELAY- REVERB- " && follows && least0 == FaceplateView::designWidth
                        && least1 >= FaceplateView::designWidth && least2 > least1   // one added: the cabinet's least may widen it (step 11)
                        && least2 == FaceplateView::bassLeastWidth (true, true, true, 0) + 2 * 48   // the face's row, and the IN and OUT columns
-                       && gEditor != nullptr && gEditor->checklistRows().empty() && gEditor->leastDesignWidth() == FaceplateView::designWidth,
+                       && gList == "COMP- " && gLeast0 == FaceplateView::designWidth
+                       && gLeast1 == FaceplateView::designWidth + FaceplateView::compWidth + FaceplateView::colGap,
                    "the strip's checklist: " + list + "; a pick one undo step, the face and the least width following ("
                        + juce::String (least0) + ", one added " + juce::String (least1) + ", both " + juce::String (least2)
-                       + "); OrbitAmp's has none");
+                       + "); OrbitAmp's " + gList + "(" + juce::String (gLeast0) + ", COMP added " + juce::String (gLeast1) + ")");
         }
 
         // THE FACE: row three in the signal's order at the least width and at 16:9, none overlapping, the cabinet never
@@ -4036,11 +4082,11 @@ int ORBITAMP_GATE_MAIN()
                "...for every guitar amp, the cockpit too");
     }
 
-    // ---- THE LOAD WINDOW: a guitar amp's as it was before the bass's COMP, the bass's a row shorter ----------
+    // ---- THE LOAD WINDOW: a guitar amp's as it was before the bass's COMP and a row for its own (02.11), the bass's four ---
     {
         LoadBreakdown gw (*guitar), bw (*amp);
-        check (gw.getHeight() == 384 && bw.getHeight() == 384 + 4 * 22,
-               "the load window: OrbitAmp's " + juce::String (gw.getHeight()) + " px (384 before), OrbitBass's " + juce::String (bw.getHeight())
+        check (gw.getHeight() == 384 + 22 && bw.getHeight() == 384 + 4 * 22,
+               "the load window: OrbitAmp's " + juce::String (gw.getHeight()) + " px (384 before, a row for its COMP), OrbitBass's " + juce::String (bw.getHeight())
                    + " (its DELAY and REVERB too, which a player may add; COMP, OCTAVE, ENVELOPE, CHORUS)");
     }
 

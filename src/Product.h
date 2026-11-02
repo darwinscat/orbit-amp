@@ -91,6 +91,10 @@ struct Product
     /** ITS CHAIN (Chain, above): the guitar's unless it says otherwise. */
     Chain chain = Chain::guitar;
 
+    /** A GUITAR CHAIN'S COMP, before the AMP (params::addGuitarCompParameters, which its `addParameters` adds): OrbitAmp's;
+        the cockpit's and the rovers' faces have none. */
+    bool guitarComp = false;
+
     /** THE LOWEST PITCH ITS TUNER LOOKS FOR, in Hz (core::PitchTracker::setLowestHz). Every guitar amp
         stays at the guitar's, which reaches a bass's low E and costs a guitar nothing more; OrbitBass
         reaches its low B and a drop-A's A0. */

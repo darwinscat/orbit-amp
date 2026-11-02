@@ -472,6 +472,12 @@ inline constexpr const char* compRatio     = "comp_ratio";
 inline constexpr float compThresholdMin = -48.0f, compThresholdMax = 0.0f, compThresholdDefault = -24.0f;
 inline constexpr float compRatioMin = 1.5f, compRatioMax = 10.0f;
 
+/** ORBITAMP'S COMP (the owner, 02.11: «добавим компрессоры в гитару»): the bass's COMP, the same parameters, before the
+    AMP as a pedal stands — out of the strip until the player adds it (`compPresent`, its checklist), on OPTO. The bass
+    has no `compPresent`: its COMP stands for good. */
+inline constexpr const char* compPresent = "comp_present";
+void addGuitarCompParameters (juce::AudioProcessorValueTreeState::ParameterLayout&);
+
 /** THE GUITAR'S INPUT CUT (the owner, 02.11): a 2nd-order high-pass at the input of every guitar amp's chain, always,
     under the lowest note (a low E loses half a decibel), so rumble, thumps and DC reach neither the gate, nor COMP, nor
     the AMP. */
@@ -633,7 +639,7 @@ inline constexpr ChainLink chainLinks[numChainRows] = {
     /* IN     */ { "IN",     false, true,  nullptr,   numStages, numStages },
     /* TUNER  */ { "TUNER",  false, true,  tunerOn,   stTuner,  numStages },
     /* GATE   */ { "GATE",   false, false, gateOn,    stGate,   numStages },
-    /* COMP   */ { "COMP",   false, false, compOn,    stComp,   numStages },
+    /* COMP   */ { "COMP",   false, false, compOn,    stComp,   numStages, compPresent },
     /* OCTAVE */ { "OCTAVE", false, false, octaveOn,  stOctave, numStages, octavePresent },
     /* FILTER */ { "ENVELOPE", false, false, filterOn, stFilter, numStages, filterPresent },
     /* AMP    */ { "AMP",    true,  true,  preampOn,  stPreamp, stPreampEq },
@@ -653,11 +659,11 @@ inline constexpr bool bassChainHolds (ChainRow) noexcept
     return true;
 }
 
-/** THE GUITAR'S CHAIN, every amp's but OrbitBass's: every link but the bass's own — COMP, OCTAVE, FILTER and
-    CHORUS — which no guitar amp has a parameter for. */
-inline constexpr bool guitarChainHolds (ChainRow row) noexcept
+/** THE GUITAR'S CHAIN, every amp's but OrbitBass's: every link but the bass's own — OCTAVE, FILTER and CHORUS — which
+    no guitar amp has a parameter for, and COMP but where the amp has one (`comp`: OrbitAmp's, Product::guitarComp). */
+inline constexpr bool guitarChainHolds (ChainRow row, bool comp = false) noexcept
 {
-    return row != rowComp && row != rowOctave && row != rowFilter && row != rowChorus;
+    return row != rowOctave && row != rowFilter && row != rowChorus && (row != rowComp || comp);
 }
 
 /** Whose cost a stage is. A captured block owns two — itself and its own console — and TOTAL

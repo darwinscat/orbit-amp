@@ -972,12 +972,13 @@ public:
     int bassBackPlanes() const noexcept { return bassWide.load (std::memory_order_relaxed); }
 
     /** WHETHER THIS PRODUCT'S CHAIN HAS THE LINK AT ALL (Product::chain) — the bass's holds every one (its DELAY and
-        REVERB out of its strip until the player adds them: linkInRig); a guitar amp's none of the bass's own, COMP,
-        OCTAVE, ENVELOPE and CHORUS. A link it does not hold never works, whatever its switch says (a state of another
-        amp's, a host's automation), and has no arrow on the strip and no block on the panel. */
+        REVERB out of its strip until the player adds them: linkInRig); a guitar amp's none of the bass's own, OCTAVE,
+        ENVELOPE and CHORUS, and COMP only where the amp has one (Product::guitarComp: OrbitAmp's). A link it does not
+        hold never works, whatever its switch says (a state of another amp's, a host's automation), and has no arrow on
+        the strip and no block on the panel. */
     bool chainHolds (params::ChainRow row) const noexcept
     {
-        return ownProduct.chain == Chain::bass ? params::bassChainHolds (row) : params::guitarChainHolds (row);
+        return ownProduct.chain == Chain::bass ? params::bassChainHolds (row) : params::guitarChainHolds (row, ownProduct.guitarComp);
     }
 
 private:
@@ -1205,8 +1206,7 @@ public:
         repaint clocks. */
     std::atomic<float> gateMeterDb { 0.0f };
 
-    /** The bass's COMP squeezing now, in dB (0 or below) — the indicator beside its knob. 0 on every
-        guitar amp, which has no COMP. */
+    /** COMP squeezing now, in dB (0 or below) — the indicator beside its knob. 0 on every amp that has no COMP. */
     std::atomic<float> compGrDb { 0.0f };
 
     /** THE HUM AT THE INPUT, as the stage last heard it — written by the audio thread at the end of
@@ -1414,8 +1414,10 @@ private:
     core::CabinetIr cab;
 
     /** THE BASS'S OWN LINKS (Chain::bass) — prepared and run on its chain alone: its COMP after the gate, the
-        DI's copy beside the cabinet, its own cuts after DI/CAB. */
-    core::BassComp bassComp;
+        DI's copy beside the cabinet, its own cuts after DI/CAB. OrbitAmp's COMP is the same (Product::guitarComp), and
+        in STEREO, where its chain works two signals, a second one squeezes the right (`compRight`, unwatched). */
+    core::BassComp bassComp, compRight;
+    bool compRightRan = false;   // the audio thread's: the twin worked the last block
     core::BassCuts bassCuts;
 
     /** THE GUITAR'S INPUT CUT (params::guitarInputCutHz) — every guitar amp's, always on. */
@@ -1434,7 +1436,7 @@ private:
     float diStep = 0.001f;   // ...and its glide per sample, 20 ms for the whole travel at the prepared rate
 
     /** OrbitBass's own parameters (params::addBassParameters), read where it has them; null on every guitar
-        amp, which has none. */
+        amp, which has none — but OrbitAmp's COMP's (`comp*`, params::addGuitarCompParameters). */
     struct BassParams
     {
         std::atomic<float>* compAmount = nullptr;

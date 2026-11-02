@@ -179,6 +179,19 @@ AmpProcessor::AmpProcessor (const Product& product)
         jassert (bass.compAmount != nullptr && bass.lpfHzSlap != nullptr && bass.chorusCrossoverHz != nullptr && bass.compThreshold != nullptr);
     }
 
+    // OrbitAmp's COMP's (Product::guitarComp): the bass's, the same parameters.
+    if (ownProduct.chain != Chain::bass && ownProduct.guitarComp)
+    {
+        const auto raw = [this] (const char* id) { return apvts.getRawParameterValue (id); };
+        bass.compAmount    = raw (params::compAmount);
+        bass.compAttack    = raw (params::compAttack);
+        bass.compRelease   = raw (params::compRelease);
+        bass.compCharacter = raw (params::compCharacter);
+        bass.compRatio     = raw (params::compRatio);
+        bass.compThreshold = raw (params::compThreshold);
+        jassert (bass.compAmount != nullptr && bass.compThreshold != nullptr);
+    }
+
     gateThresholdParam = apvts.getRawParameterValue (params::gateThreshold);
     gatePosParam       = apvts.getRawParameterValue (params::gatePos);
     gateDecayParam     = apvts.getRawParameterValue (params::gateDecay);
@@ -1061,13 +1074,22 @@ void AmpProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     delayReady  = chainHolds (params::rowDelay)  && delay.prepare (sampleRate, block, channels);
     reverbReady = chainHolds (params::rowReverb) && reverb.prepare (sampleRate, block, channels);
     preamp.prepare (sampleRate, block, channels);
+    if (bass.compAmount != nullptr)   // the bass's COMP, or OrbitAmp's — and its right twin where the chain can be stereo
+    {
+        (void) bassComp.prepare (sampleRate, block);   // a refusal leaves it a wire (BassComp::process)
+        bassComp.snapAmount (bass.compAmount->load());
+        if (ownProduct.chain != Chain::bass)
+        {
+            (void) compRight.prepare (sampleRate, block);
+            compRight.snapAmount (bass.compAmount->load());
+            compRightRan = false;
+        }
+        compTap.prepare (sampleRate);
+    }
     if (ownProduct.chain != Chain::bass)   // the guitar's input cut: snapped where it stands at the first block
         guitarInputCut.prepare (sampleRate);
     if (ownProduct.chain == Chain::bass)
     {
-        (void) bassComp.prepare (sampleRate, block);   // a refusal leaves it a wire (BassComp::process)
-        bassComp.snapAmount (bass.compAmount->load());
-        compTap.prepare (sampleRate);
         octaveTap->prepare (sampleRate);
         filterTap.prepare (sampleRate);
         filterTapLive = false;
@@ -2134,18 +2156,29 @@ void AmpProcessor::processChunk (juce::AudioBuffer<float>& buffer)
 
     // THE BASS'S COMP (Chain::bass), after the gate, on its one signal: ONE KNOB (core::BassComp). Its STANDBY is
     // the house's crossfade, toward the link in AND its knob up; standing by with the knob up it is fed, not heard;
-    // at 0 nothing is computed and the block passes bit for bit.
+    // at 0 nothing is computed and the block passes bit for bit. OrbitAmp's the same, before its AMP as a pedal stands;
+    // in STEREO its right signal through a twin of its own (compRight), started fresh whenever it starts working again.
     if (bass.compAmount != nullptr && nch > 0)
     {
         const auto a = PerfClock::now();
         const double amount = (double) bass.compAmount->load();
         const auto span = blockFade[(size_t) params::rowComp].advance (numSamples, linkWorks (params::rowComp) && amount > 0.0);
+        const auto attack    = static_cast<core::BassComp::Attack>    (juce::jlimit (0, 2, juce::roundToInt (bass.compAttack->load())));
+        const auto release   = static_cast<core::BassComp::Release>   (juce::jlimit (0, 2, juce::roundToInt (bass.compRelease->load())));
+        const auto character = static_cast<core::BassComp::Character> (juce::jlimit (0, core::BassComp::characterCount - 1, juce::roundToInt (bass.compCharacter->load())));
+        const double threshold = (double) bass.compThreshold->load(), ratio = (double) bass.compRatio->load();
         bassComp.tap = compWatched.load (std::memory_order_relaxed) ? &compTap : nullptr;   // the picture on screen, or nobody
-        bassComp.process (channels[0], numSamples, amount, span,
-                          static_cast<core::BassComp::Attack>    (juce::jlimit (0, 2, juce::roundToInt (bass.compAttack->load()))),
-                          static_cast<core::BassComp::Release>   (juce::jlimit (0, 2, juce::roundToInt (bass.compRelease->load()))),
-                          static_cast<core::BassComp::Character> (juce::jlimit (0, core::BassComp::characterCount - 1, juce::roundToInt (bass.compCharacter->load()))),
-                          (double) bass.compThreshold->load(), (double) bass.compRatio->load());
+        bassComp.process (channels[0], numSamples, amount, span, attack, release, character, threshold, ratio);
+        if (nch > 1 && ownProduct.chain != Chain::bass)
+        {
+            if (! compRightRan)
+            {
+                compRight.reset();
+                compRight.snapAmount (amount);
+            }
+            compRight.process (channels[1], numSamples, amount, span, attack, release, character, threshold, ratio);
+        }
+        compRightRan = nch > 1;
         compGrDb.store (bassComp.grDb.load (std::memory_order_relaxed), std::memory_order_relaxed);
         innerCut (1);   // after COMP
         nsStage[stComp] = elapsedNs (a);
