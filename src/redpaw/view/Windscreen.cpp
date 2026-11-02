@@ -652,6 +652,7 @@ void Windscreen::renderFrame (int x, int y, int w, int h, juce::uint32 target)
     world->setLights ((lightsWanted.load() & 1) != 0, (lightsWanted.load() & 2) != 0);
     const bool litNow = lit && lit();
     world->setLit (litNow);
+    world->setTempo (tempo ? tempo() : 0.0);
     if (litNow && hearing)
     {
         const auto heard = hearing();

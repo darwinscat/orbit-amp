@@ -6,6 +6,11 @@
 #include "RedGrooveControls.h"
 
 #include "../face/Console.h"
+#include "../redpaw/view/Windscreen.h"
+
+#include <juce_opengl/juce_opengl.h>
+
+#include <atomic>
 
 namespace orbitamp::redgroove
 {
@@ -23,16 +28,6 @@ private:
     juce::Rectangle<int> historyArea() const override;
 };
 
-/** WHAT SHOWS THROUGH THE DOME: for now one frame of the walker's world, the still it ships, laid over the
-    dome's whole box under the picture. Takes no click. */
-class Dome final : public juce::Component
-{
-public:
-    Dome();
-    juce::Image still;
-    void paint (juce::Graphics&) override;
-};
-
 //==============================================================================
 /** REDGROOVEBASS'S FACE over OrbitAmp's processor: the family's console (face/Console.h) laid out on the
     walker's dashboard, under its glass dome over the mushroom forest, its channels the bass's two amps. What
@@ -42,13 +37,40 @@ public:
     and its squeeze beside it, BLEND, the three effects' faders, MIDDLE's frequency across under the tones, DI/CAB,
     a ring round every knob and a reading under every control; the channel lever, the cuts' two switches and the
     cabinet's screen; LEARN's glass over the tuner. */
-class RedGrooveEditor final : public face::Console
+class RedGrooveEditor final : public face::Console,
+                              private juce::OpenGLRenderer
 {
 public:
     explicit RedGrooveEditor (AmpProcessor&);
+    ~RedGrooveEditor() override;
 
 private:
-    Dome dome;
+    // THE DOME: the walker's world (view/WalkerDrive.h) in the windscreen the rovers look through (redpaw/view/
+    // Windscreen.h), under the dashboard, in the dome's box: its gear the channel's, its pace the host's tempo where
+    // there is one, its forest breathing with the bass. Its GPU frame is drawn by this window's own context, which
+    // paints the face over it. What it shows is the machine's to say: the forest on the GPU, the 1993 landscape on
+    // the CPU, or the still the walker ships.
+    std::unique_ptr<redpaw::Windscreen> view;
+    juce::OpenGLContext gl;
+    std::atomic<int> glassX { 0 }, glassY { 0 }, glassW { 0 }, glassH { 0 };     // the dome in the editor's pixels
+    /** A walk of the walker's own, at its world's start, in the product's two gears, the horizon 57 % down the dome. */
+    static std::unique_ptr<redpaw::Drive> makeDrive();
+    void placeView();
+    void chooseLandscape (redpaw::Windscreen::Mode);
+    void chooseFrameRate (int fps);
+    void showWindowMenu();          // a right click on the glass: WINDOW and LANDSCAPE, as the settings menu has them
+    void addWindowSections (juce::PopupMenu&) override;
+    void stagePlaced() override { placeView(); }
+    // A right click on the glass is the view's menu; a left drag across it steers.
+    struct GlassClicks final : juce::MouseListener
+    {
+        std::function<void()> menu;
+        void mouseDown (const juce::MouseEvent& e) override { if (e.mods.isPopupMenu() && menu) menu(); }
+    };
+    GlassClicks glassClicks;
+    void newOpenGLContextCreated() override;
+    void renderOpenGL() override;
+    void openGLContextClosing() override;
 
     // THE BASS'S OWN CONTROLS. COMP's knob is its threshold, clockwise the deeper (0 to -48 dB); its ratio, its
     // character and its share are the walker's to hold (channels::Lineup::pinned). BLEND and DI/CAB are their

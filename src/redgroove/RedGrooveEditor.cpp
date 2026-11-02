@@ -7,8 +7,11 @@
 #include "RedGrooveLayout.h"
 #include "RedGrooveLineup.h"
 
+#include "view/WalkerDrive.h"
+
 #include "../ui/BassControls.h"
 #include "../ui/FactoryMissing.h"
+#include "../ui/Prefs.h"
 
 #include <BinaryData.h>
 
@@ -28,6 +31,13 @@ using namespace face;
 
 namespace
 {
+    /** What the dome shows, and how often — the machine's, kept with its settings: the landscape as a word, in the
+        order of Windscreen::Mode, and what the menu calls each. */
+    const juce::Identifier landscapeKey { "landscape" };
+    const juce::Identifier frameRateKey { "landscape_fps" };
+    const juce::StringArray landscapeWords { "forest", "1993", "still" };
+    const juce::StringArray landscapeNames { "The forest", "1993", "Still" };
+
     // Where the pointer is drawn on the knobs' renders: a lit slot from `inner` to `outer` of the cap's
     // radius, `width` wide — on the machined cap, clear of the knurled ring.
     constexpr ArtKnob::Pointer drivePointer { 0.30f, 0.66f, 0.06f };
@@ -249,22 +259,9 @@ void Cabin::paintStrips (juce::Graphics& g, float) const
 }
 
 //==============================================================================
-Dome::Dome()
-{
-    setInterceptsMouseClicks (false, false);
-    setOpaque (true);
-}
-
-void Dome::paint (juce::Graphics& g)
-{
-    g.fillAll (juce::Colour (0xff0b0b11));
-    if (still.isValid())
-        g.drawImage (still, getLocalBounds().toFloat(), juce::RectanglePlacement::fillDestination);
-}
-
-//==============================================================================
 RedGrooveEditor::RedGrooveEditor (AmpProcessor& p)
     : face::Console (p, std::make_unique<Cabin>(), cabinPlaces(), cabinLook()),
+      view (std::make_unique<redpaw::Windscreen> (makeDrive())),
       comp (Art::of().knobTone, tonePointer),
       blend (Art::of().knobTone, tonePointer),
       diCab (Art::of().knobTone, tonePointer),
@@ -461,9 +458,10 @@ RedGrooveEditor::RedGrooveEditor (AmpProcessor& p)
     learnGlass.onShow = [this] (bool up) { tuner.setAlpha (up ? 0.0f : 1.0f); };
 
     // THE DOME, under the dashboard: the picture's alpha is its frame.
-    dome.still = Art::still();
-    stage.addAndMakeVisible (dome, 0);
-    dome.setBounds (layout::dome.toNearestInt());
+    stage.addAndMakeVisible (*view, 0);
+    view->setBounds (layout::dome.toNearestInt());
+    view->addMouseListener (&glassClicks, false);
+    glassClicks.menu = [this] { showWindowMenu(); };
 
     // A prototype's hook for looking at the face on another channel without a hand on anything:
     // REDGROOVE_CHANNEL names one, from 0 to the last.
@@ -471,6 +469,34 @@ RedGrooveEditor::RedGrooveEditor (AmpProcessor& p)
         engine.go (c.getIntValue());
 
     showChannel();
+
+    // What the dome shows: the machine's choice, the forest unless it has said otherwise — drawn by this window's
+    // context, which paints the face over it. A GPU that will not draw it says so in the family's log.
+    view->setLogName (amp.loadedAs());
+    view->setHost (&gl);
+    view->setHearing ([&a = amp] { return a.takePlay(); });            // the forest answers the bass (WalkerDrive::hear)...
+    view->setLit ([&a = amp] { return a.viewLit(); });                   // ...unless the player said not to (prefs::viewLit)
+    view->setTempo ([&a = amp] { return (double) a.hostTempoBpm(); });   // the footfalls on the host's beat; standalone its own
+    gl.setOpenGLVersionRequired (juce::OpenGLContext::openGL3_2);
+    gl.setRenderer (this);
+    gl.setComponentPaintingEnabled (true);
+    gl.setContinuousRepainting (false);     // the view asks for each frame, at its own pace
+    gl.attachTo (*this);
+    view->setFrameRateCap ((int) prefs::store (amp.product()).get (frameRateKey, 60));
+    view->setPicture ([] { return Art::still(); });                      // STILL is the walker's own still
+    view->setMode ((redpaw::Windscreen::Mode) juce::jmax (0, landscapeWords.indexOf (prefs::store (amp.product()).get (landscapeKey, landscapeWords[0]).toString())));
+    placeView();
+}
+
+RedGrooveEditor::~RedGrooveEditor()
+{
+    view->removeMouseListener (&glassClicks);
+    gl.detach();
+}
+
+std::unique_ptr<redpaw::Drive> RedGrooveEditor::makeDrive()
+{
+    return std::make_unique<WalkerDrive> (2, 0.57);
 }
 
 Readout& RedGrooveEditor::readout (juce::Rectangle<float> box)
@@ -546,6 +572,7 @@ void RedGrooveEditor::showSelector (int channel)
         lever.setPlace (channel, true, false);
     lever.repaint();
     cabinet.refresh();
+    view->setGear (channel + 1);        // B15 walks in the first gear, SVT in the second
 }
 
 /** The number keys pull the lever: 1 is B15, 2 SVT. */
@@ -594,9 +621,94 @@ void RedGrooveEditor::webExtras (const juce::File& dir, juce::DynamicObject& kit
     webPoses.count = channels.count();
     webPoses.opening = channels.active();
     webPoses.standAt = [this] (int at) { go (at); };
+    webPoses.firstFrame = [this] (int, std::function<void (juce::Image)> done)
+    {
+        const auto box = layout::dome * 2.0f;
+        view->firstFrame (makeDrive(), juce::roundToInt (box.getWidth()), juce::roundToInt (box.getHeight()), std::move (done));
+    };
+    webPoses.live = "the dome's first frame for the channel: the walker on the GPU from its world's start, in the channel's "
+                    "gear, settled, nothing stepped (t = 0); the top poster is the channel the app opens at";
     webPoses.still = [] (int) { return Art::still(); };
     webPoses.window = layout::dome;
-    webPoses.hidden = { &dome };
+    webPoses.hidden = { view.get() };
+}
+
+//==============================================================================
+/** What the dome shows — the forest on the GPU, the 1993 landscape on the CPU, or the still — and how often; whether
+    the forest answers the bass; and full screen. The machine's, kept with its settings. */
+void RedGrooveEditor::addWindowSections (juce::PopupMenu& menu)
+{
+    const auto self = [] (Console& e) -> RedGrooveEditor& { return static_cast<RedGrooveEditor&> (e); };
+
+    if (! amp.runsInHost())
+    {
+        menu.addSectionHeader ("WINDOW");
+        addChoice (menu, "Full screen", fullScreen, [self] (Console& e) { self (e).setFullScreen (! self (e).fullScreen); });
+    }
+
+    // Where the GPU's forest cannot be had the CPU's drives instead, and the tick says what runs.
+    menu.addSectionHeader ("LANDSCAPE");
+    const auto running = view->mode();
+    for (int i = 0; i < landscapeNames.size(); ++i)
+        addChoice (menu, landscapeNames[i], (int) running == i,
+                   [self, i] (Console& e) { self (e).chooseLandscape ((redpaw::Windscreen::Mode) i); },
+                   i != (int) redpaw::Windscreen::Mode::gpu || ! view->status().gpuBroken);
+    for (const int fps : { 60, 30 })
+        addChoice (menu, juce::String (fps) + " frames a second", view->frameRateCap() == fps,
+                   [self, fps] (Console& e) { self (e).chooseFrameRate (fps); }, running != redpaw::Windscreen::Mode::still);
+    // The forest answering the bass (prefs::viewLit) — the machine's, on unless asked otherwise on this face.
+    const bool lit = prefs::viewLitByGuitar (amp.product());
+    addChoice (menu, "Lit by the bass", lit, [self, lit] (Console& e) { prefs::setViewLitByGuitar (self (e).amp.product(), ! lit); });
+}
+
+void RedGrooveEditor::showWindowMenu()
+{
+    juce::PopupMenu menu;
+    addWindowSections (menu);
+    menu.showMenuAsync (juce::PopupMenu::Options().withMousePosition());
+}
+
+void RedGrooveEditor::chooseLandscape (redpaw::Windscreen::Mode mode)
+{
+    prefs::store (amp.product()).set (landscapeKey, landscapeWords[(int) mode]);
+    view->setMode (mode);
+}
+
+void RedGrooveEditor::chooseFrameRate (int fps)
+{
+    prefs::store (amp.product()).set (frameRateKey, fps);
+    view->setFrameRateCap (fps);
+}
+
+/** Where the dome is in the editor's own pixels, for the GL thread: the stage's scale and place. */
+void RedGrooveEditor::placeView()
+{
+    const auto at = (layout::dome * stageScale() + stageOrigin()).toNearestInt();
+    glassX.store (at.getX());
+    glassY.store (at.getY());
+    glassW.store (at.getWidth());
+    glassH.store (at.getHeight());
+    gl.triggerRepaint();
+}
+
+void RedGrooveEditor::newOpenGLContextCreated()
+{
+    view->hostContextCreated();
+}
+
+void RedGrooveEditor::renderOpenGL()
+{
+    const float k = (float) gl.getRenderingScale();
+    const int fw = juce::roundToInt ((float) getWidth() * k), fh = juce::roundToInt ((float) getHeight() * k);
+    juce::OpenGLHelpers::clear (juce::Colours::black);
+
+    const auto glass = juce::Rectangle<float> ((float) glassX.load(), (float) glassY.load(), (float) glassW.load(), (float) glassH.load()) * k;
+    view->hostRender (glass.toNearestInt(), fw, fh);
+}
+
+void RedGrooveEditor::openGLContextClosing()
+{
+    view->hostContextClosing();
 }
 
 } // namespace orbitamp::redgroove

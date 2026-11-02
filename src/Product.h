@@ -101,6 +101,10 @@ struct Product
         reaches its low B and a drop-A's A0. */
     double tunerLowestHz = core::PitchTracker::guitarLowestHz;
 
+    /** WHETHER ITS VIEW ANSWERS THE PLAYING UNTIL THE PLAYER SAYS OTHERWISE (prefs::viewLit): the family's views do
+        not; RedGrooveBass's walker does (the owner, 02.11: the forest breathes with the bass from the first note). */
+    bool viewLitByDefault = false;
+
     /** WHICH STANDARD EQ ITS AMP'S CONSOLE IS (params::EqStandard): the bass's on the bass's chain, the guitar's on
         every other. Read from the chain for now, and asked HERE and nowhere else — the console's face
         (EqSection::setStandard) and the processor's EQ (AmpProcessor::bassEq) both come to this one question — so the

@@ -138,7 +138,7 @@ inline const juce::Identifier viewLit { "view_lit_by_guitar" };
 inline std::atomic<bool>& litCache (const Product& p)
 {
     static PerProduct<std::atomic<bool>> cached;
-    return cached.of (p.name, [&p] { return getBool (p, viewLit, false); });
+    return cached.of (p.name, [&p] { return getBool (p, viewLit, p.viewLitByDefault); });
 }
 
 inline bool viewLitByGuitar (const Product& p)              { return litCache (p).load (std::memory_order_relaxed); }
