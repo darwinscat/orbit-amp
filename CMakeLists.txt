@@ -1378,9 +1378,9 @@ add_amp(AmberPawAmp   CODE Ambp    BY_NAME
 
 # OrbitBass — the bass's workstation: OrbitAmp's frame and blocks over the bass's chain (src/Product.h,
 # Chain::bass) — mono, no delay, no reverb. It plays bass packs alone, ORBITBASS_SET's, and Darwin's Cat's
-# own cabinets. Not in the family's release (installer/family.ini), and asked for by name; OrbitAmp's
-# icon until it has its own.
-add_amp(OrbitBass     CODE Obas    BY_NAME    ICON OrbitAmp
+# own cabinets. Not in the family's release (installer/family.ini), and asked for by name. Its icon its own
+# (the owner, 02.11): OrbitAmp's orbit doubled, a second ring inside it.
+add_amp(OrbitBass     CODE Obas    BY_NAME
     SOURCES   ${ORBITBASS_SOURCES}
     LIBRARIES
         OrbitAmpData                 # the mark, the notice, the disclaimer — BinaryData::*

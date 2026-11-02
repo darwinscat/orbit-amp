@@ -53,6 +53,7 @@ Chrome::Chrome (AmpProcessor& processor)
     brand.firstLineH = firstLineH;
     brand.wordmarkH  = 26.0f;
     brand.bylineH    = 16.0f;
+    brand.doubledOrbit = processor.product().chain == Chain::bass;   // OrbitBass's own mark (TwoLineBrand)
 
     for (auto* b : { &undo, &redo, &gear })
     {
