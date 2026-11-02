@@ -66,6 +66,7 @@ namespace
         if (product.opening != nullptr)
             product.opening (product, opening);
         opening.stereoMode = environment;
+        opening.packTones  = product.chain == Chain::bass;     // its pack's tone, where the pack opens it
 
         auto all = params::createLayout (product.name, opening);
         if (product.addParameters != nullptr)
@@ -874,7 +875,8 @@ void AmpProcessor::pumpDeviceWork()
         const auto mode = static_cast<params::EqMode> (juce::roundToInt (
             apvts.getRawParameterValue (params::blockEqMode (blk))->load()));
 
-        block.setRaw (mode == params::EqMode::ours || bassEq());   // the bass's standard's tone is always ours
+        // On the bass, no choice: a pack with a tone of its own plays it, and one with none the bass's standard.
+        block.setRaw (bassEq() ? ! block.hasWearableTone() : mode == params::EqMode::ours);
         block.applySelectors (selectors);
         block.setGain (gainParam->load(), smoothParam->load() > 0.5f, turbo);
 
@@ -1731,14 +1733,17 @@ void AmpProcessor::updateEqSettings() noexcept
 
         const auto& blockFor = blockAt ((size_t) l);
 
-        // THE BASS'S EQ IS THE SGT-DI'S (params::bassMidMinHz): ours always, BASS, MIDDLE at its swept frequency and
-        // TREBLE — the second bell and the scalpel are held out of its sound.
+        // THE BASS'S EQ IS THE SGT-DI'S (params::bassMidMinHz): BASS, MIDDLE at its swept frequency and TREBLE — the
+        // second bell and the scalpel are held out of its sound. Ours on a pack with no tone of its own; on a pack with
+        // one, the pack's plays (the owner, 02.11: two kinds of EQ, the rig's and the standard) and ours stands flat.
         if (bassEq())
         {
             s.b1Hz = juce::jlimit ((double) params::bassMidMinHz, (double) params::bassMidMaxHz, s.b1Hz);
             s.b2Db = 0.0;
             s.b3On = false;
             s.b3Db = 0.0;
+            if (blockFor.hasWearableTone())
+                s.loDb = s.b1Db = s.hiDb = 0.0;
         }
         else if (mode == params::EqMode::native && blockFor.hasWearableTone())
         {

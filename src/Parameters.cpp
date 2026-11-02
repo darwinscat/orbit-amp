@@ -27,7 +27,7 @@ namespace
     };
 
     BlockDefaults blockDefaults (const juce::String& product, device::DeviceLibrary::Slot slot,
-                                 const juce::String& wantedName, const char* capture)
+                                 const juce::String& wantedName, const char* capture, bool packTones)
     {
         BlockDefaults d;
         const auto packs = device::DeviceLibrary::scan (product, slot);
@@ -50,6 +50,8 @@ namespace
 
         if (own >= 0)
             d.device = own;
+        if (packTones && d.device < packs.size())      // ...or the tones where the pack that plays starts them (Opening::packTones)
+            d.meas = device::PackOpening::of (packs.getReference (d.device)).meas;
         return d;
     }
 
@@ -177,7 +179,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout (const juce::St
     // these defaults (channels/Engine.cpp, setUpChain) and find them already so.
     //
     // The device a fresh instance opens on, and everything the engine's pack says about starting it.
-    const auto preampDef = blockDefaults (product, device::DeviceLibrary::ampSlot, enginePack, opening.capture);
+    const auto preampDef = blockDefaults (product, device::DeviceLibrary::ampSlot, enginePack, opening.capture, opening.packTones);
 
     using Bool   = juce::AudioParameterBool;
     using Choice = juce::AudioParameterChoice;

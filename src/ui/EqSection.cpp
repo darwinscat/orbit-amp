@@ -180,7 +180,12 @@ void EqSection::buildBands (std::vector<Band> newBands)
         // Every band's number under its dial, typed there too (Oleh, 24.10): ours in decibels, a
         // device's on the amp-panel's 0-10, the scale its GAIN reads in — its parameter is a
         // normalised place on the device's dial.
-        if (b.showsDb)
+        if (b.reading != nullptr)
+        {
+            k->textForValue = b.reading;
+            k->setHint (b.label + ":   where the band it moves stands, in Hz");
+        }
+        else if (b.showsDb)
         {
             k->textForValue = [] (double v) { return (v > 0.0 ? "+" : "") + juce::String (v, 1); };
             k->setHint (b.label + ":   the band's gain, in dB");
