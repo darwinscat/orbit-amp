@@ -28,10 +28,11 @@ namespace orbitamp::core
         the signal passes bit for bit), 1 all of the signal compressed, between the compressed signal over the clean one,
         sample-aligned (no lookahead, no latency).
       - MAKE-UP is automatic and LEVEL-NEUTRAL (the owner, 31.10: BLEND changes evenness, not loudness): it gives back
-        exactly what the curve takes from a note at the REFERENCE — a steady note at -18 dBFS RMS (`referenceDb`), which
-        each detector reads as its squeeze settles there (`readsDb`: by CHARACTER, ATTACK and RELEASE, measured). A note
-        there keeps its level at any BLEND, at every setting; a quieter one comes up a little, a louder one goes down a
-        little. It glides as the squeeze does — up at the attack's pace, down at the release's.
+        what the squeeze has TAKEN FROM THIS PLAYING — its average over `makeupAverageMs`, followed only while a note
+        sounds and held through the pauses (the owner, 02.11: a threshold still over every note gave make-up from the
+        reference note's curve and drove the amp into distortion). A threshold no note reaches gives nothing back; a
+        steady note keeps its level at any BLEND. It glides as the squeeze does — up at the attack's pace, down at the
+        release's. (`makeupDbFor`, the curve's take from the reference note, stays for the picture and the gates.)
       - Every move GLIDES: the blend over 20 ms for its whole travel, the threshold over 20 ms for its 48 dB, the ratio
         over 20 ms for 1.5:1..10:1 — a drag, a recall or automation is never a step.
       - CHARACTER chooses the detector: SMOOTH hears the level's RMS over 10 ms, PUNCHY its peaks. (The old law raised
@@ -68,6 +69,9 @@ public:
     static constexpr double releaseFastMs     = 80.0,  releaseSlowMs = 400.0;
     static constexpr double amountGlideMs     = 20.0;   // the knob's whole travel
     static constexpr double holdMs            = 500.0;  // AUTO's memory of the squeeze
+    static constexpr double makeupAverageMs   = 400.0;  // the make-up: the squeeze taken, averaged over this...
+    static constexpr double presenceDb        = -50.0;  // ...while a note sounds, its peak over this (dBFS)
+    static constexpr double presenceReleaseMs = 150.0;  // how long a note's peak is held for it
     static constexpr double holdFullDb        = 6.0;    // ...held this deep, the release is at its slowest
     static constexpr double cadenceMs         = 1.0;    // how often the knob and the release reach the compressor
     static constexpr double warmMs            = 30.0;   // a fresh start is fed, not heard, three attacks and this long...
@@ -213,6 +217,9 @@ public:
         warmSamples = (3.0 * attackMedMs + warmMs) * 0.001 * fs;   // the attack's own, from the first apply
         warmFade    = warmFadeMs * 0.001 * fs;
         holdK     = 1.0 - std::exp (-1.0 / (holdMs * 0.001 * fs));
+        takenK    = 1.0 - std::exp (-1.0 / (makeupAverageMs * 0.001 * fs));
+        envDecay  = std::exp (-1.0 / (presenceReleaseMs * 0.001 * fs));
+        presence  = std::pow (10.0, presenceDb / 20.0);
         key.assign ((size_t) block, 0.0f);
         dry.assign ((size_t) block, 0.0f);
         work.assign ((size_t) block, 0.0f);
@@ -246,6 +253,8 @@ public:
         clock       = 0;
         sinceStart  = 0;
         makeupNowDb = 0.0;
+        takenDb     = 0.0;
+        signalEnv   = 0.0;
         snapMakeup  = false;
         running     = false;
         paramsValid = false;
@@ -338,6 +347,13 @@ public:
                 heldDb += holdK * (std::max (0.0, -(double) gr[(size_t) k]) - heldDb);
                 amt = target > amt ? std::min (target, amt + glideStep) : std::max (target, amt - glideStep);
 
+                // THE MAKE-UP IS WHAT THE SQUEEZE HAS TAKEN FROM THIS PLAYING: its average over makeupAverageMs, followed
+                // only while a note sounds (its peak over presenceDb) and held through the pauses — so a threshold over
+                // every note gives nothing back and drives nothing harder into the amp (the owner, 02.11).
+                signalEnv = std::max ((double) std::abs (dry[(size_t) k]), signalEnv * envDecay);
+                if (signalEnv > presence)
+                    takenDb += takenK * (std::max (0.0, -(double) gr[(size_t) k]) - takenDb);
+                makeupTargetDb = takenDb;
                 makeupNowDb += (makeupTargetDb - makeupNowDb) * (makeupTargetDb > makeupNowDb ? makeupUpK : makeupDownK);
                 const float squeezed = work[(size_t) k];   // after the squeeze, before the make-up: the picture's
                 work[(size_t) k] *= (float) std::exp (makeupNowDb * 0.11512925464970228);   // ln 10 / 20
@@ -433,15 +449,13 @@ private:
         felitronics::dynamics::CompressorParams p;
         p.thresholdDb = thrAt;   // the line is where the detector works, in either character (no offset any more)
 
-        // The make-up's number — what the curve takes from the reference note, as this character's detector reads it
-        // (level-neutral: see the class comment) — and the paces it glides at.
-        makeupTargetDb = makeupDbFor (thrAt, ratioAt, character, attack, slowness);
+        // The paces the make-up glides at; its number is what the squeeze takes from the playing (process).
         makeupUpK      = 1.0 - std::exp (-1.0 / (attackMsOf (character, attack) * 0.001 * fs));
         makeupDownK    = 1.0 - std::exp (-1.0 / (releaseMs * 0.001 * fs));
         warmSamples    = (3.0 * attackMsOf (character, attack) + warmMs) * 0.001 * fs;
         if (snapMakeup)
         {
-            makeupNowDb = makeupTargetDb;
+            makeupNowDb = takenDb;
             snapMakeup  = false;
         }
         p.ratio       = ratioAt;
@@ -484,6 +498,7 @@ private:
     long long clock = 0, sinceStart = 0;
     double warmSamples = 960.0, warmFade = 720.0;
     double makeupNowDb = 0.0, makeupTargetDb = 0.0, makeupUpK = 0.001, makeupDownK = 0.001;
+    double takenDb = 0.0, takenK = 0.0001, signalEnv = 0.0, envDecay = 0.999, presence = 0.003;   // the make-up's measure
     bool   snapMakeup = false;
     int    block = 0, cadence = 48;
     bool   ready = false, running = false, paramsValid = false;
