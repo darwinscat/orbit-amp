@@ -495,7 +495,7 @@ Console::Console (AmpProcessor& p, std::unique_ptr<Picture> pic, const Places& w
     gateDoor.setBounds (box (places.gateDoor));
     if (places.gateDoorAngle != 0.0f)
         gateDoor.setTransform (juce::AffineTransform::rotation (places.gateDoorAngle, places.gateDoor.getCentreX(), places.gateDoor.getCentreY()));
-    limiterDoor.set ({}, "LIMITER");
+    limiterDoor.set ({}, places.limiterWord);
     limiterDoor.onClick = [this] { showOutputMenu(); };
     limiterDoor.setBounds (box (places.limiterDoor));
     if (places.limiterDoorAngle != 0.0f)

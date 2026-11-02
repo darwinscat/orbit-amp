@@ -7,6 +7,7 @@
 #include "RedGrooveLayout.h"
 #include "RedGrooveLineup.h"
 
+#include "../ui/BassControls.h"
 #include "../ui/FactoryMissing.h"
 
 #include <BinaryData.h>
@@ -137,7 +138,7 @@ namespace
         // No REVERB, DELAY or CAB plates. CAB's box is the cabinet's screen: a dropped IR's tag stands over it,
         // and a right click on it opens the cabinets' window.
         p.plates = false;
-        p.sliderNames[2] = { 1246.0f, 707.5f, 251.5f, 49.0f };
+        p.sliderNames[2] = cabinetScreen;
 
         p.faderCapLength = faderCapLength;
         p.inFader  = inFaderSlot.withSizeKeepingCentre (faderWidth, inFaderSlot.getHeight());
@@ -157,7 +158,8 @@ namespace
         p.lamps[limiterLamp] = around ({ limiterSlot.getX() + 14.0f, limiterSlot.getCentreY() }, 14.0f, 14.0f);
         p.gateDoor    = gateSlot.withTrimmedLeft (24.0f).withTrimmedRight (2.0f);
         p.limiterDoor = limiterSlot.withTrimmedLeft (24.0f).withTrimmedRight (2.0f);
-        p.doorsFit = true;              // LIMITER is wider than its slot leaves it: set condensed
+        p.doorsFit = true;              // set condensed into their slots, where wider
+        p.limiterWord = "LIMIT";        // ...and LIMITER's door says LIMIT, as the plate has room for
 
         p.emblemFace = { emblemFace.begin(), emblemFace.end() };
         p.emblemMark = emblemMark;
@@ -265,7 +267,11 @@ RedGrooveEditor::RedGrooveEditor (AmpProcessor& p)
       blend (Art::of().knobTone, tonePointer),
       diCab (Art::of().knobTone, tonePointer),
       octave (Art::of().faderCap), envelope (Art::of().faderCap), chorus (Art::of().faderCap), midFreq (Art::of().faderCap),
-      squeeze ([&p] { return p.compGrDb.load (std::memory_order_relaxed); })
+      squeeze ([&p] { return p.compGrDb.load (std::memory_order_relaxed); }),
+      lever (cabinInk(), { "B15", "SVT" }, layout::leverPlaces, layout::leverX, layout::leverNames, layout::leverBox.getPosition()),
+      lowCut (cabinInk(), "5 STR", "4 STR"),
+      highCut (cabinInk(), "FINGERS", "SLAP"),
+      cabinet (cabinInk())
 {
     // Everything this constructor sets is the face settling onto the state, not a player's edit.
     const felitronics::appkit::CompareHistory::ScopedSuppress settling (amp.history);
@@ -401,6 +407,57 @@ RedGrooveEditor::RedGrooveEditor (AmpProcessor& p)
     bindTravel (midFreq, midId, midTravel, midHz, [&midValue] (float hz) { midValue.set (hertz (juce::jlimit (params::bassMidMinHz, params::bassMidMaxHz, hz))); });
     sayLever (midFreq, "MIDDLE", [this, midId] { return getParam (midId.toRawUTF8()); });
 
+    // THE CHANNEL LEVER: B15 or SVT — the gear and everything it was left with.
+    addToStage (lever);
+    lever.setBounds (layout::leverBox.toNearestInt());
+    lever.handLight = handLight;
+    lever.onPlace   = [this] (int at) { go (at); };
+    lever.onRelease = [this] { showChannel(); };       // held, it follows the hand; let go, it follows the state
+    lever.setComponentID ("lever");
+
+    // THE CUTS' SWITCHES: the HPF by the strings, the LPF by the hand — both always in (channels::Lineup::pinned), the
+    // switch choosing between their positions; a right click on either its positions' frequencies.
+    const auto switchAt = [this] (SlideSwitch& sw, juce::Rectangle<float> slot, const char* id)
+    {
+        const auto box = juce::Rectangle<float> (2.0f * layout::cutWordRoom + 10.0f, slot.getHeight() + 2.0f * layout::cutWordsAbove + 6.0f)
+                             .withCentre ({ slot.getCentreX(), slot.getCentreY() - layout::cutWordsAbove });
+        sw.slot = slot - box.getPosition();
+        sw.wordsY = slot.getY() - layout::cutWordsAbove - box.getY();
+        sw.wordRoom = layout::cutWordRoom;
+        sw.handLight = handLight;
+        addToStage (sw);
+        sw.setBounds (box.toNearestInt());
+        bindSwitch (sw, id);
+    };
+    switchAt (lowCut, layout::lowCutSlot, params::bassHpf);
+    switchAt (highCut, layout::highCutSlot, params::bassLpf);
+    lowCut.onMenu  = [this] { bass::Menu m; bass::addHpf (m, m.items, amp.apvts); bass::show (std::move (m), &lowCut); };
+    highCut.onMenu = [this] { bass::Menu m; bass::addLpf (m, m.items, amp.apvts); bass::show (std::move (m), &highCut); };
+    lowCut.setComponentID ("lowCut");
+    highCut.setComponentID ("highCut");
+
+    // THE CABINET'S SCREEN: the cabinet that plays, by its name — OFF while it is out of the sound.
+    cabinet.name = [this]
+    {
+        if (! channels.cabinetOn())
+            return juce::String ("OFF");
+        const int playing = channels.cabinet();
+        return playing >= 0 ? Channels::cabinetName (channels.cabinets().getReference (playing)).toUpperCase() : juce::String();
+    };
+    cabinet.onClick = [this] { showCabinetList(); };
+    cabinet.onMenu  = [this] { showCabs(); };
+    cabinet.handLight = handLight;
+    addToStage (cabinet);
+    cabinet.setBounds (layout::cabinetScreen.reduced (3.0f).toNearestInt());
+    cabinet.setComponentID ("cabinet");
+    cabinet.refresh();
+
+    // LEARN — from GATE's menu, or a double click on its lamp — takes the tuner's glass while it runs.
+    addToStage (learnGlass);
+    learnGlass.setBounds (layout::tunerScreen.toNearestInt());
+    learnGlass.inset = { 10.0f, 4.0f };
+    learnGlass.onShow = [this] (bool up) { tuner.setAlpha (up ? 0.0f : 1.0f); };
+
     // THE DOME, under the dashboard: the picture's alpha is its frame.
     dome.still = Art::still();
     stage.addAndMakeVisible (dome, 0);
@@ -443,6 +500,64 @@ void RedGrooveEditor::bindTravel (Control& control, const juce::String& paramId,
     a->sendInitialUpdate();
 }
 
+/** A SWITCH ON ITS PARAMETER: where it stands, the switch shows; a hand's throw is one step of the history. */
+void RedGrooveEditor::bindSwitch (SlideSwitch& sw, const char* paramId)
+{
+    auto* a = follow (paramId, [&sw] (float v) { sw.setPosition (juce::roundToInt (v), false); });
+    sw.onFlip = [a] (int to) { a->setValueAsCompleteGesture ((float) to); };
+    a->sendInitialUpdate();
+}
+
+/** THE CABINETS, ON A CLICK ON THE SCREEN: the build's own under their shelf's folders, then the player's own, the one
+    that plays ticked. A pick plays it, and brings the cabinet back into the sound. */
+void RedGrooveEditor::showCabinetList()
+{
+    juce::PopupMenu menu;
+    const auto& all = channels.cabinets();
+    const int playing = channels.cabinetOn() ? channels.cabinet() : -1;
+    juce::String heading = "-";
+    for (int i = 0; i < all.size(); ++i)
+    {
+        const auto folder = i < channels.factoryCabinets() ? channels.cabinetFolder (i) : juce::String ("YOUR OWN");
+        if (folder != heading)
+        {
+            heading = folder;
+            menu.addSectionHeader (folder.isEmpty() ? juce::String ("DARWIN'S CAT") : folder.toUpperCase());
+        }
+        menu.addItem (i + 1, Channels::cabinetName (all.getReference (i)), true, i == playing);
+    }
+    menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&cabinet),
+                        [safe = juce::Component::SafePointer<RedGrooveEditor> (this)] (int picked)
+                        {
+                            if (safe == nullptr || picked <= 0)
+                                return;
+                            safe->channels.chooseCabinet (picked - 1);
+                            safe->channels.setCabinetOn (true);
+                            safe->cabinet.refresh();
+                        });
+}
+
+/** The lever goes where the state's channel is — unless the hand holds it. */
+void RedGrooveEditor::showSelector (int channel)
+{
+    if (! lever.isHeld() && lever.getPlace() != channel)
+        lever.setPlace (channel, true, false);
+    lever.repaint();
+    cabinet.refresh();
+}
+
+/** The number keys pull the lever: 1 is B15, 2 SVT. */
+bool RedGrooveEditor::channelKey (const juce::KeyPress& key)
+{
+    const auto c = (juce::juce_wchar) key.getKeyCode();
+    const int at = c >= '1' && c < '1' + lever.numPlaces() ? (int) (c - '1') : -1;
+    if (at < 0)
+        return false;
+    if (! lever.isHeld())
+        lever.setPlace (at, true);
+    return true;
+}
+
 /** THE TONES' RINGS GO WITH THEIR KNOBS: each round its knob where the rows put it, the size the row gives it; a ring
     whose knob the channel has not, hidden with it. */
 void RedGrooveEditor::stripsLaid (const face::Strips& laid)
@@ -460,7 +575,7 @@ void RedGrooveEditor::stripsLaid (const face::Strips& laid)
 
 /** The walker's own part of the site's demo (Console::webExtras): the dome — the box the world is drawn in — the
     still it ships, and a poster for each channel, that still through the glass. */
-void RedGrooveEditor::webExtras (const juce::File& dir, juce::DynamicObject& places, juce::DynamicObject&)
+void RedGrooveEditor::webExtras (const juce::File& dir, juce::DynamicObject& kit, juce::DynamicObject&)
 {
     writeForWeb (dir.getChildFile ("still.webp"), Art::still());
 
@@ -469,10 +584,10 @@ void RedGrooveEditor::webExtras (const juce::File& dir, juce::DynamicObject& pla
     window->setProperty ("y", layout::dome.getY());
     window->setProperty ("w", layout::dome.getWidth());
     window->setProperty ("h", layout::dome.getHeight());
-    places.setProperty ("window", juce::var (window));
+    kit.setProperty ("window", juce::var (window));
     juce::Array<juce::var> stills;
     stills.add ("still.webp");
-    places.setProperty ("stills", stills);
+    kit.setProperty ("stills", stills);
 
     webPoses.count = channels.count();
     webPoses.opening = channels.active();

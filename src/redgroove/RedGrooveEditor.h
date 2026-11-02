@@ -40,7 +40,8 @@ public:
     and OUT, GATE and LIMITER, the tuner, the maker's plate; what it has not: REVERB, DELAY and CAB's plates,
     HPF and LPF (Console::Places::plates, filterKeys). What is the walker's own over it: COMP's knob, its threshold,
     and its squeeze beside it, BLEND, the three effects' faders, MIDDLE's frequency across under the tones, DI/CAB,
-    a ring round every knob and a reading under every control. */
+    a ring round every knob and a reading under every control; the channel lever, the cuts' two switches and the
+    cabinet's screen; LEARN's glass over the tuner. */
 class RedGrooveEditor final : public face::Console
 {
 public:
@@ -68,8 +69,20 @@ private:
     void bindTravel (Control&, const juce::String& paramId, std::function<float (float)> toTravel,
                      std::function<float (float)> toPlain, std::function<void (float)> shown);
 
+    // THE WALKER'S HAND ON THE CHANNELS AND THE CUTS. The lever picks the gear — and the number keys, a Program
+    // Change, a host's CHANNEL with it; the two switches throw 5 STR / 4 STR and FINGERS / SLAP, each its frequency
+    // on its right click; the cabinet's screen names the cabinet that plays, its list on a click, the cabinets'
+    // window on a right click.
+    ChannelLever lever;
+    SlideSwitch lowCut, highCut;
+    CabinetScreen cabinet;
+    void bindSwitch (SlideSwitch&, const char* paramId);
+    void showCabinetList();
+
+    void showSelector (int channel) override;
+    bool channelKey (const juce::KeyPress&) override;
     void stripsLaid (const face::Strips&) override;     // the tones' rings go round their knobs where they stand now
-    void webExtras (const juce::File& dir, juce::DynamicObject& places, juce::DynamicObject& world) override;
+    void webExtras (const juce::File& dir, juce::DynamicObject& kit, juce::DynamicObject& world) override;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (RedGrooveEditor)
 };

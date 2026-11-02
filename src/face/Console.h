@@ -131,6 +131,7 @@ public:
         juce::Rectangle<float> version, load, memory, preset, gateDoor, limiterDoor;
         float gateDoorAngle = 0.0f, limiterDoorAngle = 0.0f;    // GATE and LIMITER turned about their middles, radians
         bool doorsFit = false;                              // ...set condensed into their boxes, as tall, where wider (Legend::fit)
+        const char* limiterWord = "LIMITER";                // what LIMITER's door says: RedGrooveBass's says LIMIT, as its plate has room for
         float readingPx = stage::px11;                      // what CPU and MEM are written at...
         bool readingsFit = false;                           // ...set condensed into their boxes, as tall, where wider (Legend::fit)
         bool tunerStrip = false;                            // the tuner in one low line (TunerFace::setStrip)...
@@ -464,7 +465,6 @@ private:
     // cabinet that is playing handed out as the IR file it is, files taken in, and one of the player's
     // own renamed or removed.
     std::unique_ptr<juce::FileChooser> cabChooser;
-    void showCabs();
     void saveCab();
     void chooseCabsToAdd();
     void renameCab();
@@ -504,6 +504,9 @@ protected:
     LearnGlass learnGlass { learner, humLearner };
     void startGateLearn();
     void startHumLearn();
+
+    /** THE CABINETS' WINDOW (Cabs.h), as a right click on CAB opens it — for a face whose cabinet is chosen its own way. */
+    void showCabs();
 
     /** A KEY OF THE SIX THE FACE TAKES FOR ITSELF, under a name of its own: the console neither lights it
         nor answers it from then on — what it does and whether it is lit are the face's. */

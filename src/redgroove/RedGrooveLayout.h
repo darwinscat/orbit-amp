@@ -8,6 +8,7 @@
 #include <juce_graphics/juce_graphics.h>
 
 #include <array>
+#include <vector>
 
 /** WHERE EVERYTHING STANDS ON THE WALKER'S DASHBOARD, in the stage's own 1672 x 941 — measured off its render
     (resources/redgroove/dashboard.webp, drawn at twice the stage), which was painted after the layout's drawing
@@ -94,11 +95,28 @@ inline constexpr float midFreqCap = 12.0f;
 inline constexpr float valueY = 882.0f, toneValueY = 822.0f, midFreqValueY = 849.0f, levelValueY = 855.0f;
 inline constexpr float diCabNameY = 778.0f, diCabValueY = 886.0f;
 
-// The bottom edge under the panels: PRESET, the version, MEM and CPU — for now.
-inline constexpr float footY = 928.0f;
-inline const juce::Rectangle<float> presetPlace  { 150.0f, footY - 12.0f, 130.0f, 24.0f };
-inline const juce::Rectangle<float> versionPlace { 776.0f, footY - 12.0f, 120.0f, 24.0f };
-inline const juce::Rectangle<float> memoryPlace  { 1190.0f, footY - 12.0f, 120.0f, 24.0f };
-inline const juce::Rectangle<float> loadPlace    { 1320.0f, footY - 12.0f, 120.0f, 24.0f };
+// PRESET, the version, MEM and CPU: on the sill over the maker's two plates — PRESET and the version over POWERED BY,
+// MEM and CPU over DARWIN'S CAT.
+inline constexpr float sillY = 586.0f;
+inline const juce::Rectangle<float> presetPlace  { 560.0f, sillY - 14.0f, 116.0f, 28.0f };
+inline const juce::Rectangle<float> versionPlace { 682.0f, sillY - 14.0f, 84.0f, 28.0f };
+inline const juce::Rectangle<float> memoryPlace  { 910.0f, sillY - 14.0f, 124.0f, 28.0f };
+inline const juce::Rectangle<float> loadPlace    { 1040.0f, sillY - 14.0f, 72.0f, 28.0f };
+
+// CHANNEL: the lever's slot left in the AMP's panel, its two places from the top — B15, SVT — the first's name over
+// the slot, the second's under it: beside it there is no room short of COMP's socket.
+inline constexpr float leverX = 189.5f;
+inline const std::vector<float> leverPlaces { 766.0f, 829.0f };
+inline const std::vector<juce::Point<float>> leverNames { { leverX, 729.0f }, { leverX, 866.0f } };
+inline const juce::Rectangle<float> leverBox { 158.0f, 712.0f, 64.0f, 170.0f };
+
+// THE CUTS' SWITCHES, right of DI/CAB: the HPF's by the strings over the LPF's by the hand, each a slot the picture
+// paints, its two words over it.
+inline const juce::Rectangle<float> lowCutSlot  { 1389.0f, 788.5f, 52.0f, 28.0f };
+inline const juce::Rectangle<float> highCutSlot { 1389.0f, 862.0f, 52.0f, 28.0f };
+inline constexpr float cutWordsAbove = 14.0f, cutWordRoom = 78.0f;
+
+// THE CABINET'S SCREEN, across the top of its panel.
+inline const juce::Rectangle<float> cabinetScreen { 1246.0f, 707.5f, 251.5f, 49.0f };
 
 } // namespace orbitamp::redgroove::layout
