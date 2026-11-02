@@ -497,10 +497,43 @@ void AmpEditor::showTunerMenu (juce::Point<int> screenPos)
     auto* mute = amp.apvts.getParameter (params::tunerMute);
     juce::PopupMenu m;
     m.addItem (1, "MUTE", true, mute->getValue() > 0.5f);
+
+    // How it shows the note — the needle, a strobe, or every string of a strum — and the strings the polyphonic one
+    // reads, in its menu as on the faces (the owner, 03.11: switched with a right click), as well as in SETUP.
+    using Display = prefs::TunerDisplay;
+    const auto& product = amp.product();
+    const auto shown = prefs::tunerDisplay (product);
+    const std::array<std::pair<Display, const char*>, 3> displays { { { Display::needle, "Needle" }, { Display::strobe, "Strobe" },
+                                                                      { Display::poly, "Poly" } } };
+    juce::PopupMenu display;
+    for (size_t i = 0; i < displays.size(); ++i)
+        display.addItem (100 + (int) i, displays[i].second, true, shown == displays[i].first);
+    m.addSubMenu (juce::String ("Display  ") + displays[(size_t) shown].second, display);
+
+    const auto& tuned = prefs::tunerTuning (product);
+    const auto tunings = core::polyTunings (prefs::tunesBass (product));
+    juce::PopupMenu tuning;
+    for (size_t i = 0; i < tunings.size(); ++i)
+        tuning.addItem (200 + (int) i, core::polyTuningName (tunings[i]).menu, true, &tunings[i] == &tuned);
+    m.addSubMenu (juce::String ("Tuning  ") + core::polyTuningName (tuned).menu, tuning);
+
     m.showMenuAsync (juce::PopupMenu::Options().withTargetScreenArea ({ screenPos.x, screenPos.y, 1, 1 }),
-                     [safe = juce::Component::SafePointer<AmpEditor> (this), mute] (int r)
+                     [safe = juce::Component::SafePointer<AmpEditor> (this), mute, displays, tunings] (int r)
                      {
-                         if (safe == nullptr || r != 1)
+                         if (safe == nullptr)
+                             return;
+                         const auto& own = safe->amp.product();
+                         if (r >= 100 && r < 100 + (int) displays.size())
+                         {
+                             prefs::setTunerDisplay (own, displays[(size_t) (r - 100)].first);
+                             return;
+                         }
+                         if (r >= 200 && r < 200 + (int) tunings.size())
+                         {
+                             prefs::setTunerTuning (own, tunings[(size_t) (r - 200)]);
+                             return;
+                         }
+                         if (r != 1)
                              return;
                          auto* p = mute;
                          safe->amp.history.beginGesture();
