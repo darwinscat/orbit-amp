@@ -22,10 +22,12 @@ namespace orbitamp::redgroove
      2. THE SCENE — the ground (a polar lattice around the eye out to 420 m, its height from the
         heightfield, the moss's detail, the pools, the sun low on the horizon, the fog), the mushrooms
         (nine instanced draws, three shapes in three classes, from the world's instance lists, which follow
-        the walker), then the sky over what is left: violet above, rust at the horizon, the dim red sun on
-        it, faint stars.
-     3. THE GLOW — a soft halo over each cap, added over everything.
-    The legs, the drifting spores and the spore bursts are the prototype's too and come next.
+        the walker; the knee-high caps under a footprint flattened), the walker's two front legs (a femur, a
+        knee joint, a shin and a foot pad each, lathe pieces under the IK's bones), then the sky over what is
+        left: violet above, rust at the horizon, the dim red sun on it, faint stars.
+     3. THE GLOW — a soft halo over each cap, the spore bursts (a footfall's puff, an attack's sparks), then
+        the drifting spores in a box ahead of the glass, streaking with the pace; all added over everything.
+    The bass's breath, an attack's flash and its glow are the world's (uBreath, uHit, uHitGlow).
 
     The camera's field follows the frame's aspect (fieldFor), the horizon sits where it is asked to
     (setHorizon), and the gait's heave, pitch, nod and roll are the camera's. Draws into an offscreen frame
@@ -73,7 +75,7 @@ private:
         std::uint32_t id = 0;
         int uniform (const char* name) const;
     };
-    Program ground, mush, splat, halo, sky;
+    Program ground, mush, splat, halo, sky, leg, spore, burst;
 
     /** A class's instance list of one shape: its buffer, a vertex array with the mesh under it, one with
         the instances alone (the splats and the halos), and where the shape's triangles are. */
@@ -89,6 +91,9 @@ private:
     std::uint32_t texHeight = 0, texDetail = 0, texLight = 0, fboLight = 0;
     std::uint32_t vboGround = 0, iboGround = 0, vaoGround = 0, vboMesh = 0, iboMesh = 0, vaoEmpty = 0, vboEmpty = 0;
     int groundIndices = 0;
+    std::uint32_t vboLeg = 0, iboLeg = 0, vaoLeg = 0;
+    struct Piece { int first = 0, count = 0; };
+    Piece femur, tibia, joint, foot;
     std::uint32_t fbo = 0, fboColour = 0, fboDepth = 0;
     int fbW = 0, fbH = 0;
     int repeats = 1;

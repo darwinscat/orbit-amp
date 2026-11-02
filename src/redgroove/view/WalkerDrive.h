@@ -6,8 +6,10 @@
 #include "WalkerGl.h"
 #include "WalkerWorld.h"
 #include "../../redpaw/view/Drive.h"
+#include "../../worlds/Play.h"
 
 #include <algorithm>
+#include <cmath>
 
 namespace orbitamp::redgroove
 {
@@ -39,10 +41,34 @@ public:
     void setTurbo (bool on) override         { world.setTurbo (on); }
     void setSteer (float amount) override    { world.setSteer (amount); }
     void setTempo (double bpm) override      { world.setBpm (bpm); }
-    void step (double dt) override           { made(); world.step (dt); }
 
-    /** As the prototype settles a gear: the pace, the stride, the spores and the storm where they are going. */
-    void settle (int g, bool t) override { setGear (g); setTurbo (t); made(); world.settle(); }
+    /** THE BASS, heard: the amp's input's peak since the last step, made a level between what counts as sounding
+        and its top (worlds::Play's floorDb..topDb), is the world's level input — the caps breathe with it, and a
+        jump in it is an attack (WalkerWorld::setLevel). The pick, the Ear's click above 3 kHz, is not the bass's. */
+    void hear (float peak, float /*pick*/) override { if (lit) heard = std::max (heard, std::abs (peak)); }
+    /** Not lit by the bass: the level stays 0, and the forest is the forest as it always was. */
+    void setLit (bool on) override { lit = on; if (! on) heard = 0.0f; }
+
+    void step (double dt) override
+    {
+        made();
+        const float db = 20.0f * std::log10 (std::max (heard, 1.0e-6f));
+        world.setLevel (std::clamp ((db - worlds::Play::floorDb) / (worlds::Play::topDb - worlds::Play::floorDb), 0.0f, 1.0f));
+        heard = 0.0f;
+        world.step (dt);
+    }
+
+    /** A gear or TURBO changed is settled at once, as the prototype settles one: the pace, the stride, the spores
+        and the storm where they are going. A still otherwise keeps the walk where it is, its spores and its sway. */
+    void settle (int g, bool t) override
+    {
+        const bool changed = std::clamp (g, 1, gearCount) != world.gear() || t != world.isTurbo();
+        setGear (g); setTurbo (t);
+        if (! world.isBuilt())
+            made();
+        else if (changed)
+            world.settle();
+    }
 
     /** A fresh walk from there: the world made again with no history, standing at (x, z) on that heading. */
     void placeAt (double x, double z, double heading) override
@@ -79,6 +105,8 @@ public:
 
 private:
     const int gearCount;
+    bool lit = false;
+    float heard = 0.0f;
     WalkerWorld world;
     WalkerGl gl { world };
 

@@ -31,6 +31,7 @@ namespace
     constexpr double groundNear = 0.5, groundFar = 420.0;
     constexpr double hTan = 1.2;            // tan of the half horizontal field: ~100 degrees across at the wide aspects
     constexpr double zNear = 0.3, zFar = 3000.0;
+    constexpr int sporeCount = 4200;        // the drifting spores
 
     // The attributes' locations, shared by every program that reads them (walker-gl.js's LOC).
     constexpr GLuint locPos = 0, locNrm = 1, locUv = 2, locPart = 3, locI0 = 4, locI1 = 5, locOff = 0;
@@ -55,6 +56,25 @@ namespace
         const V3 r { r0[0] * cr + u0[0] * sr, r0[1] * cr + u0[1] * sr, r0[2] * cr + u0[2] * sr };
         const V3 u { u0[0] * cr - r0[0] * sr, u0[1] * cr - r0[1] * sr, u0[2] * cr - r0[2] * sr };
         return { f, r, u };
+    }
+
+    /** A model matrix taking the unit-length y axis from a to b (column-major), and its normal matrix. */
+    void boneMatrix (const V3& a, const V3& b, std::array<float, 16>& M, std::array<float, 9>& N) noexcept
+    {
+        double yx = b[0] - a[0], yy = b[1] - a[1], yz = b[2] - a[2];
+        double L = Js::hypot (yx, yy, yz);
+        if (! (L > 0)) L = 1e-4;            // the prototype's `|| 1e-4`
+        yx /= L; yy /= L; yz /= L;
+        const V3 ref = std::abs (yz) > 0.9 ? V3 { 1, 0, 0 } : V3 { 0, 0, 1 };
+        double xx = yy * ref[2] - yz * ref[1], xy = yz * ref[0] - yx * ref[2], xz = yx * ref[1] - yy * ref[0];
+        double xl = Js::hypot (xx, xy, xz);
+        if (! (xl > 0)) xl = 1;
+        xx /= xl; xy /= xl; xz /= xl;
+        const double zx = xy * yz - xz * yy, zy = xz * yx - xx * yz, zz = xx * yy - xy * yx;
+        const double m[16] { xx, xy, xz, 0, yx * L, yy * L, yz * L, 0, zx, zy, zz, 0, a[0], a[1], a[2], 1 };
+        const double n[9] { xx, xy, xz, yx / L, yy / L, yz / L, zx, zy, zz };
+        for (int i = 0; i < 16; ++i) M[(size_t) i] = (float) m[i];
+        for (int i = 0; i < 9; ++i) N[(size_t) i] = (float) n[i];
     }
 
     /** a * b, column-major, as the prototype multiplies its Float32Arrays: in doubles, kept as f32. */
@@ -110,7 +130,10 @@ bool WalkerGl::create()
         || ! compile (mush, "walker/mush.vert", "walker/mush.frag", "mushroom")
         || ! compile (splat, "walker/splat.vert", "walker/splat.frag", "light map")
         || ! compile (halo, "walker/halo.vert", "walker/halo.frag", "halo")
-        || ! compile (sky, "walker/sky.vert", "walker/sky.frag", "sky"))
+        || ! compile (sky, "walker/sky.vert", "walker/sky.frag", "sky")
+        || ! compile (leg, "walker/leg.vert", "walker/leg.frag", "leg")
+        || ! compile (spore, "walker/spore.vert", "walker/spore.frag", "spore")
+        || ! compile (burst, "walker/burst.vert", "walker/burst.frag", "burst"))
     {
         destroy();
         return false;
@@ -152,6 +175,7 @@ void WalkerGl::destroy()
     }
     for (auto& b : windowBase) b.set = false;
     del (vboGround, glDeleteBuffers); del (iboGround, glDeleteBuffers); del (vaoGround, glDeleteVertexArrays);
+    del (vboLeg, glDeleteBuffers); del (iboLeg, glDeleteBuffers); del (vaoLeg, glDeleteVertexArrays);
     del (vboMesh, glDeleteBuffers); del (iboMesh, glDeleteBuffers); del (vaoEmpty, glDeleteVertexArrays); del (vboEmpty, glDeleteBuffers);
     del (texHeight, glDeleteTextures); del (texDetail, glDeleteTextures); del (texLight, glDeleteTextures); del (fboLight, glDeleteFramebuffers);
     del (fboColour, glDeleteRenderbuffers); del (fboDepth, glDeleteRenderbuffers); del (fbo, glDeleteFramebuffers);
@@ -159,7 +183,7 @@ void WalkerGl::destroy()
     if (query[0] != 0) glDeleteQueries ((GLsizei) query.size(), query.data());
     query.fill (0);
     queriesWork = false; queriesPending = 0; queryNext = 0;
-    for (auto* p : { &ground, &mush, &splat, &halo, &sky }) { if (p->id != 0) glDeleteProgram (p->id); p->id = 0; }
+    for (auto* p : { &ground, &mush, &splat, &halo, &sky, &leg, &spore, &burst }) { if (p->id != 0) glDeleteProgram (p->id); p->id = 0; }
 }
 
 bool WalkerGl::makeTextures()
@@ -278,6 +302,40 @@ void WalkerGl::makeBuffers()
     }
     glBindBuffer (GL_ARRAY_BUFFER, 0);
     vaoEmpty = gpu::attributeless (vboEmpty);
+
+    // The legs: four lathe pieces in one buffer pair (the bones unit-long along y, the radii in metres), the
+    // renderer's profiles, the joint's a sphere's.
+    std::vector<std::array<double, 2>> sphere;
+    for (int i = 1; i < 12; ++i) { const double a = -W::pi / 2 + W::pi * i / 12; sphere.push_back ({ 0.56 * Js::cos (a), 0.56 * Js::sin (a) }); }
+    const std::pair<Piece*, W::Mesh> pieces[] {
+        { &femur, W::lathe ({ { 0.30, 0.0 }, { 0.44, 0.06 }, { 0.42, 0.45 }, { 0.36, 0.92 }, { 0.28, 1.0 } }, 28) },
+        { &tibia, W::lathe ({ { 0.30, 0.0 }, { 0.31, 0.05 }, { 0.25, 0.45 }, { 0.19, 0.93 }, { 0.15, 1.0 } }, 28) },
+        { &joint, W::lathe (sphere, 28) },
+        { &foot,  W::lathe ({ { 0.60, 0.0 }, { 0.95, 0.05 }, { 0.95, 0.20 }, { 0.70, 0.34 }, { 0.38, 0.46 }, { 0.30, 0.58 } }, 28) },
+    };
+    std::vector<float> legVerts;
+    std::vector<std::uint16_t> legIdx;
+    int lbase = 0;
+    for (const auto& [piece, m] : pieces)
+    {
+        *piece = { (int) legIdx.size(), (int) m.idx.size() };
+        legVerts.insert (legVerts.end(), m.verts.begin(), m.verts.end());
+        for (auto i : m.idx) legIdx.push_back ((std::uint16_t) (i + lbase));
+        lbase += (int) (m.verts.size() / 8);
+    }
+    glGenVertexArrays (1, &vaoLeg);
+    glBindVertexArray (vaoLeg);
+    glGenBuffers (1, &vboLeg);
+    glBindBuffer (GL_ARRAY_BUFFER, vboLeg);
+    glBufferData (GL_ARRAY_BUFFER, (GLsizeiptr) (legVerts.size() * sizeof (float)), legVerts.data(), GL_STATIC_DRAW);
+    glEnableVertexAttribArray (locPos); glVertexAttribPointer (locPos, 3, GL_FLOAT, GL_FALSE, 32, offset (0));
+    glEnableVertexAttribArray (locNrm); glVertexAttribPointer (locNrm, 3, GL_FLOAT, GL_FALSE, 32, offset (12));
+    glEnableVertexAttribArray (locUv);  glVertexAttribPointer (locUv, 2, GL_FLOAT, GL_FALSE, 32, offset (24));
+    glGenBuffers (1, &iboLeg);
+    glBindBuffer (GL_ELEMENT_ARRAY_BUFFER, iboLeg);
+    glBufferData (GL_ELEMENT_ARRAY_BUFFER, (GLsizeiptr) (legIdx.size() * sizeof (std::uint16_t)), legIdx.data(), GL_STATIC_DRAW);
+    glBindVertexArray (0);
+    glBindBuffer (GL_ARRAY_BUFFER, 0);
 }
 
 bool WalkerGl::ensureFrame (int w, int h)
@@ -511,6 +569,31 @@ void WalkerGl::drawScene (int rw, int rh)
             glDrawElementsInstanced (GL_TRIANGLES, L.indices, GL_UNSIGNED_SHORT, reinterpret_cast<const void*> ((std::uintptr_t) L.first * 2), L.count);
         }
 
+    {
+        // The legs: hip to knee (the femur), the knee joint, knee to ankle (the tibia), the foot on the ground.
+        glUseProgram (leg.id); setCommon (leg); setLight (leg);
+        glUniformMatrix4fv (leg.uniform ("uViewProj"), 1, GL_FALSE, VP.data());
+        glBindVertexArray (vaoLeg);
+        std::array<float, 16> M {};
+        std::array<float, 9> N {};
+        const auto piece = [&] (const Piece& r, double ring)
+        {
+            glUniformMatrix4fv (leg.uniform ("uModel"), 1, GL_FALSE, M.data());
+            glUniformMatrix3fv (leg.uniform ("uNormal"), 1, GL_FALSE, N.data());
+            glUniform1f (leg.uniform ("uRing"), (float) ring);
+            glDrawElements (GL_TRIANGLES, r.count, GL_UNSIGNED_SHORT, reinterpret_cast<const void*> ((std::uintptr_t) r.first * 2));
+        };
+        const auto translate = [&] (const V3& t) { M = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, (float) t[0], (float) t[1], (float) t[2], 1 }; };
+        for (const auto& L : s.legs)
+        {
+            const V3 footAt { L.pos[0] - s.eyeX, L.pos[1], L.pos[2] - s.eyeZ }, ankle { footAt[0], footAt[1] + 0.5, footAt[2] };
+            boneMatrix (L.hip, L.knee, M, N); piece (femur, 0.86);
+            boneMatrix (L.knee, ankle, M, N); piece (tibia, 0.12);
+            translate (L.knee); N = { 1, 0, 0, 0, 1, 0, 0, 0, 1 }; piece (joint, -1);
+            translate (footAt); piece (foot, 0.72);
+        }
+    }
+
     glUseProgram (sky.id); setCommon (sky); setLight (sky);
     set3 (sky, "uCamFwd", basis.f); set3 (sky, "uCamRight", basis.r); set3 (sky, "uCamUp", basis.u);
     glUniform2f (sky.uniform ("uTanHalf"), (float) th, (float) tv); glUniform1f (sky.uniform ("uShear"), (float) shear);
@@ -529,6 +612,35 @@ void WalkerGl::drawScene (int rw, int rh)
             glBindVertexArray (L.vaoQuad);
             glDrawArraysInstanced (GL_TRIANGLES, 0, 6, L.count);
         }
+    {
+        // The bursts: a footfall's puff of spores, an attack's sparks from the caps.
+        std::array<float, W::maxBursts * 4> b0 {}, b1 {};
+        for (int i = 0; i < W::maxBursts; ++i)
+        {
+            const auto at = (size_t) (i * 4), from = (size_t) (i * 8);
+            b0[at] = s.bursts[from]; b0[at + 1] = s.bursts[from + 1]; b0[at + 2] = s.bursts[from + 2];
+            b0[at + 3] = (float) ((double) s.bursts[from + 3] - tBase);
+            b1[at] = s.bursts[from + 4]; b1[at + 1] = s.bursts[from + 5]; b1[at + 2] = s.bursts[from + 6]; b1[at + 3] = s.bursts[from + 7];
+        }
+        glUseProgram (burst.id); setCommon (burst);
+        glUniformMatrix4fv (burst.uniform ("uView"), 1, GL_FALSE, V.data()); glUniformMatrix4fv (burst.uniform ("uProj"), 1, GL_FALSE, P.data());
+        glUniform4fv (burst.uniform ("uB0[0]"), W::maxBursts, b0.data()); glUniform4fv (burst.uniform ("uB1[0]"), W::maxBursts, b1.data());
+        glUniform1i (burst.uniform ("uPer"), W::burstParticles);
+        glBindVertexArray (vaoEmpty);
+        glDrawArrays (GL_TRIANGLES, 0, W::maxBursts * W::burstParticles * 6);
+    }
+    glDisable (GL_DEPTH_TEST);
+    if (s.spores > 0.005)
+    {
+        // The drifting spores, in a box ahead of the glass.
+        glUseProgram (spore.id); setCommon (spore);
+        glUniformMatrix4fv (spore.uniform ("uProj"), 1, GL_FALSE, P.data());
+        glUniform2f (spore.uniform ("uResolution"), (float) rw, (float) rh); glUniform2f (spore.uniform ("uTanHalf"), (float) th, (float) tv);
+        glUniform1f (spore.uniform ("uTravel"), (float) std::fmod (s.travel, 100000.0)); glUniform1f (spore.uniform ("uSpeed"), (float) s.speed);
+        glUniform1f (spore.uniform ("uSpores"), (float) s.spores); glUniform1f (spore.uniform ("uCount"), (float) sporeCount);
+        glBindVertexArray (vaoEmpty);
+        glDrawArrays (GL_TRIANGLES, 0, sporeCount * 6);
+    }
     glDisable (GL_BLEND); glDepthMask (GL_TRUE); glDisable (GL_DEPTH_TEST);
     glBindVertexArray (0);
     glUseProgram (0);

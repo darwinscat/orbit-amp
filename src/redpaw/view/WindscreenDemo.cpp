@@ -18,7 +18,9 @@
 // FrostPaw's over the ice, (ORBITAMP_VIEW_DEMO_TITAN) as the canopy over Titan's sea, and (ORBITAMP_VIEW_DEMO_WALKER) as the
 // walker's dome over the glowing forest, the whole cabin's stage — each in its product's gears unless --gears says otherwise. The
 // walker starts where its world starts it unless --at says otherwise, walks to --bpm=beats a minute where given, and puts its
-// horizon --horizon=fraction of the frame from the top (the cabin's 0.40 unless said).
+// horizon --horizon=fraction of the frame from the top (the cabin's 0.40 unless said); for matching its prototype's stills,
+// --bass=level holds a low note through the walk and --strike=seconds strikes an attack that long before its end.
+// --glass=WxH sizes the glass, any world's.
 
 #include "Windscreen.h"
 #if ORBITAMP_VIEW_DEMO_WALKER
@@ -108,7 +110,8 @@ namespace
         bool report = false, placed = false, clocked = false, fixed = false;
         double x = 0, z = 0, heading = 0, clockSeconds = 0, clockMetres = 0, driveSeconds = 0, quitSeconds = 0, findMetres = 0;
         float play = 0.0f, hit = 0.0f;
-        double bpm = 0, horizon = 0.40;
+        double bpm = 0, horizon = 0.40, bass = 0, strike = -1;
+        int glassW = glassWidth, glassH = glassHeight;
         bool lights = false;
         juce::String stillFile;
 
@@ -139,6 +142,9 @@ namespace
                 else if (a == "--lights")            lights = true;
                 else if (a.startsWith ("--bpm="))    bpm = value.getDoubleValue();
                 else if (a.startsWith ("--horizon=")) horizon = value.getDoubleValue();
+                else if (a.startsWith ("--bass="))   bass = value.getDoubleValue();
+                else if (a.startsWith ("--strike=")) strike = value.getDoubleValue();
+                else if (a.startsWith ("--glass="))  { glassW = value.upToFirstOccurrenceOf ("x", false, false).getIntValue(); glassH = value.fromFirstOccurrenceOf ("x", false, false).getIntValue(); }
             }
             if (stress > 1)
                 fixed = true;
@@ -170,8 +176,24 @@ namespace
                 if (! placed && ! ownStart)
                     d->placeAt (31500, 3000, 0);
                 d->setSteer (steer);
-                for (int i = 0, n = juce::roundToInt (driveSeconds * 60); i < n; ++i)
+                const bool striking = strike >= 0 && strike < driveSeconds;
+               #if ORBITAMP_VIEW_DEMO_WALKER
+                // As the prototype's view walks a still: the gear settled first, the held note heard from the
+                // first step on, the attack struck that long before the end.
+                auto& walker = static_cast<orbitamp::redgroove::WalkerDrive&> (*d).walker();
+                d->settle (gear, turbo);
+                walker.setBass (bass);
+               #endif
+                for (int i = 0, n = juce::roundToInt ((striking ? driveSeconds - strike : driveSeconds) * 60); i < n; ++i)
                     d->step (1.0 / 60);
+               #if ORBITAMP_VIEW_DEMO_WALKER
+                if (striking)
+                {
+                    walker.hit (1.0);
+                    for (int i = 0, n = juce::roundToInt (strike * 60); i < n; ++i)
+                        d->step (1.0 / 60);
+                }
+               #endif
             }
             d->setRepeats (stress);
             if (findMetres > 0)
@@ -217,7 +239,7 @@ namespace
             line.setFont (juce::FontOptions (13.0f, juce::Font::plain));
             line.setColour (juce::Label::textColourId, juce::Colour (0xffd9cbbd));
             line.setColour (juce::Label::backgroundColourId, juce::Colour (0xff0b0608));
-            setSize (glassWidth, glassHeight + lineHeight);
+            setSize (args.glassW, args.glassH + lineHeight);
             setWantsKeyboardFocus (true);
             started = juce::Time::getMillisecondCounterHiRes();
             startTimerHz (4);
@@ -256,7 +278,7 @@ namespace
         Args args;
         orbitamp::redpaw::Windscreen view;
         juce::Label line;
-        int ticks = 0;
+        int ticks = 0, cpuTicks = 0;
         double started = 0;
 
         void timerCallback() override
@@ -265,16 +287,21 @@ namespace
             line.setText (status + "      1.." + juce::String (view.numGears()) + " gear   T turbo   arrows / drag steer   M mode   S scale   F cap", juce::dontSendNotification);
             if (args.report && (++ticks % 4) == 0)
                 std::cout << status << std::endl;
-            if (args.stillFile.isNotEmpty() && view.mode() == Mode::still && view.stillImage().isValid())
+            const auto write = [this] (const juce::Image& image)
             {
                 const juce::File out = juce::File::getCurrentWorkingDirectory().getChildFile (args.stillFile);
                 out.deleteFile();
                 juce::FileOutputStream stream (out);
                 if (stream.openedOk())
-                    juce::PNGImageFormat().writeImageToStream (view.stillImage(), stream);
-                std::cout << "still " << out.getFullPathName() << " " << view.stillImage().getWidth() << "x" << view.stillImage().getHeight() << std::endl;
+                    juce::PNGImageFormat().writeImageToStream (image, stream);
+                std::cout << "still " << out.getFullPathName() << " " << image.getWidth() << "x" << image.getHeight() << std::endl;
                 juce::JUCEApplication::getInstance()->systemRequestedQuit();
-            }
+            };
+            if (args.stillFile.isNotEmpty() && view.mode() == Mode::still && view.stillImage().isValid())
+                write (view.stillImage());
+            // The CPU's 1993 look has no still of its own: the windscreen as it paints it, two seconds in.
+            if (args.stillFile.isNotEmpty() && view.mode() == Mode::cpu && ++cpuTicks == 8)
+                write (view.createComponentSnapshot (view.getLocalBounds(), true, 2.0f));
             if (args.quitSeconds > 0 && juce::Time::getMillisecondCounterHiRes() - started > args.quitSeconds * 1000)
                 juce::JUCEApplication::getInstance()->systemRequestedQuit();
         }
