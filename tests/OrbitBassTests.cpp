@@ -3739,9 +3739,10 @@ int ORBITAMP_GATE_MAIN()
                 gEditor->setLinkPresent (params::rowComp, true);
                 gLeast1 = gEditor->leastDesignWidth();
             }
-            check (list == "OCTAVE+ ENVELOPE+ CHORUS+ DELAY- REVERB- " && follows && least0 == FaceplateView::designWidth
-                       && least1 >= FaceplateView::designWidth && least2 > least1   // one added: the cabinet's least may widen it (step 11)
-                       && least2 == FaceplateView::bassLeastWidth (true, true, true, 0) + 2 * 48   // the face's row, and the IN and OUT columns
+            check (list == "OCTAVE+ ENVELOPE+ CHORUS+ DELAY- REVERB- " && follows
+                       && least0 == FaceplateView::bassLeastWidth (true, true, true, false, false, 0) + 2 * 48   // row one's (02.11)
+                       && least1 >= least0 && least2 > least1   // one added: the cabinet's least may widen it (step 11)
+                       && least2 == FaceplateView::bassLeastWidth (true, true, true, true, true, 0) + 2 * 48   // the face's row, and the IN and OUT columns
                        && gList == "COMP- " && gLeast0 == FaceplateView::designWidth
                        && gLeast1 == FaceplateView::designWidth + FaceplateView::compWidth + FaceplateView::colGap,
                    "the strip's checklist: " + list + "; a pick one undo step, the face and the least width following ("
@@ -3850,7 +3851,7 @@ int ORBITAMP_GATE_MAIN()
             check (bad.isEmpty(), "row three in the signal's order — CHORUS, DELAY, REVERB, the cabinet, LIMIT — at the least width, 16:9 "
                                   "and 2.2:1, the cabinet never under its least, the IR's line \"" + irLine + "\" (" + juce::String (irLineW, 1)
                                   + " px at 13 px) under its waveform (the cabinet's least " + juce::String (FaceplateView::bassCabLeast())
-                                  + ", the face's with both " + juce::String (FaceplateView::bassLeastWidth (true, true, true, 0)) + " + 2 x 48)"
+                                  + ", the face's with both " + juce::String (FaceplateView::bassLeastWidth (true, true, true, true, true, 0)) + " + 2 x 48)"
                                   + ", the pictures' words inside them; no gear on any frame, a menu on every block's "
                                   "right click but the guards'" + (bad.isEmpty() ? juce::String() : ": " + bad.joinIntoString ("; ")));
         }

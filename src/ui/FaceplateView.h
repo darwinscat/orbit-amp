@@ -135,6 +135,10 @@ public:
     /** OrbitBass's ENVELOPE block (FILTER inside), after OCTAVE: its slider and its picture (ui/FilterBlock.h). */
     static constexpr int filterWidth = 170;
 
+    /** OCTAVE's and ENVELOPE's share at OrbitBass's least width: room for each picture to read beside its slider —
+        OCTAVE's over 100 px wide, ENVELOPE's over 90. Row one (GATE, COMP and the two) at that is the face's least. */
+    static constexpr int fxLeast = 244;
+
     /** OrbitBass's CHORUS block, at the head of the cabinet's row: its slider and its picture (ui/ChorusBlock.h). The
         row's width is the AMP's, so the cabinet gives up what it takes. */
     /** OrbitBass's CHORUS, DELAY and REVERB in the cabinet's row: each always this wide (the owner, 01.11 — the guitar's
@@ -143,7 +147,8 @@ public:
 
     /** ORBITBASS'S FACE, THREE ROWS by the signal's way (the owner, 31.10): GATE, COMP, OCTAVE and ENVELOPE before the
         amp; the AMP across the whole width; CHORUS, CAB IR and LIMIT after it (the cabinet takes what is left — room for
-        one more block). Its least width is the guitar's; a wider window widens the pictures, every knob keeps its size. */
+        one more block). Its least width is row one's with OCTAVE and ENVELOPE at fxLeast (02.11); a wider window widens
+        the pictures, every knob keeps its size. */
 
     /** THE CABINET'S LEAST on the bass: never under the guitar face's cabinet at its least (226, three in a row), and wide
         enough that appkit's IrWaveView — which writes the IR's line itself ("85ms  |  48.0kHz  |  24-bit  |  mono", at
@@ -153,15 +158,20 @@ public:
     static int bassCabLeast();
     static constexpr const char* worstIrLine = "5000ms  |  192.0kHz  |  32-bit  |  stereo";
 
-    /** THE LEAST WIDTH OF ORBITBASS'S FACEPLATE as its strip stands: the cabinet's row — CHORUS, DELAY, REVERB as they
-        are in it, the cabinet at its least, LIMIT — or `fallback` (the guitar's least), whichever is wider. */
-    static int bassLeastWidth (bool chorusIn, bool delayIn, bool reverbIn, int fallback)
+    /** THE LEAST WIDTH OF ORBITBASS'S FACEPLATE as its strip stands: row one — GATE, COMP, and OCTAVE and ENVELOPE as
+        they are in it, each at fxLeast — the cabinet's row — CHORUS, DELAY, REVERB as they are in it, the cabinet at its
+        least, LIMIT — or `fallback` (the guitar's least), whichever is widest. */
+    static int bassLeastWidth (bool octaveIn, bool filterIn, bool chorusIn, bool delayIn, bool reverbIn, int fallback)
     {
+        int first = GuardBlock::designWidth + colGap + compWidth;
+        for (const bool in : { octaveIn, filterIn })
+            if (in)
+                first += colGap + fxLeast;
         int row = GuardBlock::designWidth + colGap + bassCabLeast();
         for (const bool in : { chorusIn, delayIn, reverbIn })
             if (in)
                 row += fxRowWidth + colGap;
-        return juce::jmax (fallback, row);
+        return juce::jmax (fallback, first, row);
     }
 
     static constexpr int bassFxRowH  = 180;

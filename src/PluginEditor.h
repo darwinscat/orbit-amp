@@ -81,8 +81,9 @@ private:
     /** THE WIDTH IS THE WINDOW'S CHOICE. The height sets the zoom; what the corner gives beyond the
         design's own width is laid out across — the pictures and the air widen, every knob keeps its
         size. From the design's own width up to a window of `maxAspect`. */
-    /** The design's own width for this product, as its strip stands: OrbitBass's three rows are the guitar's width at
-        their least (31.10) — wider by what its DELAY and REVERB take when both are in the strip. */
+    /** The design's own width for this product, as its strip stands: OrbitBass's three rows at their least are row one's
+        with OCTAVE's and ENVELOPE's pictures readable (02.11) — wider by what its DELAY and REVERB take when both are in
+        the strip. */
     static int minDesignWidthFor (const AmpProcessor& p)
     {
         // A guitar amp's: the design's, wider by COMP where it stands in the strip (OrbitAmp's), the AMP kept whole.
@@ -91,7 +92,8 @@ private:
                  + (p.linkShown (params::rowComp) ? FaceplateView::compWidth + FaceplateView::colGap : 0);
         const int sides = 2 * (VolumeColumn::designWidth + chromeGap);   // the in and out columns, as resized() stands them
         return juce::jmax ((int) FaceplateView::designWidth,
-                           FaceplateView::bassLeastWidth (p.linkShown (params::rowChorus), p.linkShown (params::rowDelay),
+                           FaceplateView::bassLeastWidth (p.linkShown (params::rowOctave), p.linkShown (params::rowFilter),
+                                                          p.linkShown (params::rowChorus), p.linkShown (params::rowDelay),
                                                           p.linkShown (params::rowReverb), 0) + sides);
     }
 
