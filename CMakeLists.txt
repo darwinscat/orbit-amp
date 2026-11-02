@@ -201,7 +201,14 @@ set(FELITRONICS_WITH_PFFFT ON CACHE BOOL "orbit-amp's cabinet convolver uses the
 # turned while playing, every load landing mid-session: v0.1.1 and v0.7.0 differ in the eight blocks of
 # the first fade-in alone — v0.7.0 silent through four blocks where v0.1.1 had begun to rise, then its own
 # fade, four blocks later — and in nothing after them; v0.6.0 and v0.7.0 are the same bit for bit in all 48.
-set(ORBITAMP_GUITAR_TAG "v0.7.0" CACHE STRING "felitronics-guitar-core release tag (fetched when no local checkout)")
+#
+# v0.8.0 plays namz v5.0.0's packs, the `.orbitrig` schema 5 — a band's frequency taken from another knob
+# (`hz_by`: a MIDDLE with its own FREQ) and a capture's own lag and polarity — and every schema-4 pack as
+# before. It brings the crossover blend OrbitBass's BLEND rides (RigPlayer::setCrossover*): at amount 0 it is
+# the player without it, byte for byte, for one atomic load a block. Its one change to what plays: a slot's
+# alignment delay moves through a 10 ms crossfade while it is heard, where it used to wait for silence — the
+# set's twelve packs carry no alignment, so for them nothing moves. It needs namz v5.0.0, pinned with it below.
+set(ORBITAMP_GUITAR_TAG "v0.8.0" CACHE STRING "felitronics-guitar-core release tag (fetched when no local checkout)")
 set(ORBITAMP_GUITAR_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../felitronics-guitar-core"
     CACHE PATH "Local felitronics-guitar-core checkout (used if present); else the pinned release is fetched")
 
@@ -269,15 +276,15 @@ endif()
 #
 # THE TWO PINS MOVE TOGETHER. The tag here is FORCEd over the NAM module's own, so guitar-core's pin
 # never reaches this build — and since guitar-core v0.7.0 a fetched namz is held to FELITRONICS_NAMZ_COMMIT,
-# the commit of the tag the NAM module pins (v4.4.0's, 215d164, by default). This tag is guitar-core
-# v0.7.0's own, so the two agree and the commit is left at its default. A guitar-core bump moves this tag
+# the commit of the tag the NAM module pins (v5.0.0's, 717ca2d, by default). This tag is guitar-core
+# v0.8.0's own, so the two agree and the commit is left at its default. A guitar-core bump moves this tag
 # to that release's namz pin in the same commit: a tag left behind stops the configure, naming both
 # commits. A namz bump made HERE alone, ahead of guitar-core, FORCEs FELITRONICS_NAMZ_COMMIT to the new
 # tag's commit beside it — a tag moved without its commit stops the configure the same way. The local
 # checkout (ORBITAMP_NAMZ_SRC) is not held to either, and is taken whenever it exists: on a namz older
-# than v4.3.0 the NAM module stops compiling (no namz::decode), and one older than v4.4.0 refuses every
-# float16 capture — keep it on v4.4.0 or later, or empty the override.
-set(ORBITAMP_NAMZ_TAG "v4.4.0" CACHE STRING "namz release tag CI builds against (no local checkout)")
+# than v5.0.0 the pack player stops compiling (no `input_lag_samples`, no `hz_by`) — keep it on v5.0.0 or
+# later, or empty the override.
+set(ORBITAMP_NAMZ_TAG "v5.0.0" CACHE STRING "namz release tag CI builds against (no local checkout)")
 set(FELITRONICS_NAMZ_TAG "${ORBITAMP_NAMZ_TAG}" CACHE STRING "" FORCE)
 
 FetchContent_MakeAvailable(felitronics_core)
