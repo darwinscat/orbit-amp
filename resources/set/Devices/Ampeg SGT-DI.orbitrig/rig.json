@@ -1,0 +1,132 @@
+{
+  "format": "orbitrig", "schema": 5,
+  "rig_id": "sgt-di-19a4", "family_id": "ampeg-sgt-di", "name": "SGT-DI", "modeled_by": "Darwin's Cat",
+  "picture": "device.webp",
+  "chain": [
+    {
+      "kind": "nam", "slot": "preamp",
+      "gear": { "make": "Ampeg", "model": "SGT-DI", "type": "preamp", "year": 2025,
+                "serial_number": "21SGD2V7522000062", "designed_in": "United States",
+                "made_in": "China" },
+      "tone_type": "edge", "voicing": "od",
+      "controls": [
+        { "name": "Voice", "role": "generic", "values": ["SVT", "B15"] },
+        { "name": "Grit", "role": "gain", "sweep": 300,
+          "values": ["0", "30", "60", "90", "120", "150", "180", "210", "240", "270", "300"] }
+      ],
+      "files": [
+        { "file": "SGT-DI-0007.namz", "settings": { "Grit": "0", "Voice": "SVT" },
+          "lag_samples": 0, "epochs": 200, "esr": 0.00150338 },
+        { "file": "SGT-DI-0008.namz", "settings": { "Grit": "0", "Voice": "B15" },
+          "lag_samples": 1, "epochs": 200, "esr": 0.00110311 },
+        { "file": "SGT-DI-0009.namz", "settings": { "Grit": "30", "Voice": "SVT" },
+          "lag_samples": 0, "epochs": 200, "esr": 0.00144058 },
+        { "file": "SGT-DI-0010.namz", "settings": { "Grit": "30", "Voice": "B15" },
+          "lag_samples": 1, "epochs": 200, "esr": 0.00104276 },
+        { "file": "SGT-DI-0011.namz", "settings": { "Grit": "60", "Voice": "SVT" },
+          "lag_samples": 0, "epochs": 200, "esr": 0.00175433 },
+        { "file": "SGT-DI-0012.namz", "settings": { "Grit": "60", "Voice": "B15" },
+          "lag_samples": 1, "epochs": 200, "esr": 0.00105813 },
+        { "file": "SGT-DI-0013.namz", "settings": { "Grit": "90", "Voice": "SVT" },
+          "lag_samples": 0, "epochs": 200, "esr": 0.00236321 },
+        { "file": "SGT-DI-0014.namz", "settings": { "Grit": "90", "Voice": "B15" },
+          "lag_samples": 1, "epochs": 200, "esr": 0.0017854 },
+        { "file": "SGT-DI-0015.namz", "settings": { "Grit": "120", "Voice": "SVT" },
+          "lag_samples": 0, "epochs": 200, "esr": 0.00421357 },
+        { "file": "SGT-DI-0016.namz", "settings": { "Grit": "120", "Voice": "B15" },
+          "lag_samples": 1, "epochs": 200, "esr": 0.00191922 },
+        { "file": "SGT-DI-0017.namz", "settings": { "Grit": "150", "Voice": "SVT" },
+          "lag_samples": 0, "epochs": 200, "esr": 0.00447288 },
+        { "file": "SGT-DI-0018.namz", "settings": { "Grit": "150", "Voice": "B15" },
+          "lag_samples": 1, "epochs": 200, "esr": 0.00272888 },
+        { "file": "SGT-DI-0019.namz", "settings": { "Grit": "180", "Voice": "SVT" },
+          "lag_samples": 0, "epochs": 200, "esr": 0.00629745 },
+        { "file": "SGT-DI-0020.namz", "settings": { "Grit": "180", "Voice": "B15" },
+          "lag_samples": 1, "epochs": 200, "esr": 0.00382578 },
+        { "file": "SGT-DI-0021.namz", "settings": { "Grit": "210", "Voice": "SVT" },
+          "lag_samples": 0, "epochs": 200, "esr": 0.01075514 },
+        { "file": "SGT-DI-0022.namz", "settings": { "Grit": "210", "Voice": "B15" },
+          "lag_samples": 1, "epochs": 200, "esr": 0.0069539 },
+        { "file": "SGT-DI-0023.namz", "settings": { "Grit": "240", "Voice": "SVT" },
+          "lag_samples": 0, "epochs": 200, "esr": 0.01332888 },
+        { "file": "SGT-DI-0024.namz", "settings": { "Grit": "240", "Voice": "B15" },
+          "lag_samples": 1, "epochs": 200, "esr": 0.00792436 },
+        { "file": "SGT-DI-0026.namz", "settings": { "Grit": "270", "Voice": "SVT" },
+          "lag_samples": 0, "epochs": 200, "esr": 0.01525486 },
+        { "file": "SGT-DI-0027.namz", "settings": { "Grit": "270", "Voice": "B15" },
+          "lag_samples": 1, "epochs": 200, "esr": 0.01014025 },
+        { "file": "SGT-DI-0028.namz", "settings": { "Grit": "300", "Voice": "SVT" },
+          "lag_samples": 0, "epochs": 200, "esr": 0.0153218 },
+        { "file": "SGT-DI-0029.namz", "settings": { "Grit": "300", "Voice": "B15" },
+          "lag_samples": 1, "epochs": 200, "esr": 0.01028485 }
+      ],
+      "tone": [
+        {
+          "name": "Bass", "sweep": 300, "placement": "post",
+          "reference": "150", "default": "150",
+          "sections": [
+            { "type": "low_shelf", "hz": 80.0, "q": 0.7, "range_db": [-12.0, 15.0] }
+          ]
+        },
+        {
+          "name": "Mid", "sweep": 300, "placement": "post",
+          "reference": "150", "default": "150",
+          "sections": [
+            { "type": "bell", "hz": 1000.0, "q": 0.7, "range_db": [-14.0, 14.0], "hz_by": "Freq" }
+          ]
+        },
+        {
+          "name": "Freq", "sweep": 300,
+          "reference": "150", "default": "150",
+          "positions": [
+            { "value": "0", "norm": 0.0, "hz": 200.0 },
+            { "value": "75", "norm": 0.25, "hz": 500.0 },
+            { "value": "150", "norm": 0.5, "hz": 1000.0 },
+            { "value": "225", "norm": 0.75, "hz": 2000.0 },
+            { "value": "300", "norm": 1.0, "hz": 3000.0 }
+          ]
+        },
+        {
+          "name": "Treble", "sweep": 300, "placement": "post",
+          "reference": "150", "default": "150",
+          "sections": [
+            { "type": "high_shelf", "hz": 4000.0, "q": 0.7, "range_db": [-20.0, 20.0] }
+          ]
+        },
+        {
+          "name": "Ultra Lo", "placement": "post",
+          "reference": "0", "default": "0",
+          "positions": [
+            {
+              "value": "-",
+              "sections": [
+                { "type": "low_shelf", "hz": 80.0, "q": 0.7, "gain_db": -17.0 }
+              ]
+            },
+            { "value": "0", "sections": [] },
+            {
+              "value": "+",
+              "sections": [
+                { "type": "low_shelf", "hz": 80.0, "q": 0.7, "gain_db": 2.0 },
+                { "type": "bell", "hz": 500.0, "q": 0.7, "gain_db": -10.0 }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Ultra Hi", "placement": "post",
+          "reference": "0", "default": "0",
+          "positions": [
+            { "value": "0", "sections": [] },
+            {
+              "value": "+",
+              "sections": [
+                { "type": "high_shelf", "hz": 4000.0, "q": 0.7, "gain_db": 9.0 }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

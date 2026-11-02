@@ -989,10 +989,10 @@ set(FROSTPAWAMP_SET "Two Notes ReVolt Clean PowerAmp" "Two Notes ReVolt Crunch P
 set(AMBERPAWAMP_SET "Victory V4 Copper (clean)" "Victory V4 Sheriff (crunch)" "Victory V4 Kraken (hi-gain)")
 # OrbitBass plays bass packs alone — and until the bass captures are trained, ONE TEMPORARY PACK, a clean
 # guitar amp's, to play its chain through. The bass packs replace this line; it opens on the first.
-set(ORBITBASS_SET   "Two Notes ReVolt Clean PowerAmp")   # TEMPORARY — not a bass pack
+set(ORBITBASS_SET   "Ampeg SGT-DI")
 # RedGrooveBass's two channels, B15 and SVT, play the same way until the bass captures are trained: TWO
 # TEMPORARY PACKS, the ReVolt's clean and crunch, each with its Boost held off (src/redgroove/RedGrooveLineup.cpp).
-set(REDGROOVEBASS_SET "Two Notes ReVolt Clean PowerAmp" "Two Notes ReVolt Crunch PowerAmp")   # TEMPORARY — not bass packs
+set(REDGROOVEBASS_SET "Ampeg SGT-DI")
 
 # A RELEASE SHIPS NO PACK OF AN AMP IT LEAVES OUT. A release (ORBITAMP_DEV_FACTORY OFF) carries the amps
 # installer/family.ini names; the packs only an amp it leaves out plays — today AmberPawAmp's V4 — are not
@@ -1460,7 +1460,7 @@ add_amp(OrbitBass     CODE Obas    BY_NAME    BASS
 # (src/redgroove) — the family's console over the bass's chain (Chain::bass), driven as channels: two, B15 and
 # SVT, its two gears, over REDGROOVEBASS_SET's packs; Darwin's Cat's own cabinets. Not in the family's release
 # (installer/family.ini), and asked for by name.
-add_amp(RedGrooveBass CODE Rgrv    BY_NAME
+add_amp(RedGrooveBass CODE Rgrv    BY_NAME    BASS
     ART       ${REDGROOVEBASS_RENDERS}
     SOURCES   ${REDGROOVEBASS_SOURCES}
     LIBRARIES

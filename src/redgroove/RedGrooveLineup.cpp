@@ -28,8 +28,8 @@ const channels::Lineup& lineup()
     static const channels::Lineup walker {
         "walker", "walker_channel", "red-giant",
         {
-            { "B15", "revolt-clean-poweramp-bf62",  "Plate", std::nullopt, 0.0f, false, { "Boost", "off" } },
-            { "SVT", "revolt-crunch-poweramp-73a7", "Plate", std::nullopt, 0.0f, false, { "Boost", "off" } },
+            { "B15", "sgt-di-19a4", "Plate", std::nullopt, 0.0f, false, { "Voice", "B15" } },
+            { "SVT", "sgt-di-19a4", "Plate", std::nullopt, 0.0f, false, { "Voice", "SVT" } },
         },
         false,
         {
