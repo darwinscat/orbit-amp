@@ -417,7 +417,7 @@ juce::ValueTree Channels::ensureNode()
     if (! n.isValid())
     {
         n = juce::ValueTree (nodeType());
-        n.setProperty (activeId, 0, nullptr);
+        n.setProperty (activeId, juce::jlimit (0, count() - 1, line.opensAt), nullptr);    // a tag or a flag may make it before adopt does
         amp.apvts.state.appendChild (n, nullptr);
     }
     return n;
@@ -592,12 +592,13 @@ bool Channels::adopt()
     auto* device = amp.apvts.getParameter (params::preampDevice);
     const int playing = juce::roundToInt (plain (params::preampDevice));
     const bool chosen = device != nullptr && playing != juce::roundToInt (device->convertFrom0to1 (amp.engineDefault (*device)));
+    const int opens = juce::jlimit (0, count() - 1, line.opensAt);
     int channel = -1;
-    for (int c = 0; c < count() && channel < 0; ++c)       // two channels on one pack: the first of them
-        if (chosen && packFor (c) >= 0 && packFor (c) == playing)
+    for (int k = 0; k < count() && channel < 0; ++k)       // two channels on one pack: the one it opens on first
+        if (const int c = (opens + k) % count(); chosen && packFor (c) >= 0 && packFor (c) == playing)
             channel = c;
 
-    ensureNode().setProperty (activeId, juce::jmax (0, channel), nullptr);
+    ensureNode().setProperty (activeId, channel >= 0 ? channel : opens, nullptr);
     align();    // the first channel's pack if none of ours was playing, and a cabinet of ours — names settled with them
     return true;
 }

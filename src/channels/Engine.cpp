@@ -22,7 +22,7 @@ void Engine::addParameters (juce::AudioProcessorValueTreeState::ParameterLayout&
     juce::StringArray names;
     for (const auto& c : lineup.channels)
         names.add (c.name);
-    layout.add (std::make_unique<juce::AudioParameterChoice> (juce::ParameterID { lineup.parameterId, 1 }, "Channel", names, 0));
+    layout.add (std::make_unique<juce::AudioParameterChoice> (juce::ParameterID { lineup.parameterId, 1 }, "Channel", names, lineup.opensAt));
 }
 
 void Engine::opening (const Lineup& lineup, params::Opening& o)
@@ -33,7 +33,7 @@ void Engine::opening (const Lineup& lineup, params::Opening& o)
     if (lineup.channels.empty())
         return;
 
-    const auto& first = lineup.channels.front();
+    const auto& first = lineup.opener();
     o.capture  = first.capture;
     o.reverb   = first.reverb;
     o.delayMix = first.delayMix;

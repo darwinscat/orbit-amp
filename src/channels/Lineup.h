@@ -65,6 +65,11 @@ struct Lineup
     };
     std::vector<Pin> pinned {};
 
+    /** THE CHANNEL A FRESH INSTANCE OPENS ON (Channels::adopt, Engine::opening, CHANNEL's default) — the first unless
+        the product says another: the walker opens on SVT, its second (the owner, 03.11). */
+    int opensAt = 0;
+    const Channel& opener() const { return channels[(size_t) juce::jlimit (0, count() - 1, opensAt)]; }
+
     int count() const noexcept { return (int) channels.size(); }
 };
 

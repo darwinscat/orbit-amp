@@ -48,7 +48,8 @@ const channels::Lineup& lineup()
             { params::bassLpfOn,     1.0f },
             { params::delayPresent,  0.0f },
             { params::reverbPresent, 0.0f },
-        }
+        },
+        1,      // ...and it opens on SVT (the owner, 03.11)
     };
     return walker;
 }
@@ -76,7 +77,7 @@ namespace
         return std::make_unique<channels::Engine> (p, redgroove::lineup());
     }
 
-    /** Where a fresh walker stands: on its first gear (Engine::opening), and with MIDDLE's frequency at 1 kHz — every
+    /** Where a fresh walker stands: on SVT, its second gear (Lineup::opensAt, Engine::opening), and with MIDDLE's frequency at 1 kHz — every
         gear opening there, INIT and a double click on MID FREQ bringing it back there (the owner, 02.11). */
     constexpr float midOpensHz = 1000.0f;
 
