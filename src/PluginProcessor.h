@@ -1039,6 +1039,12 @@ private:
         WaveNets fight over the same cores the audio thread wants. */
     juce::ThreadPool modelPool { 1 };
 
+    // requestCabSynth's: which request is the latest, whether the processor still stands, and the worker — declared
+    // last of the three, so it is gone (its job finished) before what the job reads.
+    std::atomic<int> cabSynthLatest { 0 };
+    std::shared_ptr<int> cabSynthAlive = std::make_shared<int> (0);
+    juce::ThreadPool cabSynthPool { 1 };
+
 public:
     /** Everything a moved control needs done OFF the audio thread, for both captured blocks: landing
         the dial where the gain knob points, the tone knobs where their slots stand, handing the
@@ -1234,6 +1240,24 @@ public:
         them by key — the file can go anywhere afterwards. False, changing nothing, for a file that
         is too big to be an IR or that does not decode as audio. Message thread only. */
     bool chooseCabFile (const juce::File& file);
+
+    /** WHERE THE MIC STANDS at a cabinet rendered live (core/CabSynth.h): across its first speaker in radii from the cap,
+        x right and y up; how far in front of it; the horn on or off. */
+    struct CabSpot
+    {
+        float x = 0.0f, y = 0.0f, distance = 0.05f;
+        bool horn = true;
+    };
+
+    /** A CABINET OF THE BASS'S OWN, rendered with the mic at `spot` — on a worker, a tenth of a second or so — then
+        played as an IR of the player's own is: its bytes kept by key, so a session or a preset carries it, named by the
+        cabinet, its `from` saying where the mic stood (cabSynthOf reads it back). A later request supersedes one still
+        rendering; the cabinet's own 50 ms crossfade carries the swap. Message thread. */
+    void requestCabSynth (const juce::String& cab, CabSpot spot);
+
+    /** The rendered cabinet a choice plays, and where its mic stood — or `valid` false for any other IR. */
+    struct CabSynthChoice { juce::String cab; CabSpot spot; bool valid = false; };
+    static CabSynthChoice cabSynthOf (const CabChoice&);
 
     /** TEMPORARY — the audition loop player. Goes with the demo strip it belongs to. */
     core::DemoPlayer demo;

@@ -1065,6 +1065,9 @@ juce_add_binary_data(OrbitAmpData
         # the README carries word for word, and a file can be diffed against that one.
         "${CMAKE_CURRENT_SOURCE_DIR}/resources/notice.txt"
         "${CMAKE_CURRENT_SOURCE_DIR}/resources/disclaimer.txt"   # ...and its long form, with the list
+
+        # The bass's cabinets, as core/CabSynth.h renders them live with the mic where the player put it.
+        "${CMAKE_CURRENT_SOURCE_DIR}/tools/cabgen/cabinets.txt"
 )
 # ...and the table the cabinet shelf is played by: its IRs themselves lie in the factory folder.
 target_link_libraries(OrbitAmpData INTERFACE OrbitAmpCabinetCatalog)

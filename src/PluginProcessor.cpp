@@ -10,6 +10,8 @@
 #include <felitronics/octave/OctaveLaw.h>
 
 #include <cstring>
+#include "core/CabSynth.h"
+#include <BinaryData.h>
 #include "device/FactoryShelf.h"
 #include "device/IrLibrary.h"
 
@@ -812,6 +814,55 @@ bool AmpProcessor::chooseCabFile (const juce::File& file)
     // No parameter moved: without this, a host would not know the session has something to save.
     updateHostDisplay (ChangeDetails{}.withNonParameterStateChanged (true));
     return true;
+}
+
+void AmpProcessor::requestCabSynth (const juce::String& cab, CabSpot spot)
+{
+    const int mine = ++cabSynthLatest;
+    std::weak_ptr<int> alive = cabSynthAlive;
+
+    cabSynthPool.addJob ([this, alive, mine, cab, spot]
+    {
+        if (mine != cabSynthLatest.load())
+            return;   // superseded before it began
+
+        static const auto table = core::cabsynth::parseTable (std::string (BinaryData::cabinets_txt, (size_t) BinaryData::cabinets_txtSize));
+        const auto ir  = core::cabsynth::renderAt (table, cab.toStdString(), { spot.x, spot.y, spot.distance, spot.horn });
+        const auto wav = core::cabsynth::wav24 (ir, 48000);
+        auto bytes = std::make_shared<juce::MemoryBlock> (wav.data(), wav.size());
+
+        juce::MessageManager::callAsync ([this, alive, mine, cab, spot, bytes]
+        {
+            if (alive.lock() == nullptr || mine != cabSynthLatest.load() || bytes->getSize() == 0)
+                return;
+
+            const auto key = cabIrEmbeds.add (std::move (*bytes));
+            if (key.isEmpty())
+                return;
+
+            apvts.state.setProperty (params::cabIrUserKey, key, nullptr);
+            apvts.state.setProperty (params::cabIrUserName, cab, nullptr);
+            apvts.state.setProperty (params::cabIrUserFrom, "synth:" + cab + "|" + juce::String (spot.x, 3) + "|" + juce::String (spot.y, 3)
+                                                                 + "|" + juce::String (spot.distance, 3) + "|" + (spot.horn ? "1" : "0"), nullptr);
+            updateHostDisplay (ChangeDetails{}.withNonParameterStateChanged (true));
+        });
+    });
+}
+
+AmpProcessor::CabSynthChoice AmpProcessor::cabSynthOf (const CabChoice& choice)
+{
+    CabSynthChoice out;
+    if (! choice.isUser() || ! choice.from.startsWith ("synth:"))
+        return out;
+
+    const auto parts = juce::StringArray::fromTokens (choice.from.fromFirstOccurrenceOf ("synth:", false, false), "|", "");
+    if (parts.size() != 5)
+        return out;
+
+    out.cab   = parts[0];
+    out.spot  = { parts[1].getFloatValue(), parts[2].getFloatValue(), parts[3].getFloatValue(), parts[4] == "1" };
+    out.valid = true;
+    return out;
 }
 
 void AmpProcessor::embedCabIrs (juce::ValueTree& tree) const
