@@ -1493,7 +1493,7 @@ private:
         std::atomic<float>* blend = nullptr;
         std::atomic<float>* blendHz = nullptr;
         std::atomic<float>* blendInvert = nullptr;
-        std::atomic<float>* diMix = nullptr;
+        std::atomic<float>* cabMix = nullptr;
         std::atomic<float>* hpf = nullptr;
         std::atomic<float>* hpfHz4 = nullptr;
         std::atomic<float>* hpfHz5 = nullptr;

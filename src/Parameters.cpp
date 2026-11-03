@@ -134,13 +134,13 @@ void addBassParameters (juce::AudioProcessorValueTreeState::ParameterLayout& lay
                 std::make_unique<Bool> (juce::ParameterID { reverbPresent, 1 }, "Reverb In Strip", false));
 
     layout.add (std::make_unique<Float> (juce::ParameterID { ampBlend, 1 },       "Amp Blend",
-                                         juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f),
+                                         juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 1.0f),
                 std::make_unique<Float> (juce::ParameterID { ampBlendHz, 1 },     "Amp Blend Hz",
                                          hz (ampBlendMinHz, ampBlendMaxHz, ampBlendDefaultHz), ampBlendDefaultHz),
                 std::make_unique<Bool>  (juce::ParameterID { ampBlendInvert, 1 }, "Amp Blend Invert", false));
 
-    layout.add (std::make_unique<Float> (juce::ParameterID { diMix, 1 }, "DI/Cab",
-                                         juce::NormalisableRange<float> (0.0f, 100.0f, 0.1f), diMixDefault));
+    layout.add (std::make_unique<Float> (juce::ParameterID { cabMix, 1 }, "Cab Mix",
+                                         juce::NormalisableRange<float> (0.0f, 100.0f, 0.1f), cabMixDefault));
 
     layout.add (std::make_unique<Bool>   (juce::ParameterID { bassHpfOn, 1 },        "Bass HPF On", true),
                 std::make_unique<Choice> (juce::ParameterID { bassHpf, 1 },          "Bass HPF", bassHpfPositions, (int) BassHpf::five),

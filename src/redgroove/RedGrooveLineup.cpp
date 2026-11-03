@@ -34,7 +34,7 @@ const channels::Lineup& lineup()
         false,
         {
             params::ampBlend, params::eqBellHz (0, 0), params::compThreshold,
-            params::octaveAmount, params::filterAmount, params::chorusAmount, params::diMix,
+            params::octaveAmount, params::filterAmount, params::chorusAmount, params::cabMix,
         },
         {
             { params::compOn,        1.0f },
@@ -62,7 +62,7 @@ namespace orbitamp
 namespace
 {
     // The walker's half of the two things a product gives the processor beside its face (Product.h): CHANNEL
-    // over its lineup, and the bass's own — COMP, BLEND, DI/CAB, its cuts and its effects — each declaring where the
+    // over its lineup, and the bass's own — COMP, BLEND, the CAB's MIX, its cuts and its effects — each declaring where the
     // walker holds it (Lineup::pinned, read into the Opening by Engine::opening).
     void addParameters (const Product&, juce::AudioProcessorValueTreeState::ParameterLayout& layout)
     {

@@ -3,7 +3,7 @@
 
 // Gate for ORBITBASS'S CHAIN (src/Product.h, Chain::bass), headless, run as OrbitBass:
 //
-//   where a fresh one stands — the gate off, COMP on at BLEND half, the AMP's BLEND 0 at 150 Hz, DI/CAB 30 % DI, its own HPF at
+//   where a fresh one stands — the gate off, COMP on at BLEND half, the AMP's BLEND 100 % at 150 Hz, the CAB's MIX 70 %, its own HPF at
 //   5 (22 Hz) and LPF off, the cabinet's own cuts off, no delay and no reverb, mono, on its one temporary pack;
 //   its strip — GATE, COMP, AMP, CAB, LIMIT, in that order — while OrbitAmp's keeps the delay and the reverb
 //   and has no COMP, nor any of the bass's parameters;
@@ -361,7 +361,7 @@ int ORBITAMP_GATE_MAIN()
             return items;
         };
 
-        // WITH NONE THERE: no cabinet. No IR loads, and the cabinet's share is silent: at DI/CAB's 30 % the DI's share alone.
+        // WITH NONE THERE: no cabinet. No IR loads, and the cabinet's share is silent: at the CAB's MIX 70 % the DI's 30 % alone.
         juce::MemoryBlock before;
         {
             auto fresh = make (bass);
@@ -516,10 +516,10 @@ int ORBITAMP_GATE_MAIN()
                    && juce::roundToInt (value (a, params::compAttack)) == 1 && juce::roundToInt (value (a, params::compRelease)) == 0
                    && juce::roundToInt (value (a, params::compCharacter)) == params::compCharacters.indexOf ("Opto"),
                "COMP on, BLEND at half, MED attack, AUTO release, OPTO");
-        check (juce::approximatelyEqual (value (a, params::ampBlend), 0.0f) && juce::approximatelyEqual (value (a, params::ampBlendHz), 150.0f)
+        check (juce::approximatelyEqual (value (a, params::ampBlend), 1.0f) && juce::approximatelyEqual (value (a, params::ampBlendHz), 150.0f)
                    && value (a, params::ampBlendInvert) < 0.5f,
-               "BLEND 0, its crossover at 150 Hz, not inverted");
-        check (juce::approximatelyEqual (value (a, params::diMix), 30.0f), "DI/CAB 30 % DI");
+               "the AMP's BLEND 100 % (the capture alone), its crossover at 150 Hz, not inverted");
+        check (juce::approximatelyEqual (value (a, params::cabMix), 70.0f), "the CAB's MIX 70 %: 30 % DI");
         check (declared (a, params::delayPresent) < 0.5f && declared (a, params::reverbPresent) < 0.5f
                    && value (a, params::delayPresent) < 0.5f && value (a, params::reverbPresent) < 0.5f
                    && value (a, params::delayOn) > 0.5f && value (a, params::reverbOn) > 0.5f
@@ -553,7 +553,7 @@ int ORBITAMP_GATE_MAIN()
         // OrbitAmp's COMP (the owner, 02.11): the bass's, its parameters the same, out of the strip until the player adds
         // it, on OPTO; none of the bass's other links or parameters. The cockpit's face has no COMP at all.
         bool none = ! guitar->chainHolds (params::rowOctave) && ! guitar->chainHolds (params::rowFilter) && ! guitar->chainHolds (params::rowChorus);
-        for (const char* id : { params::ampBlend, params::diMix, params::bassHpf, params::bassLpf,
+        for (const char* id : { params::ampBlend, params::cabMix, params::bassHpf, params::bassLpf,
                                 params::octaveAmount, params::filterAmount, params::chorusAmount })
             none = none && guitar->apvts.getParameter (id) == nullptr;
         bool comp = guitar->chainHolds (params::rowComp) && guitar->linkRemovable (params::rowComp) && ! guitar->linkShown (params::rowComp);
@@ -708,12 +708,12 @@ int ORBITAMP_GATE_MAIN()
             return worstApart (play (*same, blocks, false).l, heard.l);
         };
 
-        // OrbitBass as at step 1: COMP at 0, BLEND 0, its HPF off, the DI's share none.
+        // OrbitBass as at step 1: COMP at 0, the AMP's BLEND 100 %, its HPF off, the DI's share none (the CAB's MIX 100 %).
         const auto asBefore = [&]
         {
             auto b = make (bass);
             set (*b, params::bassHpfOn, 0.0f);
-            set (*b, params::diMix, 0.0f);
+            set (*b, params::cabMix, 100.0f);
             set (*b, params::compAmount, 0.0f);   // COMP's BLEND at 0: no compressor, as at step 1
             return b;
         };
@@ -744,7 +744,7 @@ int ORBITAMP_GATE_MAIN()
             auto* blendP  = blended->apvts.getParameter (params::ampBlend);
             auto* hzP     = blended->apvts.getParameter (params::ampBlendHz);
             auto* invertP = blended->apvts.getParameter (params::ampBlendInvert);
-            blendP->setValueNotifyingHost (blendP->convertTo0to1 (0.7f));
+            blendP->setValueNotifyingHost (blendP->convertTo0to1 (0.3f));   // BLEND 30 %: the crossover's 70
             hzP->setValueNotifyingHost (hzP->convertTo0to1 (250.0f));
             invertP->setValueNotifyingHost (1.0f);
             std::thread elsewhere ([&] { blended->pumpDeviceWork(); });
@@ -765,29 +765,29 @@ int ORBITAMP_GATE_MAIN()
                    "...and its frequency and its polarity are heard too");
         }
 
-        // The cabinets in, on the same IR's bytes, at DI/CAB 0 %: the cabinet alone, bit for bit.
+        // The cabinets in, on the same IR's bytes, at the CAB's MIX 100 %: the cabinet alone, bit for bit.
         {
             auto cabOnly = asBefore();
             const auto heard = play (*cabOnly, blocks, false, true);   // through the guitar's input cut, as above
-            const float worst = twin (*cabOnly, heard, "the cabinets in, DI/CAB 0 %");
+            const float worst = twin (*cabOnly, heard, "the cabinets in, the CAB's MIX 100 %");
             check (worst <= 5.0e-6f,   // each chain's standard EQ, as above
                    "...plays what OrbitBass plays through the guitar's input cut, the cabinet alone (worst apart " + juce::String (worst, 9) + " of peak " + juce::String (peak (heard.l), 4) + ")");
         }
     }
 
-    // DI/CAB at 100 %: no IR at all — what the cabinet was handed, bit for bit as with the cabinet out.
+    // The CAB's MIX at 0 %: no IR at all — what the cabinet was handed, bit for bit as with the cabinet out.
     {
         auto allDi = make (bass);
-        set (*allDi, params::diMix, 100.0f);
+        set (*allDi, params::cabMix, 0.0f);
         auto noCab = make (bass);
         set (*noCab, params::cabOn, 0.0f);
         const auto a = play (*allDi, blocks, false), b = play (*noCab, blocks, false);
-        check (worstApart (a.l, b.l) == 0.0f, "DI/CAB at 100 % plays no IR, as the cabinet out, bit for bit");
-        check (worstApart (a.l, plain.l) > 1.0e-3f, "...and 30 % is not that");
+        check (worstApart (a.l, b.l) == 0.0f, "the CAB's MIX at 0 % plays no IR, as the cabinet out, bit for bit");
+        check (worstApart (a.l, plain.l) > 1.0e-3f, "...and 70 % is not that");
 
-        // 30 % is 0.7 of the cabinet and 0.3 of the DI, sample for sample.
+        // 70 % is 0.7 of the cabinet and 0.3 of the DI, sample for sample.
         auto cabOnly = make (bass);
-        set (*cabOnly, params::diMix, 0.0f);
+        set (*cabOnly, params::cabMix, 100.0f);
         const auto c = play (*cabOnly, blocks, false);
         float worst = 0.0f;
         for (size_t i = 0; i < c.l.size(); ++i)
@@ -796,7 +796,7 @@ int ORBITAMP_GATE_MAIN()
             const float want = 0.7f * c.l[i] + 0.3f * a.l[i];
             worst = std::max (worst, std::abs (want - plain.l[i]));
         }
-        check (worst <= 1.0e-5f, "DI/CAB at 30 % plays 0.7 x the cabinet + 0.3 x the DI (worst apart " + juce::String (worst, 8) + ")");
+        check (worst <= 1.0e-5f, "the CAB's MIX at 70 % plays 0.7 x the cabinet + 0.3 x the DI (worst apart " + juce::String (worst, 8) + ")");
     }
 
     // ITS CUTS BY THEIR POSITIONS — tones the amp passes, the cabinet out: the HPF takes more of a 26 Hz tone at 4
@@ -1187,13 +1187,13 @@ int ORBITAMP_GATE_MAIN()
             check (std::abs (l1 - l0) <= 0.1 && std::abs (l5 - l0) <= 2.0,
                    "COMP's knob from its zero: 0.1 % plays " + juce::String (l1 - l0, 2) + " dB, 2.5 % " + juce::String (l5 - l0, 2) + " dB");
         }
-        // DI/CAB moved 30 -> 80 % in one block: a glide, not a step of the difference.
+        // The CAB's MIX moved 70 -> 20 % in one block: a glide, not a step of the difference.
         {
             auto t = bare();
             set (*t, params::cabOn, 1.0f);
-            const auto v = tone (*t, 97.0, -12.0f, len, at, [&] { set (*t, params::diMix, 80.0f); });
+            const auto v = tone (*t, 97.0, -12.0f, len, at, [&] { set (*t, params::cabMix, 20.0f); });
             const auto w = judgeSwitch (v, at, 30.0);
-            check (w.stepRatio <= 1.5, "DI/CAB moved 30 -> 80 %: " + say (w));
+            check (w.stepRatio <= 1.5, "the CAB's MIX moved 70 -> 20 %: " + say (w));
         }
         // The HPF switched off on a 26 Hz tone, its cut's phase near the corner: a crossfade.
         {
@@ -1411,7 +1411,7 @@ int ORBITAMP_GATE_MAIN()
             auto b = make (bass);
             auto* blendP = b->apvts.getParameter (params::ampBlend);
             auto* hzP    = b->apvts.getParameter (params::ampBlendHz);
-            blendP->setValueNotifyingHost (blendP->convertTo0to1 (0.6f));
+            blendP->setValueNotifyingHost (blendP->convertTo0to1 (0.4f));   // BLEND 40 %: the crossover's 60
             hzP->setValueNotifyingHost (hzP->convertTo0to1 (200.0f));
             std::thread host ([&] { b->prepareToPlay (sampleRate, blockSize); });
             host.join();
@@ -2469,12 +2469,12 @@ int ORBITAMP_GATE_MAIN()
                     wrong.add ("BLEND reads " + r->gripText());
                 if (r->paramId() == params::compThreshold && r->gripText() != "-24")
                     wrong.add ("COMP's threshold reads " + r->gripText());
-                if (r->paramId() == params::diMix && r->gripText() != "30%")
-                    wrong.add ("DI/CAB reads " + r->gripText());
+                if (r->paramId() == params::cabMix && r->gripText() != "70%")
+                    wrong.add ("the CAB's MIX reads " + r->gripText());
                 if (r->paramId() == params::octaveToneHz && r->gripText() != "120 Hz")
                     wrong.add ("TONE reads " + r->gripText());
             }
-            check (wrong.isEmpty() && seen.contains (params::ampBlend) && seen.contains (params::compThreshold) && seen.contains (params::diMix)
+            check (wrong.isEmpty() && seen.contains (params::ampBlend) && seen.contains (params::compThreshold) && seen.contains (params::cabMix)
                        && seen.contains (params::octaveToneHz) && seen.contains (params::filterReleaseMs) && seen.contains (params::chorusRateHz)
                        && seen.size() == 12,
                    "the bass's rails write their numbers at 13 px, the faders' with their units, COMP's threshold in dB on its grip; GATE and LIMIT faders, their numbers in their lamps ("
@@ -5275,7 +5275,7 @@ int ORBITAMP_GATE_MAIN()
                 { "REVERB",   { params::reverbOn, params::reverbType, params::reverbDecay, params::reverbPredelay } },
                 { "AMP",      { params::preampOn, params::ampBlendHz, params::ampBlendInvert, params::bassHpfOn, params::bassHpf, params::bassHpfHz5,
                                 params::bassHpfHz4, params::bassLpfOn, params::bassLpf, params::bassLpfHzFingers, params::bassLpfHzSlap } },
-                { "CAB IR",   { params::cabOn, params::diMix, params::cabTrimOn, params::cabTrim } } };
+                { "CAB IR",   { params::cabOn, params::cabMix, params::cabTrimOn, params::cabTrim } } };
             const auto& all = t->getParameters();
             const auto snapshot = [&all]
             {
@@ -6252,7 +6252,7 @@ int ORBITAMP_GATE_MAIN()
                         || wave.getRight() > rail->getX() || rail->getX() - wave.getRight() > 10)
                         wrong.add ("the layout: " + said);
                     // A FADER as every BLEND and MIX on the bass's face (the owner, 01.11): violet, its percent under it at 13 px.
-                    if (rail->paramId() != params::diMix || rail->gripText() != "30%" || ! rail->hasFaderLook() || fader::textH < 13.0f
+                    if (rail->paramId() != params::cabMix || rail->gripText() != "70%" || ! rail->hasFaderLook() || fader::textH < 13.0f
                         || rail->columnWidth != fader::columnW || rail->typeDecimals < 0 || rail->getTooltip() != "DI/CAB: DI with cabinet")
                         wrong.add ("the rail reads \"" + rail->gripText() + "\" at " + juce::String (rail->gripTextHeight, 0) + " px, hint \""
                                    + rail->getTooltip() + "\"");
@@ -6260,14 +6260,14 @@ int ORBITAMP_GATE_MAIN()
                     settle (*t);
                     rail->typeValue (55.0f);
                     settle (*t);
-                    const float typed = value (*t, params::diMix);
+                    const float typed = value (*t, params::cabMix);
                     t->history.undo();
-                    if (std::abs (typed - 55.0f) > 1.0e-3f || std::abs (value (*t, params::diMix) - 30.0f) > 1.0e-3f)
-                        wrong.add ("typed 55 -> " + juce::String (typed, 2) + ", one undo -> " + juce::String (value (*t, params::diMix), 2));
+                    if (std::abs (typed - 55.0f) > 1.0e-3f || std::abs (value (*t, params::cabMix) - 70.0f) > 1.0e-3f)
+                        wrong.add ("typed 55 -> " + juce::String (typed, 2) + ", one undo -> " + juce::String (value (*t, params::cabMix), 2));
 
-                    set (*t, params::diMix, 70.0f);
+                    set (*t, params::cabMix, 30.0f);
                     settle (*t);
-                    const juce::Point<float> grip ((float) rail->getWidth() * 0.5f, rail->yOfValue (70.0f));
+                    const juce::Point<float> grip ((float) rail->getWidth() * 0.5f, rail->yOfValue (30.0f));
                     rail->mouseDown (event (*rail, grip, 1, false));
                     rail->mouseUp (event (*rail, grip, 1, false));
                     rail->mouseDown (event (*rail, grip, 2, false));
@@ -6280,12 +6280,12 @@ int ORBITAMP_GATE_MAIN()
                         juce::Timer::callPendingTimersSynchronously();
                     }
                     settle (*t);
-                    const float reset = value (*t, params::diMix);
+                    const float reset = value (*t, params::cabMix);
                     const bool field = rail->isTyping();
                     t->history.undo();
-                    if (std::abs (reset - params::diMixDefault) > 1.0e-3f || field || std::abs (value (*t, params::diMix) - 70.0f) > 1.0e-3f)
-                        wrong.add ("a double click at 70 -> " + juce::String (reset, 2) + (field ? ", a field" : "") + ", one undo -> "
-                                   + juce::String (value (*t, params::diMix), 2));
+                    if (std::abs (reset - params::cabMixDefault) > 1.0e-3f || field || std::abs (value (*t, params::cabMix) - 30.0f) > 1.0e-3f)
+                        wrong.add ("a double click at 30 -> " + juce::String (reset, 2) + (field ? ", a field" : "") + ", one undo -> "
+                                   + juce::String (value (*t, params::cabMix), 2));
 
                     auto& face = *faces[0];
                     face.lastMenu = {};

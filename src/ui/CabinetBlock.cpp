@@ -14,7 +14,7 @@ namespace orbitamp
 
 struct CabinetBlock::BassRow
 {
-    explicit BassRow (AmpProcessor& p) : di (*p.apvts.getParameter (params::diMix), 0.0f, 100.0f) {}
+    explicit BassRow (AmpProcessor& p) : di (*p.apvts.getParameter (params::cabMix), 0.0f, 100.0f) {}
 
     /** DI/CAB, A FADER as every BLEND and MIX on the bass's face (the owner, 01.11): its name over it, its percent under
         it, typed there, a double click its default, one undo step a drag. No switch of its own, as the AMP's BLEND: moved, it mixes

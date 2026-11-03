@@ -542,17 +542,19 @@ inline constexpr const char* chorusCrossoverHz = "chorus_crossover_hz";
 inline constexpr float chorusCentreMs = 8.0f;
 inline constexpr float chorusCrossoverItems[] { 200.0f, 250.0f, 300.0f, 400.0f, 500.0f };
 
-/** BLEND, in the AMP: the clean input below a frequency, the capture above it (RigPlayer's crossover
-    blend) — 0 is the capture alone. The frequency and the polarity in its menu. */
-inline constexpr const char* ampBlend       = "amp_blend";
+/** BLEND, in the AMP: the capture's share against the clean input below a frequency (RigPlayer's crossover
+    blend, told 1 - this) — 1 is the capture alone, as every MIX on the bass is its block alone at the top (the owner,
+    03.11). A new id since it turned: a state saved the other way round falls to the default instead. The frequency
+    and the polarity in its menu. */
+inline constexpr const char* ampBlend       = "amp_blend_wet";
 inline constexpr const char* ampBlendHz     = "amp_blend_hz";
 inline constexpr const char* ampBlendInvert = "amp_blend_invert";
 inline constexpr float ampBlendMinHz = 80.0f, ampBlendMaxHz = 250.0f, ampBlendDefaultHz = 150.0f;
 
-/** DI/CAB, after the cabinet: the DI's share — the signal before the cabinet's IR — against the
-    cabinet's, in percent. */
-inline constexpr const char* diMix = "di_mix";
-inline constexpr float diMixDefault = 30.0f;
+/** MIX, in the CAB, after the cabinet: the cabinet's share against the DI — the signal the cabinet is handed — in
+    percent; 100 is the cabinet alone. */
+inline constexpr const char* cabMix = "cab_mix";
+inline constexpr float cabMixDefault = 70.0f;
 
 /** The bass's own cuts (the owner, 31.10: ONE pair, on the AMP's switches): the HPF by the strings — 5 STR (a low B
     whole) or 4 STR — switched on and off apart from that choice, so it comes back where it was; ONE control across the

@@ -3672,7 +3672,7 @@ int main()
         for (const auto& [id, v] : { std::pair<const char*, float> { orbitamp::params::compAmount, 0.7f },
                                       { orbitamp::params::octaveAmount, 0.8f }, { orbitamp::params::filterAmount, 0.9f },
                                       { orbitamp::params::chorusAmount, 0.8f }, { orbitamp::params::ampBlend, 0.5f },
-                                      { orbitamp::params::bassLpfOn, 1.0f }, { orbitamp::params::diMix, 60.0f } })
+                                      { orbitamp::params::bassLpfOn, 1.0f }, { orbitamp::params::cabMix, 40.0f } })
             set (amp, id, v);
         amp.pumpDeviceWork();
 

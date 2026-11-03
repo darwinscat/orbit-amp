@@ -486,8 +486,8 @@ RedGrooveEditor::RedGrooveEditor (AmpProcessor& p)
                 [] (float t) { return t * params::compThresholdMin; }, [&compValue] (float db) { compValue.set (dbWhole (db)); });
     bindTravel (blend, params::ampBlend, [] (float v) { return v; }, [] (float t) { return t; },
                 [&blendValue] (float v) { blendValue.set (percent (v)); });
-    // CAB / DI: the cabinet at the head, the DI at the foot — the DI's share down its travel.
-    bindTravel (diCab, params::diMix, [] (float v) { return 1.0f - v / 100.0f; }, [] (float t) { return (1.0f - t) * 100.0f; }, {});
+    // CAB / DI: the cabinet at the head, the DI at the foot — the cabinet's share up its travel.
+    bindTravel (diCab, params::cabMix, [] (float v) { return v / 100.0f; }, [] (float t) { return t * 100.0f; }, {});
     const char* effectIds[] { params::octaveAmount, params::filterAmount, params::chorusAmount };
     const char* effectNames[] { "OCTAVE", "ENVELOPE", "CHORUS" };
     for (size_t i = 0; i < 3; ++i)
@@ -855,7 +855,7 @@ void RedGrooveEditor::webExtras (const juce::File& dir, juce::DynamicObject& kit
             v->setProperty ("id", "diCab"); v->setProperty ("name", "CAB / DI"); v->setProperty ("box", rect (boxOf (diCab)));
             v->setProperty ("slot", rect (layout::diCabSlot));
             v->setProperty ("sprite", "fader-cap"); v->setProperty ("capLength", layout::faderCapLength);
-            v->setProperty ("param", params::diMix); v->setProperty ("travel", "1 - the value / 100, bottom (DI) to top (CAB)");
+            v->setProperty ("param", params::cabMix); v->setProperty ("travel", "the value / 100, bottom (DI) to top (CAB)");
             a.add (juce::var (v));
         }
         o->setProperty ("columns", a);

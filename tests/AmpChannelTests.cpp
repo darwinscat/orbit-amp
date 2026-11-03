@@ -808,7 +808,7 @@ int ORBITAMP_GATE_MAIN()
         auto* lpf = amp->apvts.getParameter (params::bassLpf);
         const juce::StringArray kept { params::preampGain, params::ampBlend, params::eqLoDb (0), params::eqBellDb (0, 0),
                                        params::eqHiDb (0), params::eqBellHz (0, 0), params::compThreshold,
-                                       params::octaveAmount, params::filterAmount, params::chorusAmount, params::diMix };
+                                       params::octaveAmount, params::filterAmount, params::chorusAmount, params::cabMix };
         const auto at  = [&amp] (const juce::String& id) { auto* p = amp->apvts.getParameter (id); return p != nullptr ? p->getValue() : -1.0f; };
         const auto put = [&amp] (const juce::String& id, float to) { if (auto* p = amp->apvts.getParameter (id)) p->setValueNotifyingHost (to); };
         const auto plain = [&amp] (const juce::String& id) { auto* p = amp->apvts.getParameter (id); return p != nullptr ? p->convertFrom0to1 (p->getValue()) : -1000.0f; };

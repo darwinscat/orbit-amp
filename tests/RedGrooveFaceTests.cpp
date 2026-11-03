@@ -123,8 +123,8 @@ int ORBITAMP_GATE_MAIN()
         }
         return ok && std::abs (plain (id) - want) < 1.0e-2f;
     };
-    check (turns ("blend", 0.62f, params::ampBlend, 0.62f) && turns ("diCab", 0.4f, params::diMix, 40.0f),
-           "BLEND turns its share and DI/CAB the DI's");
+    check (turns ("blend", 0.62f, params::ampBlend, 0.62f) && turns ("diCab", 0.4f, params::cabMix, 40.0f),
+           "BLEND turns the capture's share and CAB / DI the cabinet's");
     check (turns ("octave", 0.3f, params::octaveAmount, 0.3f) && turns ("envelope", 0.5f, params::filterAmount, 0.5f)
                && turns ("chorus", 0.7f, params::chorusAmount, 0.7f),
            "OCTAVE, ENVELOPE and CHORUS each turn their amount");

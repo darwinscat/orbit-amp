@@ -165,7 +165,7 @@ AmpProcessor::AmpProcessor (const Product& product)
     {
         const auto raw = [this] (const char* id) { return apvts.getRawParameterValue (id); };
         bass = { raw (params::compAmount), raw (params::compAttack), raw (params::compRelease), raw (params::compCharacter),
-                 raw (params::ampBlend), raw (params::ampBlendHz), raw (params::ampBlendInvert), raw (params::diMix),
+                 raw (params::ampBlend), raw (params::ampBlendHz), raw (params::ampBlendInvert), raw (params::cabMix),
                  raw (params::bassHpf), raw (params::bassHpfHz4), raw (params::bassHpfHz5),
                  raw (params::bassLpf), raw (params::bassLpfHzFingers), raw (params::bassLpfHzSlap),
                  raw (params::octaveAmount), raw (params::octaveToneHz),
@@ -893,10 +893,10 @@ void AmpProcessor::pumpDeviceWork()
 
     pump (preamp,   preampGainParam, preampSmoothParam, params::preampMeasured, params::preampId);
 
-    // The bass's BLEND, its clean low end under the capture: the player's crossover, told from here as every
-    // other setting of the device is. Amount 0 is the player without it. This pump runs from the message thread's
-    // timer and from prepareToPlay, which a host may call from a thread of its own: the message thread tells it
-    // here (or the only thread there is, with no MessageManager at all), and a prepare elsewhere tells it itself
+    // The AMP's BLEND, the capture against its clean low end: the player's crossover, told from here as every
+    // other setting of the device is. BLEND 1 — the crossover's amount 0 — is the player without it. This pump
+    // runs from the message thread's timer and from prepareToPlay, which a host may call from a thread of its own:
+    // the message thread tells it here (or the only thread there is, with no MessageManager at all), and a prepare elsewhere tells it itself
     // (tellBlend, from prepareToPlay) — both under one control-side lock, never the audio callback's.
     if (bass.blend != nullptr
         && (juce::MessageManager::existsAndIsCurrentThread() || juce::MessageManager::getInstanceWithoutCreating() == nullptr))
@@ -1173,7 +1173,7 @@ void AmpProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
         bassCuts.prepare (sampleRate);
         for (auto& c : innerCuts)
             c.prepare (sampleRate);
-        diNow  = juce::jlimit (0.0f, 1.0f, bass.diMix->load() * 0.01f);
+        diNow  = juce::jlimit (0.0f, 1.0f, (100.0f - bass.cabMix->load()) * 0.01f);
         diStep = (float) (1000.0 / (juce::jmax (8000.0, sampleRate) * 20.0));   // the prepared rate, not getSampleRate()'s
 
         // The three effects: mono up to the chorus, which takes the bus's planes. TOLD WHERE THEY STAND BEFORE THEIR
@@ -1253,7 +1253,7 @@ void AmpProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 
     pumpDeviceWork();
 
-    // ...and BLEND as the state has it, whatever thread prepares: a host that sets it, prepares on a worker and
+    // ...and the AMP's BLEND as the state has it, whatever thread prepares: a host that sets it, prepares on a worker and
     // renders at once — an offline render, its message thread busy — plays it from the first block.
     if (bass.blend != nullptr)
         tellBlend();
@@ -1442,7 +1442,7 @@ void AmpProcessor::runSpaceStage (Stage& stage, bool ready, params::ChainRow row
 void AmpProcessor::tellBlend()
 {
     const std::scoped_lock control (blendControl);
-    preamp.setCrossover (bass.blend->load(), bass.blendHz->load(), bass.blendInvert->load() > 0.5f);
+    preamp.setCrossover (1.0f - bass.blend->load(), bass.blendHz->load(), bass.blendInvert->load() > 0.5f);   // BLEND 1: the capture alone
 }
 
 namespace
@@ -2529,17 +2529,17 @@ void AmpProcessor::processChunk (juce::AudioBuffer<float>& buffer)
               juce::FloatVectorOperations::copy (fadeDry.getWritePointer (ch),
                                                  buffer.getReadPointer (ch), numSamples);
 
-      // THE BASS'S DI/CAB: the DI is the signal the cabinet is handed, kept aside to be mixed with what the
+      // THE CAB'S MIX: the DI is the signal the cabinet is handed, kept aside to be mixed with what the
       // cabinet makes of it — the cabinet's IR plays at sample zero, so the two line up as they are. With the
       // cabinet out there is nothing to mix against, and the share does nothing.
       //
       // The share GLIDES, owned by the audio thread (20 ms for the whole travel), so a hand, a recall or automation is
       // never a step of the difference between the two; settled, the mix is the plain one. With the cabinet fully
       // out the share lands where it is asked at once — there is nothing to glide against.
-      const float diWant = bass.diMix != nullptr ? juce::jlimit (0.0f, 1.0f, bass.diMix->load() * 0.01f) : 0.0f;
-      const bool  diMix  = bass.diMix != nullptr && cabOn && (diWant > 0.0f || diNow > 0.0f)
+      const float diWant = bass.cabMix != nullptr ? juce::jlimit (0.0f, 1.0f, (100.0f - bass.cabMix->load()) * 0.01f) : 0.0f;   // MIX: the cabinet's share
+      const bool  diMix  = bass.cabMix != nullptr && cabOn && (diWant > 0.0f || diNow > 0.0f)
                         && numSamples <= diDry.getNumSamples();
-      if (bass.diMix != nullptr && ! cabOn)
+      if (bass.cabMix != nullptr && ! cabOn)
           diNow = diWant;
       if (diMix)
           for (int ch = 0; ch < nchBack; ++ch)
