@@ -5,7 +5,8 @@
 // strums with a KNOWN answer. Every string is additive synthesis of a stiff string: partial h at
 // h f0 sqrt(1 + B h^2), a pluck-position spectrum, higher partials dying faster, a pitch that starts
 // sharp and settles, the strings struck one after another as a strum does. The truth is each
-// string's first partial. Seeded: the gate never rolls dice.
+// string's pitch as the needle hears it: its partials together (PolyTuner::heardAs; reckon,
+// below). Seeded: the gate never rolls dice.
 //
 // And what the faces draw from it (core::TunerPoly): the tunings each product offers, a reading's lanes,
 // and the pump's tick — the analysis run only while it is asked for, nothing allocated per tick.
@@ -17,6 +18,7 @@
 #include "core/TunerPoly.h"
 #include "core/TunerTap.h"
 
+#include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <complex>
@@ -63,12 +65,13 @@ namespace
 
     struct StringSpec
     {
-        double f1      = 0.0;    // the truth: the first partial
+        double f1      = 0.0;    // the first partial (the truth is `heard`, below)
         double B       = 0.0;
         double levelDb = 0.0;
         double pluck   = 0.15;   // pluck position, a fraction of the length
         double tau1    = 3.0;    // the first partial's decay, s
         bool   on      = true;
+        mutable double heard = 0.0;   // the truth, Hz, for the reading just taken (reckon)
     };
 
     struct Scene
@@ -182,6 +185,40 @@ namespace
         return sc;
     }
 
+    /** The truth for the reading `pt` just took (PolyTuner::heardAs): the mean of the string's partials'
+        h-ths under the band it is read in, weighted by (amplitude x h)^2, the amplitudes at the middle of the
+        reading's span — as rendered, the glide long settled by then: the string as the needle hears it alone.
+        Into each string's `heard`. */
+    void reckon (const PolyTuner& pt, const Scene& sc)
+    {
+        const auto& r = pt.reading();
+        const double mid = r.endSec - 0.5e-3 * r.spanMs;
+        for (size_t i = 0; i < sc.strings.size(); ++i)
+        {
+            const auto& st = sc.strings[i];
+            st.heard = 0.0;
+            if (r.spanMs <= 0.0f)
+                continue;
+            const double at = mid - (sc.strumAt + 1.0e-3 * sc.spreadMs * (double) i);
+            const double f0 = st.f1 / std::sqrt (1.0 + st.B);
+            double wsum = 0.0, lsum = 0.0;
+            for (int h = 1; h <= 40; ++h)
+            {
+                const double fh = h * f0 * std::sqrt (1.0 + st.B * h * h);
+                if (fh > std::min ({ 0.45 * sc.fs, 2500.0, pt.readBandHz() }))
+                    break;
+                const double a  = std::abs (std::sin (pi * h * st.pluck)) / std::pow ((double) h, 0.9)
+                                * std::exp (-at / (st.tau1 / (1.0 + fh / 600.0)));
+                const double wt = (a * h) * (a * h);
+                wsum += wt;
+                lsum += wt * std::log (fh / h);
+            }
+            st.heard = wsum > 0.0 ? std::exp (lsum / wsum) : 0.0;
+        }
+    }
+
+    double truthOf (const StringSpec& st) { return st.heard > 0.0 ? st.heard : st.f1; }
+
     PolyTuner::Reading listen (const PolyTuner::Tuning& t, const Scene& sc, double* seconds = nullptr)
     {
         static PolyTuner pt;   // big: keep it off the stack
@@ -193,6 +230,7 @@ namespace
         pt.analyse();
         if (seconds != nullptr)
             *seconds = std::chrono::duration<double> (std::chrono::steady_clock::now() - t0).count();
+        reckon (pt, sc);
         return pt.reading();
     }
 
@@ -225,8 +263,8 @@ namespace
             const auto& o = r.string[(size_t) s];
             const auto& st = sc.strings[(size_t) s];
             std::printf ("      string %d  true %8.3f Hz (%+6.1f c, %5.1f dB, B %.1e)  read %-6s %8.3f Hz  err %+7.3f c  sd %.3f  lvl %.1f\n",
-                         s + 1, st.f1, 1200.0 * std::log2 (st.f1 / targetOf (t, s)), st.levelDb, st.B, heardName (o.heard),
-                         o.hz, o.hz > 0.0f ? 1200.0 * std::log2 (o.hz / st.f1) : 0.0, o.sigmaCents, o.levelDb);
+                         s + 1, truthOf (st), 1200.0 * std::log2 (truthOf (st) / targetOf (t, s)), st.levelDb, st.B, heardName (o.heard),
+                         o.hz, o.hz > 0.0f ? 1200.0 * std::log2 (o.hz / truthOf (st)) : 0.0, o.sigmaCents, o.levelDb);
         }
     }
 
@@ -241,19 +279,22 @@ namespace
 
     double errCents (const PolyTuner::String& o, const StringSpec& st)
     {
-        return o.hz > 0.0f ? 1200.0 * std::log2 (o.hz / st.f1) : 999.0;
+        return o.hz > 0.0f ? 1200.0 * std::log2 (o.hz / truthOf (st)) : 999.0;
     }
 
-    // The rule the analysis keeps (PolyTuner.h, Decisions): a published number within a cent of the truth,
-    // or none — "pluck alone" or "-". Withholding is counted, and the count is held to a ceiling at the end:
-    // a tuner that withheld everything would pass the rest.
+    // The rule the analysis keeps (PolyTuner.h, Decisions): a published number within a cent of the truth — in a
+    // chord, within the needle's green band — or none: "pluck alone" or "-". Withholding is counted, and the count
+    // is held to a ceiling at the end: a tuner that withheld everything would pass the rest.
     int withheld = 0, sounding = 0;
-    constexpr double withheldCeiling = 10.0;
-    bool rightOrWithheld (const PolyTuner::String& o, const StringSpec& st)
+    constexpr double withheldCeiling = 15.0;   // 7.7 % on the first partial; a chord's string leaning on its model waits more
+    bool rightOrWithheld (const PolyTuner::String& o, const StringSpec& st, const Scene& sc)
     {
         ++sounding;
+        int on = 0;
+        for (const auto& x : sc.strings)
+            on += x.on ? 1 : 0;
         if (o.heard == Heard::near)
-            return std::abs (errCents (o, st)) <= 1.0;
+            return std::abs (errCents (o, st)) <= (on > 1 ? orbitamp::core::TunerEar::inTuneCents : 1.0);
         if (o.heard == Heard::far)
             return false;   // every string here is within 40 c of its note
         ++withheld;
@@ -294,7 +335,7 @@ int main()
                         ++masked[s];
                     else
                         worst[s] = std::max (worst[s], std::abs (errCents (o, sc.strings[(size_t) s])));
-                    ok = rightOrWithheld (o, sc.strings[(size_t) s]) && ok;
+                    ok = rightOrWithheld (o, sc.strings[(size_t) s], sc) && ok;
                 }
                 check (ok, "strum", t, sc, r);
             }
@@ -321,7 +362,7 @@ int main()
             bool ok = r.string[(size_t) m].heard == Heard::no || r.string[(size_t) m].heard == Heard::masked;
             for (int s = 0; s < t.strings; ++s)
                 if (s != m)
-                    ok = rightOrWithheld (r.string[(size_t) s], sc.strings[(size_t) s]) && ok;
+                    ok = rightOrWithheld (r.string[(size_t) s], sc.strings[(size_t) s], sc) && ok;
             check (ok, "muted string", t, sc, r);
         }
     std::printf ("muted string: checked every string of every tuning\n");
@@ -335,10 +376,11 @@ int main()
             sc.strings[(size_t) f].f1 = targetOf (t, f) * std::pow (2.0, off / 1200.0);
             const auto r = listen (t, sc);
             const auto& o = r.string[(size_t) f];
+            // FAR shows its side, never a number: read by its first partial, within a few cents of it.
             bool ok = o.heard == Heard::far && std::abs (o.cents - off) <= 2.0;
             for (int s = 0; s < t.strings; ++s)
                 if (s != f)
-                    ok = rightOrWithheld (r.string[(size_t) s], sc.strings[(size_t) s]) && ok;
+                    ok = rightOrWithheld (r.string[(size_t) s], sc.strings[(size_t) s], sc) && ok;
             check (ok, "one string 150 c off", t, sc, r);
         }
     std::printf ("far string: +-150 c on every string of every tuning\n");
@@ -356,7 +398,7 @@ int main()
             for (int s = 0; s < t.strings; ++s)
             {
                 const auto& o = r.string[(size_t) s];
-                ok = rightOrWithheld (o, sc.strings[(size_t) s]) && ok;
+                ok = rightOrWithheld (o, sc.strings[(size_t) s], sc) && ok;
                 if (clean.string[(size_t) s].heard == Heard::near && o.heard == Heard::near)
                     humShift = std::max (humShift, (double) std::abs (o.cents - clean.string[(size_t) s].cents));
             }
@@ -409,11 +451,12 @@ int main()
                 got = pt.maybeAnalyse() && pt.reading().strum > 0 && pt.reading().spanMs > 0.0f
                       && (double) k / sc.fs > sc.strumAt;
             }
-                bool ok = got;
+            reckon (pt, sc);
+            bool ok = got;
             for (int s = 0; s < t.strings; ++s)
             {
                 const auto& o = pt.reading().string[(size_t) s];
-                ok = rightOrWithheld (o, sc.strings[(size_t) s]) && ok;
+                ok = rightOrWithheld (o, sc.strings[(size_t) s], sc) && ok;
             }
             check (ok, "first reading after a hard pluck", t, sc, pt.reading());
         }
@@ -584,8 +627,10 @@ int main()
         expect (poly.on() && poly.running() && perTick == 0, "pump: runs, and no tick after the first allocates");
         expect (kept && poly.reading().spanMs > 900.0f, "pump: the same tuning again keeps the reading");
         const auto lanes = poly.lanes (true);
-        expect (lanes.lane[1].mark == Mark::near && std::abs (lanes.lane[1].cents - 12.0f) < 0.5f && ! lanes.lane[1].green
-                    && lanes.lane[3].mark == Mark::near && std::abs (lanes.lane[3].cents + 30.0f) < 0.5f
+        listen (t, sc);   // the strum's truth: each string as the needle hears it (reckon), not its first partial's detune
+        const auto truthCents = [&] (int s) { return (float) (1200.0 * std::log2 (truthOf (sc.strings[(size_t) s]) / targetOf (t, s))); };
+        expect (lanes.lane[1].mark == Mark::near && std::abs (lanes.lane[1].cents - truthCents (1)) < 0.5f && ! lanes.lane[1].green
+                    && lanes.lane[3].mark == Mark::near && std::abs (lanes.lane[3].cents - truthCents (3)) < 0.5f
                     && lanes.lane[4].mark != Mark::near && lanes.lane[4].mark != Mark::far
                     && lanes.lane[5].mark == Mark::masked
                     && lanes.lane[0].green && lanes.lane[2].green,

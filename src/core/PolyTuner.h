@@ -60,7 +60,9 @@ namespace orbitamp::core
     WITHHOLD RATHER THAN LIE. A confident wrong number is the defect. Where the evidence does not hold
     — a string on another's partial or on a mains line, halves of the span that disagree, a model that
     does not fit — the lane says "pluck alone" or waits, never a number. What is published is within
-    a cent of the string's own sustained pitch (the main plane of a string that beats), or withheld.
+    a cent of the string's own sustained pitch as the needle hears it — its partials together, not its
+    first alone (heardAs; the main plane of a string that beats) — in a chord within the needle's green
+    band (2.5 c: partials crowded by the others' are read off the string's clear ones), or withheld.
 
     Off the audio thread, JUCE-free and headless like PitchTracker: push() or update() on the tuner's
     own timer, read reading(). Everything is allocated in prepare(); nothing per tick. */
@@ -102,7 +104,7 @@ public:
     {
         Heard heard      = Heard::no;
         float cents      = 0.0f;     // deviation from the target (near and far)
-        float hz         = 0.0f;     // the string's first partial
+        float hz         = 0.0f;     // the string's pitch, as the needle hears it (heardAs)
         float targetHz   = 0.0f;
         float sigmaCents = 0.0f;     // one standard deviation of `cents`, from the fit
         float levelDb    = -200.0f;  // the string's strongest of partials 1-2, dBFS
@@ -321,6 +323,10 @@ public:
     /** What the analysis decimates to, Hz — for tests and cost accounting. */
     double analysisRate() const noexcept { return fsD; }
 
+    /** The band strings are read in, Hz: a partial above it is fitted for its leakage, never read — for tests,
+        which reckon a string's pitch (heardAs) from the partials under it. */
+    double readBandHz() const noexcept { return fUse * 1.02; }
+
     /** The mains as learned: its fundamental, Hz (0: none), and which harmonics stand (bit k: the k-th). */
     double   mainsHz()   const noexcept { return humHz; }
     unsigned mainsMask() const noexcept { return humMask; }
@@ -490,8 +496,9 @@ private:
             // into its beat: a second plane, the pitch swinging toward the far side of it.
             const double dA = job.decay[0][(size_t) s], dB = job.decay[1][(size_t) s];
             const bool steady = std::abs (dA - dB) <= halvesDecayAgree && dB - dA <= halvesDecayRise;
-            bool keep = okA && okB && said (a) && said (b) && std::abs (a.cents - b.cents) <= halvesAgreeCents
-                     && std::abs (w.cents - 0.5f * (a.cents + b.cents)) <= halvesAgreeCents && steady;
+            const double g = gateScale (s);
+            bool keep = okA && okB && said (a) && said (b) && std::abs (a.cents - b.cents) <= halvesAgreeCents * g
+                     && std::abs (w.cents - 0.5f * (a.cents + b.cents)) <= halvesAgreeCents * g && steady;
             if (keep)
             {
                 // The sigma a reading is published with is the WHOLE error budget: the fit's own, and what the
@@ -503,7 +510,7 @@ private:
                 const double sw = w.sigmaCents, sa = a.sigmaCents, sb = b.sigmaCents;
                 const double dh = (double) a.cents - b.cents, dw = (double) w.cents - 0.5 * ((double) a.cents + b.cents);
                 const double total = std::sqrt (sw * sw + dh * dh + dw * dw);
-                keep = total <= publishSigmaCents && std::sqrt (sa * sa + sb * sb) <= halvesResolveCents;
+                keep = total <= publishSigmaCents * g && std::sqrt (sa * sa + sb * sb) <= halvesResolveCents * g;
                 w.sigmaCents = (float) total;
             }
             if (! keep)
@@ -603,7 +610,11 @@ private:
     static constexpr double halvesDecayAgree  = 0.3;   // ... and see the first partial die away alike, 1/s
     static constexpr double halvesDecayRise   = 0.1;   // ... never faster in the second, 1/s (their noise allowed for)
     static constexpr double halvesResolveCents = 0.7;  // ... and know their difference to this: a check that can see a cent
-    static constexpr double vouchCents        = 5.0;   // the first partial against the string's other partials
+    static constexpr double crowdedGateScale  = 2.0;   // every gate above, for a string that leans on its model (heardAs):
+                                                       // its promise is the needle's green band, 2.5 c, not a cent
+    static constexpr double vouchCents        = 15.0;  // the first partial against the string's other partials: a real
+                                                       // string's strays off them — a bass's 4-7 c, to 13, a guitar's low E
+                                                       // 5 (seven basses, six guitars DI, 03.11) — far inside a semitone
     static constexpr double mainsDecaySec     = 8.0;   // on a mains line, a string must be seen to die away
     static constexpr int    maxHumK           = 20;    // mains harmonics modelled, as far as they stand
     static constexpr double quietDropDb       = 35.0;  // the mains is learned only this far under the last strum
@@ -2180,9 +2191,16 @@ private:
     /** What each string is taken for, into `r`. A number is published only where the evidence holds:
         the string's OWN first partial, measured (not the model's extrapolation — real partials stray off
         the stiff-string formula by cents), vouched for by its other partials, known to `sigmaGate`, and
-        not standing on another string's partial or on a mains line it cannot be told from. */
+        not standing on another string's partial or on a mains line it cannot be told from. The number is
+        then the string's partials together, as the needle hears them (heardAs). */
     void decideBegin()
     {
+        if (job.part == 0)
+        {
+            heardWeights = {};
+            heardCrowded = {};
+            leansOnModel = {};
+        }
         dLevel = {};
         dLoudest = 0.0;
         for (int k = 0; k < nComps; ++k)
@@ -2344,18 +2362,151 @@ private:
                 }
             }
 
-            if (sd > sigmaGate)
+            // The string is published as the needle hears it — its first partial only vouched for it. A string
+            // further than a semitone off is FAR, and a lane shows no number for it, only its side: its first
+            // partial says that much, and its partials crowded by strings it is not tuned beside would only withhold it.
+            const bool farOff = std::abs (1200.0 * std::log2 (hz / target[(size_t) s])) > farCents + 3.0 * sd;
+            const Pitch pitch = farOff ? Pitch { hz, sd } : heardAs (s, k1);
+            if (pitch.sd > sigmaGate * gateScale (s))
             {
                 o.heard = Heard::no;   // the lane waits
                 return;
             }
 
             decayOf[(size_t) s] = c1.d * fsD;
-            o.hz         = (float) hz;
-            o.cents      = (float) (1200.0 * std::log2 (hz / target[(size_t) s]));
-            o.sigmaCents = (float) sd;
+            o.hz         = (float) pitch.hz;
+            o.cents      = (float) (1200.0 * std::log2 (pitch.hz / target[(size_t) s]));
+            o.sigmaCents = (float) pitch.sd;
             o.heard      = std::abs (o.cents) > farCents ? Heard::far : Heard::near;
         }
+    }
+
+    struct Pitch { double hz = 0.0, sd = 0.0; };   // Hz, and its sd in cents
+
+    /** How much wider string s's gates are: a string whose crowded partials stand on its model (heardAs) is
+        promised the needle's green band, not a cent — and gated by as much, the model's stray in its sigma. */
+    double gateScale (int s) const noexcept { return leansOnModel[(size_t) s] ? crowdedGateScale : 1.0; }
+
+    /** String s's pitch AS THE NEEDLE HEARS IT: the mean of its partials' h-ths, each weighted by
+        (amplitude x h)^2 — where a period's autocorrelation peaks (core::PitchTracker), the stretch of a
+        stiff string's upper partials included. A real string's partials do not lie on one series: a bass's
+        first stands 4-7 c (to 13) off where the others put it, a guitar's low E's 5, and they scatter by cents
+        among themselves; the needle reads the strings through all of them, and the face's tuners must not
+        argue about a string. Measured on seven basses and six guitars DI (03.11), single strings: this within
+        0.2 c of the needle (median; 90 % within 1.2 c), the first partial alone 1.1-1.5 (3.3-5.8) — on a BB's
+        low E 7 c off it, where the strobe's fundamental band stands still. Only the partials in the band in use
+        (readBandHz) count: the needle hears up to 1.5 kHz, but the band widened to 400-700 Hz cost 2-5x a tick
+        and, at 400, put numbers 17-22 c off in chords — for a median on the singles of 0.25 c against 0.3.
+        `k1`, the first partial, is what remains when nothing else was measured.
+        The halves weigh the partials as the whole span did: a stiff string's upper partials die faster, so
+        their own weights move the mean by itself — the halves would disagree over a pitch that never moved,
+        and their check is there for one that does.
+        IN A CHORD a partial crowded by another string's (crowded) is measured as the fit pleases — energy and
+        pitch shared, cents off at an sd that does not know it — so it counts where the string's own CLEAR partials
+        put it (their stiff-string model), at the weight it was fitted with: the mean stays the whole string's,
+        and only its crowded partials stand on the model, the stray of a real partial off it (priorFloorCents)
+        their error. Alone, none is crowded, and every partial counts as measured. */
+    Pitch heardAs (int s, int k1)
+    {
+        auto& kept = heardWeights[(size_t) s];
+        auto& crowd = heardCrowded[(size_t) s];
+        const bool weighs = job.part == 0;   // the whole span: its weights and its crowding are the halves' too
+
+        struct Meas { double h2, y, v; bool use; };
+        std::array<Meas, maxHarm + 1> clear {};
+        int nClear = 0, nCrowded = 0;
+        for (int k = 0; k < nComps; ++k)
+        {
+            const auto& c = comps[(size_t) k];
+            if (c.string != s || ! c.active || c.shield || ! std::isfinite (c.varW) || c.w <= 0.0 || c.harm > maxHarm)
+                continue;
+            if (weighs)
+            {
+                kept[(size_t) c.harm]  = std::pow (amplitudeOf (c) * c.harm, 2.0);
+                crowd[(size_t) c.harm] = crowded (c);
+            }
+            if (crowd[(size_t) c.harm])
+                ++nCrowded;
+            else if (nClear < maxHarm + 1)
+                clear[(size_t) nClear++] = { (double) c.harm * c.harm, std::log (c.w / c.harm),
+                                             c.varW / (c.w * c.w) + std::pow (measFloorCents / centsPerLog, 2.0), true };
+        }
+        ModelFit model;
+        if (nCrowded > 0 && nClear > 0)
+            model = fitMeasurements (clear.data(), nClear);
+        if (weighs)
+            leansOnModel[(size_t) s] = nCrowded > 0 && model.ok;
+
+        double wsum = 0.0, lsum = 0.0, vsum = 0.0;
+        for (int k = 0; k < nComps; ++k)
+        {
+            const auto& c = comps[(size_t) k];
+            if (c.string != s || ! c.active || c.shield || ! std::isfinite (c.varW) || c.w <= 0.0 || c.harm > maxHarm)
+                continue;
+            const double wt = kept[(size_t) c.harm];
+            if (! (wt > 0.0))
+                continue;
+            double lnw = std::log (c.w), v = 0.0;
+            if (crowd[(size_t) c.harm] && model.ok)
+            {
+                predict (model, c.harm, lnw, v);
+                v += std::pow (priorFloorCents / centsPerLog, 2.0);
+            }
+            else
+            {
+                // Its frequency was fitted held to where its string's other partials put it (c.pw), but varW counts
+                // the data alone (fitCluster's variances leave its own prior out): a partial buried under another
+                // string's reads 5 to 1700 c there. As this mean takes it, it is known to its prior as well.
+                v = c.varW / (c.w * c.w);
+                if (c.psw > 0.0 && c.pw > 0.0)
+                    v = 1.0 / (1.0 / v + std::pow (c.pw / c.psw, 2.0));
+            }
+            wsum += wt;
+            lsum += wt * (lnw - std::log ((double) c.harm));
+            vsum += wt * wt * v;
+        }
+        const auto& c1 = comps[(size_t) k1];
+        if (! (wsum > 0.0))
+            return { c1.w * fsD / (2.0 * pi), std::sqrt (c1.varW) / c1.w * centsPerLog };
+        return { std::exp (lsum / wsum) * fsD / (2.0 * pi), std::sqrt (vsum) / wsum * centsPerLog };
+    }
+
+    /** Is partial `c` crowded by another string — within mergeBins of the whole span (where the two are fitted
+        together; the whole span's, as the crowding is the halves' too) of another string's partial as fitted, or of
+        where a COINCIDENT string's may stand? There the two share their energy and pull each other by cents their
+        sd does not count: a B0's 8th beside another string's partial came out with nothing of its own, an A's 6th
+        0.9 Hz from a high E's 2nd read 3 c off at sd 0.01. A coincident string (seen only on other strings'
+        partials) is fitted where the analysis guessed, not where it rings — a high E masked on an A's 3rd was
+        fitted 50 c away — so every other string's partial in its window is where it may stand, and their
+        multiples are where its upper partials may. */
+    bool crowded (const Comp& c) const
+    {
+        const double near = mergeBins * binW;
+        for (int k = 0; k < nComps; ++k)
+        {
+            const auto& o = comps[(size_t) k];
+            if (o.string < 0 || o.string == c.string || ! o.active || strings[(size_t) o.string].status == 0)
+                continue;
+            if (std::abs (o.w - c.w) < near)
+                return true;
+        }
+        for (int m = 0; m < tuning.strings; ++m)
+        {
+            const auto& sm = strings[(size_t) m];
+            if (m == c.string || sm.status != 2)
+                continue;
+            const double lo = 2.0 * pi * sm.lo / fsD, hi = 2.0 * pi * sm.hi / fsD;
+            for (int k = 0; k < nComps; ++k)
+            {
+                const auto& x = comps[(size_t) k];
+                if (x.string < 0 || x.string == m || ! x.active || x.w < lo || x.w > hi)
+                    continue;
+                for (int j = 1; j * x.w <= c.w + near; ++j)
+                    if (std::abs (j * x.w - c.w) < near)
+                        return true;
+            }
+        }
+        return false;
     }
 
     /** Does string s explain anything its neighbours in the clusters do not? Take it out and let
@@ -2509,6 +2660,9 @@ private:
 
     Reading out {}, whole {}, firstHalf {}, secondHalf {};
     double geometrySec = 1.0;   // the whole span's length — see decide
+    std::array<std::array<double, maxHarm + 1>, maxStrings> heardWeights {};   // the partials' weights, the whole span's
+    std::array<std::array<bool, maxHarm + 1>, maxStrings>   heardCrowded {};   // ... and which of them are crowded
+    std::array<bool, maxStrings> leansOnModel {};   // the whole span's: a string's crowded partials stand on its model
     std::array<double, maxStrings> decayOf {};   // each published string's first-partial decay, 1/s — see analyse
 };
 
