@@ -231,7 +231,7 @@ void CabinetBlock::refreshIr (bool force, bool keepTrimWord)
     {
         const auto synth = AmpProcessor::cabSynthOf (choice);
         picker->show (synth.valid ? CabPicker::indexOf (synth.cab) : -1,
-                      { synth.spot.x, synth.spot.y, synth.spot.distance, synth.spot.horn });
+                      { synth.spot.x, synth.spot.y, synth.spot.distance, synth.spot.horn, synth.spot.mic });
     }
 
     // The same bytes the engine convolves, whichever shelf they came off.
@@ -416,7 +416,7 @@ void CabinetBlock::showCabPanel()
     // The bass's own cabinets, rendered live with the mic where the hand put it (AmpProcessor::requestCabSynth).
     content->onSpot = [this] (int cab, CabPicker::Spot spot)
     {
-        amp.requestCabSynth (CabPicker::cabs()[(size_t) cab].name, { spot.x, spot.y, spot.distance, spot.horn });
+        amp.requestCabSynth (CabPicker::cabs()[(size_t) cab].name, { spot.x, spot.y, spot.distance, spot.horn, spot.mic });
     };
     content->onOwnIrs = [this]
     {

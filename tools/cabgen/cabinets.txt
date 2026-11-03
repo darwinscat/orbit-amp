@@ -45,11 +45,18 @@ mic_highpass_hz = 30
 mic_presence_eq = 80/1/3, 450/0.8/-5, 4000/0.9/5
 mic_top_corner_hz = 14000
 
-[mic-ldc]
-proximity_strength = 1.0
-mic_highpass_hz = 20
-mic_presence_eq = 10000/0.8/1.5
-mic_top_corner_hz = 18000
+[mic-u87]
+proximity_strength = 1.2
+mic_highpass_hz = 30
+mic_presence_eq = 10000/1/3
+mic_top_corner_hz = 20000
+
+[mic-ribbon]
+proximity_strength = 1.4
+mic_pattern = figure8
+mic_highpass_hz = 25
+mic_presence_eq = none
+mic_top_corner_hz = 9000
 
 [pos-cap]
 mic_distance_m = 0.05
@@ -116,7 +123,7 @@ panel_modes = 140/3/0.06
 [VB-115 edge]
 inherit = VB-115 cap, mic-md421, pos-edge
 [VB-115 distance]
-inherit = VB-115 cap, mic-ldc, pos-distance
+inherit = VB-115 cap, mic-u87, pos-distance
 
 [VB-210 cap]
 inherit = defaults, mic-md421, pos-cap
@@ -189,7 +196,7 @@ panel_modes = 140/4/0.04, 230/3/-0.03
 [SVT-15E edge]
 inherit = SVT-15E cap, mic-md421, pos-edge
 [SVT-15E distance]
-inherit = SVT-15E cap, mic-ldc, pos-distance
+inherit = SVT-15E cap, mic-u87, pos-distance
 
 [SVT-210AV cap]
 inherit = defaults, mic-md421, pos-cap
@@ -285,7 +292,7 @@ panel_modes = 130/3/0.04
 [SVT-410HLF edge]
 inherit = SVT-410HLF cap, pos-edge
 [SVT-410HLF distance]
-inherit = SVT-410HLF cap, mic-ldc, pos-distance
+inherit = SVT-410HLF cap, mic-u87, pos-distance
 
 [SVT-610HLF cap]
 inherit = defaults, mic-md421, pos-cap
@@ -331,7 +338,7 @@ panel_modes = 150/3/0.03, 240/3/-0.02
 [SVT-810 edge]
 inherit = SVT-810 cap, mic-md421, pos-edge
 [SVT-810 distance]
-inherit = SVT-810 cap, mic-ldc, pos-distance
+inherit = SVT-810 cap, mic-u87, pos-distance
 
 [VB-112 cap horn-off]
 inherit = VB-112 cap

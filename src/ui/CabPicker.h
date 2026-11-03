@@ -35,7 +35,12 @@ public:
     {
         float x = 0.0f, y = 0.0f, distance = 0.05f;   // across the first speaker in radii from the cap; in front of it, m
         bool horn = true;
+        juce::String mic;                             // one of mics(), or empty for the cabinet's own
     };
+
+    /** The mics to choose from, as the table names them (its "mic-<name>" sections), and as the row writes them. */
+    static const juce::StringArray& mics()      { static const juce::StringArray m { "md421", "sm57", "re20", "d112", "u87", "ribbon" }; return m; }
+    static const juce::StringArray& micWords()  { static const juce::StringArray m { "MD421", "SM57", "RE20", "D112", "U87", "RIBBON" }; return m; }
 
     struct Cab
     {
@@ -48,13 +53,14 @@ public:
         juce::Point<float> hornAt;
         bool port = false;
         juce::Point<float> portAt;
+        juce::String mic = "md421";              // the one its table's cap section stands
     };
 
     static const std::vector<Cab>& cabs()
     {
         using P = juce::Point<float>;
         static const std::vector<Cab> all {
-            { "SVT-15E",    0, 0.61f, 0.56f, { P (0, 0.02f) }, 0.165f, false, {}, true, P (0, -0.22f) },
+            { "SVT-15E",    0, 0.61f, 0.56f, { P (0, 0.02f) }, 0.165f, false, {}, true, P (0, -0.22f), "d112" },
             { "SVT-210AV",  0, 0.33f, 0.61f, { P (0, 0.14f), P (0, -0.14f) }, 0.105f, false, {}, false, {} },
             { "SVT-210HE",  0, 0.61f, 0.46f, { P (-0.14f, 0), P (0.14f, 0) }, 0.105f, true, P (0, 0.16f), false, {} },
             { "SVT-410HE",  0, 0.61f, 0.66f, { P (-0.145f, 0.145f), P (0.145f, 0.145f), P (-0.145f, -0.145f), P (0.145f, -0.145f) },
@@ -66,9 +72,9 @@ public:
               0.105f, true, P (0, 0.175f), true, P (0, -0.45f) },
             { "SVT-810",    0, 0.66f, 1.22f, { P (-0.15f, 0.42f), P (0.15f, 0.42f), P (-0.15f, 0.14f), P (0.15f, 0.14f),
                                                 P (-0.15f, -0.14f), P (0.15f, -0.14f), P (-0.15f, -0.42f), P (0.15f, -0.42f) },
-              0.105f, false, {}, false, {} },
+              0.105f, false, {}, false, {}, "re20" },
             { "VB-112",     1, 0.52f, 0.40f, { P (-0.09f, 0) }, 0.13f, true, P (0.17f, 0.08f), true, P (0.17f, -0.12f) },
-            { "VB-115",     1, 0.56f, 0.58f, { P (0, -0.04f) }, 0.165f, true, P (0.18f, 0.19f), true, P (0, -0.25f) },
+            { "VB-115",     1, 0.56f, 0.58f, { P (0, -0.04f) }, 0.165f, true, P (0.18f, 0.19f), true, P (0, -0.25f), "d112" },
             { "VB-210",     1, 0.56f, 0.42f, { P (-0.135f, -0.02f), P (0.135f, -0.02f) }, 0.105f, true, P (0, 0.13f), true, P (0, -0.17f) },
             { "VB-410",     1, 0.58f, 0.66f, { P (-0.14f, 0.145f), P (0.14f, 0.145f), P (-0.14f, -0.145f), P (0.14f, -0.145f) },
               0.105f, true, P (0, 0), true, P (0, -0.30f) },
@@ -168,6 +174,7 @@ public:
         {
             chosen = at;
             spot_ = {};
+            spot_.mic = cabs()[(size_t) at].mic;
             send();
             return;
         }
@@ -396,9 +403,29 @@ private:
 
     juce::Rectangle<float> speakerArea() const
     {
-        auto b = getLocalBounds().withTrimmedTop (22).toFloat();
+        auto b = getLocalBounds().withTrimmedTop (22).withTrimmedBottom (micRowH + 4).toFloat();
         b.removeFromRight (44.0f);
         return b;
+    }
+
+    static constexpr int micRowH = 18;
+
+    /** The mics' words along the bottom, each its own cell, the row centred under the speaker. */
+    juce::Rectangle<int> micCell (int i) const
+    {
+        const auto font = theme::displayFont (13.0f);
+        const int gapPx = 14;
+        int total = 0;
+        for (const auto& w : micWords()) total += juce::roundToInt (theme::trackedWidth (w, font, 0.06f)) + gapPx;
+        total -= gapPx;
+        int x = juce::jmax (0, (getWidth() - 44 - total) / 2);
+        for (int k = 0; k < micWords().size(); ++k)
+        {
+            const int w = juce::roundToInt (theme::trackedWidth (micWords()[k], font, 0.06f));
+            if (k == i) return { x, getHeight() - micRowH, w, micRowH };
+            x += w + gapPx;
+        }
+        return {};
     }
 
     float speakerRadius() const
@@ -436,6 +463,13 @@ private:
             send();
             return;
         }
+        for (int i = 0; i < mics().size(); ++i)
+            if (micCell (i).expanded (4, 2).contains (e.getPosition()))
+            {
+                spot_.mic = mics()[i];
+                send();
+                return;
+            }
         if (railArea().expanded (6, 0).contains (e.position))
         {
             drag = Drag::distance;
@@ -515,6 +549,14 @@ private:
         g.fillEllipse (juce::Rectangle<float> (10, 10).withCentre (at));
         g.setColour (theme::ground);
         g.fillEllipse (juce::Rectangle<float> (4, 4).withCentre (at));
+
+        // The mics, the one that hears in the block's orange.
+        const auto heardBy = spot_.mic.isNotEmpty() ? spot_.mic : cab.mic;
+        for (int i = 0; i < mics().size(); ++i)
+        {
+            g.setColour (mics()[i] == heardBy ? theme::orange : theme::txFaint);
+            theme::drawTracked (g, micWords()[i], micCell (i).toFloat(), font, 0.06f, juce::Justification::centred);
+        }
 
         // The distance: a rail, the near end at the bottom, its number under it.
         const auto rail = railArea();

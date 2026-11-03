@@ -269,6 +269,7 @@ struct Cab
     double fsd = 50, qts = 0.4, vas = 30, vb = 60, perChamber = 1, chambers = 1, fb = 45, ql = 8;
     bool portRear = false, hornAtMic = false;
     double fixedMass = 0, coilHz = 0, proxStrength = 1, micTop = 12000, depth = 0.4;
+    bool figure8 = false;   // a ribbon's: front and back alike, the back in the other polarity
     Xy port {};
     double portArea = 150, portLeakHz = 700;
     // cone
@@ -312,6 +313,7 @@ inline Cab build (const Section& s)
     c.fixedMass = num (s, "cone_fixed_mass_fraction", 0);
     c.coilHz = num (s, "coil_corner_hz", 0);
     c.proxStrength = num (s, "proximity_strength", 1);
+    c.figure8 = str (s, "mic_pattern") == "figure8";
     c.micTop = num (s, "mic_top_corner_hz", 0);
     c.hornAtMic = s.count ("horn_at_mic_db") > 0;
     c.fb = num (s, "fb_hz", 45);
@@ -444,6 +446,8 @@ inline cd heard (const Cab& c, const Mic& m, double dx, double dy, double dz, do
     const double cosT = std::clamp ((dx * m.ax + dy * m.ay + dz * m.az) / len, -1.0, 1.0);   // the axis points at the cab: in front, +1
     const double theta = std::acos (cosT) * 180 / pi;
     const double kr = 2 * pi * f / c0 * (len + 0.02);
+    if (c.figure8)   // all gradient: its proximity whole, no front-only loss at the top
+        return cosT * (1.0 + 0.55 * c.proxStrength / cd (0, kr));
     const cd pattern = 0.5 + 0.5 * cosT * (1.0 + 0.55 * c.proxStrength / cd (0, kr));
     const double e = theta <= 60 ? 2.5 * theta / 60 : theta <= 90 ? 2.5 + 1.5 * (theta - 60) / 30 : 4 + 2 * (theta - 90) / 90;
     const double top = std::clamp (std::log2 (f / 1000) / 3, 0.0, 1.0);
@@ -668,6 +672,7 @@ struct Spot
 {
     double x = 0, y = 0, distance = 0.05;
     bool horn = true;
+    std::string mic;   // a "mic-<name>" section of the table laid over the cabinet's own, or empty for its own
 };
 
 /** A cabinet of the table — its "<name> cap" section, the mic and the box as that section says — with the mic at
@@ -675,7 +680,11 @@ struct Spot
     Any thread; a tenth of a second or so at the default FFT. */
 inline std::vector<float> renderAt (const Table& table, const std::string& cab, const Spot& spot, size_t n = 1 << 14)
 {
-    auto c = build (resolve (table, cab + " cap"));
+    auto s = resolve (table, cab + " cap");
+    if (! spot.mic.empty())
+        for (auto& [k, v] : resolve (table, "mic-" + spot.mic))
+            s[k] = v;
+    auto c = build (s);
     c.micOff  = spot.x;
     c.micOffY = spot.y;
     c.micD    = spot.distance;

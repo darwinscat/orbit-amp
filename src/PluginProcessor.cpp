@@ -827,7 +827,7 @@ void AmpProcessor::requestCabSynth (const juce::String& cab, CabSpot spot)
             return;   // superseded before it began
 
         static const auto table = core::cabsynth::parseTable (std::string (BinaryData::cabinets_txt, (size_t) BinaryData::cabinets_txtSize));
-        const auto ir  = core::cabsynth::renderAt (table, cab.toStdString(), { spot.x, spot.y, spot.distance, spot.horn });
+        const auto ir  = core::cabsynth::renderAt (table, cab.toStdString(), { spot.x, spot.y, spot.distance, spot.horn, spot.mic.toStdString() });
         const auto wav = core::cabsynth::wav24 (ir, 48000);
         auto bytes = std::make_shared<juce::MemoryBlock> (wav.data(), wav.size());
 
@@ -843,7 +843,7 @@ void AmpProcessor::requestCabSynth (const juce::String& cab, CabSpot spot)
             apvts.state.setProperty (params::cabIrUserKey, key, nullptr);
             apvts.state.setProperty (params::cabIrUserName, cab, nullptr);
             apvts.state.setProperty (params::cabIrUserFrom, "synth:" + cab + "|" + juce::String (spot.x, 3) + "|" + juce::String (spot.y, 3)
-                                                                 + "|" + juce::String (spot.distance, 3) + "|" + (spot.horn ? "1" : "0"), nullptr);
+                                                                 + "|" + juce::String (spot.distance, 3) + "|" + (spot.horn ? "1" : "0") + "|" + spot.mic, nullptr);
             updateHostDisplay (ChangeDetails{}.withNonParameterStateChanged (true));
         });
     });
@@ -856,11 +856,11 @@ AmpProcessor::CabSynthChoice AmpProcessor::cabSynthOf (const CabChoice& choice)
         return out;
 
     const auto parts = juce::StringArray::fromTokens (choice.from.fromFirstOccurrenceOf ("synth:", false, false), "|", "");
-    if (parts.size() != 5)
+    if (parts.size() < 5)
         return out;
 
     out.cab   = parts[0];
-    out.spot  = { parts[1].getFloatValue(), parts[2].getFloatValue(), parts[3].getFloatValue(), parts[4] == "1" };
+    out.spot  = { parts[1].getFloatValue(), parts[2].getFloatValue(), parts[3].getFloatValue(), parts[4] == "1", parts[5] };
     out.valid = true;
     return out;
 }
