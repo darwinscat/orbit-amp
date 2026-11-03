@@ -1571,6 +1571,7 @@ private:
     juce::AudioBuffer<float> spaceDry;                        // a stage's input, for what it added
     std::array<std::array<core::CutBiquad, 2>, 2> wetCuts {};  // [delay, reverb][plane]: the low cut on the wet
     std::array<bool, 2> spaceRunning {};                      // [delay, reverb]: ran last block
+    std::array<bool, 2> spaceFresh { true, true };            // [delay, reverb]: cleared, its next call its first
 
     /** A call of positive length with no channel (law 11c), to the three effects — their shared clocks run as through
         silence — and to DELAY and REVERB, present and running. */

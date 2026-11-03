@@ -1363,6 +1363,7 @@ void AmpProcessor::runSpaceStage (Stage& stage, bool ready, params::ChainRow row
             c.reset();
         tap.breakTrace();
         spaceRunning[(size_t) which] = false;
+        spaceFresh[(size_t) which] = true;
     };
 
     if (! run)
@@ -1378,11 +1379,17 @@ void AmpProcessor::runSpaceStage (Stage& stage, bool ready, params::ChainRow row
     const bool fed   = linkWorks (row);
     const bool write = watched.load (std::memory_order_relaxed) && fed && adds;
 
+    // ADDED AGAIN, ITS FIRST CALL UNFED. A cleared stage's door stands wherever its first call's feed puts it, with no
+    // travel (TapeDelay, AmpReverb) — open, it took the note already sounding mid-wave, and the echo gave that edge back
+    // a delay later, a click at full level (the owner, 03.11: "not at once"). Shut for this one call, it opens on the
+    // next over its own fade, as the switch opens it.
+    const bool feed = fed && ! std::exchange (spaceFresh[(size_t) which], false);
+
     if (numChannels <= 0 || channels == nullptr)
     {
         // A GAP: the stage takes it as its own (its channels stop, its clocks go on); the wet's cuts and the picture's
         // hops run over the silence it adds there.
-        (void) stage.process (nullptr, 0, numSamples, fed);
+        (void) stage.process (nullptr, 0, numSamples, feed);
         for (auto& c : wetCuts[(size_t) which])
             for (int i = 0; i < numSamples; ++i)
                 (void) c.process (0.0f);
@@ -1406,7 +1413,7 @@ void AmpProcessor::runSpaceStage (Stage& stage, bool ready, params::ChainRow row
             for (int ch = 0; ch < nch; ++ch)
                 juce::FloatVectorOperations::copy (spaceDry.getWritePointer (ch), part[ch], n);
 
-            (void) stage.process (part, nch, n, fed);   // prepared for the bus's planes and its block: it cannot refuse
+            (void) stage.process (part, nch, n, feed);   // prepared for the bus's planes and its block: it cannot refuse
 
             for (int i = 0; i < n; ++i)
             {
