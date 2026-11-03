@@ -517,6 +517,8 @@ public:
 
     /** The cap's render, its opaque width drawn this long; by default as wide as the fader less a little. */
     float capLength = 0.0f;
+    /** ...and its height this share of the render's own at that width — the walker's half (the owner, 03.11). */
+    float capSquash = 1.0f;
 
     /** A short fader in a smaller slot: its ends, its line and its scale drawn this much of a column's. */
     float scale = 1.0f;

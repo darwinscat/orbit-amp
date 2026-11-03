@@ -360,6 +360,7 @@ Console::Console (AmpProcessor& p, std::unique_ptr<Picture> pic, const Places& w
     tuner.setStrip (places.tunerStrip);
     tuner.setDial (places.tunerDial);
     inFader.capLength = outFader.capLength = places.faderCapLength;
+    inFader.capSquash = outFader.capSquash = places.faderCapSquash;
     inFader.handLight = outFader.handLight = look.handLight;
     inFader.setBounds (box (places.inFader));
     outFader.setBounds (box (places.outFader));
@@ -774,6 +775,7 @@ void Console::exportForWeb (const juce::File& dir)
     o->setProperty ("sliderCapAngle", p.sliderCapAngle);
     o->setProperty ("sliderCapLength", p.sliderCapLength);
     o->setProperty ("faderCapLength", p.faderCapLength);
+    o->setProperty ("faderCapSquash", p.faderCapSquash);
     o->setProperty ("inMeter", rectVar (p.inMeter));
     o->setProperty ("inFader", rectVar (p.inFader));
     o->setProperty ("outMeter", rectVar (p.outMeter));

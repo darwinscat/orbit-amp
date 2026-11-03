@@ -293,6 +293,19 @@ private:
     std::vector<Band> bands;
     std::vector<std::unique_ptr<Knob>> bandKnobs;
 
+    // A FREQ BESIDE ITS DIAL (the owner, 03.11): a band that reads in a unit of its own (Band::reading) — the bass's
+    // FREQ — is an upright fader close beside the dial before it, the band it moves; the two one control under one
+    // name, "MID 1.0 kHz", the frequency where it stands, and only the dial's number under them.
+    bool pairedFader (size_t i) const { return i > 0 && i < bands.size() && bands[i].reading != nullptr; }
+    struct PairName final : public juce::Component
+    {
+        juce::String text;
+        void paint (juce::Graphics&) override;
+    };
+    PairName pairName;
+    void namePair();
+    void layBands (juce::Rectangle<int> row);
+
     std::array<int, 2> innerW { 0, 0 };                    // setInnerCells
     std::array<juce::Rectangle<int>, 2> innerCells;        // ...and where layOutRow left them
     std::array<ToggleSwitch*, 2> innerToggles {};          // setInnerToggles

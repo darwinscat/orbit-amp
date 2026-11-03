@@ -173,9 +173,12 @@ void EqSection::buildBands (std::vector<Band> newBands)
 
     bands = std::move (newBands);
 
-    for (const auto& b : bands)
+    pairName.setVisible (false);
+    for (size_t i = 0; i < bands.size(); ++i)
     {
-        auto k = std::make_unique<Knob> (b.label, b.colour, b.notches);
+        const auto& b = bands[i];
+        const bool pairs = i + 1 < bands.size() && pairedFader (i + 1), paired = pairedFader (i);
+        auto k = std::make_unique<Knob> (pairs || paired ? juce::String() : b.label, b.colour, b.notches);
 
         // Every band's number under its dial, typed there too (Oleh, 24.10): ours in decibels, a
         // device's on the amp-panel's 0-10, the scale its GAIN reads in — its parameter is a
@@ -198,9 +201,12 @@ void EqSection::buildBands (std::vector<Band> newBands)
         }
 
         k->valueInDial = false;
-        k->setValueRowShown (true);
+        k->setValueRowShown (! paired);
+        k->setFader (paired);
+        if (pairs || paired)
+            pairName.setVisible (host != nullptr);
 
-        k->onValueChange   = [this] { refreshCurve(); };
+        k->onValueChange   = [this, paired] { refreshCurve(); if (paired) namePair(); };
         k->labelFontHeight = 13.0f;   // the face's floor for anything read
         k->labelRowHeight  = labelRowH;
 
@@ -212,9 +218,62 @@ void EqSection::buildBands (std::vector<Band> newBands)
 
         bandKnobs.push_back (std::move (k));
     }
+    namePair();
 
     if (host != nullptr)
         host->resized();
+}
+
+/** The pair's one name: the dial's band's, and the frequency the fader puts it at. */
+void EqSection::namePair()
+{
+    for (size_t i = 1; i < bands.size(); ++i)
+        if (pairedFader (i) && i < bandKnobs.size())
+        {
+            pairName.text = bands[i - 1].label.toUpperCase() + " " + bands[i].reading (bandKnobs[i]->getValue());   // kHz as it is written
+            pairName.repaint();
+            return;
+        }
+}
+
+void EqSection::PairName::paint (juce::Graphics& g)
+{
+    // As a knob writes its name over its dial (Knob::paint), across the two.
+    g.setColour (theme::txDim);
+    theme::drawTracked (g, text, getLocalBounds().toFloat(), theme::displayFont (13.0f), 0.15f, juce::Justification::centred);
+}
+
+/** THE DIALS ACROSS `row`, an even share each — a FREQ fader and its dial in one share between them, close together and
+    centred in it, so they never drift apart however wide the row is. */
+void EqSection::layBands (juce::Rectangle<int> row)
+{
+    int shares = 0;
+    for (size_t i = 0; i < bandKnobs.size(); ++i)
+        shares += pairedFader (i) ? 0 : 1;
+    const int shareW = row.getWidth() / juce::jmax (1, shares);
+
+    for (size_t i = 0; i < bandKnobs.size(); ++i)
+    {
+        if (pairedFader (i))
+            continue;
+        const auto cell = row.removeFromLeft (shareW);
+        if (i + 1 >= bandKnobs.size() || ! pairedFader (i + 1))
+        {
+            bandKnobs[i]->setBounds (cell);
+            continue;
+        }
+        auto& dial = *bandKnobs[i];
+        auto& fader = *bandKnobs[i + 1];
+        constexpr int gap = 4;
+        const int under = Knob::valueRowH - dial.valueLift;
+        const int dialW = juce::jlimit (1, juce::jmax (1, cell.getWidth() - gap - Knob::faderW), cell.getHeight() - dial.labelRowHeight - under);
+        auto pair = cell.withSizeKeepingCentre (dialW + gap + Knob::faderW, cell.getHeight());
+        pairName.setBounds (pair.withHeight (dial.labelRowHeight).expanded (40, 0));
+        dial.setBounds (pair.removeFromLeft (dialW));
+        pair.removeFromLeft (gap);
+        fader.labelRowHeight = dial.labelRowHeight;
+        fader.setBounds (pair.withTrimmedBottom (under));
+    }
 }
 
 void EqSection::setModes (int selected, bool nativeAvailable)
@@ -353,6 +412,11 @@ void EqSection::addTo (juce::Component& parent)
     parent.addAndMakeVisible (lpfSlopeBox);
     parent.addChildComponent (strLine);
     parent.addChildComponent (fingLine);
+    parent.addChildComponent (pairName);
+    pairName.setInterceptsMouseClicks (false, false);
+    for (size_t i = 1; i < bands.size(); ++i)
+        if (pairedFader (i))
+            pairName.setVisible (true);
 
     for (auto& k : bandKnobs)
         parent.addAndMakeVisible (*k);
@@ -384,6 +448,10 @@ void EqSection::setRowVisible (bool v)
 
     for (auto& k : bandKnobs)
         k->setVisible (v);
+    bool paired = false;
+    for (size_t i = 1; i < bands.size(); ++i)
+        paired = paired || pairedFader (i);
+    pairName.setVisible (v && paired);
 }
 
 void EqSection::refreshCurve()
@@ -448,7 +516,9 @@ void EqSection::setStandard (params::EqStandard standard, BlockFrame& owner)
         line->walkerLook = true;
     }
     strLine.setItems ("STR", { "4", "5" }, 1);
-    fingLine.setItems ({}, { "FING", "SLAP" }, 0);
+    fingLine.setItems ("STYL", { "F", "S" }, 0);
+    strLine.setTooltip (bass::strHint);
+    fingLine.setTooltip (bass::stylHint);
     strAtt = std::make_unique<juce::ParameterAttachment> (*state.getParameter (params::bassHpf), [this] (float v)
     {
         strLine.setSelectedIndex (juce::roundToInt (v) == (int) params::BassHpf::four ? 0 : 1, juce::dontSendNotification);
@@ -751,12 +821,9 @@ void EqSection::layOutRow (juce::Rectangle<int> row)
         const auto [l1, r1] = sideOf (fingLine, innerToggles[1]);
         const int leftW  = juce::roundToInt (std::ceil (l0 + (float) ToggleSwitch::slotW + r0)) + 2;
         const int rightW = juce::roundToInt (std::ceil (l1 + (float) ToggleSwitch::slotW + r1)) + 2;
-        const int bandW  = (row.getWidth() - leftW - rightW) / n;
-
         const auto left  = row.removeFromLeft (leftW);
         const auto right = row.removeFromRight (rightW);
-        for (auto& knob : bandKnobs)
-            knob->setBounds (row.removeFromLeft (bandW));
+        layBands (row);
 
         const auto lineOf = [] (juce::Rectangle<int> side, int which)
         {
@@ -784,27 +851,16 @@ void EqSection::layOutRow (juce::Rectangle<int> row)
             c->setVisible (true);
     }
 
-    const int knobW = (row.getWidth() - 2 * cutW - innerW[0] - innerW[1]) / n;
-
     const auto hpfCell = row.removeFromLeft (cutW);
     innerCells[0] = row.removeFromLeft (innerW[0]);
-
-    juce::Rectangle<int> firstCell = row;
-
-    for (size_t i = 0; i < bandKnobs.size(); ++i)
-    {
-        const auto cell = row.removeFromLeft (knobW);
-        if (i == 0)
-            firstCell = cell;
-
-        // The whole cell, not a square of it: the name over the dial is 13 px now, and MIDDLE at that
-        // size is wider than the dial under it. The knob draws its dial at the smaller of the two
-        // sides that are left, centred, so the dial is the size it was.
-        bandKnobs[i]->setBounds (cell);
-    }
-
     const auto lpfCell = row.removeFromRight (cutW);
     innerCells[1] = row.removeFromRight (innerW[1]);
+
+    // The whole cell, not a square of it: the name over the dial is 13 px now, and MIDDLE at that
+    // size is wider than the dial under it. The knob draws its dial at the smaller of the two
+    // sides that are left, centred, so the dial is the size it was.
+    const juce::Rectangle<int> firstCell = row.withWidth (row.getWidth() / n);
+    layBands (row);
 
     // The cuts hang off the first knob's geometry, so an empty row still has to put them somewhere.
     const auto first = bandKnobs.empty() ? firstCell : bandKnobs.front()->getBounds();

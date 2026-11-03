@@ -109,11 +109,12 @@ public:
 
     std::function<void (int)> onFlip;   // a hand threw it here
     std::function<void()> onMenu;
+    std::function<void (bool)> onHover; // the hand came over it, or left it
 
     void paint (juce::Graphics&) override;
     void mouseDown (const juce::MouseEvent&) override;
-    void mouseEnter (const juce::MouseEvent&) override { repaint(); }
-    void mouseExit (const juce::MouseEvent&) override  { repaint(); }
+    void mouseEnter (const juce::MouseEvent&) override { repaint(); if (onHover) onHover (true); }
+    void mouseExit (const juce::MouseEvent&) override  { repaint(); if (onHover) onHover (false); }
 
 private:
     const face::Ink ink;

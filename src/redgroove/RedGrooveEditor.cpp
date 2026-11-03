@@ -171,6 +171,7 @@ namespace
         p.sliderNames[2] = cabinetScreen;
 
         p.faderCapLength = faderCapLength;
+        p.faderCapSquash = faderCapSquash;
         p.inFader  = inFaderSlot.withSizeKeepingCentre (faderWidth, inFaderSlot.getHeight());
         p.outFader = outFaderSlot.withSizeKeepingCentre (faderWidth, outFaderSlot.getHeight());
         p.inMeter  = inMeterSlot.reduced (4.0f, 5.0f);
@@ -244,6 +245,23 @@ void Cabin::paintStatic (juce::Graphics& g, float scale) const
         const auto tunerPicture = bg.getClippedImage ((right * k).toNearestInt());
         g.drawImage (keysPicture, right);
         g.drawImage (tunerPicture, left);
+
+        // BLEND's socket under plain panel — its top half the panel over it, its bottom half the panel under it — and
+        // DRIVE's socket drawn a size up where DRIVE stands, round, over its old one.
+        const auto plainOf = [&bg, k] (juce::Rectangle<float> r) { return bg.getClippedImage ((r * k).toNearestInt()); };
+        const auto socket = blendSocketArt;
+        const float half = 0.5f * socket.getHeight();
+        g.drawImage (plainOf (socket.withY (socket.getY() - half - 4.0f).withHeight (half)), socket.withHeight (half));
+        g.drawImage (plainOf (socket.withY (socket.getBottom() + 1.0f).withHeight (half)), socket.withTrimmedTop (half));
+
+        const float grow = driveSocket / driveArtSocket, span = 1.1f * driveArtSocket;
+        const auto from = juce::Rectangle<float> (span, span).withCentre (driveArt);
+        const auto to   = juce::Rectangle<float> (span * grow, span * grow).withCentre (drive);
+        const juce::Graphics::ScopedSaveState keep (g);
+        juce::Path round;
+        round.addEllipse (to);
+        g.reduceClipRegion (round);
+        g.drawImage (plainOf (from), to);
     }
 
     // The family's cat, cut into the maker's plate; its words either side of it.
@@ -269,7 +287,7 @@ void Cabin::paintStatic (juce::Graphics& g, float scale) const
     // that air stands between them; DI/CAB over its knob; and the words at the ends of MIDDLE's frequency.
     const auto words = cabinInk().words;
     print (g, "COMP", { comp.x, knobNameY }, px13, words);
-    print (g, "BLEND", { blend.x, knobNameY }, px13, words);
+    print (g, "BLEND", { blendSlot.getCentreX(), knobNameY }, px13, words);
     const char* effects[] { "OCTAVE", "ENVELOPE", "CHORUS" };
     for (size_t i = 0; i < effectX.size(); ++i)
         printInto (g, effects[i], { effectX[i], knobNameY }, effectNameRoom, px13, words, effectNameTracking);
@@ -292,6 +310,9 @@ void Cabin::paintStatic (juce::Graphics& g, float scale) const
             const auto over = slot.expanded (6.0f, 5.0f);
             g.drawImage (plainOf (over.withY (lowCutSlot.getBottom() + 3.0f)), over);
         }
+
+        // IN's slot where BLEND's knob was.
+        g.drawImage (plainOf (inFaderSlot), blendSlot);
 
         // DI/CAB's socket under the plain panel beside it; IN's slot where the knob was, its middle left out.
         g.drawImage (plainOf (diCabPlainArt), diCabSocketArt);
@@ -322,13 +343,12 @@ RedGrooveEditor::RedGrooveEditor (AmpProcessor& p)
     : face::Console (p, std::make_unique<Cabin>(), cabinPlaces(), cabinLook()),
       view (std::make_unique<redpaw::Windscreen> (makeDrive())),
       comp (Art::of().knobTone, tonePointer),
-      blend (Art::of().knobTone, tonePointer),
       octave (Art::of().faderCap), envelope (Art::of().faderCap), chorus (Art::of().faderCap), midFreq (Art::of().faderCap),
-      diCab (Art::of().faderCap),
+      diCab (Art::of().faderCap), blend (Art::of().faderCap),
       squeeze ([&p] { return p.compGrDb.load (std::memory_order_relaxed); }),
       lever (cabinInk(), { "B15", "SVT" }, layout::leverPlaces, layout::leverX, layout::leverNames, layout::leverBox.getPosition()),
       lowCut (cabinInk(), "STR", "4", "5", 2, true),
-      highCut (cabinInk(), {}, "FING", "SLAP"),
+      highCut (cabinInk(), "STYL", "F", "S"),
       ultraLo (cabinInk(), "U-LO", "-", "+", 3),
       ultraHi (cabinInk(), "U-HI", "0", "+", 2),
       cabinet (cabinInk())
@@ -372,7 +392,6 @@ RedGrooveEditor::RedGrooveEditor (AmpProcessor& p)
         knob.setBounds (around (centre, size, size).toNearestInt());
     };
     knobAt (comp, layout::comp, layout::smallKnob);
-    knobAt (blend, layout::blend, layout::smallKnob);
 
     // THE RINGS, one round every knob in its socket's groove, the tones' where the rows put them (stripsLaid).
     const auto ringFor = [this] (const face::ArtKnob& knob, juce::Point<float> centre, float socket, float width)
@@ -382,7 +401,6 @@ RedGrooveEditor::RedGrooveEditor (AmpProcessor& p)
     };
     ringFor (driveKnob(), layout::drive, layout::driveSocket, layout::driveRingWidth);
     ringFor (comp, layout::comp, layout::smallSocket, layout::ringWidth);
-    ringFor (blend, layout::blend, layout::smallSocket, layout::ringWidth);
     for (int t = 0; t < Channels::maxTones; ++t)
         ringFor (toneKnob (t), { layout::toneX[0], layout::toneY }, layout::toneSocket, layout::ringWidth);
     stripsLaid (strips);        // the console laid the rows before there were rings to put round them
@@ -392,6 +410,7 @@ RedGrooveEditor::RedGrooveEditor (AmpProcessor& p)
     const auto faderIn = [this] (face::ColumnFader& fader, juce::Rectangle<float> box, float cap, bool across)
     {
         fader.capLength = cap;
+        fader.capSquash = layout::faderCapSquash;
         fader.handLight = handLight;
         fader.marks = across ? 4 : 10;
         fader.longMark = -1;
@@ -408,6 +427,8 @@ RedGrooveEditor::RedGrooveEditor (AmpProcessor& p)
     faderIn (midFreq, layout::midFreqSlot.withSizeKeepingCentre (layout::midFreqSlot.getWidth(), 40.0f), layout::midFreqCap, true);
     faderIn (diCab, layout::diCabSlot.withSizeKeepingCentre (layout::faderWidth, layout::diCabSlot.getHeight() - 12.0f), layout::faderCapLength, false);
     diCab.marks = 4;
+    faderIn (blend, layout::blendSlot.withSizeKeepingCentre (layout::faderWidth, layout::blendSlot.getHeight() - 12.0f), layout::faderCapLength, false);
+    blend.marks = 4;
 
     // Each known by a name of its own, as a gate finds it (tests/RedGrooveFaceTests.cpp).
     comp.setComponentID ("comp");
@@ -426,7 +447,7 @@ RedGrooveEditor::RedGrooveEditor (AmpProcessor& p)
     const auto under = [] (float x, float y, float w = 120.0f) { return around ({ x, y }, w, 26.0f); };
     auto& driveValue  = readout (under (layout::drive.x, layout::valueY));
     auto& compValue   = readout (under (layout::comp.x, layout::valueY, 84.0f));
-    auto& blendValue  = readout (under (layout::blend.x, layout::valueY));
+    auto& blendValue  = readout (under (layout::blendSlot.getCentreX(), layout::valueY, 84.0f));
     auto& midValue    = readout (under (layout::toneX[1], layout::midFreqValueY));
     auto& inValue     = readout (under (layout::inTitle.x, layout::levelValueY, 104.0f));
     auto& outValue    = readout (under (layout::outTitle.x, layout::levelValueY, 104.0f));
@@ -493,6 +514,7 @@ RedGrooveEditor::RedGrooveEditor (AmpProcessor& p)
     lever.onPlace   = [this] (int at) { go (at); };
     lever.onRelease = [this] { showChannel(); };       // held, it follows the hand; let go, it follows the state
     lever.setComponentID ("lever");
+    lever.setPlace (channels.active(), false, false);  // a window opens with it where the state is, not on its way there
 
     // THE CUTS' SWITCHES: the HPF by the strings, the LPF by the hand — both always in (channels::Lineup::pinned), the
     // switch choosing between their positions; a right click on either its positions' frequencies.
@@ -515,6 +537,18 @@ RedGrooveEditor::RedGrooveEditor (AmpProcessor& p)
     lineAt (highCut, 1);
     lineAt (ultraLo, 2);
     lineAt (ultraHi, 3);
+
+    // ...each saying what it is in the tag over it while the hand is on it (the owner, 03.11).
+    const auto sayOver = [this] (SlideSwitch& sw, juce::String words)
+    {
+        sw.onHover = [this, &sw, words] (bool over)
+        {
+            const auto at = sw.getBoundsInParent().toFloat();
+            nameTag.show ({ at.getCentreX(), at.getY() - 16.0f }, over ? words : juce::String());
+        };
+    };
+    sayOver (lowCut, bass::strHint);
+    sayOver (highCut, bass::stylHint);
     bindSwitch (lowCut, params::bassHpf);
     bindSwitch (highCut, params::bassLpf);
 
@@ -528,6 +562,11 @@ RedGrooveEditor::RedGrooveEditor (AmpProcessor& p)
         sw.setVisible (plays);
         if (! plays)
             return;
+        sw.onHover = [this, &sw, words = bass::toneSwitchHint (tone.name, tone)] (bool over)
+        {
+            const auto at = sw.getBoundsInParent().toFloat();
+            nameTag.show ({ at.getCentreX(), at.getY() - 16.0f }, over ? words : juce::String());
+        };
         const int n = juce::jmax (1, (int) tone.positions.size() - 1);
         auto* a = follow (id.toRawUTF8(), [&sw, n] (float v) { sw.setPosition (juce::roundToInt (v * (float) n), false); });
         sw.onFlip = [a, n] (int to) { a->setValueAsCompleteGesture ((float) to / (float) n); };
@@ -764,8 +803,7 @@ void RedGrooveEditor::webExtras (const juce::File& dir, juce::DynamicObject& kit
     {
         struct K { const char* id; const char* name; const juce::Component* c; const char* param; const char* travel; };
         const K knobs[] {
-            { "comp",  "COMP",   &comp,  params::compThreshold, "travel = threshold / -48 dB: 0 dB fully left, -48 dB fully right" },
-            { "blend", "BLEND",  &blend, params::ampBlend,      "travel = the value, 0..1" } };
+            { "comp",  "COMP",   &comp,  params::compThreshold, "travel = threshold / -48 dB: 0 dB fully left, -48 dB fully right" } };
         juce::Array<juce::var> a;
         for (const auto& k : knobs)
         {
@@ -777,7 +815,7 @@ void RedGrooveEditor::webExtras (const juce::File& dir, juce::DynamicObject& kit
         o->setProperty ("knobs", a);
         auto* r = new Obj();           // a ring round every knob, lit along its travel: inset from its socket's edge
         r->setProperty ("inset", layout::ringInset); r->setProperty ("width", layout::ringWidth); r->setProperty ("driveWidth", layout::driveRingWidth);
-        r->setProperty ("sockets", list ({ juce::var ("drive"), juce::var ("comp"), juce::var ("blend"), juce::var ("tones") }));
+        r->setProperty ("sockets", list ({ juce::var ("drive"), juce::var ("comp"), juce::var ("tones") }));
         o->setProperty ("rings", r);
         o->setProperty ("knobNameY", layout::knobNameY);
         o->setProperty ("cabWordY", layout::cabWordY);
@@ -796,6 +834,14 @@ void RedGrooveEditor::webExtras (const juce::File& dir, juce::DynamicObject& kit
             v->setProperty ("id", f.id); v->setProperty ("name", f.name); v->setProperty ("box", rect (boxOf (*f.c)));
             v->setProperty ("sprite", "fader-cap"); v->setProperty ("capLength", layout::faderCapLength);
             v->setProperty ("param", f.param); v->setProperty ("travel", "the value, 0..1, bottom to top"); v->setProperty ("reading", "percent");
+            a.add (juce::var (v));
+        }
+        {
+            auto* v = new Obj();        // BLEND, upright where its knob was
+            v->setProperty ("id", "blend"); v->setProperty ("name", "BLEND"); v->setProperty ("box", rect (boxOf (blend)));
+            v->setProperty ("slot", rect (layout::blendSlot));
+            v->setProperty ("sprite", "fader-cap"); v->setProperty ("capLength", layout::faderCapLength);
+            v->setProperty ("param", params::ampBlend); v->setProperty ("travel", "the value, 0..1, bottom to top"); v->setProperty ("reading", "percent");
             a.add (juce::var (v));
         }
         {

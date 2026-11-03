@@ -121,6 +121,7 @@ public:
         float sliderCapAngle = juce::MathConstants<float>::halfPi;  // how the sliders' caps lie (PlateSlider)
         float sliderCapLength = 0.0f;
         float faderCapLength = 0.0f;                        // ...and the columns' (ColumnFader)
+        float faderCapSquash = 1.0f;                        // ...their height a share of the render's (ColumnFader::capSquash)
         juce::Rectangle<float> inMeter, inFader, outMeter, outFader;
         SegmentMeter::Dots meterDots {};                    // the meters as dots the picture paints, where there is a count
         float lampDot = 0.0f;                               // a lamp the picture does not paint lit, drawn by code this wide (Lamp::dot)

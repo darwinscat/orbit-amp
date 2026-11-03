@@ -9,6 +9,8 @@
 #include "Theme.h"
 #include "../Parameters.h"
 
+#include <namz_rig.h>
+
 #include <felitronics/appkit/chrome/FlatButtons.h>
 #include <juce_audio_processors/juce_audio_processors.h>
 
@@ -77,6 +79,32 @@ inline void asBassAmount (GuardRail& r, const juce::String& name)
 inline void hint (juce::SettableTooltipClient& control, const juce::String& text)
 {
     control.setTooltip (text);
+}
+
+/** THE CUTS' SWITCHES' HINTS, the same on every bass face (the owner, 03.11). */
+inline const juce::String strHint  = "STR:   4 or 5 strings, where the low cut sits   (right click: its frequencies)";
+inline const juce::String stylHint = "STYL:   F fingers, S slap, where the high cut sits   (right click: its frequencies)";
+
+/** A PACK'S TONE SWITCH IN A FEW WORDS, from the bands its positions are (namz::rig::TonePosition::sections): each
+    position, then what it does — "ULTRA LO:   -  less lows   ·   0  flat   ·   +  more lows, less mids". */
+inline juce::String toneSwitchHint (const juce::String& name, const namz::rig::Tone& tone)
+{
+    const auto region = [] (const namz::rig::PositionSection& s) -> juce::String
+    {
+        if (s.kind == namz::rig::SectionKind::LowShelf)  return "lows";
+        if (s.kind == namz::rig::SectionKind::HighShelf) return "highs";
+        return s.hz < 250.0 ? "low mids" : s.hz < 2500.0 ? "mids" : "highs";
+    };
+    juce::StringArray says;
+    for (const auto& p : tone.positions)
+    {
+        juce::StringArray does;
+        for (const auto& s : p.sections)
+            if (std::abs (s.gainDb) >= 0.5)
+                does.addIfNotAlreadyThere ((s.gainDb > 0.0 ? "more " : "less ") + region (s));
+        says.add (juce::String (p.value).toUpperCase() + "  " + (does.isEmpty() ? juce::String ("flat") : does.joinIntoString (", ")));
+    }
+    return name.toUpperCase() + ":   " + says.joinIntoString (juce::String::fromUTF8 ("   \xc2\xb7   "));
 }
 
 /** The squeeze, a thin bar falling from its top: 0 to -12 dB, read 30 times a second. */

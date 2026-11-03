@@ -69,10 +69,15 @@ inline const juce::Rectangle<float> limiterSlot  { 1536.0f, 868.5f, 104.0f, 39.0
 
 inline constexpr float faderWidth = 40.0f;          // a column fader's box round its slot
 inline constexpr float faderCapLength = 16.0f;      // ...and its cap's render, across the slot
+inline constexpr float faderCapSquash = 0.5f;       // ...at half its render's height, every fader (the owner, 03.11)
 
-// AMP: CHANNEL's lever slot, COMP, GR's column, DRIVE (the hero) and BLEND — each a socket in the picture.
-inline const juce::Point<float> drive { 418.8f, 791.5f };
-inline constexpr float driveSocket = 120.0f, driveKnob = 104.0f;
+// AMP: CHANNEL's lever slot, COMP, GR's column, DRIVE (the hero) and BLEND — each a socket in the picture. BLEND is a
+// fader now and DRIVE a size up into the room it left (the owner, 03.11): the picture's socket (driveArt, driveArtSocket)
+// drawn larger where DRIVE stands, its old one under it.
+inline const juce::Point<float> driveArt { 418.8f, 791.5f };
+inline constexpr float driveArtSocket = 120.0f;
+inline const juce::Point<float> drive { 426.0f, 791.5f };
+inline constexpr float driveSocket = 140.0f, driveKnob = 121.0f;
 inline constexpr float knobNameY = 712.0f;          // the row the knobs' names stand in, over AMP and TONE
 
 // TONE: three sockets for as many tone knobs as the bass's standard has, and MID FREQ's slot under them.
@@ -82,6 +87,11 @@ inline constexpr float toneY = 765.1f, toneSocket = 77.0f, toneKnob = 64.0f;
 // THE OTHER KNOBS: COMP and BLEND either side of DRIVE — each in its socket; `diCab` the socket in the cabinet's panel
 // that held DI/CAB's knob. A ring round every knob, in its socket's groove, `ringInset` inside the socket's edge.
 inline const juce::Point<float> comp { 287.7f, 794.6f }, blend { 532.0f, 794.5f }, diCab { 1280.4f, 826.1f };
+
+// BLEND: a fader where its knob was, IN's slot at its full length, its name over it and its reading under it as the
+// knobs' are; the knob's socket under plain panel from over and under it.
+inline const juce::Rectangle<float> blendSlot { 538.0f - 8.75f, 735.0f, 17.5f, 121.5f };
+inline const juce::Rectangle<float> blendSocketArt { blend.x - 45.0f, 750.0f, 90.0f, 96.0f };
 inline constexpr float smallSocket = 78.0f, smallKnob = 64.0f;
 inline constexpr float ringInset = 3.5f, ringWidth = 2.5f, driveRingWidth = 3.0f;
 

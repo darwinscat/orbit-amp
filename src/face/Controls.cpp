@@ -176,21 +176,23 @@ namespace
 {
     /** The hand's rim round a cap drawn as drawCap draws it — in `colour`, or nothing while that is
         transparent. */
-    void rimCap (juce::Graphics& g, const juce::Image& img, juce::Point<float> centre, float length, float angle, juce::Colour colour)
+    void rimCap (juce::Graphics& g, const juce::Image& img, juce::Point<float> centre, float length, float angle, juce::Colour colour,
+                 float squash = 1.0f)
     {
         if (colour.isTransparent() || ! img.isValid())
             return;
         const auto src = opaqueBoundsOnce (img);
         const float k = length / src.getWidth();
-        const auto box = juce::Rectangle<float> (src.getWidth() * k, src.getHeight() * k).withCentre ({});
+        const auto box = juce::Rectangle<float> (src.getWidth() * k, src.getHeight() * k * squash).withCentre ({});
         juce::Path shape;
         shape.addRoundedRectangle (box.reduced (0.8f), juce::jmin (box.getWidth(), box.getHeight()) * 0.12f);
         shape.applyTransform (juce::AffineTransform::rotation (angle).translated (centre));
         drawHandRim (g, shape, colour);
     }
 
-    /** Draws a cap render centred on `centre`, its long axis `length` long, turned by `angle`. */
-    void drawCap (juce::Graphics& g, const juce::Image& img, juce::Point<float> centre, float length, float angle)
+    /** Draws a cap render centred on `centre`, its long axis `length` long, turned by `angle` — its short one `squash`
+        of the render's own. */
+    void drawCap (juce::Graphics& g, const juce::Image& img, juce::Point<float> centre, float length, float angle, float squash = 1.0f)
     {
         if (! img.isValid())
         {
@@ -202,7 +204,7 @@ namespace
         const float k = length / src.getWidth();
         g.setOpacity (1.0f);    // an image is drawn at the colour's opacity: a dim mark's, set before, let the well show through
         g.drawImageTransformed (img, juce::AffineTransform::translation (-src.getCentreX(), -src.getCentreY())
-                                         .scaled (k)
+                                         .scaled (k, k * squash)
                                          .rotated (angle)
                                          .translated (centre));
     }
@@ -1161,9 +1163,9 @@ void ColumnFader::paint (juce::Graphics& g)
 
     const float y = t.getEnd() - t.getLength() * value;
     const float length = capLength > 0.0f ? capLength : crossWidth() - 8.0f;
-    drawCap (g, cap, { cx, y }, length, 0.0f);
+    drawCap (g, cap, { cx, y }, length, 0.0f, capSquash);
     if (isMouseOverOrDragging (true))
-        rimCap (g, cap, { cx, y }, length, 0.0f, handLight);
+        rimCap (g, cap, { cx, y }, length, 0.0f, handLight, capSquash);
 }
 
 void ColumnFader::mouseDown (const juce::MouseEvent& e)

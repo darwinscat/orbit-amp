@@ -1012,7 +1012,7 @@ void CapturedBlockPanel::buildToneSwitches()
         sw.toggle->oneLine = true;   // a line of its own under the cut beside it (EqSection::layOutRow)
         sw.toggle->walkerLook = true;   // ...drawn as the walker draws its switches (the owner, 03.11)
         sw.toggle->setItems (name, labels, 0);
-        sw.toggle->setTooltip (name + ":   " + labels.joinIntoString (juce::String::fromUTF8 ("   \xc2\xb7   ")));
+        sw.toggle->setTooltip (bass::toneSwitchHint (m.name, m));
         sw.toggle->onChange = [this, which, n] (int at)
         {
             toneSwitches[which].attachment->setValueAsCompleteGesture (n > 1 ? (float) at / (float) (n - 1) : 0.0f);
