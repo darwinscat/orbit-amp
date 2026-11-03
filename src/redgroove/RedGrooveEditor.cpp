@@ -97,7 +97,7 @@ namespace
     juce::String dbTenth (float v) { return (v > 0.04f ? "+" : "") + juce::String (v, 1) + " dB"; }
     juce::String dbWhole (float v) { return juce::String (juce::roundToInt (v)) + " dB"; }
     juce::String percent (float share) { return juce::String (juce::roundToInt (share * 100.0f)) + "%"; }
-    juce::String hertz (float hz) { return hz >= 1000.0f ? juce::String (hz / 1000.0f, 2) + " kHz" : juce::String (juce::roundToInt (hz)) + " Hz"; }
+    juce::String hertz (float hz) { return hz >= 1000.0f ? juce::String (hz / 1000.0f, 1) + " kHz" : juce::String (juce::roundToInt (hz)) + " Hz"; }
 
     /** MIDDLE's frequency on its fader: the span params::bassMidMinHz .. bassMidMaxHz on a logarithmic travel. */
     float midTravel (float hz)
@@ -234,7 +234,17 @@ void Cabin::paintStatic (juce::Graphics& g, float scale) const
     using namespace stage;
 
     if (const auto& bg = Art::of().bg; bg.isValid())
+    {
         g.drawImage (bg, juce::Rectangle<float> (0.0f, 0.0f, width, height));
+
+        // KEYS and TUNER changed places: each top panel's picture drawn where its twin's is.
+        const float k = (float) bg.getWidth() / width;
+        const auto left = leftPanelArt, right = leftPanelArt.translated (panelShift, 0.0f);
+        const auto keysPicture  = bg.getClippedImage ((left * k).toNearestInt());
+        const auto tunerPicture = bg.getClippedImage ((right * k).toNearestInt());
+        g.drawImage (keysPicture, right);
+        g.drawImage (tunerPicture, left);
+    }
 
     // The family's cat, cut into the maker's plate; its words either side of it.
     engraveMark (g, emblemMark, scale);
@@ -263,22 +273,32 @@ void Cabin::paintStatic (juce::Graphics& g, float scale) const
     const char* effects[] { "OCTAVE", "ENVELOPE", "CHORUS" };
     for (size_t i = 0; i < effectX.size(); ++i)
         printInto (g, effects[i], { effectX[i], knobNameY }, effectNameRoom, px13, words, effectNameTracking);
-    print (g, "DI/CAB", { diCab.x, diCabNameY }, px13, words);
+    print (g, "CAB", { diCab.x, cabWordY }, px13, words);
+    print (g, "DI", { diCab.x, diWordY }, px13, words);
     const auto ends = cabinInk().at (words, 0.8f);
     writeAsIs (g, cabinInk(), "200 Hz", around ({ midFreqSlot.getX() - 48.0f, midFreqSlot.getCentreY() }, 90.0f, 28.0f), px13, ends);
     writeAsIs (g, cabinInk(), "3 kHz", around ({ midFreqSlot.getRight() + 40.0f, midFreqSlot.getCentreY() }, 80.0f, 28.0f), px13, ends);
 
     // The picture's own two slots for the cuts' switches go under plain panel — the switches stand one a line now
-    // (switchLineY), each its slot cut out of the picture where it stands. The plain is the panel between the two.
+    // (switchLineY), each its slot cut out of the picture where it stands. The plain is the panel between the two, clear
+    // of both their rims.
     if (const auto& bg = Art::of().bg; bg.isValid())
     {
         const float k = (float) bg.getWidth() / width;
+        const auto plainOf = [&bg, k] (juce::Rectangle<float> r) { return bg.getClippedImage ((r * k).toNearestInt()); };
+        g.setOpacity (1.0f);        // an image is drawn at the last colour's alpha — the words' above were translucent
         for (const auto slot : { lowCutSlot, highCutSlot })
         {
-            const auto over  = slot.expanded (7.0f);
-            const auto plain = over.withY (lowCutSlot.getBottom() + 4.0f);
-            g.drawImage (bg.getClippedImage ((plain * k).toNearestInt()), over);
+            const auto over = slot.expanded (6.0f, 5.0f);
+            g.drawImage (plainOf (over.withY (lowCutSlot.getBottom() + 3.0f)), over);
         }
+
+        // DI/CAB's socket under the plain panel beside it; IN's slot where the knob was, its middle left out.
+        g.drawImage (plainOf (diCabPlainArt), diCabSocketArt);
+        const float half = 0.5f * diCabSlot.getHeight();
+        const auto inTop = inFaderSlot.withHeight (half), inBottom = inFaderSlot.withTrimmedTop (inFaderSlot.getHeight() - half);
+        g.drawImage (plainOf (inTop), diCabSlot.withHeight (half));
+        g.drawImage (plainOf (inBottom), diCabSlot.withTrimmedTop (half));
     }
 
     // ...and a line cut into the panel between DI/CAB and them: a shadow, and its lit edge beside it.
@@ -303,8 +323,8 @@ RedGrooveEditor::RedGrooveEditor (AmpProcessor& p)
       view (std::make_unique<redpaw::Windscreen> (makeDrive())),
       comp (Art::of().knobTone, tonePointer),
       blend (Art::of().knobTone, tonePointer),
-      diCab (Art::of().knobTone, tonePointer),
       octave (Art::of().faderCap), envelope (Art::of().faderCap), chorus (Art::of().faderCap), midFreq (Art::of().faderCap),
+      diCab (Art::of().faderCap),
       squeeze ([&p] { return p.compGrDb.load (std::memory_order_relaxed); }),
       lever (cabinInk(), { "B15", "SVT" }, layout::leverPlaces, layout::leverX, layout::leverNames, layout::leverBox.getPosition()),
       lowCut (cabinInk(), "STR", "4", "5", 2, true),
@@ -353,7 +373,6 @@ RedGrooveEditor::RedGrooveEditor (AmpProcessor& p)
     };
     knobAt (comp, layout::comp, layout::smallKnob);
     knobAt (blend, layout::blend, layout::smallKnob);
-    knobAt (diCab, layout::diCab, layout::diCabKnob);
 
     // THE RINGS, one round every knob in its socket's groove, the tones' where the rows put them (stripsLaid).
     const auto ringFor = [this] (const face::ArtKnob& knob, juce::Point<float> centre, float socket, float width)
@@ -364,7 +383,6 @@ RedGrooveEditor::RedGrooveEditor (AmpProcessor& p)
     ringFor (driveKnob(), layout::drive, layout::driveSocket, layout::driveRingWidth);
     ringFor (comp, layout::comp, layout::smallSocket, layout::ringWidth);
     ringFor (blend, layout::blend, layout::smallSocket, layout::ringWidth);
-    ringFor (diCab, layout::diCab, layout::diCabSocket, layout::ringWidth);
     for (int t = 0; t < Channels::maxTones; ++t)
         ringFor (toneKnob (t), { layout::toneX[0], layout::toneY }, layout::toneSocket, layout::ringWidth);
     stripsLaid (strips);        // the console laid the rows before there were rings to put round them
@@ -388,6 +406,8 @@ RedGrooveEditor::RedGrooveEditor (AmpProcessor& p)
                                        .withCentre ({ layout::effectX[i], layout::effectTop + 0.5f * effectHeight }),
                  layout::faderCapLength, false);
     faderIn (midFreq, layout::midFreqSlot.withSizeKeepingCentre (layout::midFreqSlot.getWidth(), 40.0f), layout::midFreqCap, true);
+    faderIn (diCab, layout::diCabSlot.withSizeKeepingCentre (layout::faderWidth, layout::diCabSlot.getHeight() - 12.0f), layout::faderCapLength, false);
+    diCab.marks = 4;
 
     // Each known by a name of its own, as a gate finds it (tests/RedGrooveFaceTests.cpp).
     comp.setComponentID ("comp");
@@ -408,7 +428,6 @@ RedGrooveEditor::RedGrooveEditor (AmpProcessor& p)
     auto& compValue   = readout (under (layout::comp.x, layout::valueY, 84.0f));
     auto& blendValue  = readout (under (layout::blend.x, layout::valueY));
     auto& midValue    = readout (under (layout::toneX[1], layout::midFreqValueY));
-    auto& diCabValue  = readout (under (layout::diCab.x, layout::diCabValueY));
     auto& inValue     = readout (under (layout::inTitle.x, layout::levelValueY, 104.0f));
     auto& outValue    = readout (under (layout::outTitle.x, layout::levelValueY, 104.0f));
     Readout* effectValues[] { &readout (under (layout::effectX[0], layout::valueY, 90.0f)),
@@ -440,8 +459,8 @@ RedGrooveEditor::RedGrooveEditor (AmpProcessor& p)
                 [] (float t) { return t * params::compThresholdMin; }, [&compValue] (float db) { compValue.set (dbWhole (db)); });
     bindTravel (blend, params::ampBlend, [] (float v) { return v; }, [] (float t) { return t; },
                 [&blendValue] (float v) { blendValue.set (percent (v)); });
-    bindTravel (diCab, params::diMix, [] (float v) { return v / 100.0f; }, [] (float t) { return t * 100.0f; },
-                [&diCabValue] (float v) { diCabValue.set (percent (v / 100.0f)); });
+    // CAB / DI: the cabinet at the head, the DI at the foot — the DI's share down its travel.
+    bindTravel (diCab, params::diMix, [] (float v) { return 1.0f - v / 100.0f; }, [] (float t) { return (1.0f - t) * 100.0f; }, {});
     const char* effectIds[] { params::octaveAmount, params::filterAmount, params::chorusAmount };
     const char* effectNames[] { "OCTAVE", "ENVELOPE", "CHORUS" };
     for (size_t i = 0; i < 3; ++i)
@@ -449,7 +468,7 @@ RedGrooveEditor::RedGrooveEditor (AmpProcessor& p)
         auto& value = *effectValues[i];
         bindTravel (*effectFaders[i], effectIds[i], [] (float v) { return v; }, [] (float t) { return t; },
                     [&value] (float v) { value.set (percent (v)); });
-        sayLever (*effectFaders[i], effectNames[i], [this, id = effectIds[i]] { return 100.0f * getParam (id); });
+        sayLeverAs (*effectFaders[i], effectNames[i], [this, id = effectIds[i]] { return percent (getParam (id)); });
     }
     // MID FREQ: the pack's frequency knob, its travel the knob's (Channels::frequencyOf) — or, on a pack with none, the
     // standard MIDDLE's frequency on a logarithmic travel.
@@ -458,13 +477,13 @@ RedGrooveEditor::RedGrooveEditor (AmpProcessor& p)
         const auto freqId = channels.frequencyOf (channels.active());
         bindTravel (midFreq, freqId, [] (float v) { return v; }, [] (float t) { return t; },
                     [&midValue, freq] (float v) { midValue.set (hertz (knobHz (freq, v))); });
-        sayLever (midFreq, "MIDDLE", [this, freqId, freq] { return knobHz (freq, getParam (freqId.toRawUTF8())); });
+        sayLeverAs (midFreq, "FREQ", [this, freqId, freq] { return hertz (knobHz (freq, getParam (freqId.toRawUTF8()))); });
     }
     else
     {
         const auto midId = params::eqBellHz (0, 0);
         bindTravel (midFreq, midId, midTravel, midHz, [&midValue] (float hz) { midValue.set (hertz (juce::jlimit (params::bassMidMinHz, params::bassMidMaxHz, hz))); });
-        sayLever (midFreq, "MIDDLE", [this, midId] { return getParam (midId.toRawUTF8()); });
+        sayLeverAs (midFreq, "FREQ", [this, midId] { return hertz (getParam (midId.toRawUTF8())); });
     }
 
     // THE CHANNEL LEVER: B15 or SVT — the gear and everything it was left with.
@@ -746,8 +765,7 @@ void RedGrooveEditor::webExtras (const juce::File& dir, juce::DynamicObject& kit
         struct K { const char* id; const char* name; const juce::Component* c; const char* param; const char* travel; };
         const K knobs[] {
             { "comp",  "COMP",   &comp,  params::compThreshold, "travel = threshold / -48 dB: 0 dB fully left, -48 dB fully right" },
-            { "blend", "BLEND",  &blend, params::ampBlend,      "travel = the value, 0..1" },
-            { "diCab", "DI/CAB", &diCab, params::diMix,         "travel = the value / 100, 0..100" } };
+            { "blend", "BLEND",  &blend, params::ampBlend,      "travel = the value, 0..1" } };
         juce::Array<juce::var> a;
         for (const auto& k : knobs)
         {
@@ -759,10 +777,11 @@ void RedGrooveEditor::webExtras (const juce::File& dir, juce::DynamicObject& kit
         o->setProperty ("knobs", a);
         auto* r = new Obj();           // a ring round every knob, lit along its travel: inset from its socket's edge
         r->setProperty ("inset", layout::ringInset); r->setProperty ("width", layout::ringWidth); r->setProperty ("driveWidth", layout::driveRingWidth);
-        r->setProperty ("sockets", list ({ juce::var ("drive"), juce::var ("comp"), juce::var ("blend"), juce::var ("diCab"), juce::var ("tones") }));
+        r->setProperty ("sockets", list ({ juce::var ("drive"), juce::var ("comp"), juce::var ("blend"), juce::var ("tones") }));
         o->setProperty ("rings", r);
         o->setProperty ("knobNameY", layout::knobNameY);
-        o->setProperty ("diCabNameY", layout::diCabNameY);
+        o->setProperty ("cabWordY", layout::cabWordY);
+        o->setProperty ("diWordY", layout::diWordY);
     }
 
     // THE COLUMNS: the three effects' amounts, upright, the fader cap's render; MIDDLE's frequency across.
@@ -777,6 +796,14 @@ void RedGrooveEditor::webExtras (const juce::File& dir, juce::DynamicObject& kit
             v->setProperty ("id", f.id); v->setProperty ("name", f.name); v->setProperty ("box", rect (boxOf (*f.c)));
             v->setProperty ("sprite", "fader-cap"); v->setProperty ("capLength", layout::faderCapLength);
             v->setProperty ("param", f.param); v->setProperty ("travel", "the value, 0..1, bottom to top"); v->setProperty ("reading", "percent");
+            a.add (juce::var (v));
+        }
+        {
+            auto* v = new Obj();        // CAB / DI, upright where DI/CAB's knob was: the cabinet at the head, the DI at the foot
+            v->setProperty ("id", "diCab"); v->setProperty ("name", "CAB / DI"); v->setProperty ("box", rect (boxOf (diCab)));
+            v->setProperty ("slot", rect (layout::diCabSlot));
+            v->setProperty ("sprite", "fader-cap"); v->setProperty ("capLength", layout::faderCapLength);
+            v->setProperty ("param", params::diMix); v->setProperty ("travel", "1 - the value / 100, bottom (DI) to top (CAB)");
             a.add (juce::var (v));
         }
         o->setProperty ("columns", a);
@@ -825,7 +852,7 @@ void RedGrooveEditor::webExtras (const juce::File& dir, juce::DynamicObject& kit
     {
         struct R { const char* id; const char* format; };
         const R names[] { { "drive", "the dial, 0.0..10.0" }, { "comp", "whole dB: -24 dB" }, { "blend", "percent: 30%" },
-                          { "midFreq", "hertz: 400 Hz, 1.25 kHz" }, { "diCab", "percent of 100: 30%" }, { "in", "dB, a tenth: +1.5 dB, 0.0 dB" },
+                          { "midFreq", "hertz: 400 Hz, 1.2 kHz" }, { "in", "dB, a tenth: +1.5 dB, 0.0 dB" },
                           { "out", "dB, a tenth" }, { "octave", "percent" }, { "envelope", "percent" }, { "chorus", "percent" },
                           { "tone0", "dB, a tenth" }, { "tone1", "dB, a tenth" }, { "tone2", "dB, a tenth" } };
         jassert (readouts.size() == std::size (names));

@@ -24,11 +24,17 @@ using face::stage::height;
 /** THE DOME: the picture's transparent top, where the world shows; the sill under it from here down. */
 inline const juce::Rectangle<float> dome { 0.0f, 0.0f, width, 525.0f };
 
-// THE KEYS PANEL: six holes for push keys, UNDO and REDO wider, then A B C D.
+// THE TOP ROW'S TWO PANELS are mirror twins in the picture, the right one the left moved across by `panelShift`. KEYS and
+// TUNER changed places (the owner, 03.11): each is drawn where the other's picture is (Cabin::paintStatic) — KEYS right,
+// TUNER left.
+inline const juce::Rectangle<float> leftPanelArt { 8.0f, 550.0f, 540.0f, 110.0f };
+inline constexpr float panelShift = 1117.0f;
+
+// THE KEYS PANEL, on the right: six holes for push keys, UNDO and REDO wider, then A B C D.
 inline constexpr float keyRowY = 622.5f;
-inline constexpr std::array<float, 6> keyX { 87.8f, 184.5f, 267.0f, 339.0f, 409.5f, 480.0f };
+inline constexpr std::array<float, 6> keyX { 1204.8f, 1301.5f, 1384.0f, 1456.0f, 1526.5f, 1597.0f };
 inline constexpr float historyKeyWidth = 74.0f, registerKeyWidth = 51.0f, keyHeight = 36.0f;
-inline const juce::Point<float> keysTitle { 48.0f, 576.0f };            // "KEYS", from its left edge
+inline const juce::Point<float> keysTitle { 1165.0f, 576.0f };          // "KEYS", from its left edge
 
 // THE MAKER'S PLATE: the six-sided plate the family's cat is cut in, and the two plates beside it.
 inline constexpr std::array<juce::Point<float>, 7> emblemFace {{
@@ -38,9 +44,9 @@ inline const juce::Rectangle<float> emblemMark { 800.0f, 555.0f, 74.0f, 74.0f };
 inline const juce::Rectangle<float> poweredByPlate { 561.5f, 611.5f, 202.5f, 34.5f };
 inline const juce::Rectangle<float> makerNamePlate { 908.5f, 611.5f, 203.0f, 34.5f };
 
-// THE TUNER PANEL: its screen, and its title over it.
-inline const juce::Rectangle<float> tunerScreen { 1165.0f, 586.5f, 459.0f, 57.0f };
-inline const juce::Point<float> tunerTitle { 1168.0f, 576.0f };
+// THE TUNER PANEL, on the left: its screen, and its title over it.
+inline const juce::Rectangle<float> tunerScreen { 48.0f, 586.5f, 459.0f, 57.0f };
+inline const juce::Point<float> tunerTitle { 51.0f, 576.0f };
 
 // THE BOTTOM ROW'S PANELS, their titles' places (each from its left edge, IN and OUT centred).
 inline constexpr float panelTitleY = 682.0f;
@@ -73,10 +79,10 @@ inline constexpr float knobNameY = 712.0f;          // the row the knobs' names 
 inline constexpr std::array<float, 3> toneX { 645.5f, 753.1f, 860.5f };
 inline constexpr float toneY = 765.1f, toneSocket = 77.0f, toneKnob = 64.0f;
 
-// THE OTHER KNOBS: COMP and BLEND either side of DRIVE, DI/CAB in the cabinet's panel — each in its socket. A ring
-// round every knob, in its socket's groove, `ringInset` inside the socket's edge.
+// THE OTHER KNOBS: COMP and BLEND either side of DRIVE — each in its socket; `diCab` the socket in the cabinet's panel
+// that held DI/CAB's knob. A ring round every knob, in its socket's groove, `ringInset` inside the socket's edge.
 inline const juce::Point<float> comp { 287.7f, 794.6f }, blend { 532.0f, 794.5f }, diCab { 1280.4f, 826.1f };
-inline constexpr float smallSocket = 78.0f, smallKnob = 64.0f, diCabSocket = 73.5f, diCabKnob = 60.0f;
+inline constexpr float smallSocket = 78.0f, smallKnob = 64.0f;
 inline constexpr float ringInset = 3.5f, ringWidth = 2.5f, driveRingWidth = 3.0f;
 
 // COMP's squeeze, in its slot between COMP and DRIVE.
@@ -95,7 +101,12 @@ inline constexpr float midFreqCap = 12.0f;
 // THE READINGS, a row under each group of controls: the AMP's, the effects' and DI/CAB's; the tones'; MIDDLE's
 // frequency over its slot; IN's and OUT's levers over their lamps' slots.
 inline constexpr float valueY = 882.0f, toneValueY = 822.0f, midFreqValueY = 849.0f, levelValueY = 855.0f;
-inline constexpr float diCabNameY = 778.0f, diCabValueY = 886.0f;
+// CAB / DI: a fader where DI/CAB's knob was (the owner, 03.11), CAB over it, DI under it, no reading — its slot IN's,
+// the middle left out to fit, and the knob's socket under plain panel from beside it.
+inline const juce::Rectangle<float> diCabSlot { diCab.x - 8.75f, 784.0f, 17.5f, 95.0f };
+inline const juce::Rectangle<float> diCabSocketArt { diCab.x - 43.0f, diCab.y - 43.0f, 86.0f, 86.0f };
+inline const juce::Rectangle<float> diCabPlainArt { 1322.0f, diCab.y - 43.0f, 62.0f, 86.0f };
+inline constexpr float cabWordY = 771.0f, diWordY = 893.0f;
 
 // PRESET, the version, MEM and CPU: on the sill over the maker's two plates — PRESET and the version over POWERED BY,
 // MEM and CPU over DARWIN'S CAT.

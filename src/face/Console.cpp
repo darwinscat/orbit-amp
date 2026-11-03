@@ -1181,15 +1181,21 @@ void Console::sayForAMoment (juce::Point<float> at, const juce::String& words)
 
 void Console::sayLever (ColumnFader& fader, const juce::String& name, std::function<float()> reading)
 {
-    const auto say = [this, &fader, name, reading]
+    sayLeverAs (fader, name, [reading]
     {
         float db = reading();
         if (std::abs (db) < 0.05f)
             db = 0.0f;      // never "-0.0"
+        return (db > 0.0f ? "+" : "") + juce::String (db, 1) + " dB";
+    });
+}
 
+void Console::sayLeverAs (ColumnFader& fader, const juce::String& name, std::function<juce::String()> words)
+{
+    const auto say = [this, &fader, name, words]
+    {
         const auto at = fader.getBoundsInParent().toFloat();    // as it stands on the stage, turned or not
-        nameTag.show ({ at.getCentreX(), at.getY() - 24.0f },
-                      name + "  " + (db > 0.0f ? "+" : "") + juce::String (db, 1) + " dB");
+        nameTag.show ({ at.getCentreX(), at.getY() - 24.0f }, name + "  " + words());
     };
 
     // Round what the lever already does: the value is the parameter's, and it has moved by the time this reads it.

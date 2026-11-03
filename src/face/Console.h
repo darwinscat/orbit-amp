@@ -212,6 +212,8 @@ protected:
     // While a lever is held, a tag over it says where it stands, in the lever's own decibels — which
     // for INPUT are the trim's own, so the middle of the travel reads 0.
     void sayLever (ColumnFader&, const juce::String& name, std::function<float()> reading);
+    // ...or in words of its own: a share, a frequency.
+    void sayLeverAs (ColumnFader&, const juce::String& name, std::function<juce::String()> words);
 
     // THE PRODUCT'S OWN. Each is asked from the console's own code once the face is built.
 

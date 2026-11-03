@@ -76,11 +76,11 @@ private:
     // character and its share are the walker's to hold (channels::Lineup::pinned). BLEND and DI/CAB are their
     // parameters'; each effect's fader its amount, 0 the dry; MIDDLE's frequency lies across, 200 Hz to 3 kHz on a
     // logarithmic travel. A double click puts any of them back where it opens.
-    face::ArtKnob comp, blend, diCab;
-    face::ColumnFader octave, envelope, chorus, midFreq;
+    face::ArtKnob comp, blend;
+    face::ColumnFader octave, envelope, chorus, midFreq, diCab;
     GrColumn squeeze;
     std::vector<std::unique_ptr<face::KnobRing>> rings;     // DRIVE's, COMP's, BLEND's, DI/CAB's, then the tones'
-    static constexpr size_t firstToneRing = 4;
+    static constexpr size_t firstToneRing = 3;
     std::vector<std::unique_ptr<Readout>> readouts;
 
     /** A reading of its own under a control, in `box`. */
