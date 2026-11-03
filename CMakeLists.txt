@@ -1479,6 +1479,10 @@ add_amp(RedGrooveBass CODE Rgrv    BY_NAME    BASS
 # window built, and with it SHUT, which is the figure that matters in a host and the one the
 # standalone cannot give.
 amp_console(catpitamp_memory_probe  "CatpitAmpMemoryProbe"  CatpitAmp  tests/MemoryProbe.cpp)
+# The bass's click probe — not a gate either: a DI take through OrbitBass, left alone and then its switches flipped,
+# and every jump in the output and every block over its budget read out (tests/ClickProbe.cpp).
+amp_console(orbitbass_click_probe   "OrbitBassClickProbe"   OrbitBass  tests/ClickProbe.cpp)
+target_compile_definitions(orbitbass_click_probe PRIVATE JUCE_MODAL_LOOPS_PERMITTED=1)
 
 # THE FAMILY'S SOURCES: every amp's, each once, and their libraries — what a plug-in of several amps is made
 # of (THE FAMILY'S PLUG-INS), and the gates binary with it (below). An amp that defined something under a name
