@@ -95,7 +95,7 @@ inline const juce::Rectangle<float> blendSocketArt { blend.x - 45.0f, 750.0f, 90
 inline constexpr float smallSocket = 78.0f, smallKnob = 64.0f;
 inline constexpr float ringInset = 3.5f, ringWidth = 2.5f, driveRingWidth = 3.0f;
 
-// COMP's squeeze: across over COMP's knob (the owner, 03.11), the picture's slot between COMP and DRIVE left empty.
+// COMP's squeeze: across over COMP's knob (the owner, 03.11), the picture's slot between COMP and DRIVE under plain panel.
 inline const juce::Rectangle<float> grSlot { 336.5f, 753.5f, 12.5f, 85.0f };
 inline const juce::Rectangle<float> grBar { comp.x - 30.0f, 730.0f, 60.0f, 9.0f };
 

@@ -254,6 +254,11 @@ void Cabin::paintStatic (juce::Graphics& g, float scale) const
         g.drawImage (plainOf (socket.withY (socket.getY() - half - 4.0f).withHeight (half)), socket.withHeight (half));
         g.drawImage (plainOf (socket.withY (socket.getBottom() + 1.0f).withHeight (half)), socket.withTrimmedTop (half));
 
+        // ...and the squeeze's old slot between COMP and DRIVE, the squeeze lying over COMP now: the panel at the same
+        // height between the lever and COMP — the panel brightens toward its foot, and a patch from over or under showed.
+        const auto gr = grSlot.expanded (4.0f);
+        g.drawImage (plainOf (gr.withX (210.0f)), gr);
+
         const float grow = driveSocket / driveArtSocket, span = 1.1f * driveArtSocket;
         const auto from = juce::Rectangle<float> (span, span).withCentre (driveArt);
         const auto to   = juce::Rectangle<float> (span * grow, span * grow).withCentre (drive);
