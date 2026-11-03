@@ -1313,7 +1313,9 @@ void SegmentMeter::paint (juce::Graphics& g)
         return;
     }
 
-    const auto area = getLocalBounds().toFloat().reduced (12.0f, 14.0f);
+    // A narrow well (the walker's, 18 px) keeps its segments: the sides' 12 px would leave them no width at all.
+    const float side = (float) getWidth() >= 36.0f ? 12.0f : (float) getWidth() * 0.2f;
+    const auto area = getLocalBounds().toFloat().reduced (side, 14.0f);
     const float step = area.getHeight() / (float) segments;
     const float level = juce::jlimit (0.0f, 1.0f, (shown - floorDb) / (topDb - floorDb));
 
