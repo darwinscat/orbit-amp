@@ -863,7 +863,7 @@ private:
         if (getActiveEditor() == nullptr || ! linkWorks (params::rowTuner))
         {
             tunerStrobe.stop (display == prefs::TunerDisplay::strobe);   // off, a strobe still shows as one
-            tunerPoly.stop (display == prefs::TunerDisplay::poly);       // ...and the lanes as lanes
+            tunerPoly.stop (display == prefs::TunerDisplay::poly);       // ...and the lanes as lanes (AUTO: the needle)
             return;
         }
 
@@ -889,9 +889,12 @@ private:
         else
             tunerStrobe.stop();
 
-        // POLY: every string of a strum at once, off the same tap — run only while the player reads by it.
+        // POLY: every string of a strum at once, off the same tap — run only while the player reads by it, or by
+        // AUTO, which shows its lanes for a strum and the needle for one string.
         if (display == prefs::TunerDisplay::poly)
             tunerPoly.update (tunerTap, getSampleRate(), (double) prefs::tunerFloor (ownProduct));
+        else if (display == prefs::TunerDisplay::automatic)
+            tunerPoly.updateAuto (tunerTap, getSampleRate(), (double) prefs::tunerFloor (ownProduct));
         else
             tunerPoly.stop();
     }

@@ -503,8 +503,8 @@ void AmpEditor::showTunerMenu (juce::Point<int> screenPos)
     using Display = prefs::TunerDisplay;
     const auto& product = amp.product();
     const auto shown = prefs::tunerDisplay (product);
-    const std::array<std::pair<Display, const char*>, 3> displays { { { Display::needle, "Needle" }, { Display::strobe, "Strobe" },
-                                                                      { Display::poly, "Poly" } } };
+    const std::array<std::pair<Display, const char*>, 4> displays { { { Display::needle, "Needle" }, { Display::strobe, "Strobe" },
+                                                                      { Display::poly, "Poly" }, { Display::automatic, "Auto" } } };
     juce::PopupMenu display;
     for (size_t i = 0; i < displays.size(); ++i)
         display.addItem (100 + (int) i, displays[i].second, true, shown == displays[i].first);

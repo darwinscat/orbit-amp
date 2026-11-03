@@ -128,16 +128,17 @@ inline PolyLanes polyLanes (const PolyTuner::Reading& reading, const PolyTuner::
 
 //==============================================================================
 /** THE POLYPHONIC TUNER AS THE FACES SEE IT: the analysis (PolyTuner), run on the processor's tuner pump
-    only while the player reads by POLY and the tuner is open, and what the faces draw from it.
+    only while the player reads by POLY or AUTO and the tuner is open, and what the faces draw from it.
 
     The pump calls tune() every tick — the tuning and the A, so a face shows the right strings even while
-    the tuner is off — then update() while it runs, or stop() when it does not. Nothing here allocates but
+    the tuner is off — then update() (POLY) or updateAuto() (AUTO) while it runs, or stop() when it does not. Nothing here allocates but
     the analysis's prepare(), the first tick at a sample rate. Message thread, as the pump and the faces. */
 class TunerPoly
 {
 public:
-    /** Whether the faces draw lanes: the player reads by POLY. Set by update(), and kept by stop (true)
-        while the tuner is off or closed, so the face still shows what it is. */
+    /** Whether the faces draw lanes: the player reads by POLY — or by AUTO, and the last strum was a chord.
+        Set by update() and updateAuto(), and kept by stop (true) while the tuner is off or closed, so the face
+        still shows what it is. */
     bool on() const noexcept { return shown; }
 
     /** Whether the analysis ran on the last tick. */
@@ -177,11 +178,40 @@ public:
         run = true;
     }
 
+    /** One tick while the player reads by AUTO: the analysis runs as for POLY, and the faces draw its lanes
+        (on()) only for a STRUM — the needle for one string. A strum is a reading with two strings or more
+        read (near or far: a string standing on the plucked one's partial, masked, is no second string); one
+        string read is a single pluck. The view changes only by a strum's reading — a chord whose strings die
+        away one by one stays a chord, and a strum read as one string at first turns to lanes as soon as a
+        second is read — and a reading of nothing changes nothing. A single pluck after a chord shows the needle
+        once POLY has read it, about 1.25 s on: the needle is not stolen from a string the player is tuning. */
+    void updateAuto (const TunerTap& tap, double sampleRate, double floorDb)
+    {
+        update (tap, sampleRate, floorDb);
+        const auto& r = reading();
+        int read = 0;
+        for (int s = 0; s < r.strings; ++s)
+            read += r.string[(size_t) s].heard == PolyTuner::Heard::near || r.string[(size_t) s].heard == PolyTuner::Heard::far ? 1 : 0;
+        if (r.spanMs > 0.0f && read > 0)
+        {
+            if (! autoSeen || r.strum != autoStrum)
+            {
+                autoSeen  = true;
+                autoStrum = r.strum;
+                autoChord = read >= 2;
+            }
+            else
+                autoChord = autoChord || read >= 2;
+        }
+        shown = autoChord;
+    }
+
     /** Not run this tick — another display chosen, or the tuner off or closed. The next run starts afresh,
         from what the tap still holds. `stillShown`: POLY is the display all the same. */
     void stop (bool stillShown = false) noexcept
     {
         shown = stillShown;
+        autoSeen = autoChord = false;
         if (run)
         {
             ear.reset();
@@ -205,6 +235,8 @@ private:
     double rate = 0.0, floor = 0.0;
     bool   floorSet = false;
     bool   shown = false, run = false;
+    bool   autoSeen = false, autoChord = false;   // AUTO: a strum classified, and whether it was a chord
+    unsigned autoStrum = 0;
 };
 
 } // namespace orbitamp::core

@@ -143,10 +143,11 @@ void SetupPanel::buildTunerPage()
     {
         SettingsList::Row display;
         display.name = "DISPLAY";
-        display.note = "a needle; a strobe, still when in tune; or poly - strum, and read every string";
+        display.note = "a needle; a strobe; poly - every string of a strum; auto - the needle, poly for a strum";
         display.choices.add ("NEEDLE");
         display.choices.add ("STROBE");
         display.choices.add ("POLY");
+        display.choices.add ("AUTO");
         display.chosen = [this] { return (int) prefs::tunerDisplay (amp.product()); };
         display.choose = [this] (int k) { prefs::setTunerDisplay (amp.product(), (prefs::TunerDisplay) k); };
         rows.push_back (std::move (display));

@@ -1402,12 +1402,13 @@ void Console::showTunerMenu()
     const auto shown = prefs::tunerDisplay (amp.product());
     juce::PopupMenu display;
     for (const auto& choice : { std::pair { Display::needle, "Needle" }, std::pair { Display::strobe, "Strobe" },
-                                std::pair { Display::poly, "Poly" } })
+                                std::pair { Display::poly, "Poly" }, std::pair { Display::automatic, "Auto" } })
     {
         const auto d = choice.first;
         addChoice (display, choice.second, shown == d, [d] (Console& c) { prefs::setTunerDisplay (c.amp.product(), d); });
     }
-    menu.addSubMenu (juce::String ("Display  ") + (shown == Display::poly ? "Poly" : shown == Display::strobe ? "Strobe" : "Needle"),
+    menu.addSubMenu (juce::String ("Display  ") + (shown == Display::automatic ? "Auto" : shown == Display::poly ? "Poly"
+                                                   : shown == Display::strobe ? "Strobe" : "Needle"),
                      display);
 
     const auto& tuned = prefs::tunerTuning (amp.product());

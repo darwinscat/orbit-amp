@@ -205,11 +205,12 @@ inline int  tunerReference (const Product& p)              { return tunerReferen
 inline void setTunerReference (const Product& p, int hz)   { hz = snapTunerReference (hz); tunerReferenceCache (p).store (hz, std::memory_order_relaxed); store (p).set (tunerReferenceHz, hz); }
 
 /** HOW THE TUNER SHOWS A NOTE: its NEEDLE; a STROBE (core::TunerStrobe) — stripes that stand still when the
-    string is in tune and drift by the sound's own phase when it is not; or POLY (core::TunerPoly) — strum the
-    open strings and read every one at once, a lane each. The player's way of reading, not a sound's, so it
-    lives on the machine with the reference and is read the same way, every tick. The needle unless the
-    player chose another; a stored value that is none of the three is the needle too. */
-enum class TunerDisplay { needle, strobe, poly };
+    string is in tune and drift by the sound's own phase when it is not; POLY (core::TunerPoly) — strum the
+    open strings and read every one at once, a lane each; or AUTO — the needle for one string, the lanes for
+    a strum (TunerPoly::updateAuto). The player's way of reading, not a sound's, so it lives on the machine
+    with the reference and is read the same way, every tick. The needle unless the player chose another; a
+    stored value that is none of the four is the needle too. */
+enum class TunerDisplay { needle, strobe, poly, automatic };
 
 inline const juce::Identifier tunerDisplayKey { "tuner_display" };
 
@@ -219,7 +220,7 @@ inline std::atomic<int>& tunerDisplayCache (const Product& p)
     return cached.of (p.name, [&p]
     {
         const int d = (int) store (p).get (tunerDisplayKey, (int) TunerDisplay::needle);
-        return d >= (int) TunerDisplay::needle && d <= (int) TunerDisplay::poly ? d : (int) TunerDisplay::needle;
+        return d >= (int) TunerDisplay::needle && d <= (int) TunerDisplay::automatic ? d : (int) TunerDisplay::needle;
     });
 }
 

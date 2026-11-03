@@ -647,6 +647,34 @@ int main()
         expect (poly.on() && ! poly.running() && poly.reading().spanMs == 0.0f, "pump: stopped, shown, nothing kept");
         poly.stop();
         expect (! poly.on(), "pump: another display, not shown");
+
+        // AUTO: the same strum shows the lanes; then one string plucked alone, the needle.
+        {
+            auto alone = sc;
+            for (int s = 0; s < 6; ++s)
+                alone.strings[(size_t) s].on = s == 1;
+            auto both = render (sc);
+            const auto second = render (alone);
+            both.insert (both.end(), second.begin(), second.end());
+            static TunerTap autoTap;
+            static TunerPoly autoPoly;
+            autoPoly.tune (t, 440.0f);
+            bool chordShown = false;
+            for (size_t i = 0; i < both.size(); i += 512)
+            {
+                autoTap.write (both.data() + i, (int) std::min<size_t> (512, both.size() - i));
+                if ((i / 512) % 3 != 2)
+                    continue;
+                autoPoly.tune (t, 440.0f);
+                autoPoly.updateAuto (autoTap, sc.fs, -60.0);
+                if (i + 512 <= x.size())
+                    chordShown = autoPoly.on();   // where the strum still rings
+            }
+            expect (chordShown && ! autoPoly.on() && autoPoly.running() && autoPoly.reading().mono,
+                    "auto: a strum shows the lanes, then one string the needle");
+            autoPoly.stop();
+            expect (! autoPoly.on(), "auto: stopped, the needle");
+        }
     }
 
     // Withholding is allowed, not free: on the gate's own clean strums it stays under a ceiling.
