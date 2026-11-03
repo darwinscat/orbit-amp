@@ -43,6 +43,7 @@ CabinetBlock::CabinetBlock (AmpProcessor& processor)
     {
         bassRow = std::make_unique<BassRow> (processor);
         bassRow->addTo (*this, processor);
+
     }
 
     // The IR's name on the border beside the block's, set like a name and in the block's colour.
@@ -57,7 +58,8 @@ CabinetBlock::CabinetBlock (AmpProcessor& processor)
         *amp.apvts.getParameter (params::cabIr),
         [this] (float) { refreshIr (false, true); });
 
-    ir.onOpen = [this] { showIrMenu(); };
+    // The bass opens its cabinets, drawn (showCabPanel); its own IRs are a door in there. The guitar opens its menu.
+    ir.onOpen = [this] { if (bassRow != nullptr) showCabPanel(); else showIrMenu(); };
 
     // The picture: the IR, the cuts' curve and the trim's handle drawn on it, in the block's colour.
     wave.setAccent (theme::orange);
@@ -223,6 +225,14 @@ void CabinetBlock::refreshIr (bool force, bool keepTrimWord)
                                        : amp.product().playsCabIr (choice.factory) ? params::cabIrNames[choice.factory] : noIr,
                        0, false } });
     ir.setSelection (0);
+
+    // The picture of the bass's cabinets says which plays, and where its mic stands — none for any other IR.
+    if (picker != nullptr)
+    {
+        const auto synth = AmpProcessor::cabSynthOf (choice);
+        picker->show (synth.valid ? CabPicker::indexOf (synth.cab) : -1,
+                      { synth.spot.x, synth.spot.y, synth.spot.distance, synth.spot.horn });
+    }
 
     // The same bytes the engine convolves, whichever shelf they came off.
     if (choice.isUser())
@@ -396,6 +406,35 @@ void CabinetBlock::showIrMenu()
 
                             safe->refreshIr (false, true);
                         });
+}
+
+void CabinetBlock::showCabPanel()
+{
+    auto content = std::make_unique<CabPicker>();
+    content->setSize (520, 210);
+
+    // The bass's own cabinets, rendered live with the mic where the hand put it (AmpProcessor::requestCabSynth).
+    content->onSpot = [this] (int cab, CabPicker::Spot spot)
+    {
+        amp.requestCabSynth (CabPicker::cabs()[(size_t) cab].name, { spot.x, spot.y, spot.distance, spot.horn });
+    };
+    content->onOwnIrs = [this]
+    {
+        if (pickerBox != nullptr)
+            pickerBox->dismiss();
+        showIrMenu();
+    };
+
+    picker = content.get();
+    shownIr.clear();
+    refreshIr (true);   // what plays, shown in it
+
+    // Over the face, its arrow on the name, inside the window where it fits (as the DSP figure's breakdown opens).
+    const auto anchor = ir.getScreenBounds();
+    auto& box = juce::CallOutBox::launchAsynchronously (std::move (content), anchor, nullptr);
+    if (auto* top = getTopLevelComponent(); top != nullptr && box.getWidth() < top->getWidth() && box.getHeight() < top->getHeight())
+        box.updatePosition (anchor, top->getScreenBounds());
+    pickerBox = &box;
 }
 
 void CabinetBlock::pushToWave()

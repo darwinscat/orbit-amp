@@ -5,6 +5,7 @@
 
 #include "../Parameters.h"
 #include "BlockFrame.h"
+#include "CabPicker.h"
 #include "GuardRail.h"
 #include "VoicingSelector.h"
 #include "ZoneSwitch.h"
@@ -69,6 +70,12 @@ private:
         left off, the bass's cuts being a stage after DI/CAB. On the bass's chain alone. */
     struct BassRow;
     std::unique_ptr<BassRow> bassRow;
+
+    /** OrbitBass's cabinets, drawn (ui/CabPicker.h), in a panel over the face that the name on the border opens: the
+        block is too narrow for them beside a delay and a reverb. Set while the panel is open. */
+    juce::Component::SafePointer<CabPicker> picker;
+    juce::Component::SafePointer<juce::CallOutBox> pickerBox;
+    void showCabPanel();
 
     VoicingSelector ir;
     felitronics::appkit::IrWaveView wave;
