@@ -64,7 +64,7 @@ namespace
         using Choice = juce::AudioParameterChoice;
         using Float  = juce::AudioParameterFloat;
         layout.add (std::make_unique<Bool>   (juce::ParameterID { compOn, 1 },        "Comp", true),
-                    std::make_unique<Float>  (juce::ParameterID { compAmount, 1 },    "Comp Blend",
+                    std::make_unique<Float>  (juce::ParameterID { compAmount, 1 },    "Comp Mix",
                                               juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), blend),
                     std::make_unique<Choice> (juce::ParameterID { compAttack, 1 },    "Comp Attack",    compAttacks, 1),
                     std::make_unique<Choice> (juce::ParameterID { compRelease, 1 },   "Comp Release",   compReleases, 0),

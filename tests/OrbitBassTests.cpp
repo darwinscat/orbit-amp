@@ -5563,7 +5563,7 @@ int ORBITAMP_GATE_MAIN()
             { "DELAY",    params::delayOn,  [] (auto& s) { return bass::delayMenu (s); },
               { "SYNC", "DIVISION >", "TIME (FREE) >", "HOST TEMPO", "BPM >", "REPEATS >", "DARK >", "OFFSET >" } },
             { "REVERB",   params::reverbOn, [] (auto& s) { return bass::reverbMenu (s); }, { "TYPE >", "DECAY >", "PRE-DELAY >" } },
-            { "CAB IR",   params::cabOn,    [] (auto& s) { return bass::cabMenu (s); },    { "DI / CAB >", "TRIM", "TRIM KEEPS >" } } };
+            { "CAB IR",   params::cabOn,    [] (auto& s) { return bass::cabMenu (s); },    { "MIX >", "TRIM", "TRIM KEEPS >" } } };
         juce::StringArray wrong;
         int menus = 0, picks = 0;
         // RESET at the foot of every OrbitBass menu (the owner, 01.11), ruled off from what stands over it.
@@ -5901,7 +5901,8 @@ int ORBITAMP_GATE_MAIN()
         // HINTS OVER THE SLIDERS (the owner, 01.11: what is this, BLEND?): every rail and slider on OrbitBass's face — COMP's
         // threshold, ratio and BLEND, OCTAVE, ENVELOPE, CHORUS, DELAY's and REVERB's MIX, the AMP's BLEND, DI/CAB, GATE, LIMIT —
         // a tooltip, its name in capitals first, then what it mixes with what, or nothing more ("THRESHOLD"); SHORT (the owner,
-        // 01.11: shorter — "BLEND: compressed with dry"), 30 characters at most; the window's TooltipWindow shows it at 13 px.
+        // 01.11: shorter — "BLEND: compressed with dry"; 03.11: every share a MIX, "MIX: WET/DRY", the AMP's BLEND its own), 30 characters at most;
+        // the window's TooltipWindow shows it at 13 px.
         {
             auto t = make (bass);
             set (*t, params::delayPresent, 1.0f);
@@ -5933,7 +5934,7 @@ int ORBITAMP_GATE_MAIN()
             for (auto* child : ed->getChildren())
                 walk (*child);
             seen.sort (false);
-            check (bad.isEmpty() && seen.joinIntoString (",") == "BLEND,BLEND,CHORUS,DI/CAB,ENVELOPE,GATE,LIMIT,OCTAVE,RATE,RATIO,RELEASE,THRESHOLD,TONE" && juce::TooltipWindow().getLookAndFeel().getTooltipBounds ("BLEND: a hint", {}, { 0, 0, 2000, 2000 }).getHeight() >= 13,
+            check (bad.isEmpty() && seen.joinIntoString (",") == "BLEND,GATE,LIMIT,MIX,MIX,MIX,MIX,MIX,RATE,RATIO,RELEASE,THRESHOLD,TONE" && juce::TooltipWindow().getLookAndFeel().getTooltipBounds ("MIX: a hint", {}, { 0, 0, 2000, 2000 }).getHeight() >= 13,
                    "every rail and slider on OrbitBass's face has a short hint, its name first: " + seen.joinIntoString (", ")
                    + (bad.isEmpty() ? juce::String() : "; without: " + bad.joinIntoString ("; ")));
         }
@@ -6253,7 +6254,7 @@ int ORBITAMP_GATE_MAIN()
                         wrong.add ("the layout: " + said);
                     // A FADER as every BLEND and MIX on the bass's face (the owner, 01.11): violet, its percent under it at 13 px.
                     if (rail->paramId() != params::cabMix || rail->gripText() != "70%" || ! rail->hasFaderLook() || fader::textH < 13.0f
-                        || rail->columnWidth != fader::columnW || rail->typeDecimals < 0 || rail->getTooltip() != "DI/CAB: DI with cabinet")
+                        || rail->columnWidth != fader::columnW || rail->typeDecimals < 0 || rail->getTooltip() != "MIX: WET/DRY")
                         wrong.add ("the rail reads \"" + rail->gripText() + "\" at " + juce::String (rail->gripTextHeight, 0) + " px, hint \""
                                    + rail->getTooltip() + "\"");
 

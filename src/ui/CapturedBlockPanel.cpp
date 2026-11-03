@@ -31,7 +31,7 @@ struct CapturedBlockPanel::BassKnobs
         // BLEND, a fader as the bass's others are (the owner, 01.11): its name over it, its amount in percent under it,
         // 13 px, typed on a click; its menu on a right click.
         bass::asBassAmount (blend, "BLEND");
-        bass::hint (blend, "BLEND: clean lows with amp");
+        bass::hint (blend, "BLEND: 100% AMP, 0% CLEAN LOWS");
         blend.onMenu = [this] (juce::Point<int>) { bass::showAmpMenu (state, &blend); };   // the AMP's menu, the block's
         owner.addAndMakeVisible (blend);
     }

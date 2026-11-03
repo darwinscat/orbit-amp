@@ -315,7 +315,7 @@ public:
     {
         shieldsWhenOff = false;
         bass::asBassAmount (rail, "MIX");   // the amount in percent, a field too
-        bass::hint (rail, "CHORUS: chorus with dry");
+        bass::hint (rail, "MIX: WET/DRY");
         rail.onGesture = [&processor] (bool begin) { if (begin) processor.history.beginGesture(); else processor.history.endGesture(); };   // one undo step a drag, as COMP's
         bass::asBassFader (rateRail, "RATE", [] (float hz) { return juce::String (hz, hz < 9.95f ? 1 : 0) + " Hz"; }, 1.0f, 1);
         rateRail.logScale = true;

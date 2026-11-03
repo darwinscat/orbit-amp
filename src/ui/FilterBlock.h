@@ -378,7 +378,7 @@ public:
     {
         shieldsWhenOff = false;
         bass::asBassAmount (rail, "MIX");   // the amount in percent, a field too
-        bass::hint (rail, "ENVELOPE: filter with dry");
+        bass::hint (rail, "MIX: WET/DRY");
         rail.onGesture = [&processor] (bool begin) { if (begin) processor.history.beginGesture(); else processor.history.endGesture(); };   // one undo step a drag, as COMP's
         bass::asBassFader (releaseRail, "RELEASE", [] (float ms) { return juce::String (juce::roundToInt (ms)) + " ms"; });
         releaseRail.logScale    = true;

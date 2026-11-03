@@ -26,8 +26,8 @@ struct CabinetBlock::BassRow
         // The cuts are not here: the bass has ONE pair, on the AMP's switches (EqSection::setStandard). DI/CAB is the
         // cabinet's — with the cabinet out there is nothing to mix — and stands by with it.
         owner.addAndMakeVisible (di);
-        bass::asBassFader (di, "DI/CAB", [] (float v) { return juce::String (juce::roundToInt (v)) + "%"; });   // percent already
-        bass::hint (di, "DI/CAB: DI with cabinet");
+        bass::asBassFader (di, "MIX", [] (float v) { return juce::String (juce::roundToInt (v)) + "%"; });   // percent already
+        bass::hint (di, "MIX: WET/DRY");
         di.onGesture = [&p] (bool begin) { if (begin) p.history.beginGesture(); else p.history.endGesture(); };
         di.onMenu    = [&owner] (juce::Point<int>) { if (owner.onBlockMenu != nullptr) owner.onBlockMenu(); };   // the CAB's menu
     }

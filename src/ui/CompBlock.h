@@ -798,11 +798,11 @@ public:
           transfer (processor)
     {
         shieldsWhenOff = false;
-        bass::asBassAmount (rail, "BLEND");   // a fader, its amount in percent under it, a field too
+        bass::asBassAmount (rail, "MIX");   // a fader, its amount in percent under it, a field too
         bass::asBassRail (thresholdRail);      // one control with the graph's line: the plain rail's look
         bass::hint (thresholdRail, "THRESHOLD");
         bass::hint (ratioCombo,    "RATIO");
-        bass::hint (rail,          "BLEND: compressed with dry");
+        bass::hint (rail,          "MIX: WET/DRY");
         thresholdRail.textForValue = [] (float db) { return juce::String (juce::roundToInt (db)); };   // dB, as "dB" over it says
         thresholdRail.typedScale   = 1.0f;
         const auto undoStep = [&processor] (bool begin) { if (begin) processor.history.beginGesture(); else processor.history.endGesture(); };

@@ -277,7 +277,7 @@ public:
         setName (name);
         shieldsWhenOff = false;
         bass::asBassRail (rail);
-        bass::hint (rail, w == SpacePicture::Which::delay ? "MIX: echoes with dry" : "MIX: reverb with dry");
+        bass::hint (rail, "MIX: WET/DRY");
         rail.textForValue = [] (float v) { return juce::String (juce::roundToInt (v)); };   // MIX is percent already
         rail.typedScale   = 1.0f;
         rail.onGesture = [&processor] (bool begin) { if (begin) processor.history.beginGesture(); else processor.history.endGesture(); };

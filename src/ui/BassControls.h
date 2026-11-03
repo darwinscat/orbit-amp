@@ -383,10 +383,10 @@ inline Menu ampMenu (juce::AudioProcessorValueTreeState& state, Menu m = {})
     return m;
 }
 
-/** The CAB's: DI/CAB, and the IR's trim, its switch and what it keeps. */
+/** The CAB's: MIX, and the IR's trim, its switch and what it keeps. */
 inline Menu cabMenu (juce::AudioProcessorValueTreeState& state, Menu m = {})
 {
-    addStepsMenu (m, state, params::cabMix, "DI / CAB", { 0.0f, 30.0f, 50.0f, 70.0f, 80.0f, 90.0f, 100.0f },
+    addStepsMenu (m, state, params::cabMix, "MIX", { 0.0f, 30.0f, 50.0f, 70.0f, 80.0f, 90.0f, 100.0f },
                   [] (float v) { return juce::String (juce::roundToInt (v)) + " % CAB"; });
     addToggle (m, m.items, state, params::cabTrimOn, "TRIM");
     addStepsMenu (m, state, params::cabTrim, "TRIM KEEPS", { 0.1f, 0.25f, 0.5f, 0.75f, 1.0f },
