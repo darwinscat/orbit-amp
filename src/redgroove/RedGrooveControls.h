@@ -45,6 +45,9 @@ public:
 
     static constexpr float rangeDb = 24.0f;
 
+    /** Lying across, in a slot of its own drawing: filling from the left. */
+    bool across = false;
+
     void paint (juce::Graphics&) override;
 
 private:

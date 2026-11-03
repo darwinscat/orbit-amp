@@ -61,7 +61,25 @@ void GrColumn::timerCallback()
 
 void GrColumn::paint (juce::Graphics& g)
 {
-    const auto r = getLocalBounds().toFloat();
+    const auto box = getLocalBounds().toFloat();
+    if (across)
+    {
+        // Its own slot, dark with a lit rim, as the faders' are; the squeeze inside it from the left.
+        g.setColour (juce::Colour (0xff020205));
+        g.fillRoundedRectangle (box, 0.5f * box.getHeight());
+        g.setColour (juce::Colours::white.withAlpha (0.14f));
+        g.drawRoundedRectangle (box.reduced (0.5f), 0.5f * box.getHeight(), 1.0f);
+        const auto r = box.reduced (2.0f);
+        const float depth = r.getWidth() * juce::jlimit (0.0f, 1.0f, -shown / rangeDb);
+        if (depth < 0.5f)
+            return;
+        g.setColour (juce::Colour (0xff8b6cff));
+        g.fillRoundedRectangle (r.withWidth (depth), 0.5f * r.getHeight());
+        g.setColour (orange);
+        g.fillRect (r.getX() + depth - 1.0f, r.getY() - 1.0f, 2.0f, r.getHeight() + 2.0f);
+        return;
+    }
+    const auto r = box;
     const float depth = r.getHeight() * juce::jlimit (0.0f, 1.0f, -shown / rangeDb);
     if (depth < 0.5f)
         return;

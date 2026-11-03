@@ -272,7 +272,7 @@ void EqSection::layBands (juce::Rectangle<int> row)
         dial.setBounds (pair.removeFromLeft (dialW));
         pair.removeFromLeft (gap);
         fader.labelRowHeight = dial.labelRowHeight;
-        fader.setBounds (pair.withTrimmedBottom (under));
+        fader.setBounds (pair);     // the whole height under the name (the owner, 03.11)
     }
 }
 
@@ -519,6 +519,8 @@ void EqSection::setStandard (params::EqStandard standard, BlockFrame& owner)
     fingLine.setItems ("STYL", { "F", "S" }, 0);
     strLine.setTooltip (bass::strHint);
     fingLine.setTooltip (bass::stylHint);
+    strLine.onMenu  = [this] { bass::showHpfMenu (state, &strLine); };     // the frequencies each position stands for
+    fingLine.onMenu = [this] { bass::showLpfMenu (state, &fingLine); };
     strAtt = std::make_unique<juce::ParameterAttachment> (*state.getParameter (params::bassHpf), [this] (float v)
     {
         strLine.setSelectedIndex (juce::roundToInt (v) == (int) params::BassHpf::four ? 0 : 1, juce::dontSendNotification);

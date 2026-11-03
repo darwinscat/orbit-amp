@@ -1116,7 +1116,15 @@ ColumnFader::ColumnFader (const juce::Image& c) : cap (c)
 
 juce::Range<float> ColumnFader::travel() const
 {
-    const float end = 26.0f * scale;
+    // The cap's middle runs to 26 px short of either end, a column's full cap; a cap drawn shorter (capSquash) to half
+    // its own height and a little short of them — or it would stop where a full one does (the owner, 03.11).
+    float end = 26.0f * scale;
+    if (capSquash < 1.0f && cap.isValid())
+    {
+        const auto src = opaqueBoundsOnce (cap);
+        const float length = capLength > 0.0f ? capLength : crossWidth() - 8.0f;
+        end = 0.5f * src.getHeight() * length / juce::jmax (1.0f, (float) src.getWidth()) * capSquash + 3.0f * scale;
+    }
     return { end, runLength() - end };
 }
 

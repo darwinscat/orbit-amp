@@ -99,6 +99,7 @@ public:
     }
 
     std::function<void (int)> onChange;
+    std::function<void()> onMenu;       // a right click, when set — and then it does not move
 
     /** What a position is written as beside the oval: 0 where the pack calls it off or 0, its own word otherwise. */
     static juce::String markFor (const juce::String& position)
@@ -164,15 +165,18 @@ public:
                     juce::Justification::centredLeft, false);
     }
 
-    void mouseDown (const juce::MouseEvent&) override
+    void mouseDown (const juce::MouseEvent& e) override
     {
         dragged = false;
+        menuClick = e.mods.isPopupMenu() && onMenu != nullptr;
+        if (menuClick)
+            onMenu();
     }
 
     void mouseDrag (const juce::MouseEvent& e) override
     {
         const int dx = e.getDistanceFromDragStartX();
-        if (dragged || std::abs (dx) < dragStep)
+        if (menuClick || dragged || std::abs (dx) < dragStep)
             return;
 
         dragged = true;
@@ -181,7 +185,7 @@ public:
 
     void mouseUp (const juce::MouseEvent& e) override
     {
-        if (dragged || items.size() < 2)
+        if (menuClick || dragged || items.size() < 2)
             return;
 
         // Toward the side of the dot the click lands on — and from the end it stands against, back.
@@ -300,6 +304,7 @@ private:
     juce::StringArray items;
     int index = 0;
     bool dragged = false;
+    bool menuClick = false;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ToggleSwitch)
 };

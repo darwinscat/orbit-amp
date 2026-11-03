@@ -425,9 +425,9 @@ RedGrooveEditor::RedGrooveEditor (AmpProcessor& p)
                                        .withCentre ({ layout::effectX[i], layout::effectTop + 0.5f * effectHeight }),
                  layout::faderCapLength, false);
     faderIn (midFreq, layout::midFreqSlot.withSizeKeepingCentre (layout::midFreqSlot.getWidth(), 40.0f), layout::midFreqCap, true);
-    faderIn (diCab, layout::diCabSlot.withSizeKeepingCentre (layout::faderWidth, layout::diCabSlot.getHeight() - 12.0f), layout::faderCapLength, false);
+    faderIn (diCab, layout::diCabSlot.withSizeKeepingCentre (layout::faderWidth, layout::diCabSlot.getHeight()), layout::faderCapLength, false);
     diCab.marks = 4;
-    faderIn (blend, layout::blendSlot.withSizeKeepingCentre (layout::faderWidth, layout::blendSlot.getHeight() - 12.0f), layout::faderCapLength, false);
+    faderIn (blend, layout::blendSlot.withSizeKeepingCentre (layout::faderWidth, layout::blendSlot.getHeight()), layout::faderCapLength, false);
     blend.marks = 4;
 
     // Each known by a name of its own, as a gate finds it (tests/RedGrooveFaceTests.cpp).
@@ -439,9 +439,10 @@ RedGrooveEditor::RedGrooveEditor (AmpProcessor& p)
     chorus.setComponentID ("chorus");
     midFreq.setComponentID ("midFreq");
 
-    // COMP's squeeze, in its slot.
+    // COMP's squeeze, across over its knob.
     addToStage (squeeze);
-    squeeze.setBounds (layout::grSlot.reduced (2.0f).toNearestInt());
+    squeeze.across = true;
+    squeeze.setBounds (layout::grBar.toNearestInt());
 
     // THE READINGS, one under every control.
     const auto under = [] (float x, float y, float w = 120.0f) { return around ({ x, y }, w, 26.0f); };
@@ -886,7 +887,7 @@ void RedGrooveEditor::webExtras (const juce::File& dir, juce::DynamicObject& kit
     // THE SQUEEZE: COMP's gain reduction as a column filling down, its full span; the cabinet's screen.
     {
         auto* g = new Obj();
-        g->setProperty ("box", rect (boxOf (squeeze))); g->setProperty ("slot", rect (layout::grSlot));
+        g->setProperty ("box", rect (boxOf (squeeze))); g->setProperty ("slot", rect (layout::grBar)); g->setProperty ("across", true);
         g->setProperty ("rangeDb", GrColumn::rangeDb); g->setProperty ("reads", "COMP's gain reduction in dB (AmpProcessor::compGrDb)");
         o->setProperty ("squeeze", g);
         auto* c = new Obj();
