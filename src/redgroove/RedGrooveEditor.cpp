@@ -327,7 +327,8 @@ void Cabin::paintStatic (juce::Graphics& g, float scale) const
         const auto plain = plainOf (screen.withY (screen.getBottom() + 3.0f).withHeight (strip));
         for (int i = 0; i < 3; ++i)
         {
-            const auto to = screen.withY (screen.getY() + strip * (float) i).withHeight (strip);
+            // ...each a little over the next, so that no edge falls between two pixels with the screen showing through.
+            const auto to = screen.withY (screen.getY() + strip * (float) i).withHeight (strip).expanded (0.0f, i == 1 ? 1.0f : 0.0f);
             const float sx = to.getWidth() / (float) plain.getWidth(), sy = to.getHeight() / (float) plain.getHeight();
             g.drawImageTransformed (plain, i == 1 ? juce::AffineTransform::scale (sx, -sy).translated (to.getX(), to.getBottom())
                                                   : juce::AffineTransform::scale (sx, sy).translated (to.getX(), to.getY()));
