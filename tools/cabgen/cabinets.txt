@@ -219,7 +219,8 @@ inherit = VB-410 cap, pos-edge
 inherit = VB-410 cap, mic-sm57, pos-offaxis
 
 [SVT-15E cap]
-inherit = defaults, mic-d112, pos-cap
+# Its own mic the RE20, not the kick drum's D112: a 15 recorded at home, not a stage's (the owner, 04.11).
+inherit = defaults, mic-re20, pos-cap
 seed = 15051
 alignment = ported
 ts = 40, 0.40, 140
