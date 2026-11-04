@@ -421,10 +421,18 @@ juce::String Channels::slotFrom (int slot) const
         return {};
     if (const auto set = node().getProperty (slotId (slot)).toString(); AmpProcessor::cabSynthOf (set).valid)
         return set;
-    // Never set: the lineup's box, its own mic at its cap, the horn as the lineup says.
+    // Never set: the lineup's box, its own mic at its cap, the horn as the lineup says — and its second mic, where it
+    // has one, 30 cm out on the axis, on one clock, a third of the blend.
     const auto& own = line.cabinets[(size_t) slot];
     AmpProcessor::CabSetup setup;
     setup.a.horn = own.horn;
+    if (own.second != nullptr)
+    {
+        setup.b = { 0.0f, 0.0f, 0.30f, own.horn, own.second };
+        setup.bOn = true;
+        setup.blend = 0.35f;
+        setup.align = true;
+    }
     return AmpProcessor::cabSynthFrom (own.box, setup);
 }
 

@@ -80,11 +80,13 @@ struct Lineup
 
     /** ...IN SLOTS: so many cabinets, each a box and its mics as the player sets them in the window — one set for every
         channel, kept in the state (Channels::slotFrom) — and each channel standing at one of them (Channel::cabinet).
-        What each slot holds until the player says otherwise: its box, the box's own mic at its cap, the horn on or off. */
+        What each slot holds until the player says otherwise: its box, the box's own mic at its cap, the horn on or off —
+        and a `second` mic where it is said, the room's: 30 cm out on the axis, ALIGN on, a third of the blend. */
     struct Cabinet
     {
         const char* box = nullptr;
         bool horn = true;
+        const char* second = nullptr;
     };
     std::vector<Cabinet> cabinets {};
 

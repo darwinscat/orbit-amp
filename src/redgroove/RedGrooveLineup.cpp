@@ -54,9 +54,11 @@ const channels::Lineup& lineup()
         true,   // ITS CABINETS ARE OURS, DRAWN — Ampeg's, nobody's files (the owner, 04.11)
         {
             // ...IN SIX SLOTS, a box of each size to begin with, each the player's to set in the window (the owner,
-            // 04.11): the 1x15 for B15, its horn off; the sealed 4x10 for SVT; then the 1x12, the 2x10, the 6x10, and the
-            // 8x10 with its horn off.
-            { "SVT-15E", false }, { "SVT-410HE" }, { "VB-112" }, { "VB-210" }, { "SVT-610HLF" }, { "SVT-810", false },
+            // 04.11): the 1x15 for B15, its horn off; the sealed 4x10 for SVT; then the 1x12, the 2x10, and two as a
+            // studio puts them up, a dynamic close and a condenser 30 cm out — the 6x10's MD421 with a U87, the 8x10's
+            // RE20 with a U47, its horn off.
+            { "SVT-15E", false }, { "SVT-410HE" }, { "VB-112" }, { "VB-210" },
+            { "SVT-610HLF", true, "u87" }, { "SVT-810", false, "u47" },
         },
     };
     return walker;
