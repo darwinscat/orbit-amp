@@ -25,9 +25,10 @@ namespace orbitamp
     side — the speaker moved away from it — and beside it HORN's attenuator, OFF -12 -6 0; the mics in perspective on
     the speaker, dragged across it and just past its rim; their two columns either side, each its mic, its places (CAP,
     EDGE, OFF and ROOM, one click each), distance and angle; BLEND, ALIGN and Ø under it, and two buttons: DEFAULT, the
-    box's own mic back at its cap — SURE? at the first click, done at the second — and CLOSE. While the hand moves, the
-    cabinet is heard as it goes (onMove) — each position the worker reaches next, a tenth of a second for one mic, near
-    a second for two on the 8x10 — and what is set is kept when the hand lets go (onSetup).
+    box's own mic back at its cap — SURE? at the first click, done at the second — and CLOSE. A mic's row clicked again
+    while both are heard takes that mic away; the last one stays. While the hand moves, the cabinet is heard as it goes
+    (onMove) — each position the worker reaches next, a tenth of a second for one mic, near a second for two on the 8x10
+    — and what is set is kept when the hand lets go (onSetup).
 
     A dumb view: the cabinets in (cabs(), geometry from tools/cabgen/cabinets.txt — metres, the baffle's centre the
     origin, up positive), what plays in (show), a pick out (onSetup). */
@@ -843,6 +844,25 @@ private:
             for (int i = 0; i < mics().size(); ++i)
                 if (micRow (m, i).contains (pos))
                 {
+                    // The lit one clicked again, with both mics heard: that mic goes. A going hands its place to B, and
+                    // B keeps A's for when it is taken up again. The last mic never goes.
+                    const auto& own = mic (m).mic.isNotEmpty() ? mic (m).mic : cabs()[(size_t) chosen].mic;
+                    if (heardB() && mics()[i] == own)
+                    {
+                        if (m == 0)
+                        {
+                            auto& a = setup_.a;
+                            auto& b = setup_.b;
+                            std::swap (a.x, b.x);
+                            std::swap (a.y, b.y);
+                            std::swap (a.distance, b.distance);
+                            std::swap (a.mic, b.mic);
+                            std::swap (a.angle, b.angle);
+                        }
+                        setup_.blend = 0.0f;
+                        send();
+                        return;
+                    }
                     if (m == 1) takeUpB();
                     mic (m).mic = mics()[i];
                     send();
