@@ -435,6 +435,21 @@ void CabinetBlock::showCabPanel()
     // Over the face, its arrow on the name, inside the window where it fits (as the DSP figure's breakdown opens).
     const auto anchor = ir.getScreenBounds();
     auto& box = juce::CallOutBox::launchAsynchronously (std::move (content), anchor, nullptr);
+
+    // Ours, not JUCE's grey-green: the face's panel under it, the CAB's orange line round it and its arrow.
+    struct Look final : juce::LookAndFeel_V4
+    {
+        void drawCallOutBoxBackground (juce::CallOutBox&, juce::Graphics& g, const juce::Path& path, juce::Image&) override
+        {
+            g.setColour (theme::panel);
+            g.fillPath (path);
+            g.setColour (theme::orange);
+            g.strokePath (path, juce::PathStrokeType (1.2f));
+        }
+        float getCallOutBoxCornerSize (const juce::CallOutBox&) override { return 6.0f; }
+    };
+    static Look look;
+    box.setLookAndFeel (&look);
     if (auto* top = getTopLevelComponent(); top != nullptr && box.getWidth() < top->getWidth() && box.getHeight() < top->getHeight())
         box.updatePosition (anchor, top->getScreenBounds());
     pickerBox = &box;
