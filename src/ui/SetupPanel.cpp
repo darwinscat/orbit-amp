@@ -143,11 +143,15 @@ void SetupPanel::buildTunerPage()
     {
         SettingsList::Row display;
         display.name = "DISPLAY";
-        display.note = "a needle; a strobe; poly - every string of a strum; auto - the needle, poly for a strum";
+        display.note = prefs::tunerPolyOffered ? "a needle; a strobe; poly - every string of a strum; auto - the needle, poly for a strum"
+                                               : "a needle, or a strobe";
         display.choices.add ("NEEDLE");
         display.choices.add ("STROBE");
-        display.choices.add ("POLY");
-        display.choices.add ("AUTO");
+        if (prefs::tunerPolyOffered)
+        {
+            display.choices.add ("POLY");
+            display.choices.add ("AUTO");
+        }
         display.chosen = [this] { return (int) prefs::tunerDisplay (amp.product()); };
         display.choose = [this] (int k) { prefs::setTunerDisplay (amp.product(), (prefs::TunerDisplay) k); };
         rows.push_back (std::move (display));
@@ -169,7 +173,8 @@ void SetupPanel::buildTunerPage()
             return -1;
         };
         tuning.choose = [this, own] (int k) { prefs::setTunerTuning (amp.product(), own[(size_t) k]); };
-        rows.push_back (std::move (tuning));
+        if (prefs::tunerPolyOffered)
+            rows.push_back (std::move (tuning));
     }
 
     tunerPage.setRows (std::move (rows));

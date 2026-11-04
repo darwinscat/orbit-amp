@@ -212,6 +212,11 @@ inline void setTunerReference (const Product& p, int hz)   { hz = snapTunerRefer
     stored value that is none of the four is the needle too. */
 enum class TunerDisplay { needle, strobe, poly, automatic };
 
+/** POLY IS NOT READY (the owner, 04.11): the tuner offers the needle and the strobe, and only them — no POLY, no AUTO,
+    no TUNING its lanes read — and a POLY or AUTO stored before reads as the needle. Its code stays; this one word
+    brings it back. */
+inline constexpr bool tunerPolyOffered = false;
+
 inline const juce::Identifier tunerDisplayKey { "tuner_display" };
 
 inline std::atomic<int>& tunerDisplayCache (const Product& p)
@@ -220,7 +225,8 @@ inline std::atomic<int>& tunerDisplayCache (const Product& p)
     return cached.of (p.name, [&p]
     {
         const int d = (int) store (p).get (tunerDisplayKey, (int) TunerDisplay::needle);
-        return d >= (int) TunerDisplay::needle && d <= (int) TunerDisplay::automatic ? d : (int) TunerDisplay::needle;
+        const auto last = tunerPolyOffered ? TunerDisplay::automatic : TunerDisplay::strobe;
+        return d >= (int) TunerDisplay::needle && d <= (int) last ? d : (int) TunerDisplay::needle;
     });
 }
 

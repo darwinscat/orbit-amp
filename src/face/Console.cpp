@@ -1405,11 +1405,19 @@ void Console::showTunerMenu()
                                 std::pair { Display::poly, "Poly" }, std::pair { Display::automatic, "Auto" } })
     {
         const auto d = choice.first;
+        if (! prefs::tunerPolyOffered && (d == Display::poly || d == Display::automatic))
+            continue;
         addChoice (display, choice.second, shown == d, [d] (Console& c) { prefs::setTunerDisplay (c.amp.product(), d); });
     }
     menu.addSubMenu (juce::String ("Display  ") + (shown == Display::automatic ? "Auto" : shown == Display::poly ? "Poly"
                                                    : shown == Display::strobe ? "Strobe" : "Needle"),
                      display);
+
+    if (! prefs::tunerPolyOffered)
+    {
+        menu.showMenuAsync (juce::PopupMenu::Options().withMousePosition());
+        return;
+    }
 
     const auto& tuned = prefs::tunerTuning (amp.product());
     juce::PopupMenu tuning;

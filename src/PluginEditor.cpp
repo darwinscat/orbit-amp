@@ -507,7 +507,8 @@ void AmpEditor::showTunerMenu (juce::Point<int> screenPos)
                                                                       { Display::poly, "Poly" }, { Display::automatic, "Auto" } } };
     juce::PopupMenu display;
     for (size_t i = 0; i < displays.size(); ++i)
-        display.addItem (100 + (int) i, displays[i].second, true, shown == displays[i].first);
+        if (prefs::tunerPolyOffered || (displays[i].first != Display::poly && displays[i].first != Display::automatic))
+            display.addItem (100 + (int) i, displays[i].second, true, shown == displays[i].first);
     m.addSubMenu (juce::String ("Display  ") + displays[(size_t) shown].second, display);
 
     const auto& tuned = prefs::tunerTuning (product);
@@ -515,7 +516,8 @@ void AmpEditor::showTunerMenu (juce::Point<int> screenPos)
     juce::PopupMenu tuning;
     for (size_t i = 0; i < tunings.size(); ++i)
         tuning.addItem (200 + (int) i, core::polyTuningName (tunings[i]).menu, true, &tunings[i] == &tuned);
-    m.addSubMenu (juce::String ("Tuning  ") + core::polyTuningName (tuned).menu, tuning);
+    if (prefs::tunerPolyOffered)
+        m.addSubMenu (juce::String ("Tuning  ") + core::polyTuningName (tuned).menu, tuning);
 
     m.showMenuAsync (juce::PopupMenu::Options().withTargetScreenArea ({ screenPos.x, screenPos.y, 1, 1 }),
                      [safe = juce::Component::SafePointer<AmpEditor> (this), mute, displays, tunings] (int r)
