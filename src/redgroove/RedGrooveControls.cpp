@@ -274,7 +274,9 @@ CabinetScreen::CabinetScreen (const face::Ink& i, const juce::Image& cap, float 
     slider.onGestureStart = [this] { moving = notch != nullptr ? notch() : -1; };
     slider.onChange = [this] (float t)
     {
+        // The cap jumps from notch to notch under the hand — it stands nowhere between them.
         const int at = juce::jlimit (0, notches - 1, juce::roundToInt (t * last()));
+        slider.setValue ((float) at / last(), false);
         if (at == moving)
             return;
         moving = at;
