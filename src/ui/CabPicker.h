@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "MicGlyphs.h"
 #include "Theme.h"
 
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -36,6 +37,7 @@ public:
         float x = 0.0f, y = 0.0f, distance = 0.05f;   // across the first speaker in radii from the cap; in front of it, m
         bool horn = true;
         juce::String mic;                             // one of mics(), or empty for the cabinet's own
+        float angle = 0.0f;                           // degrees it leans back toward the cap
     };
 
     /** Two mics on the box (AmpProcessor::CabSetup): A, and B mixed in by `blend` — 0 is A alone — on one clock unless
@@ -184,7 +186,6 @@ public:
             chosen = at;
             setup_ = {};
             setup_.a.mic = cabs()[(size_t) at].mic;
-            active = 0;
             send();
             return;
         }
@@ -208,24 +209,24 @@ public:
     {
         if (! zoomed || chosen < 0 || drag == Drag::none)
             return;
-        if (drag == Drag::mic)
+        auto& m = mic (dragMic);
+        if (drag == Drag::spot)
         {
-            const auto sp = speakerArea();
-            const float R = speakerRadius();
-            auto p = (e.position - sp.getCentre()) / R;
+            const auto o = scene().getCentre();
+            const float R = radius();
+            auto p = (e.position - o) / R;
             const float len = p.getDistanceFromOrigin();
             if (len > maxReach)
                 p *= maxReach / len;
-            cur().x = p.x;
-            cur().y = -p.y;
+            m.x = p.x;
+            m.y = -p.y;
         }
+        else if (drag == Drag::distance)
+            m.distance = minCm * std::pow (maxCm / minCm, along (track (dragMic, 0), e.position.x)) / 100.0f;
+        else if (drag == Drag::angle)
+            m.angle = maxAngle * along (track (dragMic, 1), e.position.x);
         else if (drag == Drag::blend)
-        {
-            const auto t = blendTrack();
-            setup_.blend = juce::jlimit (0.0f, 1.0f, (e.position.x - t.getX()) / t.getWidth());
-        }
-        else
-            cur().distance = distanceAt (e.position.y);
+            setup_.blend = along (blendTrack(), e.position.x);
         repaint();
     }
 
@@ -241,18 +242,18 @@ public:
 
 private:
     static constexpr float maxReach = 1.35f;   // how far past its rim the mic may go, in radii
-    static constexpr float minCm = 1.0f, maxCm = 30.0f;
+    static constexpr float minCm = 1.0f, maxCm = 30.0f, maxAngle = 60.0f;
 
-    enum class Drag { none, mic, distance, blend };
+    enum class Drag { none, spot, distance, angle, blend };
 
     int chosen = -1, hover = -1, family = 0;
     Setup setup_;
-    int active = 0;   // the mic the hand moves: 0 A, 1 B
     bool zoomed = false, dragging = false;
     Drag drag = Drag::none;
+    int dragMic = 0;
 
-    Spot& cur() { return active == 0 ? setup_.a : setup_.b; }
-    const Spot& cur() const { return active == 0 ? setup_.a : setup_.b; }
+    Spot& mic (int m) { return m == 0 ? setup_.a : setup_.b; }
+    const Spot& mic (int m) const { return m == 0 ? setup_.a : setup_.b; }
 
     void send()
     {
@@ -405,6 +406,14 @@ private:
     }
 
     // ---------------------------------------------------------------- the speaker
+    // Its mics in two columns, A at the left in the block's orange and B at the right in lilac — each its list of mics,
+    // its distance and its angle; between them the speaker, flat, as the player faces it, and on it the mics in
+    // perspective: the nearer the cone, the smaller (the farther from the eye), a shadow on the cone that grows and
+    // fades with the distance, the glyph leaning back toward the cap by the angle. BLEND, ALIGN and Ø under it.
+    static constexpr int colW = 150, rowH = 18, headH = 22, footH = 26;
+
+    static juce::Colour colourOf (int m) { return m == 0 ? theme::orange : theme::lilac; }
+
     juce::Rectangle<int> backArea() const
     {
         const auto font = theme::displayFont (13.0f);
@@ -418,159 +427,193 @@ private:
         return { getWidth() - w, 0, w, 18 };
     }
 
-    juce::Rectangle<float> railArea() const
+    juce::Rectangle<int> column (int m) const
     {
-        auto b = getLocalBounds().withTrimmedTop (24).toFloat();
-        return b.removeFromRight (34.0f).reduced (0, 4);
+        const int h = getHeight() - headH - footH;
+        return m == 0 ? juce::Rectangle<int> (0, headH, colW, h) : juce::Rectangle<int> (getWidth() - colW, headH, colW, h);
     }
 
-    juce::Rectangle<float> speakerArea() const
+    juce::Rectangle<int> micRow (int m, int i) const
     {
-        auto b = getLocalBounds().withTrimmedTop (22).withTrimmedBottom (micRowH + 4 + blendRowH + 4).toFloat();
-        b.removeFromRight (44.0f);
-        return b;
+        const auto c = column (m);
+        return { c.getX(), c.getY() + rowH + 4 + i * rowH, c.getWidth(), rowH };
     }
 
-    static constexpr int micRowH = 18, blendRowH = 18;
-
-    /** The A and B tabs, after the way back. */
-    juce::Rectangle<int> abTab (int m) const
+    /** A column's two sliders: 0 the distance, 1 the angle — a word and its value over a track. */
+    juce::Rectangle<float> track (int m, int which) const
     {
-        const int x0 = backArea().getRight() + 28;
-        return { x0 + m * 30, 0, 22, 18 };
+        const auto c = column (m);
+        const int top = micRow (m, mics().size() - 1).getBottom() + 8 + which * (rowH + 12);
+        return juce::Rectangle<float> ((float) c.getX() + 4.0f, (float) (top + rowH + 2), (float) c.getWidth() - 12.0f, 6.0f);
     }
 
-    /** The blend row, over the mics': BLEND, its track A..B, ALIGN, Ø. */
-    juce::Rectangle<int> blendRow() const { return { 0, getHeight() - micRowH - 4 - blendRowH, getWidth() - 44, blendRowH }; }
+    juce::Rectangle<float> scene() const
+    {
+        return getLocalBounds().withTrimmedTop (headH).withTrimmedBottom (footH).reduced (colW + 10, 0).toFloat();
+    }
+
+    float radius() const { const auto s = scene(); return juce::jmax (10.0f, juce::jmin (s.getWidth(), s.getHeight()) * 0.5f / 1.2f); }
+
+    juce::Rectangle<int> foot() const { return { colW + 10, getHeight() - footH + 4, getWidth() - 2 * (colW + 10), footH - 4 }; }
 
     juce::Rectangle<float> blendTrack() const
     {
-        const auto r = blendRow().toFloat();
-        const float x0 = r.getX() + theme::trackedWidth ("BLEND", theme::displayFont (13.0f), 0.06f) + 30.0f;
-        return { x0, r.getCentreY() - 3.0f, juce::jmax (60.0f, r.getWidth() * 0.42f), 6.0f };
+        const auto f = foot().toFloat();
+        const float word = theme::trackedWidth ("BLEND", theme::displayFont (13.0f), 0.06f);
+        return { f.getX() + word + 30.0f, f.getCentreY() - 3.0f, f.getWidth() * 0.38f, 6.0f };
     }
 
     juce::Rectangle<int> alignArea() const
     {
         const auto font = theme::displayFont (13.0f);
         const int x = juce::roundToInt (blendTrack().getRight()) + 26;
-        return { x, blendRow().getY(), juce::roundToInt (theme::trackedWidth ("ALIGN", font, 0.06f)) + 4, blendRowH };
+        return { x, foot().getY(), juce::roundToInt (theme::trackedWidth ("ALIGN", font, 0.06f)) + 4, foot().getHeight() };
     }
 
-    juce::Rectangle<int> invertArea() const { return { alignArea().getRight() + 16, blendRow().getY(), 20, blendRowH }; }
+    juce::Rectangle<int> invertArea() const { return { alignArea().getRight() + 14, foot().getY(), 20, foot().getHeight() }; }
 
-    /** The mics' words along the bottom, each its own cell, the row centred under the speaker. */
-    juce::Rectangle<int> micCell (int i) const
+    static float along (juce::Rectangle<float> t, float x) { return juce::jlimit (0.0f, 1.0f, (x - t.getX()) / t.getWidth()); }
+
+    /** Where a mic stands on the cone, on the screen, and how big its glyph is there. */
+    juce::Point<float> spotOf (int m) const
     {
-        const auto font = theme::displayFont (13.0f);
-        const int gapPx = 14;
-        int total = 0;
-        for (const auto& w : micWords()) total += juce::roundToInt (theme::trackedWidth (w, font, 0.06f)) + gapPx;
-        total -= gapPx;
-        int x = juce::jmax (0, (getWidth() - 44 - total) / 2);
-        for (int k = 0; k < micWords().size(); ++k)
-        {
-            const int w = juce::roundToInt (theme::trackedWidth (micWords()[k], font, 0.06f));
-            if (k == i) return { x, getHeight() - micRowH, w, micRowH };
-            x += w + gapPx;
-        }
-        return {};
+        const auto o = scene().getCentre();
+        const float R = radius();
+        return o + juce::Point<float> (mic (m).x * R, -mic (m).y * R);
     }
 
-    float speakerRadius() const
+    static float nearness (float distance)   // 0 at the cone, 1 at 30 cm
     {
-        const auto a = speakerArea();
-        return juce::jmax (10.0f, juce::jmin (a.getHeight(), a.getWidth()) * 0.5f / 1.25f);
+        return std::log (juce::jlimit (minCm, maxCm, distance * 100.0f) / minCm) / std::log (maxCm / minCm);
     }
 
-    float railY (float d) const
-    {
-        const auto r = railArea();
-        const float t = std::log (juce::jlimit (minCm, maxCm, d * 100.0f) / minCm) / std::log (maxCm / minCm);
-        return r.getBottom() - 16.0f - t * (r.getHeight() - 32.0f);
-    }
+    bool heardB() const { return setup_.blend > 0.0f; }
 
-    float distanceAt (float y) const
+    /** B's column taken up: B is heard, half and half, from the first touch. */
+    void takeUpB()
     {
-        const auto r = railArea();
-        const float t = juce::jlimit (0.0f, 1.0f, (r.getBottom() - 16.0f - y) / (r.getHeight() - 32.0f));
-        return minCm * std::pow (maxCm / minCm, t) / 100.0f;
+        if (! heardB())
+            setup_.blend = 0.5f;
     }
 
     void speakerDown (const juce::MouseEvent& e)
     {
-        if (backArea().contains (e.getPosition()))
+        const auto pos = e.getPosition();
+        if (backArea().contains (pos))
         {
             zoomed = false;
             repaint();
             return;
         }
         const auto& cab = cabs()[(size_t) chosen];
-        if (cab.horn && hornArea().contains (e.getPosition()))
+        if (cab.horn && hornArea().contains (pos))
         {
             setup_.a.horn = ! setup_.a.horn;
             send();
             return;
         }
+
         for (int m = 0; m < 2; ++m)
-            if (abTab (m).expanded (4, 2).contains (e.getPosition()))
-            {
-                active = m;
-                if (m == 1 && setup_.blend <= 0.0f)
+        {
+            if (! column (m).contains (pos))
+                continue;
+            for (int i = 0; i < mics().size(); ++i)
+                if (micRow (m, i).contains (pos))
                 {
-                    setup_.blend = 0.5f;   // B taken up: heard at once, half and half
+                    if (m == 1) takeUpB();
+                    mic (m).mic = mics()[i];
                     send();
+                    return;
                 }
-                repaint();
-                return;
-            }
-        if (alignArea().expanded (4, 2).contains (e.getPosition()))
-        {
-            setup_.align = ! setup_.align;
-            send();
+            for (int which = 0; which < 2; ++which)
+                if (track (m, which).expanded (2.0f, 10.0f).contains (e.position))
+                {
+                    if (m == 1) takeUpB();
+                    drag = which == 0 ? Drag::distance : Drag::angle;
+                    dragMic = m;
+                    dragging = true;
+                    mouseDrag (e);
+                    return;
+                }
             return;
         }
-        if (invertArea().expanded (4, 2).contains (e.getPosition()))
-        {
-            setup_.invert = ! setup_.invert;
-            send();
-            return;
-        }
-        if (blendTrack().expanded (8, 8).contains (e.position))
+
+        if (alignArea().expanded (4, 2).contains (pos)) { setup_.align = ! setup_.align; send(); return; }
+        if (invertArea().expanded (4, 2).contains (pos)) { setup_.invert = ! setup_.invert; send(); return; }
+        if (blendTrack().expanded (8.0f, 8.0f).contains (e.position))
         {
             drag = Drag::blend;
             dragging = true;
             mouseDrag (e);
             return;
         }
-        for (int i = 0; i < mics().size(); ++i)
-            if (micCell (i).expanded (4, 2).contains (e.getPosition()))
-            {
-                cur().mic = mics()[i];
-                send();
-                return;
-            }
-        if (railArea().expanded (6, 0).contains (e.position))
+
+        if (scene().contains (e.position))
         {
-            drag = Drag::distance;
+            // The nearer mic of the two (B only once it is heard) is the one taken; elsewhere, A moves.
+            int m = 0;
+            if (heardB() && e.position.getDistanceFrom (spotOf (1)) < e.position.getDistanceFrom (spotOf (0)))
+                m = 1;
+            drag = Drag::spot;
+            dragMic = m;
             dragging = true;
             mouseDrag (e);
-            return;
         }
-        const auto sp = speakerArea();
-        if (e.position.getDistanceFrom (sp.getCentre()) <= speakerRadius() * (maxReach + 0.1f))
+    }
+
+    void paintMicGlyph (juce::Graphics& g, const juce::String& name, juce::Rectangle<float> box, juce::Colour colour, float lean,
+                        juce::Point<float> pivot) const
+    {
+        if (const auto* d = micGlyph (name))
         {
-            // Grabbing the other mic's dot takes that one up.
-            if (setup_.blend > 0.0f)
-            {
-                const float R = speakerRadius();
-                const auto other = active == 0 ? setup_.b : setup_.a;
-                if (e.position.getDistanceFrom (sp.getCentre() + juce::Point<float> (other.x * R, -other.y * R)) < 9.0f)
-                    active = 1 - active;
-            }
-            drag = Drag::mic;
-            dragging = true;
-            mouseDrag (e);
+            auto copy = d->createCopy();
+            copy->replaceColour (juce::Colours::black, colour);
+            juce::Graphics::ScopedSaveState keep (g);
+            g.addTransform (juce::AffineTransform::rotation (lean, pivot.x, pivot.y));
+            copy->drawWithin (g, box, juce::RectanglePlacement::centred, 1.0f);
+        }
+    }
+
+    void paintColumn (juce::Graphics& g, int m) const
+    {
+        const auto font = theme::displayFont (13.0f);
+        const auto c = column (m);
+        const auto colour = colourOf (m);
+        const bool live = m == 0 || heardB();
+        const float dim = live ? 1.0f : 0.45f;
+        const auto& sp = mic (m);
+        const auto& cab = cabs()[(size_t) chosen];
+        const auto heardBy = sp.mic.isNotEmpty() ? sp.mic : cab.mic;
+
+        g.setColour (colour.withMultipliedAlpha (dim));
+        theme::drawTracked (g, m == 0 ? "MIC A" : "MIC B", c.toFloat().withHeight ((float) rowH), font, 0.08f, juce::Justification::centredLeft);
+
+        for (int i = 0; i < mics().size(); ++i)
+        {
+            const auto r = micRow (m, i).toFloat();
+            const bool lit = mics()[i] == heardBy;
+            const auto tint = (lit ? colour : theme::txFaint).withMultipliedAlpha (dim);
+            paintMicGlyph (g, mics()[i], r.withWidth (12.0f).reduced (0, 1), tint, 0.0f, {});
+            g.setColour (tint);
+            theme::drawTracked (g, micWords()[i], r.withTrimmedLeft (20.0f), font, 0.06f, juce::Justification::centredLeft);
+        }
+
+        const juce::String words[2] { "DIST", "ANGLE" };
+        const juce::String values[2] { juce::String (juce::roundToInt (sp.distance * 100.0f)) + " cm",
+                                       juce::String (juce::roundToInt (sp.angle)) + juce::String::fromUTF8 ("\xc2\xb0") };
+        const float at[2] { nearness (sp.distance), sp.angle / maxAngle };
+        for (int which = 0; which < 2; ++which)
+        {
+            const auto t = track (m, which);
+            const auto label = juce::Rectangle<float> (t.getX(), t.getY() - (float) rowH - 2.0f, t.getWidth(), (float) rowH);
+            g.setColour (theme::txFaint.withMultipliedAlpha (dim));
+            theme::drawTracked (g, words[which], label, font, 0.06f, juce::Justification::centredLeft);
+            g.setColour (theme::txDim.withMultipliedAlpha (dim));
+            theme::drawTracked (g, values[which], label, font, 0.0f, juce::Justification::centredRight);
+            g.setColour (theme::hair2);
+            g.fillRoundedRectangle (t.withSizeKeepingCentre (t.getWidth(), 2.0f), 1.0f);
+            g.setColour (colour.withMultipliedAlpha (dim));
+            g.fillRoundedRectangle (juce::Rectangle<float> (6.0f, 12.0f).withCentre ({ t.getX() + at[which] * t.getWidth(), t.getCentreY() }), 2.0f);
         }
     }
 
@@ -581,94 +624,86 @@ private:
 
         g.setColour (theme::txDim);
         theme::drawTracked (g, "< CABS", backArea().toFloat(), font, 0.08f, juce::Justification::centredLeft);
-        for (int m = 0; m < 2; ++m)
-        {
-            const bool lit = m == active;
-            g.setColour (lit ? (m == 0 ? theme::orange : theme::lilac) : theme::txFaint);
-            theme::drawTracked (g, m == 0 ? "A" : "B", abTab (m).toFloat(), font, 0.0f, juce::Justification::centred);
-            if (lit)
-                g.fillRect (abTab (m).toFloat().removeFromBottom (1.5f).reduced (4.0f, 0));
-        }
         if (cab.horn)
         {
             g.setColour (setup_.a.horn ? theme::orange : theme::txFaint);
             theme::drawTracked (g, "HORN", hornArea().toFloat(), font, 0.08f, juce::Justification::centredRight);
         }
 
-        const auto sp = speakerArea();
-        const float R = speakerRadius();
-        const auto o = sp.getCentre();
+        paintColumn (g, 0);
+        paintColumn (g, 1);
+
+        const auto sc = scene();
+        const float R = radius();
+        const auto o = sc.getCentre();
         const float s = R / cab.radius;   // px a metre
 
-        // The neighbours, at the same scale, where they stand from the first — cut off at the area's edge.
+        // The neighbours and the horn, at the same scale, cut off at the scene's edge.
         {
             juce::Graphics::ScopedSaveState keep (g);
-            g.reduceClipRegion (sp.toNearestInt());
+            g.reduceClipRegion (sc.toNearestInt());
             g.setColour (theme::bezel);
-            g.fillRect (sp);
+            g.fillRoundedRectangle (sc, 4.0f);
             for (size_t i = 1; i < cab.drivers.size(); ++i)
             {
                 const auto d = cab.drivers[i] - cab.drivers.front();
-                const auto c = o + juce::Point<float> (d.x * s, -d.y * s);
                 g.setColour (theme::violet.withAlpha (0.25f));
-                g.drawEllipse (juce::Rectangle<float> (2 * R, 2 * R).withCentre (c), 1.0f);
+                g.drawEllipse (juce::Rectangle<float> (2 * R, 2 * R).withCentre (o + juce::Point<float> (d.x * s, -d.y * s)), 1.0f);
             }
             if (cab.horn)
             {
                 const auto d = cab.hornAt - cab.drivers.front();
-                const auto c = o + juce::Point<float> (d.x * s, -d.y * s);
                 g.setColour (setup_.a.horn ? theme::lilac.withAlpha (0.6f) : theme::txFaint.withAlpha (0.3f));
-                g.drawRoundedRectangle (juce::Rectangle<float> (0.10f * s, 0.05f * s).withCentre (c), 3.0f, 1.0f);
+                g.drawRoundedRectangle (juce::Rectangle<float> (0.10f * s, 0.05f * s).withCentre (o + juce::Point<float> (d.x * s, -d.y * s)), 3.0f, 1.0f);
             }
-        }
 
-        // The speaker: its surround, its cone in rings, its cap.
-        g.setColour (theme::panel2);
-        g.fillEllipse (juce::Rectangle<float> (2.12f * R, 2.12f * R).withCentre (o));
-        g.setGradientFill (juce::ColourGradient (theme::panel, o.x, o.y, theme::bezel, o.x + R, o.y, true));
-        g.fillEllipse (juce::Rectangle<float> (2 * R, 2 * R).withCentre (o));
-        g.setColour (theme::violet.withAlpha (0.8f));
-        g.drawEllipse (juce::Rectangle<float> (2 * R, 2 * R).withCentre (o), 1.2f);
-        g.setColour (theme::violet.withAlpha (0.18f));
-        for (float k : { 0.45f, 0.7f, 0.88f })
-            g.drawEllipse (juce::Rectangle<float> (2 * k * R, 2 * k * R).withCentre (o), 0.8f);
-        g.setColour (theme::panel2.brighter (0.15f));
-        g.fillEllipse (juce::Rectangle<float> (0.5f * R, 0.5f * R).withCentre (o));
-        g.setColour (theme::violet.withAlpha (0.6f));
-        g.drawEllipse (juce::Rectangle<float> (0.5f * R, 0.5f * R).withCentre (o), 1.0f);
+            // The speaker, flat: its surround, its cone in rings, its cap.
+            g.setColour (theme::panel2);
+            g.fillEllipse (juce::Rectangle<float> (2.12f * R, 2.12f * R).withCentre (o));
+            g.setGradientFill (juce::ColourGradient (theme::panel, o.x, o.y, theme::bezel, o.x + R, o.y, true));
+            g.fillEllipse (juce::Rectangle<float> (2 * R, 2 * R).withCentre (o));
+            g.setColour (theme::violet.withAlpha (0.8f));
+            g.drawEllipse (juce::Rectangle<float> (2 * R, 2 * R).withCentre (o), 1.2f);
+            g.setColour (theme::violet.withAlpha (0.18f));
+            for (float k : { 0.45f, 0.7f, 0.88f })
+                g.drawEllipse (juce::Rectangle<float> (2 * k * R, 2 * k * R).withCentre (o), 0.8f);
+            g.setColour (theme::panel2.brighter (0.15f));
+            g.fillEllipse (juce::Rectangle<float> (0.5f * R, 0.5f * R).withCentre (o));
+            g.setColour (theme::violet.withAlpha (0.6f));
+            g.drawEllipse (juce::Rectangle<float> (0.5f * R, 0.5f * R).withCentre (o), 1.0f);
 
-        const auto sp_ = sp;
-        // The mics: a dot where each stands, a faint ring as wide as its distance — the farther, the more of the box it
-        // hears; A orange, B lilac (only once it is mixed in), the one the hand moves ringed.
-        for (int m = 0; m < 2; ++m)
-        {
-            if (m == 1 && setup_.blend <= 0.0f && active != 1)
-                continue;
-            const auto& sp = m == 0 ? setup_.a : setup_.b;
-            const auto colour = m == 0 ? theme::orange : theme::lilac;
-            const auto at = o + juce::Point<float> (sp.x * R, -sp.y * R);
+            // The mics in perspective, the farther from the cone drawn last (nearest the eye): its shadow on the cone,
+            // then the glyph, its capsule over the spot, as tall as it is near the eye, leaning back toward the cap.
+            int order[2] { 0, 1 };
+            if (mic (1).distance < mic (0).distance) std::swap (order[0], order[1]);
+            for (int m : order)
             {
-                juce::Graphics::ScopedSaveState keep (g);   // the ring stays on the speaker's ground
-                g.reduceClipRegion (sp_.toNearestInt());
-                g.setColour (colour.withAlpha (0.35f));
-                g.drawEllipse (juce::Rectangle<float> (2, 2).withCentre (at).expanded (juce::jmin (2.0f * R, sp.distance * s)), 1.0f);
-            }
-            g.setColour (colour);
-            g.fillEllipse (juce::Rectangle<float> (10, 10).withCentre (at));
-            g.setColour (theme::ground);
-            g.fillEllipse (juce::Rectangle<float> (4, 4).withCentre (at));
-            if (m == active)
-            {
-                g.setColour (colour);
-                g.drawEllipse (juce::Rectangle<float> (16, 16).withCentre (at), 1.0f);
+                if (m == 1 && ! heardB())
+                    continue;
+                const auto& sp = mic (m);
+                const float near = nearness (sp.distance);
+                const auto at = spotOf (m);
+                const auto colour = colourOf (m);
+
+                const float sh = 6.0f + 26.0f * near;
+                g.setColour (juce::Colours::black.withAlpha (0.55f - 0.35f * near));
+                g.fillEllipse (juce::Rectangle<float> (sh, sh * 0.6f).withCentre (at + juce::Point<float> (10.0f * near, 8.0f * near)));
+                g.setColour (colour.withAlpha (0.9f));
+                g.fillEllipse (juce::Rectangle<float> (5, 5).withCentre (at));
+
+                const float h = 30.0f + 70.0f * near, w = h * 24.0f / 64.0f;
+                const float side = at.x >= o.x ? 1.0f : -1.0f;   // leaning back from the cap: its top away from the centre
+                const float lean = side * sp.angle * juce::MathConstants<float>::pi / 180.0f;
+                const auto box = juce::Rectangle<float> (w, h).withPosition (at.x - w * 0.5f, at.y - h * 0.94f);
+                paintMicGlyph (g, sp.mic.isNotEmpty() ? sp.mic : cab.mic, box, colour, lean, at);
             }
         }
 
         // The blend: A..B on a track, ALIGN, and Ø for B.
         {
-            const auto row = blendRow().toFloat();
+            const auto row = foot().toFloat();
             g.setColour (theme::txFaint);
-            theme::drawTracked (g, "BLEND", row.withWidth (row.getWidth()), font, 0.06f, juce::Justification::centredLeft);
+            theme::drawTracked (g, "BLEND", row, font, 0.06f, juce::Justification::centredLeft);
             const auto t = blendTrack();
             g.setColour (theme::orange);
             theme::drawTracked (g, "A", juce::Rectangle<float> (t.getX() - 18.0f, row.getY(), 14.0f, row.getHeight()), font, 0.0f, juce::Justification::centred);
@@ -676,39 +711,13 @@ private:
             theme::drawTracked (g, "B", juce::Rectangle<float> (t.getRight() + 4.0f, row.getY(), 14.0f, row.getHeight()), font, 0.0f, juce::Justification::centred);
             g.setColour (theme::hair2);
             g.fillRoundedRectangle (t.withSizeKeepingCentre (t.getWidth(), 2.0f), 1.0f);
-            const float x = t.getX() + setup_.blend * t.getWidth();
             g.setColour (theme::orange.interpolatedWith (theme::lilac, setup_.blend));
-            g.fillRoundedRectangle (juce::Rectangle<float> (6.0f, 14.0f).withCentre ({ x, t.getCentreY() }), 2.0f);
-            const bool two = setup_.blend > 0.0f;
-            g.setColour (two && setup_.align ? theme::orange : theme::txFaint);
+            g.fillRoundedRectangle (juce::Rectangle<float> (6.0f, 14.0f).withCentre ({ t.getX() + setup_.blend * t.getWidth(), t.getCentreY() }), 2.0f);
+            g.setColour (heardB() && setup_.align ? theme::orange : theme::txFaint);
             theme::drawTracked (g, "ALIGN", alignArea().toFloat(), font, 0.06f, juce::Justification::centredLeft);
-            g.setColour (two && setup_.invert ? theme::orange : theme::txFaint);
+            g.setColour (heardB() && setup_.invert ? theme::orange : theme::txFaint);
             theme::drawTracked (g, juce::String::fromUTF8 ("\xc3\x98"), invertArea().toFloat(), font, 0.0f, juce::Justification::centred);
         }
-
-        // The mics, the one that hears in the block's orange.
-        const auto heardBy = cur().mic.isNotEmpty() ? cur().mic : cab.mic;
-        for (int i = 0; i < mics().size(); ++i)
-        {
-            g.setColour (mics()[i] == heardBy ? theme::orange : theme::txFaint);
-            theme::drawTracked (g, micWords()[i], micCell (i).toFloat(), font, 0.06f, juce::Justification::centred);
-        }
-
-        // The distance: a rail, the near end at the bottom, its number under it.
-        const auto rail = railArea();
-        const float x = rail.getCentreX();
-        g.setColour (theme::hair2);
-        g.fillRect (juce::Rectangle<float> (x - 1.0f, rail.getY() + 16.0f, 2.0f, rail.getHeight() - 32.0f));
-        const float y = railY (cur().distance);
-        g.setColour (theme::orange);
-        g.fillRoundedRectangle (juce::Rectangle<float> (18.0f, 6.0f).withCentre ({ x, y }), 2.0f);
-        g.setColour (theme::txDim);
-        theme::drawTracked (g, juce::String (juce::roundToInt (cur().distance * 100.0f)) + " cm",
-                            juce::Rectangle<float> (rail.getX() - 14.0f, rail.getBottom() - 14.0f, rail.getWidth() + 14.0f, 14.0f),
-                            theme::displayFont (13.0f), 0.0f, juce::Justification::centredRight);
-        g.setColour (theme::txFaint);
-        theme::drawTracked (g, "DIST", juce::Rectangle<float> (rail.getX() - 14.0f, rail.getY() - 2.0f, rail.getWidth() + 14.0f, 14.0f),
-                            theme::displayFont (13.0f), 0.0f, juce::Justification::centredRight);
     }
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (CabPicker)

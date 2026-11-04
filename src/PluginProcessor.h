@@ -1248,6 +1248,7 @@ public:
         float x = 0.0f, y = 0.0f, distance = 0.05f;
         bool horn = true;
         juce::String mic;   // the table's mic by name (md421, sm57, re20, d112, u87, ribbon), or empty for the cabinet's own
+        float angle = 0.0f; // degrees it leans back toward the cap
     };
 
     /** A CABINET OF THE BASS'S OWN, rendered with the mic at `spot` — on a worker, a tenth of a second or so — then

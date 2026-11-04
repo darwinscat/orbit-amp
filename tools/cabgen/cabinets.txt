@@ -2,8 +2,8 @@
 # Class-typical numbers — published -3/-10 dB points, sealed or ported, horn or not — not measurements of any one box.
 
 [defaults]
-length_ms = 200
-tail_fade_ms = 30
+length_ms = 100
+tail_fade_ms = 15
 cone_fixed_mass_fraction = 0.4
 coil_corner_hz = 1300
 mode_count = 12

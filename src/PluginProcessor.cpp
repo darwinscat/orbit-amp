@@ -827,7 +827,7 @@ void AmpProcessor::requestCabSynth (const juce::String& cab, CabSetup setup)
             return;   // superseded before it began
 
         static const auto table = core::cabsynth::parseTable (std::string (BinaryData::cabinets_txt, (size_t) BinaryData::cabinets_txtSize));
-        const auto spot = [] (const CabSpot& s) { return core::cabsynth::Spot { s.x, s.y, s.distance, s.horn, s.mic.toStdString() }; };
+        const auto spot = [] (const CabSpot& s) { return core::cabsynth::Spot { s.x, s.y, s.distance, s.horn, s.mic.toStdString(), s.angle }; };
         const auto ir  = core::cabsynth::renderPair (table, cab.toStdString(), { spot (setup.a), spot (setup.b), setup.blend, setup.align, setup.invert });
         const auto wav = core::cabsynth::wav24 (ir, 48000);
         auto bytes = std::make_shared<juce::MemoryBlock> (wav.data(), wav.size());
@@ -849,7 +849,7 @@ void AmpProcessor::requestCabSynth (const juce::String& cab, CabSetup setup)
                                                                  + "|" + juce::String (a.distance, 3) + "|" + (a.horn ? "1" : "0") + "|" + a.mic
                                                                  + "|" + juce::String (setup.blend, 3) + "|" + (setup.align ? "1" : "0") + "|" + (setup.invert ? "1" : "0")
                                                                  + "|" + juce::String (b.x, 3) + "|" + juce::String (b.y, 3) + "|" + juce::String (b.distance, 3)
-                                                                 + "|" + b.mic, nullptr);
+                                                                 + "|" + b.mic + "|" + juce::String (a.angle, 1) + "|" + juce::String (b.angle, 1), nullptr);
             updateHostDisplay (ChangeDetails{}.withNonParameterStateChanged (true));
         });
     });
@@ -873,6 +873,11 @@ AmpProcessor::CabSynthChoice AmpProcessor::cabSynthOf (const CabChoice& choice)
         out.setup.align  = parts[7] == "1";
         out.setup.invert = parts[8] == "1";
         out.setup.b      = { parts[9].getFloatValue(), parts[10].getFloatValue(), parts[11].getFloatValue(), out.setup.a.horn, parts[12] };
+    }
+    if (parts.size() >= 15)
+    {
+        out.setup.a.angle = parts[13].getFloatValue();
+        out.setup.b.angle = parts[14].getFloatValue();
     }
     out.valid = true;
     return out;

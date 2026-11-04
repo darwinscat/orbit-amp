@@ -463,7 +463,9 @@ inline std::vector<double> render (const Cab& c, size_t n)
     // The mic, in front of the first cone, off its centre by a fraction of its radius, tilted toward +x.
     const Xy t = c.drivers.empty() ? Xy {} : c.drivers[0];
     const double tr = c.tilt * pi / 180;
-    const Mic mic { t.x + c.micOff * c.radius, t.y + c.micOffY * c.radius, c.micD, -std::sin (tr), 0, -std::cos (tr) };
+    // Tilted toward the cap: off the cap, the axis leans back toward its centre; on it, toward -x.
+    const double off = std::hypot (c.micOff, c.micOffY), ux = off > 1e-6 ? -c.micOff / off : -1.0, uy = off > 1e-6 ? -c.micOffY / off : 0.0;
+    const Mic mic { t.x + c.micOff * c.radius, t.y + c.micOffY * c.radius, c.micD, std::sin (tr) * ux, std::sin (tr) * uy, -std::cos (tr) };
 
     // Each cone as patches: rings x spokes, the cone's depth behind the baffle growing toward its centre.
     constexpr int rings = 7, spokes = 16;
@@ -675,7 +677,8 @@ struct Spot
 {
     double x = 0, y = 0, distance = 0.05;
     bool horn = true;
-    std::string mic;   // a "mic-<name>" section of the table laid over the cabinet's own, or empty for its own
+    std::string mic;    // a "mic-<name>" section of the table laid over the cabinet's own, or empty for its own
+    double angle = 0;   // degrees the mic leans back toward the cap
 };
 
 /** A cabinet of the table — its "<name> cap" section, the box as that section says, its mic or the one `spot` names
@@ -690,7 +693,7 @@ inline Cab cabAt (const Table& table, const std::string& cab, const Spot& spot)
     c.micOff  = spot.x;
     c.micOffY = spot.y;
     c.micD    = spot.distance;
-    c.tilt    = 0;
+    c.tilt    = spot.angle;
     c.horn    = c.horn && spot.horn;
     return c;
 }
