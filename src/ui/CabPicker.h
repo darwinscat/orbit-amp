@@ -38,6 +38,15 @@ public:
         juce::String mic;                             // one of mics(), or empty for the cabinet's own
     };
 
+    /** Two mics on the box (AmpProcessor::CabSetup): A, and B mixed in by `blend` — 0 is A alone — on one clock unless
+        `align`, B turned over by `invert`. The horn is A's. */
+    struct Setup
+    {
+        Spot a, b { 0.0f, 0.0f, 0.25f, true, "u87" };
+        float blend = 0.0f;
+        bool align = false, invert = false;
+    };
+
     /** The mics to choose from, as the table names them (its "mic-<name>" sections), and as the row writes them. */
     static const juce::StringArray& mics()      { static const juce::StringArray m { "md421", "sm57", "re20", "d112", "u87", "ribbon" }; return m; }
     static const juce::StringArray& micWords()  { static const juce::StringArray m { "MD421", "SM57", "RE20", "D112", "U87", "RIBBON" }; return m; }
@@ -90,13 +99,13 @@ public:
         return -1;
     }
 
-    /** What plays: a cabinet of cabs() and its spot — or none (an IR of the player's own, or the factory's). */
-    void show (int cab, Spot spot)
+    /** What plays: a cabinet of cabs() and its mics — or none (an IR of the player's own, or the factory's). */
+    void show (int cab, Setup setup)
     {
         if (dragging)
             return;   // the hand's, until it lets go
         chosen = cab;
-        spot_ = spot;
+        setup_ = setup;
         if (chosen >= 0)
             family = cabs()[(size_t) chosen].family;
         else
@@ -104,7 +113,7 @@ public:
         repaint();
     }
 
-    std::function<void (int cab, Spot spot)> onSpot;
+    std::function<void (int cab, Setup setup)> onSetup;
 
     /** The door to the player's own IRs, top right of the row (where it is set). */
     std::function<void()> onOwnIrs;
@@ -173,8 +182,9 @@ public:
         if (at != chosen)
         {
             chosen = at;
-            spot_ = {};
-            spot_.mic = cabs()[(size_t) at].mic;
+            setup_ = {};
+            setup_.a.mic = cabs()[(size_t) at].mic;
+            active = 0;
             send();
             return;
         }
@@ -185,7 +195,7 @@ public:
         const float s = box.getWidth() / cab.w;
         if (cab.horn && e.position.getDistanceFrom (onBox (box, s, cab.hornAt)) < juce::jmax (7.0f, 0.06f * s))
         {
-            spot_.horn = ! spot_.horn;
+            setup_.a.horn = ! setup_.a.horn;
             send();
             return;
         }
@@ -206,11 +216,16 @@ public:
             const float len = p.getDistanceFromOrigin();
             if (len > maxReach)
                 p *= maxReach / len;
-            spot_.x = p.x;
-            spot_.y = -p.y;
+            cur().x = p.x;
+            cur().y = -p.y;
+        }
+        else if (drag == Drag::blend)
+        {
+            const auto t = blendTrack();
+            setup_.blend = juce::jlimit (0.0f, 1.0f, (e.position.x - t.getX()) / t.getWidth());
         }
         else
-            spot_.distance = distanceAt (e.position.y);
+            cur().distance = distanceAt (e.position.y);
         repaint();
     }
 
@@ -228,18 +243,22 @@ private:
     static constexpr float maxReach = 1.35f;   // how far past its rim the mic may go, in radii
     static constexpr float minCm = 1.0f, maxCm = 30.0f;
 
-    enum class Drag { none, mic, distance };
+    enum class Drag { none, mic, distance, blend };
 
     int chosen = -1, hover = -1, family = 0;
-    Spot spot_;
+    Setup setup_;
+    int active = 0;   // the mic the hand moves: 0 A, 1 B
     bool zoomed = false, dragging = false;
     Drag drag = Drag::none;
+
+    Spot& cur() { return active == 0 ? setup_.a : setup_.b; }
+    const Spot& cur() const { return active == 0 ? setup_.a : setup_.b; }
 
     void send()
     {
         repaint();
-        if (onSpot != nullptr && chosen >= 0)
-            onSpot (chosen, spot_);
+        if (onSetup != nullptr && chosen >= 0)
+            onSetup (chosen, setup_);
     }
 
     // ---------------------------------------------------------------- the row
@@ -364,20 +383,24 @@ private:
         if (c.horn)
         {
             const auto r = juce::Rectangle<float> (0.10f * s, 0.05f * s).withCentre (onBox (box, s, c.hornAt));
-            g.setColour (isChosen && ! spot_.horn ? theme::txFaint.withAlpha (0.4f) : theme::lilac.withAlpha (isChosen ? 0.9f : 0.55f));
+            g.setColour (isChosen && ! setup_.a.horn ? theme::txFaint.withAlpha (0.4f) : theme::lilac.withAlpha (isChosen ? 0.9f : 0.55f));
             g.drawRoundedRectangle (r, 1.5f, 1.0f);
         }
 
-        // The mic where it stands on the first speaker; farther off, a ring as wide as the distance.
+        // The mics where they stand on the first speaker, A orange and B lilac; farther off, a ring as wide as the distance.
         if (isChosen)
         {
             const auto o = onBox (box, s, c.drivers.front());
             const float r = c.radius * s;
-            const auto at = o + juce::Point<float> (spot_.x * r, -spot_.y * r);
-            g.setColour (theme::orange);
-            g.fillEllipse (juce::Rectangle<float> (6, 6).withCentre (at));
-            if (spot_.distance > 0.08f)
-                g.drawEllipse (juce::Rectangle<float> (2, 2).withCentre (at).expanded (spot_.distance * s), 1.0f);
+            for (int m = setup_.blend > 0.0f ? 1 : 0; m >= 0; --m)
+            {
+                const auto& sp = m == 0 ? setup_.a : setup_.b;
+                const auto at = o + juce::Point<float> (sp.x * r, -sp.y * r);
+                g.setColour (m == 0 ? theme::orange : theme::lilac);
+                g.fillEllipse (juce::Rectangle<float> (6, 6).withCentre (at));
+                if (sp.distance > 0.08f)
+                    g.drawEllipse (juce::Rectangle<float> (2, 2).withCentre (at).expanded (sp.distance * s), 1.0f);
+            }
         }
     }
 
@@ -403,12 +426,38 @@ private:
 
     juce::Rectangle<float> speakerArea() const
     {
-        auto b = getLocalBounds().withTrimmedTop (22).withTrimmedBottom (micRowH + 4).toFloat();
+        auto b = getLocalBounds().withTrimmedTop (22).withTrimmedBottom (micRowH + 4 + blendRowH + 4).toFloat();
         b.removeFromRight (44.0f);
         return b;
     }
 
-    static constexpr int micRowH = 18;
+    static constexpr int micRowH = 18, blendRowH = 18;
+
+    /** The A and B tabs, after the way back. */
+    juce::Rectangle<int> abTab (int m) const
+    {
+        const int x0 = backArea().getRight() + 28;
+        return { x0 + m * 30, 0, 22, 18 };
+    }
+
+    /** The blend row, over the mics': BLEND, its track A..B, ALIGN, Ø. */
+    juce::Rectangle<int> blendRow() const { return { 0, getHeight() - micRowH - 4 - blendRowH, getWidth() - 44, blendRowH }; }
+
+    juce::Rectangle<float> blendTrack() const
+    {
+        const auto r = blendRow().toFloat();
+        const float x0 = r.getX() + theme::trackedWidth ("BLEND", theme::displayFont (13.0f), 0.06f) + 30.0f;
+        return { x0, r.getCentreY() - 3.0f, juce::jmax (60.0f, r.getWidth() * 0.42f), 6.0f };
+    }
+
+    juce::Rectangle<int> alignArea() const
+    {
+        const auto font = theme::displayFont (13.0f);
+        const int x = juce::roundToInt (blendTrack().getRight()) + 26;
+        return { x, blendRow().getY(), juce::roundToInt (theme::trackedWidth ("ALIGN", font, 0.06f)) + 4, blendRowH };
+    }
+
+    juce::Rectangle<int> invertArea() const { return { alignArea().getRight() + 16, blendRow().getY(), 20, blendRowH }; }
 
     /** The mics' words along the bottom, each its own cell, the row centred under the speaker. */
     juce::Rectangle<int> micCell (int i) const
@@ -459,14 +508,45 @@ private:
         const auto& cab = cabs()[(size_t) chosen];
         if (cab.horn && hornArea().contains (e.getPosition()))
         {
-            spot_.horn = ! spot_.horn;
+            setup_.a.horn = ! setup_.a.horn;
             send();
+            return;
+        }
+        for (int m = 0; m < 2; ++m)
+            if (abTab (m).expanded (4, 2).contains (e.getPosition()))
+            {
+                active = m;
+                if (m == 1 && setup_.blend <= 0.0f)
+                {
+                    setup_.blend = 0.5f;   // B taken up: heard at once, half and half
+                    send();
+                }
+                repaint();
+                return;
+            }
+        if (alignArea().expanded (4, 2).contains (e.getPosition()))
+        {
+            setup_.align = ! setup_.align;
+            send();
+            return;
+        }
+        if (invertArea().expanded (4, 2).contains (e.getPosition()))
+        {
+            setup_.invert = ! setup_.invert;
+            send();
+            return;
+        }
+        if (blendTrack().expanded (8, 8).contains (e.position))
+        {
+            drag = Drag::blend;
+            dragging = true;
+            mouseDrag (e);
             return;
         }
         for (int i = 0; i < mics().size(); ++i)
             if (micCell (i).expanded (4, 2).contains (e.getPosition()))
             {
-                spot_.mic = mics()[i];
+                cur().mic = mics()[i];
                 send();
                 return;
             }
@@ -480,6 +560,14 @@ private:
         const auto sp = speakerArea();
         if (e.position.getDistanceFrom (sp.getCentre()) <= speakerRadius() * (maxReach + 0.1f))
         {
+            // Grabbing the other mic's dot takes that one up.
+            if (setup_.blend > 0.0f)
+            {
+                const float R = speakerRadius();
+                const auto other = active == 0 ? setup_.b : setup_.a;
+                if (e.position.getDistanceFrom (sp.getCentre() + juce::Point<float> (other.x * R, -other.y * R)) < 9.0f)
+                    active = 1 - active;
+            }
             drag = Drag::mic;
             dragging = true;
             mouseDrag (e);
@@ -493,9 +581,17 @@ private:
 
         g.setColour (theme::txDim);
         theme::drawTracked (g, "< CABS", backArea().toFloat(), font, 0.08f, juce::Justification::centredLeft);
+        for (int m = 0; m < 2; ++m)
+        {
+            const bool lit = m == active;
+            g.setColour (lit ? (m == 0 ? theme::orange : theme::lilac) : theme::txFaint);
+            theme::drawTracked (g, m == 0 ? "A" : "B", abTab (m).toFloat(), font, 0.0f, juce::Justification::centred);
+            if (lit)
+                g.fillRect (abTab (m).toFloat().removeFromBottom (1.5f).reduced (4.0f, 0));
+        }
         if (cab.horn)
         {
-            g.setColour (spot_.horn ? theme::orange : theme::txFaint);
+            g.setColour (setup_.a.horn ? theme::orange : theme::txFaint);
             theme::drawTracked (g, "HORN", hornArea().toFloat(), font, 0.08f, juce::Justification::centredRight);
         }
 
@@ -521,7 +617,7 @@ private:
             {
                 const auto d = cab.hornAt - cab.drivers.front();
                 const auto c = o + juce::Point<float> (d.x * s, -d.y * s);
-                g.setColour (spot_.horn ? theme::lilac.withAlpha (0.6f) : theme::txFaint.withAlpha (0.3f));
+                g.setColour (setup_.a.horn ? theme::lilac.withAlpha (0.6f) : theme::txFaint.withAlpha (0.3f));
                 g.drawRoundedRectangle (juce::Rectangle<float> (0.10f * s, 0.05f * s).withCentre (c), 3.0f, 1.0f);
             }
         }
@@ -541,17 +637,57 @@ private:
         g.setColour (theme::violet.withAlpha (0.6f));
         g.drawEllipse (juce::Rectangle<float> (0.5f * R, 0.5f * R).withCentre (o), 1.0f);
 
-        // The mic: a dot where it stands, a faint ring as wide as its distance — the farther, the more of the box it hears.
-        const auto at = o + juce::Point<float> (spot_.x * R, -spot_.y * R);
-        g.setColour (theme::orange.withAlpha (0.35f));
-        g.drawEllipse (juce::Rectangle<float> (2, 2).withCentre (at).expanded (juce::jmin (2.0f * R, spot_.distance * s)), 1.0f);
-        g.setColour (theme::orange);
-        g.fillEllipse (juce::Rectangle<float> (10, 10).withCentre (at));
-        g.setColour (theme::ground);
-        g.fillEllipse (juce::Rectangle<float> (4, 4).withCentre (at));
+        const auto sp_ = sp;
+        // The mics: a dot where each stands, a faint ring as wide as its distance — the farther, the more of the box it
+        // hears; A orange, B lilac (only once it is mixed in), the one the hand moves ringed.
+        for (int m = 0; m < 2; ++m)
+        {
+            if (m == 1 && setup_.blend <= 0.0f && active != 1)
+                continue;
+            const auto& sp = m == 0 ? setup_.a : setup_.b;
+            const auto colour = m == 0 ? theme::orange : theme::lilac;
+            const auto at = o + juce::Point<float> (sp.x * R, -sp.y * R);
+            {
+                juce::Graphics::ScopedSaveState keep (g);   // the ring stays on the speaker's ground
+                g.reduceClipRegion (sp_.toNearestInt());
+                g.setColour (colour.withAlpha (0.35f));
+                g.drawEllipse (juce::Rectangle<float> (2, 2).withCentre (at).expanded (juce::jmin (2.0f * R, sp.distance * s)), 1.0f);
+            }
+            g.setColour (colour);
+            g.fillEllipse (juce::Rectangle<float> (10, 10).withCentre (at));
+            g.setColour (theme::ground);
+            g.fillEllipse (juce::Rectangle<float> (4, 4).withCentre (at));
+            if (m == active)
+            {
+                g.setColour (colour);
+                g.drawEllipse (juce::Rectangle<float> (16, 16).withCentre (at), 1.0f);
+            }
+        }
+
+        // The blend: A..B on a track, ALIGN, and Ø for B.
+        {
+            const auto row = blendRow().toFloat();
+            g.setColour (theme::txFaint);
+            theme::drawTracked (g, "BLEND", row.withWidth (row.getWidth()), font, 0.06f, juce::Justification::centredLeft);
+            const auto t = blendTrack();
+            g.setColour (theme::orange);
+            theme::drawTracked (g, "A", juce::Rectangle<float> (t.getX() - 18.0f, row.getY(), 14.0f, row.getHeight()), font, 0.0f, juce::Justification::centred);
+            g.setColour (theme::lilac);
+            theme::drawTracked (g, "B", juce::Rectangle<float> (t.getRight() + 4.0f, row.getY(), 14.0f, row.getHeight()), font, 0.0f, juce::Justification::centred);
+            g.setColour (theme::hair2);
+            g.fillRoundedRectangle (t.withSizeKeepingCentre (t.getWidth(), 2.0f), 1.0f);
+            const float x = t.getX() + setup_.blend * t.getWidth();
+            g.setColour (theme::orange.interpolatedWith (theme::lilac, setup_.blend));
+            g.fillRoundedRectangle (juce::Rectangle<float> (6.0f, 14.0f).withCentre ({ x, t.getCentreY() }), 2.0f);
+            const bool two = setup_.blend > 0.0f;
+            g.setColour (two && setup_.align ? theme::orange : theme::txFaint);
+            theme::drawTracked (g, "ALIGN", alignArea().toFloat(), font, 0.06f, juce::Justification::centredLeft);
+            g.setColour (two && setup_.invert ? theme::orange : theme::txFaint);
+            theme::drawTracked (g, juce::String::fromUTF8 ("\xc3\x98"), invertArea().toFloat(), font, 0.0f, juce::Justification::centred);
+        }
 
         // The mics, the one that hears in the block's orange.
-        const auto heardBy = spot_.mic.isNotEmpty() ? spot_.mic : cab.mic;
+        const auto heardBy = cur().mic.isNotEmpty() ? cur().mic : cab.mic;
         for (int i = 0; i < mics().size(); ++i)
         {
             g.setColour (mics()[i] == heardBy ? theme::orange : theme::txFaint);
@@ -563,11 +699,11 @@ private:
         const float x = rail.getCentreX();
         g.setColour (theme::hair2);
         g.fillRect (juce::Rectangle<float> (x - 1.0f, rail.getY() + 16.0f, 2.0f, rail.getHeight() - 32.0f));
-        const float y = railY (spot_.distance);
+        const float y = railY (cur().distance);
         g.setColour (theme::orange);
         g.fillRoundedRectangle (juce::Rectangle<float> (18.0f, 6.0f).withCentre ({ x, y }), 2.0f);
         g.setColour (theme::txDim);
-        theme::drawTracked (g, juce::String (juce::roundToInt (spot_.distance * 100.0f)) + " cm",
+        theme::drawTracked (g, juce::String (juce::roundToInt (cur().distance * 100.0f)) + " cm",
                             juce::Rectangle<float> (rail.getX() - 14.0f, rail.getBottom() - 14.0f, rail.getWidth() + 14.0f, 14.0f),
                             theme::displayFont (13.0f), 0.0f, juce::Justification::centredRight);
         g.setColour (theme::txFaint);

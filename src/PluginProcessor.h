@@ -1254,10 +1254,19 @@ public:
         played as an IR of the player's own is: its bytes kept by key, so a session or a preset carries it, named by the
         cabinet, its `from` saying where the mic stood (cabSynthOf reads it back). A later request supersedes one still
         rendering; the cabinet's own 50 ms crossfade carries the swap. Message thread. */
-    void requestCabSynth (const juce::String& cab, CabSpot spot);
+    /** ...and two mics as an engineer puts them up (core/CabSynth.h, renderPair): A, and B mixed in by `blend` — 0 is A
+        alone — on one clock unless `align`, B turned over by `invert`. The horn is A's. */
+    struct CabSetup
+    {
+        CabSpot a, b;
+        float blend = 0.0f;
+        bool align = false, invert = false;
+    };
 
-    /** The rendered cabinet a choice plays, and where its mic stood — or `valid` false for any other IR. */
-    struct CabSynthChoice { juce::String cab; CabSpot spot; bool valid = false; };
+    void requestCabSynth (const juce::String& cab, CabSetup setup);
+
+    /** The rendered cabinet a choice plays, and where its mics stood — or `valid` false for any other IR. */
+    struct CabSynthChoice { juce::String cab; CabSetup setup; bool valid = false; };
     static CabSynthChoice cabSynthOf (const CabChoice&);
 
     /** TEMPORARY — the audition loop player. Goes with the demo strip it belongs to. */

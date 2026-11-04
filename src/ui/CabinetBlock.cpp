@@ -230,8 +230,10 @@ void CabinetBlock::refreshIr (bool force, bool keepTrimWord)
     if (picker != nullptr)
     {
         const auto synth = AmpProcessor::cabSynthOf (choice);
+        const auto spot = [] (const AmpProcessor::CabSpot& s) { return CabPicker::Spot { s.x, s.y, s.distance, s.horn, s.mic }; };
+        const auto& su = synth.setup;
         picker->show (synth.valid ? CabPicker::indexOf (synth.cab) : -1,
-                      { synth.spot.x, synth.spot.y, synth.spot.distance, synth.spot.horn, synth.spot.mic });
+                      { spot (su.a), su.blend > 0.0f ? spot (su.b) : CabPicker::Setup{}.b, su.blend, su.align, su.invert });
     }
 
     // The same bytes the engine convolves, whichever shelf they came off.
@@ -411,12 +413,13 @@ void CabinetBlock::showIrMenu()
 void CabinetBlock::showCabPanel()
 {
     auto content = std::make_unique<CabPicker>();
-    content->setSize (520, 210);
+    content->setSize (520, 240);
 
     // The bass's own cabinets, rendered live with the mic where the hand put it (AmpProcessor::requestCabSynth).
-    content->onSpot = [this] (int cab, CabPicker::Spot spot)
+    content->onSetup = [this] (int cab, CabPicker::Setup setup)
     {
-        amp.requestCabSynth (CabPicker::cabs()[(size_t) cab].name, { spot.x, spot.y, spot.distance, spot.horn, spot.mic });
+        const auto spot = [] (const CabPicker::Spot& s) { return AmpProcessor::CabSpot { s.x, s.y, s.distance, s.horn, s.mic }; };
+        amp.requestCabSynth (CabPicker::cabs()[(size_t) cab].name, { spot (setup.a), spot (setup.b), setup.blend, setup.align, setup.invert });
     };
     content->onOwnIrs = [this]
     {

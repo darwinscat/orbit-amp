@@ -291,6 +291,7 @@ struct Cab
     double micD = 0.05, micOff = 0, micOffY = 0, tilt = 0;
     double baffleStepDb = 0.5;
     double lengthMs = 200, fadeMs = 30;
+    double refDelay = -1;   // the time zero, s from the sound leaving: below zero, the first arrival's own
 };
 
 inline Cab build (const Section& s)
@@ -513,6 +514,8 @@ inline std::vector<double> render (const Cab& c, size_t n)
             pathTo (p.x, p.y, p.z, r, dx, dy, dz);
             minDelay = std::min (minDelay, r / c0);
         }
+    if (c.refDelay >= 0)
+        minDelay = c.refDelay;   // two mics on one clock: the later one arrives late by its path
 
     // The coil's inductance: half a slope (-3 dB/oct) above its corner, minimum-phase — the woofer's alone.
     std::vector<cd> coil (n, 1.0);
@@ -675,10 +678,9 @@ struct Spot
     std::string mic;   // a "mic-<name>" section of the table laid over the cabinet's own, or empty for its own
 };
 
-/** A cabinet of the table — its "<name> cap" section, the mic and the box as that section says — with the mic at
-    `spot`, aimed straight at the baffle: the IR at 48 kHz, its peak at -6 dBFS (a player levels each IR itself).
-    Any thread; a tenth of a second or so at the default FFT. */
-inline std::vector<float> renderAt (const Table& table, const std::string& cab, const Spot& spot, size_t n = 1 << 14)
+/** A cabinet of the table — its "<name> cap" section, the box as that section says, its mic or the one `spot` names
+    laid over it — with the mic at `spot`, aimed straight at the baffle. */
+inline Cab cabAt (const Table& table, const std::string& cab, const Spot& spot)
 {
     auto s = resolve (table, cab + " cap");
     if (! spot.mic.empty())
@@ -690,12 +692,80 @@ inline std::vector<float> renderAt (const Table& table, const std::string& cab, 
     c.micD    = spot.distance;
     c.tilt    = 0;
     c.horn    = c.horn && spot.horn;
-    const auto ir = render (c, n);
+    return c;
+}
+
+/** When the first sound reaches the mic: the nearest patch of the nearest cone, s. */
+inline double firstArrival (const Cab& c)
+{
+    if (c.drivers.empty()) return 0;
+    const Xy t = c.drivers[0];
+    const double mx = t.x + c.micOff * c.radius, my = t.y + c.micOffY * c.radius;
+    double best = 1e9;
+    for (const auto& d : c.drivers)
+        for (int r = 0; r < 7; ++r)
+            for (int k = 0; k < 16; ++k)
+            {
+                const double rho = (r + 0.5) / 7, phi = 2 * pi * (k + 0.5 * (r % 2)) / 16;
+                const double x = d.x + rho * c.radius * std::cos (phi), y = d.y + rho * c.radius * std::sin (phi);
+                const double z = -c.depthFrac * c.radius * (1 - rho);
+                best = std::min (best, std::sqrt ((x - mx) * (x - mx) + (y - my) * (y - my) + (z - c.micD) * (z - c.micD)) / c0);
+            }
+    return best;
+}
+
+inline std::vector<float> peakAt (const std::vector<double>& ir, double to)
+{
     double peak = 1e-12;
     for (double v : ir) peak = std::max (peak, std::abs (v));
     std::vector<float> out (ir.size());
-    for (size_t i = 0; i < ir.size(); ++i) out[i] = (float) (ir[i] * 0.5 / peak);
+    for (size_t i = 0; i < ir.size(); ++i) out[i] = (float) (ir[i] * to / peak);
     return out;
+}
+
+/** The cabinet with the mic at `spot`: the IR at 48 kHz, its peak at -6 dBFS (a player levels each IR itself). Any
+    thread; a tenth of a second or so at the default FFT. */
+inline std::vector<float> renderAt (const Table& table, const std::string& cab, const Spot& spot, size_t n = 1 << 14)
+{
+    return peakAt (render (cabAt (table, cab, spot), n), 0.5);
+}
+
+/** TWO MICS on one cabinet, as an engineer puts them up: each at its own spot, both on one clock — the farther heard
+    late by its path, so the two comb where they meet — unless `align` slides the later one onto the first; each brought
+    to the same level in the middle (500 Hz-2 kHz) before `blend` mixes them, the second turned over by `invertB`. The
+    horn is A's. Blend 0 is A alone. */
+struct Pair
+{
+    Spot a, b;
+    double blend = 0;
+    bool align = false, invertB = false;
+};
+
+inline std::vector<float> renderPair (const Table& table, const std::string& cab, const Pair& p, size_t n = 1 << 14)
+{
+    if (p.blend <= 0)
+        return renderAt (table, cab, p.a, n);
+
+    auto b = p.b;
+    b.horn = p.a.horn;
+    auto ca = cabAt (table, cab, p.a), cb = cabAt (table, cab, b);
+    const double da = firstArrival (ca), db = firstArrival (cb), first = std::min (da, db);
+    ca.refDelay = p.align ? da : first;
+    cb.refDelay = p.align ? db : first;
+    const auto ia = render (ca, n), ib = render (cb, n);
+
+    const auto middle = [n] (const std::vector<double>& ir) {
+        std::vector<cd> x (n, 0.0);
+        for (size_t i = 0; i < ir.size() && i < n; ++i) x[i] = ir[i];
+        fft (x, false);
+        double e = 1e-30;
+        for (size_t k = (size_t) (500.0 * n / fs); k <= (size_t) (2000.0 * n / fs); ++k) e += std::norm (x[k]);
+        return std::sqrt (e);
+    };
+    const double ga = (1 - p.blend) / middle (ia), gb = p.blend / middle (ib) * (p.invertB ? -1 : 1);
+    std::vector<double> mix (std::min (ia.size(), ib.size()));
+    for (size_t i = 0; i < mix.size(); ++i) mix[i] = ga * ia[i] + gb * ib[i];
+    return peakAt (mix, 0.5);
 }
 
 /** The cabinets the table holds, by the names their cap sections give them, in the table's order. */
