@@ -491,11 +491,13 @@ void CabinetBlock::showCabPanel()
     content->setSize (CabPicker::panelW, CabPicker::panelH);
 
     // The bass's own cabinets, rendered live with the mic where the hand put it (AmpProcessor::requestCabSynth).
-    content->onSetup = [this] (int cab, CabPicker::Setup setup)
+    const auto request = [this] (int cab, const CabPicker::Setup& setup, bool live)
     {
         const auto spot = [] (const CabPicker::Spot& s) { return AmpProcessor::CabSpot { s.x, s.y, s.distance, s.horn, s.mic, s.angle, s.hornDb }; };
-        amp.requestCabSynth (CabPicker::cabs()[(size_t) cab].name, { spot (setup.a), spot (setup.b), setup.blend, setup.align, setup.invert });
+        amp.requestCabSynth (CabPicker::cabs()[(size_t) cab].name, { spot (setup.a), spot (setup.b), setup.blend, setup.align, setup.invert }, live);
     };
+    content->onSetup = [request] (int cab, CabPicker::Setup setup) { request (cab, setup, false); };
+    content->onMove  = [request] (int cab, CabPicker::Setup setup) { request (cab, setup, true); };
 
     content->onClose = [this] { if (pickerBox != nullptr) pickerBox->dismiss(); };
 

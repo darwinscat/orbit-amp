@@ -816,12 +816,12 @@ bool AmpProcessor::chooseCabFile (const juce::File& file)
     return true;
 }
 
-void AmpProcessor::requestCabSynth (const juce::String& cab, CabSetup setup)
+void AmpProcessor::requestCabSynth (const juce::String& cab, CabSetup setup, bool live)
 {
     const int mine = ++cabSynthLatest;
     std::weak_ptr<int> alive = cabSynthAlive;
 
-    cabSynthPool.addJob ([this, alive, mine, cab, setup]
+    cabSynthPool.addJob ([this, alive, mine, cab, setup, live]
     {
         if (mine != cabSynthLatest.load())
             return;   // superseded before it began
@@ -832,10 +832,20 @@ void AmpProcessor::requestCabSynth (const juce::String& cab, CabSetup setup)
         const auto wav = core::cabsynth::wav24 (ir, 48000);
         auto bytes = std::make_shared<juce::MemoryBlock> (wav.data(), wav.size());
 
-        juce::MessageManager::callAsync ([this, alive, mine, cab, setup, bytes]
+        juce::MessageManager::callAsync ([this, alive, mine, cab, setup, bytes, live]
         {
             if (alive.lock() == nullptr || mine != cabSynthLatest.load() || bytes->getSize() == 0)
                 return;
+
+            if (live)
+            {
+                this->cab.load (bytes->getData(), bytes->getSize());   // heard, not kept: the state still names the last kept
+                return;
+            }
+
+            // Kept: and loaded even when it is the very cabinet the state already named — a drag that ends where it
+            // began has left a live one playing in between.
+            cabIrStale = true;
 
             const auto key = cabIrEmbeds.add (std::move (*bytes));
             if (key.isEmpty())

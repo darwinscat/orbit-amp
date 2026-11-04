@@ -25,9 +25,9 @@ namespace orbitamp
     side — the speaker moved away from it — and beside it HORN's attenuator, OFF -12 -6 0; the mics in perspective on
     the speaker, dragged across it and just past its rim; their two columns either side, each its mic, its places (CAP,
     EDGE, OFF and ROOM, one click each), distance and angle; BLEND, ALIGN and Ø under it, and two buttons: DEFAULT, the
-    box's own mic back at its cap — SURE? at the first click, done at the second — and CLOSE. What is set is sent when the
-    hand lets go (onSetup): a render takes a tenth of a second, and a cabinet changing under a moving hand would only
-    stutter.
+    box's own mic back at its cap — SURE? at the first click, done at the second — and CLOSE. While the hand moves, the
+    cabinet is heard as it goes (onMove) — each position the worker reaches next, a tenth of a second for one mic, near
+    a second for two on the 8x10 — and what is set is kept when the hand lets go (onSetup).
 
     A dumb view: the cabinets in (cabs(), geometry from tools/cabgen/cabinets.txt — metres, the baffle's centre the
     origin, up positive), what plays in (show), a pick out (onSetup). */
@@ -166,6 +166,9 @@ public:
 
     std::function<void (int cab, Setup setup)> onSetup;
 
+    /** The hand still moving: what it would sound like there, heard and not kept — onSetup follows when it lets go. */
+    std::function<void (int cab, Setup setup)> onMove;
+
     /** CLOSE: whoever opened the panel takes it away. No button without it. */
     std::function<void()> onClose;
 
@@ -226,6 +229,8 @@ public:
         else if (drag == Drag::blend)
             setup_.blend = along (blendTrack(), e.position.x);
         repaint();
+        if (onMove != nullptr)
+            onMove (chosen, setup_);
     }
 
     void mouseUp (const juce::MouseEvent&) override

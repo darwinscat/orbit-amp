@@ -1258,7 +1258,11 @@ public:
         rendering; the cabinet's own 50 ms crossfade carries the swap. Message thread. */
     /** ...and two mics as an engineer puts them up (core/CabSynth.h, renderPair): A, and B mixed in by `blend` — 0 is A
         alone — on one clock unless `align` (on from the start, as the panel's: CabPicker::Setup), B turned over by
-        `invert`. The horn is A's. */
+        `invert`. The horn is A's.
+
+        `live`: a hand still moving a mic. The cabinet is only HEARD — loaded straight into the convolution, nothing kept,
+        no key, no host told: a drag renders as often as the worker keeps up, and every position kept would stay in the
+        store for the plugin's life. The hand letting go asks once more without it, and that one is kept. */
     struct CabSetup
     {
         CabSpot a, b;
@@ -1266,7 +1270,7 @@ public:
         bool align = true, invert = false;
     };
 
-    void requestCabSynth (const juce::String& cab, CabSetup setup);
+    void requestCabSynth (const juce::String& cab, CabSetup setup, bool live = false);
 
     /** The rendered cabinet a choice plays, and where its mics stood — or `valid` false for any other IR. */
     struct CabSynthChoice { juce::String cab; CabSetup setup; bool valid = false; };
