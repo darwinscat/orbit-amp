@@ -130,8 +130,10 @@ private:
 };
 
 /** THE CABINET'S SCREEN: the name of the cabinet that plays — OFF while it is out of the sound — and a chevron at its
-    right end. A click opens the cabinets' window, and so does a right click. Asks for the name four times a second,
-    and draws it again when it is another. */
+    right end. The name dragged left and right steps through the cabinets, a step every `stepPx` of the hand's travel
+    (onDrag, with the steps from where it took hold; onDragEnd when it lets go); the chevron clicked opens the cabinets'
+    window (onClick), and so does a right click anywhere on it (onMenu). Asks for the name four times a second, and
+    draws it again when it is another. */
 class CabinetScreen final : public juce::Component, private juce::Timer
 {
 public:
@@ -139,6 +141,8 @@ public:
 
     std::function<juce::String()> name;
     std::function<void()> onClick, onMenu;
+    std::function<void (int steps)> onDrag;
+    std::function<void()> onDragEnd;
     juce::Colour handLight;
 
     /** What it says now. */
@@ -146,6 +150,9 @@ public:
 
     void paint (juce::Graphics&) override;
     void mouseDown (const juce::MouseEvent&) override;
+    void mouseDrag (const juce::MouseEvent&) override;
+    void mouseUp (const juce::MouseEvent&) override;
+    void mouseMove (const juce::MouseEvent&) override;
     void mouseEnter (const juce::MouseEvent&) override { repaint(); }
     void mouseExit (const juce::MouseEvent&) override  { repaint(); }
 
@@ -153,8 +160,13 @@ public:
     void refresh();
 
 private:
+    static constexpr float chevronRoom = 34.0f, stepPx = 40.0f;     // the name's width: the six cabinets in one sweep
     const face::Ink ink;
     juce::String shown;
+    bool holding = false;       // the hand took hold of the name, and has not let go
+    int steps = 0;              // ...how many steps it has it moved now
+    bool moved = false;         // ...and whether it has moved it at all: back where it began is still a cabinet to keep
+    bool onChevron (juce::Point<float> p) const { return p.x >= (float) getWidth() - chevronRoom; }
     void timerCallback() override { refresh(); }
 };
 

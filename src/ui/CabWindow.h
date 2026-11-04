@@ -29,6 +29,9 @@ public:
     /** A rendered cabinet as the pictures draw it: its box, -1 for none of ours, and its mics. */
     static std::pair<int, CabPicker::Setup> drawnOf (const AmpProcessor::CabSynthChoice&);
 
+    /** ...and a box of CabPicker::cabs() with those mics asked of the engine: heard only while `live`, kept when not. */
+    static void request (AmpProcessor&, int cab, const CabPicker::Setup&, bool live);
+
     void resized() override;
 
 private:

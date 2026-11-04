@@ -23,23 +23,24 @@ std::pair<int, CabPicker::Setup> CabWindow::drawnOf (const AmpProcessor::CabSynt
                     su.aOn, su.bOn } };
 }
 
+void CabWindow::request (AmpProcessor& processor, int cab, const CabPicker::Setup& setup, bool live)
+{
+    processor.requestCabSynth (CabPicker::cabs()[(size_t) cab].name,
+                         { toEngine (setup.a), toEngine (setup.b), setup.blend, setup.align, setup.invert, setup.aOn, setup.bOn },
+                         live);
+}
+
 CabWindow::CabWindow (AmpProcessor& a, CabPicker::Range range, std::function<void()> p)
     : amp (a), picker (range), picked (std::move (p))
 {
     // The bass's own cabinets, rendered with the mics where the hand put them.
-    const auto request = [this] (int cab, const CabPicker::Setup& setup, bool live)
+    picker.onSetup = [this] (int cab, CabPicker::Setup setup)
     {
-        amp.requestCabSynth (CabPicker::cabs()[(size_t) cab].name,
-                             { toEngine (setup.a), toEngine (setup.b), setup.blend, setup.align, setup.invert, setup.aOn, setup.bOn },
-                             live);
-    };
-    picker.onSetup = [this, request] (int cab, CabPicker::Setup setup)
-    {
-        request (cab, setup, false);
+        request (amp, cab, setup, false);
         if (picked != nullptr)
             picked();
     };
-    picker.onMove  = [request] (int cab, CabPicker::Setup setup) { request (cab, setup, true); };
+    picker.onMove  = [this] (int cab, CabPicker::Setup setup) { request (amp, cab, setup, true); };
     picker.onClose = [this] { if (auto* box = findParentComponentOfClass<juce::CallOutBox>()) box->dismiss(); };
 
     addAndMakeVisible (picker);

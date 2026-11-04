@@ -274,7 +274,6 @@ void CabinetScreen::refresh()
 void CabinetScreen::paint (juce::Graphics& g)
 {
     const auto r = getLocalBounds().toFloat();
-    const float chevronRoom = 34.0f;
     const auto text = r.withTrimmedLeft (12.0f).withTrimmedRight (chevronRoom + 6.0f);
     const float wide = juce::GlyphArrangement::getStringWidth (face::labelFont (face::stage::px13).withExtraKerningFactor (0.04f), shown);
     {
@@ -285,7 +284,7 @@ void CabinetScreen::paint (juce::Graphics& g)
                    face::stage::px13, shown == "OFF" ? ink.at (ink.values, 0.45f) : ink.values);
     }
 
-    // The divider and the chevron: what a click opens.
+    // The divider and the chevron: what a click opens — the name left of it, what a drag steps.
     const float x = r.getRight() - chevronRoom;
     g.setColour (juce::Colour (0xff51465f));
     g.fillRect (x, r.getY() + 4.0f, 1.2f, r.getHeight() - 8.0f);
@@ -312,8 +311,45 @@ void CabinetScreen::mouseDown (const juce::MouseEvent& e)
         if (onMenu)
             onMenu();
     }
-    else if (onClick)
-        onClick();
+    else if (onChevron (e.position))
+    {
+        if (onClick)
+            onClick();
+    }
+    else
+    {
+        holding = true;
+        steps = 0;
+        moved = false;
+    }
+}
+
+void CabinetScreen::mouseDrag (const juce::MouseEvent& e)
+{
+    if (! holding)
+        return;
+    const int now = juce::roundToInt ((float) e.getDistanceFromDragStartX() / stepPx);
+    if (now != steps)
+    {
+        steps = now;
+        moved = true;
+        if (onDrag)
+            onDrag (steps);
+    }
+}
+
+void CabinetScreen::mouseUp (const juce::MouseEvent&)
+{
+    if (! holding)
+        return;
+    holding = false;
+    if (moved && onDragEnd)
+        onDragEnd();
+}
+
+void CabinetScreen::mouseMove (const juce::MouseEvent& e)
+{
+    setMouseCursor (onChevron (e.position) ? juce::MouseCursor::PointingHandCursor : juce::MouseCursor::LeftRightResizeCursor);
 }
 
 } // namespace orbitamp::redgroove

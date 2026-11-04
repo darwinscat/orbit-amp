@@ -7,6 +7,7 @@
 
 #include "../face/Console.h"
 #include "../redpaw/view/Windscreen.h"
+#include "../ui/CabPicker.h"
 
 #include <juce_opengl/juce_opengl.h>
 
@@ -93,13 +94,17 @@ private:
 
     // THE WALKER'S HAND ON THE CHANNELS AND THE CUTS. The lever picks the gear — and the number keys, a Program
     // Change, a host's CHANNEL with it; the two switches throw 5 STR / 4 STR and FINGERS / SLAP, each its frequency
-    // on its right click; the cabinet's screen names the cabinet that plays, and a click on it opens the cabinets'
-    // window — Ampeg's, drawn.
+    // on its right click; the cabinet's screen names the cabinet that plays, a drag on it steps through Ampeg's six,
+    // drawn, and its chevron opens their window.
     ChannelLever lever;
     SlideSwitch lowCut, highCut, ultraLo, ultraHi;
     CabinetScreen cabinet;
     void bindSwitch (SlideSwitch&, const char* paramId);
     void showCabinets();
+    void dragCabinet (int steps);
+    void keepDraggedCabinet();
+    int dragFrom = 0, dragAt = -1, dragFromCab = -1;   // the drag's: where in CabPicker::ampegLine it began, where it is
+    CabPicker::Setup dragSetup;                        // ...and the mics as they stood when the hand took hold
 
     void showSelector (int channel) override;
     bool channelKey (const juce::KeyPress&) override;

@@ -164,6 +164,26 @@ public:
         return one;
     }
 
+    /** Ampeg's six in the order of their size, as the walker's cabinet screen steps through them. */
+    static const juce::StringArray& ampegLine()
+    {
+        static const juce::StringArray line { "SVT-15E", "VB-112", "VB-210", "SVT-410HE", "SVT-610HLF", "SVT-810" };
+        return line;
+    }
+
+    /** THE MICS A BOX IS PICKED WITH, `from` the one that was playing: where they stood — the same cap, the same
+        centimetres, the way a cabinet is compared — only a mic never chosen following the box's own; the horn as it
+        stood, unless the two boxes come with theirs otherwise (Cab::hornOn): the SVT-15E's and the 8x10's go off, the
+        next one's on. A click in the pile picks by it, and so does the walker's screen. */
+    static Setup pickedWith (int from, int to, Setup s)
+    {
+        if (from < 0 || cabs()[(size_t) from].hornOn != cabs()[(size_t) to].hornOn)
+            s.a.horn = cabs()[(size_t) to].hornOn;
+        if (s.a.mic.isEmpty())
+            s.a.mic = cabs()[(size_t) to].mic;
+        return s;
+    }
+
     static int indexOf (const juce::String& name)
     {
         for (int i = 0; i < (int) cabs().size(); ++i)
@@ -525,14 +545,8 @@ private:
 
         if (at != chosen)
         {
-            // The mics stay where they stand — the same cap, the same centimetres, on the box now chosen — the way a
-            // cabinet is compared; only a mic never chosen follows the box's own. The horn as it stood, unless this box
-            // and the last come with theirs otherwise (Cab::hornOn): the SVT-15E's and the 8x10's go off, the next one's on.
-            if (chosen < 0 || cabs()[(size_t) chosen].hornOn != cabs()[(size_t) at].hornOn)
-                setup_.a.horn = cabs()[(size_t) at].hornOn;
+            setup_ = pickedWith (chosen, at, setup_);
             chosen = at;
-            if (setup_.a.mic.isEmpty())
-                setup_.a.mic = cabs()[(size_t) at].mic;
             send();
             return;
         }
