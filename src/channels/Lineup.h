@@ -34,6 +34,14 @@ struct Lineup
             const char* control = nullptr;
             const char* value   = nullptr;
         } held {};
+
+        /** ITS OWN CABINET, where the product's cabinets are drawn (drawnCabinets): the box the channel opens on, never
+            visited, with the box's own mic at its cap and its horn on or off — the lineup's openingCabinet when not said. */
+        struct Cabinet
+        {
+            const char* box = nullptr;
+            bool horn = true;
+        } cabinet {};
     };
 
     const char* nodeType;       // the product's node in the state tree, where the channels' memory is kept
@@ -72,7 +80,8 @@ struct Lineup
 
     /** CABINETS DRAWN, NOT FILES: the walker plays the bass's own rendered cabinets alone (ui/CabWindow.h, Ampeg's pile)
         — no file of the build's, none of the player's — and a channel keeps its cabinet as its mics stood (the state's
-        `from`, AmpProcessor::cabSynthOf); `openingCabinet` is then a box's name, played with its own mic at its cap. */
+        `from`, AmpProcessor::cabSynthOf), opening on its own box (Channel::cabinet) — or on `openingCabinet`, then a
+        box's name, with its own mic at its cap. */
     bool drawnCabinets = false;
 
     int count() const noexcept { return (int) channels.size(); }

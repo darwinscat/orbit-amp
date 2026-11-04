@@ -395,15 +395,16 @@ juce::String Channels::drawnPlaying() const
     return AmpProcessor::cabSynthOf (now).valid ? now : juce::String();
 }
 
-void Channels::playDrawn (const juce::String& from)
+void Channels::playDrawn (const juce::String& from, int channel)
 {
-    // The record's cabinet, its mics where they stood — or, with none of ours in it, the box the product opens on, with
-    // its own mic at its cap and its horn off, as the walker's 8x10 comes (ui/CabPicker.h, Cab::hornOn).
+    // The record's cabinet, its mics where they stood — or, with none of ours in it, the box the channel opens on, with
+    // its own mic at its cap and its horn as the lineup says (the walker's B15 on the SVT-15E, the horn off).
     auto synth = AmpProcessor::cabSynthOf (from);
     if (! synth.valid)
     {
-        synth = { line.openingCabinet, {}, true };
-        synth.setup.a.horn = false;
+        const auto& own = line.channels[(size_t) memoryOf (juce::jlimit (0, count() - 1, channel))].cabinet;
+        synth = { own.box != nullptr ? own.box : line.openingCabinet, {}, true };
+        synth.setup.a.horn = own.box != nullptr ? own.horn : true;
     }
     const auto asked = AmpProcessor::cabSynthFrom (synth.cab, synth.setup);
     if (asked == drawnPlaying())
@@ -426,7 +427,7 @@ void Channels::align()
     if (line.drawnCabinets)
     {
         if (drawnPlaying().isEmpty())
-            playDrawn ({});     // none of ours playing — a fresh instance, a file a state of before named: the opening box
+            playDrawn ({}, active());   // none of ours playing — a fresh instance, a file a state of before named: its box
     }
     else if (const int playing = cabinet(); playing < 0)
     {
@@ -840,7 +841,7 @@ void Channels::recall (int channel, const juce::ValueTree& record)
     for (int f = 0; f < numFlags; ++f)
         setFlag ((Flag) f, record.isValid() && (bool) record.getProperty (flagIds[(size_t) f], false));
     if (line.drawnCabinets)
-        playDrawn (record.getProperty (cabinetFromId).toString());
+        playDrawn (record.getProperty (cabinetFromId).toString(), channel);
     else
         chooseCabinetNamed (record.getProperty (cabinetId).toString());
 }

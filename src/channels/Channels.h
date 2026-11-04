@@ -252,7 +252,7 @@ private:
     // DRAWN CABINETS (Lineup::drawnCabinets): the one playing as its `from` says it — or the one asked for and still
     // rendering, so a channel left before it lands keeps what it was given — and a record's, rendered again.
     juce::String drawnPlaying() const;
-    void playDrawn (const juce::String& from);            // ...or, empty or none of ours, the box the product opens on
+    void playDrawn (const juce::String& from, int channel);   // ...or, empty or none of ours, the box `channel` opens on
     mutable juce::String drawnAsked, drawnOver;           // the one asked for, and the state's `from` when it was asked
 
     juce::ValueTree node() const;
