@@ -71,10 +71,8 @@ private:
     struct BassRow;
     std::unique_ptr<BassRow> bassRow;
 
-    /** OrbitBass's cabinets, drawn (ui/CabPicker.h), in a panel over the face that FACTORY IRS opens: the block is
-        too narrow for them beside a delay and a reverb. Set while the panel is open. */
-    juce::Component::SafePointer<CabPicker> picker;
-    juce::Component::SafePointer<juce::CallOutBox> pickerBox;
+    /** OrbitBass's cabinets, drawn (ui/CabPicker.h), in a window over the face that FACTORY IRS opens (ui/CabWindow.h):
+        the block is too narrow for them beside a delay and a reverb. */
     void showCabPanel();
 
     /** OrbitBass's two doors under the picture, where the guitar's trim stands: FACTORY IRS (the cabinets, drawn) and

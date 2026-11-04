@@ -10,6 +10,7 @@
 #include "view/WalkerDrive.h"
 
 #include "../ui/BassControls.h"
+#include "../ui/CabWindow.h"
 #include "../ui/FactoryMissing.h"
 #include "../ui/Prefs.h"
 
@@ -165,8 +166,7 @@ namespace
         }
         p.holeKeySize = keyHeight;
 
-        // No REVERB, DELAY or CAB plates. CAB's box is the cabinet's screen: a dropped IR's tag stands over it,
-        // and a right click on it opens the cabinets' window.
+        // No REVERB, DELAY or CAB plates. CAB's box is the cabinet's screen: a click on it opens the cabinets' window.
         p.plates = false;
         p.sliderNames[2] = cabinetScreen;
 
@@ -588,16 +588,16 @@ RedGrooveEditor::RedGrooveEditor (AmpProcessor& p)
     highCut.setComponentID ("highCut");
 
 
-    // THE CABINET'S SCREEN: the cabinet that plays, by its name — OFF while it is out of the sound.
+    // THE CABINET'S SCREEN: the cabinet that plays, by its box's name — OFF while it is out of the sound.
     cabinet.name = [this]
     {
         if (! channels.cabinetOn())
             return juce::String ("OFF");
-        const int playing = channels.cabinet();
-        return playing >= 0 ? Channels::cabinetName (channels.cabinets().getReference (playing)).toUpperCase() : juce::String();
+        const auto synth = AmpProcessor::cabSynthOf (amp.cabChoice());
+        return synth.valid ? synth.cab : juce::String();
     };
-    cabinet.onClick = [this] { showCabinetList(); };
-    cabinet.onMenu  = [this] { showCabs(); };
+    cabinet.onClick = [this] { showCabinets(); };
+    cabinet.onMenu  = [this] { showCabinets(); };
     cabinet.handLight = handLight;
     addToStage (cabinet);
     cabinet.setBounds (layout::cabinetScreen.reduced (3.0f).toNearestInt());
@@ -689,33 +689,17 @@ void RedGrooveEditor::bindSwitch (SlideSwitch& sw, const char* paramId)
     a->sendInitialUpdate();
 }
 
-/** THE CABINETS, ON A CLICK ON THE SCREEN: the build's own under their shelf's folders, then the player's own, the one
-    that plays ticked. A pick plays it, and brings the cabinet back into the sound. */
-void RedGrooveEditor::showCabinetList()
+/** THE CABINETS, ON A CLICK ON THE SCREEN: Ampeg's, drawn, in the window OrbitBass's are in (ui/CabWindow.h). A
+    cabinet kept there brings the cabinet back into the sound. */
+void RedGrooveEditor::showCabinets()
 {
-    juce::PopupMenu menu;
-    const auto& all = channels.cabinets();
-    const int playing = channels.cabinetOn() ? channels.cabinet() : -1;
-    juce::String heading = "-";
-    for (int i = 0; i < all.size(); ++i)
+    CabWindow::open (amp, cabinet, CabPicker::Range::ampeg, [safe = juce::Component::SafePointer<RedGrooveEditor> (this)]
     {
-        const auto folder = i < channels.factoryCabinets() ? channels.cabinetFolder (i) : juce::String ("YOUR OWN");
-        if (folder != heading)
-        {
-            heading = folder;
-            menu.addSectionHeader (folder.isEmpty() ? juce::String ("DARWIN'S CAT") : folder.toUpperCase());
-        }
-        menu.addItem (i + 1, Channels::cabinetName (all.getReference (i)), true, i == playing);
-    }
-    menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&cabinet),
-                        [safe = juce::Component::SafePointer<RedGrooveEditor> (this)] (int picked)
-                        {
-                            if (safe == nullptr || picked <= 0)
-                                return;
-                            safe->channels.chooseCabinet (picked - 1);
-                            safe->channels.setCabinetOn (true);
-                            safe->cabinet.refresh();
-                        });
+        if (safe == nullptr)
+            return;
+        safe->channels.setCabinetOn (true);
+        safe->cabinet.refresh();
+    });
 }
 
 /** The lever goes where the state's channel is — unless the hand holds it. */

@@ -1168,6 +1168,7 @@ set(ORBITAMP_SOURCES
     src/ui/FaceplateView.cpp
     src/ui/CapturedBlockPanel.cpp
     src/ui/CabinetBlock.cpp
+    src/ui/CabWindow.cpp
     src/ui/EqSection.cpp
     src/ui/DelayBlock.cpp
     src/ui/ReverbBlock.cpp
@@ -1377,6 +1378,7 @@ set(REDGROOVEBASS_SOURCES
     src/redgroove/RedGrooveControls.cpp
     src/redgroove/RedGrooveEditor.cpp
     src/redgroove/RedGrooveLineup.cpp
+    src/ui/CabWindow.cpp             # the bass's cabinets, drawn — OrbitBass's window, Ampeg's pile
     ${REDPAW_VIEW_SOURCES}           # the windscreen the rovers look through ...
     ${REDGROOVE_VIEW_SOURCES})       # ... looking out on the walker's forest
 

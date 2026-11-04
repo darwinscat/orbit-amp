@@ -853,27 +853,37 @@ void AmpProcessor::requestCabSynth (const juce::String& cab, CabSetup setup, boo
 
             apvts.state.setProperty (params::cabIrUserKey, key, nullptr);
             apvts.state.setProperty (params::cabIrUserName, cab, nullptr);
-            const auto& a = setup.a;
-            const auto& b = setup.b;
-            // The horn: 0 off, 1 on at the table's level, or its attenuator's step in dB (-6, -12) while on.
-            const juce::String horn = ! a.horn ? "0" : a.hornDb < -0.5f ? juce::String (juce::roundToInt (a.hornDb)) : "1";
-            apvts.state.setProperty (params::cabIrUserFrom, "synth:" + cab + "|" + juce::String (a.x, 3) + "|" + juce::String (a.y, 3)
-                                                                 + "|" + juce::String (a.distance, 3) + "|" + horn + "|" + a.mic
-                                                                 + "|" + juce::String (setup.blend, 3) + "|" + (setup.align ? "1" : "0") + "|" + (setup.invert ? "1" : "0")
-                                                                 + "|" + juce::String (b.x, 3) + "|" + juce::String (b.y, 3) + "|" + juce::String (b.distance, 3)
-                                                                 + "|" + b.mic + "|" + juce::String (a.angle, 1) + "|" + juce::String (b.angle, 1), nullptr);
+            apvts.state.setProperty (params::cabIrUserFrom, cabSynthFrom (cab, setup), nullptr);
             updateHostDisplay (ChangeDetails{}.withNonParameterStateChanged (true));
         });
     });
 }
 
+juce::String AmpProcessor::cabSynthFrom (const juce::String& box, const CabSetup& setup)
+{
+    const auto& a = setup.a;
+    const auto& b = setup.b;
+    // The horn: 0 off, 1 on at the table's level, or its attenuator's step in dB (-6, -12) while on.
+    const juce::String horn = ! a.horn ? "0" : a.hornDb < -0.5f ? juce::String (juce::roundToInt (a.hornDb)) : "1";
+    return "synth:" + box + "|" + juce::String (a.x, 3) + "|" + juce::String (a.y, 3)
+         + "|" + juce::String (a.distance, 3) + "|" + horn + "|" + a.mic
+         + "|" + juce::String (setup.blend, 3) + "|" + (setup.align ? "1" : "0") + "|" + (setup.invert ? "1" : "0")
+         + "|" + juce::String (b.x, 3) + "|" + juce::String (b.y, 3) + "|" + juce::String (b.distance, 3)
+         + "|" + b.mic + "|" + juce::String (a.angle, 1) + "|" + juce::String (b.angle, 1);
+}
+
 AmpProcessor::CabSynthChoice AmpProcessor::cabSynthOf (const CabChoice& choice)
 {
+    return choice.isUser() ? cabSynthOf (choice.from) : CabSynthChoice {};
+}
+
+AmpProcessor::CabSynthChoice AmpProcessor::cabSynthOf (const juce::String& from)
+{
     CabSynthChoice out;
-    if (! choice.isUser() || ! choice.from.startsWith ("synth:"))
+    if (! from.startsWith ("synth:"))
         return out;
 
-    const auto parts = juce::StringArray::fromTokens (choice.from.fromFirstOccurrenceOf ("synth:", false, false), "|", "");
+    const auto parts = juce::StringArray::fromTokens (from.fromFirstOccurrenceOf ("synth:", false, false), "|", "");
     if (parts.size() < 5)
         return out;
 

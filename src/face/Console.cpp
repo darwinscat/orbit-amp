@@ -2424,6 +2424,8 @@ void Console::addCabinets (const juce::StringArray& paths)
 
 bool Console::isInterestedInFileDrag (const juce::StringArray& files)
 {
+    if (channels.lineup().drawnCabinets)
+        return false;       // its cabinets are drawn, and none of them a file (Lineup::drawnCabinets)
     for (const auto& path : files)
         if (device::IrLibrary::looksLikeImport (juce::File (path)))
             return true;

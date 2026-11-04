@@ -130,8 +130,8 @@ private:
 };
 
 /** THE CABINET'S SCREEN: the name of the cabinet that plays — OFF while it is out of the sound — and a chevron at its
-    right end. A click opens the list of the cabinets; a right click their window. Asks for the name four times a
-    second, and draws it again when it is another. */
+    right end. A click opens the cabinets' window, and so does a right click. Asks for the name four times a second,
+    and draws it again when it is another. */
 class CabinetScreen final : public juce::Component, private juce::Timer
 {
 public:

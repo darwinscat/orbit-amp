@@ -38,7 +38,7 @@ struct Lineup
 
     const char* nodeType;       // the product's node in the state tree, where the channels' memory is kept
     const char* parameterId;    // CHANNEL, the host's handle on the selector
-    const char* openingCabinet; // the cabinet a channel opens on, by the stem of its file's name
+    const char* openingCabinet; // the cabinet a channel opens on, by the stem of its file's name (drawnCabinets: its box's)
 
     std::vector<Channel> channels;
 
@@ -69,6 +69,11 @@ struct Lineup
         the product says another: the walker opens on SVT, its second (the owner, 03.11). */
     int opensAt = 0;
     const Channel& opener() const { return channels[(size_t) juce::jlimit (0, count() - 1, opensAt)]; }
+
+    /** CABINETS DRAWN, NOT FILES: the walker plays the bass's own rendered cabinets alone (ui/CabWindow.h, Ampeg's pile)
+        — no file of the build's, none of the player's — and a channel keeps its cabinet as its mics stood (the state's
+        `from`, AmpProcessor::cabSynthOf); `openingCabinet` is then a box's name, played with its own mic at its cap. */
+    bool drawnCabinets = false;
 
     int count() const noexcept { return (int) channels.size(); }
 };

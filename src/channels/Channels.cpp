@@ -21,6 +21,7 @@ namespace
     const juce::Identifier activeId { "active" };
     const juce::Identifier indexId  { "i" };
     const juce::Identifier cabinetId { AmpProcessor::recordCabinetId };    // ...which a state of before is converted by
+    const juce::Identifier cabinetFromId { "cabinet_from" };               // ...and where a drawn one's mics stood
 
     // A pair's record (Lineup::pairs) says which of the two it was left playing, and the tones by their
     // knobs: the two packs may keep them in different places.
@@ -171,6 +172,14 @@ Channels::Channels (AmpProcessor& p, const Lineup& l) : amp (p), line (l)
 
 void Channels::readCabinets()
 {
+    if (line.drawnCabinets)
+    {
+        irs.clear();        // drawn, not files: none of the build's, none of the player's
+        factory = 0;
+        irKeys.clear();
+        return;
+    }
+
     // The cabinets: a channel keeps its own too, but by NAME — a cabinet is a file, not a parameter.
     // The build's own stand first and the player's after them, each group in the order of its names:
     // what a player adds never lands among the factory ones. The build's own are the ones the product's
@@ -377,6 +386,34 @@ void Channels::chooseCabinetNamed (const juce::String& stem)
     chooseCabinet (defaultCabinet());   // not here any more, or never chosen: the one a channel opens on
 }
 
+juce::String Channels::drawnPlaying() const
+{
+    const auto now = amp.apvts.state.getProperty (params::cabIrUserFrom).toString();
+    if (drawnAsked.isNotEmpty() && now == drawnOver)
+        return drawnAsked;      // still rendering: what was asked for is what the channel has
+    drawnAsked.clear();         // landed — or a hand, an undo or a preset since: the state's is the truth
+    return AmpProcessor::cabSynthOf (now).valid ? now : juce::String();
+}
+
+void Channels::playDrawn (const juce::String& from)
+{
+    // The record's cabinet, its mics where they stood — or, with none of ours in it, the box the product opens on, with
+    // its own mic at its cap and its horn off, as the walker's 8x10 comes (ui/CabPicker.h, Cab::hornOn).
+    auto synth = AmpProcessor::cabSynthOf (from);
+    if (! synth.valid)
+    {
+        synth = { line.openingCabinet, {}, true };
+        synth.setup.a.horn = false;
+    }
+    const auto asked = AmpProcessor::cabSynthFrom (synth.cab, synth.setup);
+    if (asked == drawnPlaying())
+        return;
+
+    drawnOver  = amp.apvts.state.getProperty (params::cabIrUserFrom).toString();
+    drawnAsked = asked;
+    amp.requestCabSynth (synth.cab, synth.setup);
+}
+
 void Channels::align()
 {
     if (const int pack = packFor (active()); pack >= 0 && pack != juce::roundToInt (plain (params::preampDevice)))
@@ -386,7 +423,12 @@ void Channels::align()
     }
     hold (active());
 
-    if (const int playing = cabinet(); playing < 0)
+    if (line.drawnCabinets)
+    {
+        if (drawnPlaying().isEmpty())
+            playDrawn ({});     // none of ours playing — a fresh instance, a file a state of before named: the opening box
+    }
+    else if (const int playing = cabinet(); playing < 0)
     {
         chooseCabinet (defaultCabinet());
     }
@@ -748,6 +790,8 @@ juce::ValueTree Channels::whole() const
         full.setProperty (cabinetId, live ? cabinetPlaying()
                                           : record.hasProperty (cabinetId) ? record[cabinetId].toString() : opening,
                           nullptr);
+        if (line.drawnCabinets)
+            full.setProperty (cabinetFromId, live ? drawnPlaying() : record.getProperty (cabinetFromId).toString(), nullptr);
         out.appendChild (full, nullptr);
     }
     return out;
@@ -772,6 +816,8 @@ void Channels::store (juce::ValueTree record) const
     for (int f = 0; f < numFlags; ++f)
         record.setProperty (flagIds[(size_t) f], flag ((Flag) f), nullptr);
     record.setProperty (cabinetId, cabinetPlaying(), nullptr);
+    if (line.drawnCabinets)
+        record.setProperty (cabinetFromId, drawnPlaying(), nullptr);
 }
 
 void Channels::recall (int channel, const juce::ValueTree& record)
@@ -793,7 +839,10 @@ void Channels::recall (int channel, const juce::ValueTree& record)
     hold (channel);     // whatever the record says: a host may have moved it while the channel played
     for (int f = 0; f < numFlags; ++f)
         setFlag ((Flag) f, record.isValid() && (bool) record.getProperty (flagIds[(size_t) f], false));
-    chooseCabinetNamed (record.getProperty (cabinetId).toString());
+    if (line.drawnCabinets)
+        playDrawn (record.getProperty (cabinetFromId).toString());
+    else
+        chooseCabinetNamed (record.getProperty (cabinetId).toString());
 }
 
 float Channels::plain (const juce::String& paramId) const

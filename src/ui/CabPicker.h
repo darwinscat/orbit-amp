@@ -18,9 +18,10 @@ namespace orbitamp
 
     THE PILE: one family at a time (SVT, VENTURE, ORANGE, MARKBASS, MESA — words to click), its boxes to scale and stacked as a backline stands
     them, the small on the big; each with its speakers, its horn and its port where it has them; under them the chosen
-    box's name. A click on a box picks it, the mics staying where they stand, and the horn too — but a box whose horn
-    comes off (Cab::hornOn, the SVT-15E's and the 8x10's) takes it off, and the next box puts it back; a click on the
-    chosen box's horn turns the horn off and on, its step kept.
+    box's name. The walker's (Range::ampeg) is Ampeg's alone, the SVTs and the Ventures in one pile and no words over it.
+    A click on a box picks it, the mics staying where they stand, and the horn too — but a box whose horn comes off
+    (Cab::hornOn, the SVT-15E's and the 8x10's) takes it off, and the next box puts it back; a click on the chosen box's
+    horn turns the horn off and on, its step kept.
 
     THE SPEAKER: the chosen box's first speaker, flat, its neighbours at its edge, its horn big in the corner on the horn's
     side — the speaker moved away from it — and beside it HORN's attenuator, OFF -12 -6 0; the mics in perspective on
@@ -36,7 +37,11 @@ namespace orbitamp
 class CabPicker final : public juce::Component
 {
 public:
-    CabPicker() = default;
+    /** WHICH CABINETS IT OFFERS: every maker's, a pile each under its word — OrbitBass's — or Ampeg's alone in one pile
+        (ampegPile) — the walker's. */
+    enum class Range { all, ampeg };
+
+    explicit CabPicker (Range r = Range::all) : range (r) {}
 
     /** The size it is drawn for — small enough to open over a cabin's face too. */
     static constexpr int panelW = 780, panelH = 280;
@@ -147,6 +152,16 @@ public:
         return all;
     }
 
+    /** Ampeg's, the walker's, in one pile: a box of each size — 1x15, 1x12, 2x10, 4x10, 6x10, 8x10 — the SVTs and the
+        Ventures together, each with a horn the player turns on and off (the owner, 04.11). */
+    static const std::vector<std::vector<juce::StringArray>>& ampegPile()
+    {
+        static const std::vector<std::vector<juce::StringArray>> one {
+            { { "SVT-15E", "VB-112" }, { "SVT-810" }, { "SVT-410HE", "VB-210" }, { "SVT-610HLF" } },
+        };
+        return one;
+    }
+
     static int indexOf (const juce::String& name)
     {
         for (int i = 0; i < (int) cabs().size(); ++i)
@@ -161,7 +176,8 @@ public:
         if (dragging)
             return;   // the hand's, until it lets go
         if (cab >= 0 && cab != chosen)
-            family = cabs()[(size_t) cab].family;   // the pile it stands in; a pile only looked at stays shown
+            if (const int pile = pileOf (cab); pile >= 0)
+                family = pile;                      // the pile it stands in; a pile only looked at stays shown
         chosen = cab;
         setup_ = setup;
         repaint();
@@ -253,7 +269,8 @@ private:
 
     enum class Drag { none, spot, distance, angle, blend };
 
-    int chosen = -1, hover = -1, family = 0;
+    const Range range;
+    int chosen = -1, hover = -1, family = 0;     // `family`: an index of shownPiles()
     Setup setup_;
     bool dragging = false;
     Drag drag = Drag::none;
@@ -290,6 +307,25 @@ private:
 
     static constexpr int tabH = 18, tabGap = 14;
 
+    /** The piles it offers (Range), and the words over them: one a pile, none over a single one. */
+    const std::vector<std::vector<juce::StringArray>>& shownPiles() const { return range == Range::ampeg ? ampegPile() : piles(); }
+    const juce::StringArray& words() const
+    {
+        static const juce::StringArray none;
+        return range == Range::ampeg ? none : families();
+    }
+
+    /** The shown pile a box stands in; -1 for one it does not offer. */
+    int pileOf (int cab) const
+    {
+        const auto& all = shownPiles();
+        for (size_t p = 0; p < all.size(); ++p)
+            for (const auto& column : all[p])
+                if (column.contains (cabs()[(size_t) cab].name))
+                    return (int) p;
+        return -1;
+    }
+
     /** The families' words, left to right, a new line wherever the next would pass the pile's half. */
     juce::Rectangle<int> tabArea (int f) const
     {
@@ -297,7 +333,7 @@ private:
         int x = 0, y = 0;
         for (int i = 0;; ++i)
         {
-            const int w = juce::roundToInt (theme::trackedWidth (families()[i], font, 0.08f)) + 4;
+            const int w = juce::roundToInt (theme::trackedWidth (words()[i], font, 0.08f)) + 4;
             if (x > 0 && x + w > leftW)
             {
                 x = 0;
@@ -309,8 +345,8 @@ private:
         }
     }
 
-    /** Where the pile starts: under the families' last line. */
-    int pileTop() const { return tabArea (families().size() - 1).getBottom() + headH - tabH; }
+    /** Where the pile starts: under the families' last line — near the top with no words over it. */
+    int pileTop() const { return words().isEmpty() ? 8 : tabArea (words().size() - 1).getBottom() + headH - tabH; }
 
     juce::Rectangle<int> pileArea() const { return { 0, pileTop(), leftW, getHeight() - pileTop() - nameH }; }
 
@@ -390,7 +426,7 @@ private:
     {
         const auto area = pileArea().toFloat();
         float s = 1.0e6f;
-        for (const auto& pile : piles())
+        for (const auto& pile : shownPiles())
         {
             float w = 0, h = 0;
             for (const auto& column : pile)
@@ -416,7 +452,7 @@ private:
     {
         const auto area = pileArea().toFloat();
         const float s = pileScale();
-        const auto& pile = piles()[(size_t) family];
+        const auto& pile = shownPiles()[(size_t) juce::jlimit (0, (int) shownPiles().size() - 1, family)];
 
         float width = columnGapM * (float) (pile.size() - 1);
         for (const auto& column : pile)
@@ -472,7 +508,7 @@ private:
     void pileDown (const juce::MouseEvent& e)
     {
         const auto pos = e.getPosition();
-        for (int f = 0; f < families().size(); ++f)
+        for (int f = 0; f < words().size(); ++f)
             if (tabArea (f).contains (pos))
             {
                 family = f;
@@ -536,10 +572,10 @@ private:
     {
         // The families, as words to click: the one shown in the block's orange, the others faint.
         const auto font = theme::displayFont (13.0f);
-        for (int f = 0; f < families().size(); ++f)
+        for (int f = 0; f < words().size(); ++f)
         {
             g.setColour (f == family ? theme::orange : theme::txFaint);
-            theme::drawTracked (g, families()[f], tabArea (f).toFloat(), font, 0.08f, juce::Justification::centredLeft);
+            theme::drawTracked (g, words()[f], tabArea (f).toFloat(), font, 0.08f, juce::Justification::centredLeft);
         }
 
         const auto area = pileArea();

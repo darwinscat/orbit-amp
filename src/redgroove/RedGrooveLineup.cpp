@@ -26,7 +26,7 @@ const channels::Lineup& lineup()
     // threshold alone; OCTAVE, ENVELOPE and CHORUS in the strip and on — their sliders are their amounts, 0 the
     // dry; both cuts on — the switches choose between their positions; no delay and no room in the strip.
     static const channels::Lineup walker {
-        "walker", "walker_channel", "red-giant",
+        "walker", "walker_channel", "SVT-810",
         {
             { "B15", "sgt-di-19a4", "Plate", std::nullopt, 0.0f, false, { "Voice", "B15" } },
             { "SVT", "sgt-di-19a4", "Plate", std::nullopt, 0.0f, false, { "Voice", "SVT" } },
@@ -50,6 +50,7 @@ const channels::Lineup& lineup()
             { params::reverbPresent, 0.0f },
         },
         1,      // ...and it opens on SVT (the owner, 03.11)
+        true,   // ITS CABINETS ARE OURS, DRAWN — Ampeg's, nobody's files (the owner, 04.11) — opening on the 8x10
     };
     return walker;
 }

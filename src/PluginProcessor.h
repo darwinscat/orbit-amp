@@ -1275,6 +1275,8 @@ public:
     /** The rendered cabinet a choice plays, and where its mics stood — or `valid` false for any other IR. */
     struct CabSynthChoice { juce::String cab; CabSetup setup; bool valid = false; };
     static CabSynthChoice cabSynthOf (const CabChoice&);
+    static CabSynthChoice cabSynthOf (const juce::String& from);   // ...as its `from` says it, wherever that is kept
+    static juce::String cabSynthFrom (const juce::String& box, const CabSetup&);   // ...and the `from` a kept one is given
 
     /** TEMPORARY — the audition loop player. Goes with the demo strip it belongs to. */
     core::DemoPlayer demo;

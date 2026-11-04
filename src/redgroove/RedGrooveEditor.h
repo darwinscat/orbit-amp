@@ -93,13 +93,13 @@ private:
 
     // THE WALKER'S HAND ON THE CHANNELS AND THE CUTS. The lever picks the gear — and the number keys, a Program
     // Change, a host's CHANNEL with it; the two switches throw 5 STR / 4 STR and FINGERS / SLAP, each its frequency
-    // on its right click; the cabinet's screen names the cabinet that plays, its list on a click, the cabinets'
-    // window on a right click.
+    // on its right click; the cabinet's screen names the cabinet that plays, and a click on it opens the cabinets'
+    // window — Ampeg's, drawn.
     ChannelLever lever;
     SlideSwitch lowCut, highCut, ultraLo, ultraHi;
     CabinetScreen cabinet;
     void bindSwitch (SlideSwitch&, const char* paramId);
-    void showCabinetList();
+    void showCabinets();
 
     void showSelector (int channel) override;
     bool channelKey (const juce::KeyPress&) override;

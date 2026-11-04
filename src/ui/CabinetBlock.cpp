@@ -6,6 +6,7 @@
 #include "../PluginProcessor.h"
 #include "../device/IrLibrary.h"
 #include "BassControls.h"
+#include "CabWindow.h"
 #include "Prefs.h"
 #include "OnFirst.h"
 
@@ -266,15 +267,10 @@ void CabinetBlock::refreshIr (bool force, bool keepTrimWord)
     factoryIrs.repaint();
     myIrs.repaint();
 
-    // The pictures of the bass's cabinets — the panel's and the sketch over the IR — say which plays, and where its mics
-    // stand; none for any other IR.
+    // The sketch of the bass's cabinet over the IR says which plays, and where its mics stand; none for any other IR. The
+    // window's picture follows the state on its own (CabWindow).
     {
-        const auto spot = [] (const AmpProcessor::CabSpot& s) { return CabPicker::Spot { s.x, s.y, s.distance, s.horn, s.mic, s.angle, s.hornDb }; };
-        const auto& su = synth.setup;
-        const int cab = synth.valid ? CabPicker::indexOf (synth.cab) : -1;
-        const CabPicker::Setup setup { spot (su.a), su.blend > 0.0f ? spot (su.b) : CabPicker::Setup{}.b, su.blend, su.align, su.invert };
-        if (picker != nullptr)
-            picker->show (cab, setup);
+        const auto [cab, setup] = CabWindow::drawnOf (synth);
         sketch.cab = cab;
         sketch.setup = setup;
         sketch.repaint();
@@ -487,46 +483,7 @@ void CabinetBlock::showIrMenu (juce::Component* from)
 
 void CabinetBlock::showCabPanel()
 {
-    auto content = std::make_unique<CabPicker>();
-    content->setSize (CabPicker::panelW, CabPicker::panelH);
-
-    // The bass's own cabinets, rendered live with the mic where the hand put it (AmpProcessor::requestCabSynth).
-    const auto request = [this] (int cab, const CabPicker::Setup& setup, bool live)
-    {
-        const auto spot = [] (const CabPicker::Spot& s) { return AmpProcessor::CabSpot { s.x, s.y, s.distance, s.horn, s.mic, s.angle, s.hornDb }; };
-        amp.requestCabSynth (CabPicker::cabs()[(size_t) cab].name, { spot (setup.a), spot (setup.b), setup.blend, setup.align, setup.invert }, live);
-    };
-    content->onSetup = [request] (int cab, CabPicker::Setup setup) { request (cab, setup, false); };
-    content->onMove  = [request] (int cab, CabPicker::Setup setup) { request (cab, setup, true); };
-
-    content->onClose = [this] { if (pickerBox != nullptr) pickerBox->dismiss(); };
-
-    picker = content.get();
-    shownIr.clear();
-    refreshIr (true);   // what plays, shown in it
-
-    // Over the face above the block, its arrow at the block's top, inside the window where it fits: the block stays in
-    // sight, its picture and its name answering the hand.
-    const auto anchor = getScreenBounds();
-    auto& box = juce::CallOutBox::launchAsynchronously (std::move (content), anchor, nullptr);
-
-    // Ours, not JUCE's grey-green: the face's panel under it, the CAB's orange line round it and its arrow.
-    struct Look final : juce::LookAndFeel_V4
-    {
-        void drawCallOutBoxBackground (juce::CallOutBox&, juce::Graphics& g, const juce::Path& path, juce::Image&) override
-        {
-            g.setColour (theme::panel);
-            g.fillPath (path);
-            g.setColour (theme::orange);
-            g.strokePath (path, juce::PathStrokeType (1.2f));
-        }
-        float getCallOutBoxCornerSize (const juce::CallOutBox&) override { return 6.0f; }
-    };
-    static Look look;
-    box.setLookAndFeel (&look);
-    if (auto* top = getTopLevelComponent(); top != nullptr && box.getWidth() < top->getWidth() && box.getHeight() < top->getHeight())
-        box.updatePosition (anchor, top->getScreenBounds());
-    pickerBox = &box;
+    CabWindow::open (amp, *this, CabPicker::Range::all);
 }
 
 void CabinetBlock::pushToWave()
