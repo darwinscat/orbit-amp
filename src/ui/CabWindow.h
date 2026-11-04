@@ -33,9 +33,9 @@ public:
     /** ...and a box of CabPicker::cabs() with those mics asked of the engine: heard only while `live`, kept when not. */
     static void request (AmpProcessor&, int cab, const CabPicker::Setup&, bool live);
 
-    /** A rendered cabinet as a line says it: its box and the mics heard — "SVT-410HE · MD421", "+U87" with B heard
-        beside A, B's alone with A off. */
-    static juce::String labelOf (const AmpProcessor::CabSynthChoice&);
+    /** A rendered cabinet as a line says it: its box as the player reads it (CabPicker::wordOf, CLOSED or PORTED with
+        `kind`) and the mics heard — "4x10 · MD421", "+U87" with B heard beside A, B's alone with A off. */
+    static juce::String labelOf (const AmpProcessor::CabSynthChoice&, bool kind);
 
     void resized() override;
 

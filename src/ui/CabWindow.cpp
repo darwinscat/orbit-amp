@@ -36,7 +36,7 @@ void CabWindow::request (AmpProcessor& processor, int cab, const CabPicker::Setu
     processor.requestCabSynth (CabPicker::cabs()[(size_t) cab].name, engineOf (setup), live);
 }
 
-juce::String CabWindow::labelOf (const AmpProcessor::CabSynthChoice& synth)
+juce::String CabWindow::labelOf (const AmpProcessor::CabSynthChoice& synth, bool kind)
 {
     if (! synth.valid)
         return {};
@@ -44,7 +44,7 @@ juce::String CabWindow::labelOf (const AmpProcessor::CabSynthChoice& synth)
     const auto micOf = [at] (const AmpProcessor::CabSpot& s)
     { return (s.mic.isNotEmpty() ? s.mic : at >= 0 ? CabPicker::cabs()[(size_t) at].mic : juce::String()).toUpperCase(); };
     const auto& su = synth.setup;
-    return synth.cab + juce::String::fromUTF8 (" \xc2\xb7 ")
+    return (at >= 0 ? CabPicker::wordOf (at, kind) : synth.cab) + juce::String::fromUTF8 (" \xc2\xb7 ")
          + (su.aOn ? micOf (su.a) : juce::String()) + (su.aOn && su.bOn ? "+" : "") + (su.bOn ? micOf (su.b) : juce::String());
 }
 

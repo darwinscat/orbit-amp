@@ -623,10 +623,10 @@ RedGrooveEditor::RedGrooveEditor (AmpProcessor& p)
     cabinet.name = [this]
     {
         if (dragAt >= 0)
-            return CabWindow::labelOf (AmpProcessor::cabSynthOf (channels.slotFrom (dragAt)));
+            return CabWindow::labelOf (AmpProcessor::cabSynthOf (channels.slotFrom (dragAt)), false);
         if (! channels.cabinetOn())
             return juce::String ("OFF");
-        return CabWindow::labelOf (AmpProcessor::cabSynthOf (amp.cabChoice()));
+        return CabWindow::labelOf (AmpProcessor::cabSynthOf (amp.cabChoice()), false);   // one box of each size
     };
     cabinet.notches = channels.cabinetSlots();
     cabinet.notch   = [this] { return channels.cabinetSlot(); };

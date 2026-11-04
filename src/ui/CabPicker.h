@@ -164,6 +164,33 @@ public:
         return one;
     }
 
+    /** A BOX AS THE PLAYER READS IT: its speakers and their size — "4x10" — and no maker's model (the owner, 05.11); with
+        `kind`, where its family has two of that size, whether it is CLOSED or PORTED. The table's name stays the key a
+        state keeps. */
+    static juce::String wordOf (int cab, bool kind)
+    {
+        const auto sizeOf = [] (const Cab& c)
+        {
+            const int inches = c.radius > 0.15f ? 15 : c.radius > 0.12f ? 12 : c.radius > 0.095f ? 10 : c.radius > 0.07f ? 8 : 6;
+            return juce::String ((int) c.drivers.size()) + "x" + juce::String (inches);
+        };
+        const auto& c = cabs()[(size_t) cab];
+        const auto word = sizeOf (c);
+        if (! kind)
+            return word;
+        for (int i = 0; i < (int) cabs().size(); ++i)
+            if (i != cab && cabs()[(size_t) i].family == c.family && sizeOf (cabs()[(size_t) i]) == word)
+                return word + (sealed (c.name) ? " CLOSED" : " PORTED");
+        return word;
+    }
+
+    /** The boxes the table calls sealed (tools/cabgen/cabinets.txt, `alignment`); every other one is ported. */
+    static bool sealed (const juce::String& name)
+    {
+        static const juce::StringArray closed { "SVT-210AV", "SVT-410HE", "SVT-810", "OBC115", "OBC210", "OBC410", "OBC810" };
+        return closed.contains (name);
+    }
+
     /** Ampeg's six in the order of their size, as the walker's cabinet screen steps through them. */
     static const juce::StringArray& ampegLine()
     {
@@ -607,7 +634,7 @@ private:
         if (named >= 0)
         {
             g.setColour (named == chosen ? theme::tx : theme::txDim);
-            theme::drawTracked (g, cabs()[(size_t) named].name, row, font, 0.06f, juce::Justification::centredLeft);
+            theme::drawTracked (g, wordOf (named, range == Range::all), row, font, 0.06f, juce::Justification::centredLeft);
         }
     }
 
