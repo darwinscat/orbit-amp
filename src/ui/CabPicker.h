@@ -489,11 +489,18 @@ private:
 
     bool heardB() const { return setup_.blend > 0.0f; }
 
-    /** B's column taken up: B is heard, half and half, from the first touch. */
+    /** B's column taken up: B is heard, half and half, from the first touch — and stands on the other side of the cone
+        from A, not on top of it, where it was only waiting. */
     void takeUpB()
     {
-        if (! heardB())
-            setup_.blend = 0.5f;
+        if (heardB())
+            return;
+        setup_.blend = 0.5f;
+        if (std::hypot (setup_.b.x - setup_.a.x, setup_.b.y - setup_.a.y) < 0.4f)
+        {
+            setup_.b.x = setup_.a.x >= 0.0f ? -0.6f : 0.6f;
+            setup_.b.y = 0.0f;
+        }
     }
 
     void speakerDown (const juce::MouseEvent& e)
