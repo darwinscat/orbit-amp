@@ -229,7 +229,10 @@ baffle = 0.61, 0.56, 0.41
 driver_xy = 0/0.02
 effective_radius_m = 0.165
 equivalent_port_xy = 0/-0.22
-horn = absent
+# A horn of ours in its top corner, as the VB-115 has one — off unless the player turns it on (ui/CabPicker.h, hornOn).
+horn_xy = 0.22/0.20
+horn_crossover_hz = 3500
+horn_at_mic_db = -12
 coil_corner_hz = 1300
 breakup_hz = 800..4500
 woofer_lowpass_hz = 3200
@@ -371,7 +374,11 @@ chamber = 58, 2, 4
 baffle = 0.66, 1.22, 0.41
 driver_xy = -0.15/0.42, 0.15/0.42, -0.15/0.14, 0.15/0.14, -0.15/-0.14, 0.15/-0.14, -0.15/-0.42, 0.15/-0.42
 effective_radius_m = 0.105
-horn = absent
+# A horn of ours in the strip over the top pair, the only room the baffle has — off unless the player turns it on
+# (ui/CabPicker.h, hornOn).
+horn_xy = 0/0.565
+horn_crossover_hz = 4000
+horn_at_mic_db = -12
 coil_corner_hz = 1300
 breakup_hz = 1500..6500
 woofer_lowpass_hz = 4600
@@ -397,6 +404,14 @@ horn = absent
 
 [VB-410 cap horn-off]
 inherit = VB-410 cap
+horn = absent
+
+[SVT-15E cap horn-off]
+inherit = SVT-15E cap
+horn = absent
+
+[SVT-810 cap horn-off]
+inherit = SVT-810 cap
 horn = absent
 
 [SVT-210HE cap horn-off]

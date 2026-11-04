@@ -18,8 +18,9 @@ namespace orbitamp
 
     THE PILE: one family at a time (SVT, VENTURE, ORANGE, MARKBASS, MESA — words to click), its boxes to scale and stacked as a backline stands
     them, the small on the big; each with its speakers, its horn and its port where it has them; under them the chosen
-    box's name. A click on a box picks it, the mics staying where they stand; a click on the chosen box's horn turns the
-    horn off and on, its step kept.
+    box's name. A click on a box picks it, the mics staying where they stand, and the horn too — but a box whose horn
+    comes off (Cab::hornOn, the SVT-15E's and the 8x10's) takes it off, and the next box puts it back; a click on the
+    chosen box's horn turns the horn off and on, its step kept.
 
     THE SPEAKER: the chosen box's first speaker, flat, its neighbours at its edge, its horn big in the corner on the horn's
     side — the speaker moved away from it — and beside it HORN's attenuator, OFF -12 -6 0; the mics in perspective on
@@ -75,13 +76,14 @@ public:
         bool port = false;
         juce::Point<float> portAt;
         juce::String mic = "md421";              // the one its table's cap section stands
+        bool hornOn = true;                      // how its horn comes when the box is picked: the SVT-15E's and the 8x10's off
     };
 
     static const std::vector<Cab>& cabs()
     {
         using P = juce::Point<float>;
         static const std::vector<Cab> all {
-            { "SVT-15E",    0, 0.61f, 0.56f, { P (0, 0.02f) }, 0.165f, false, {}, true, P (0, -0.22f), "d112" },
+            { "SVT-15E",    0, 0.61f, 0.56f, { P (0, 0.02f) }, 0.165f, true, P (0.22f, 0.20f), true, P (0, -0.22f), "d112", false },
             { "SVT-210AV",  0, 0.33f, 0.61f, { P (0, 0.14f), P (0, -0.14f) }, 0.105f, false, {}, false, {} },
             { "SVT-210HE",  0, 0.61f, 0.46f, { P (-0.14f, 0), P (0.14f, 0) }, 0.105f, true, P (0, 0.16f), false, {} },
             { "SVT-410HE",  0, 0.61f, 0.66f, { P (-0.145f, 0.145f), P (0.145f, 0.145f), P (-0.145f, -0.145f), P (0.145f, -0.145f) },
@@ -93,7 +95,7 @@ public:
               0.105f, true, P (0, 0.175f), true, P (0, -0.45f) },
             { "SVT-810",    0, 0.66f, 1.22f, { P (-0.15f, 0.42f), P (0.15f, 0.42f), P (-0.15f, 0.14f), P (0.15f, 0.14f),
                                                 P (-0.15f, -0.14f), P (0.15f, -0.14f), P (-0.15f, -0.42f), P (0.15f, -0.42f) },
-              0.105f, false, {}, false, {}, "re20" },
+              0.105f, true, P (0, 0.565f), false, {}, "re20", false },
             { "VB-112",     1, 0.52f, 0.40f, { P (-0.09f, 0) }, 0.13f, true, P (0.17f, 0.08f), true, P (0.17f, -0.12f) },
             { "VB-115",     1, 0.56f, 0.58f, { P (0, -0.04f) }, 0.165f, true, P (0.18f, 0.19f), true, P (0, -0.25f), "d112" },
             { "VB-210",     1, 0.56f, 0.42f, { P (-0.135f, -0.02f), P (0.135f, -0.02f) }, 0.105f, true, P (0, 0.13f), true, P (0, -0.17f) },
@@ -486,7 +488,10 @@ private:
         if (at != chosen)
         {
             // The mics stay where they stand — the same cap, the same centimetres, on the box now chosen — the way a
-            // cabinet is compared; only a mic never chosen follows the box's own.
+            // cabinet is compared; only a mic never chosen follows the box's own. The horn as it stood, unless this box
+            // and the last come with theirs otherwise (Cab::hornOn): the SVT-15E's and the 8x10's go off, the next one's on.
+            if (chosen < 0 || cabs()[(size_t) chosen].hornOn != cabs()[(size_t) at].hornOn)
+                setup_.a.horn = cabs()[(size_t) at].hornOn;
             chosen = at;
             if (setup_.a.mic.isEmpty())
                 setup_.a.mic = cabs()[(size_t) at].mic;
@@ -900,6 +905,7 @@ private:
             disarmDefault();
             setup_ = {};
             setup_.a.mic = cabs()[(size_t) chosen].mic;
+            setup_.a.horn = cabs()[(size_t) chosen].hornOn;
             send();
             return;
         }
