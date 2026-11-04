@@ -94,17 +94,17 @@ private:
 
     // THE WALKER'S HAND ON THE CHANNELS AND THE CUTS. The lever picks the gear — and the number keys, a Program
     // Change, a host's CHANNEL with it; the two switches throw 5 STR / 4 STR and FINGERS / SLAP, each its frequency
-    // on its right click; the cabinet's screen names the cabinet that plays, a drag on it steps through Ampeg's six,
+    // on its right click; the cabinet's screen names the cabinet that plays over a slider, a notch each of Ampeg's six,
     // drawn, and its chevron opens their window.
     ChannelLever lever;
     SlideSwitch lowCut, highCut, ultraLo, ultraHi;
     CabinetScreen cabinet;
     void bindSwitch (SlideSwitch&, const char* paramId);
     void showCabinets();
-    void dragCabinet (int steps);
-    void keepDraggedCabinet();
-    int dragFrom = 0, dragAt = -1, dragFromCab = -1;   // the drag's: where in CabPicker::ampegLine it began, where it is
-    CabPicker::Setup dragSetup;                        // ...and the mics as they stood when the hand took hold
+    void hearCabinetAt (int notch);
+    void keepCabinetAt (int notch);
+    int dragAt = -1, dragFromCab = -1;     // the slider's under the hand: its notch in CabPicker::ampegLine, the box it left
+    CabPicker::Setup dragSetup;            // ...and the mics as they stood when the hand took hold
 
     void showSelector (int channel) override;
     bool channelKey (const juce::KeyPress&) override;

@@ -256,9 +256,47 @@ void SlideSwitch::mouseDown (const juce::MouseEvent& e)
 }
 
 //==============================================================================
-CabinetScreen::CabinetScreen (const face::Ink& i) : ink (i)
+CabinetScreen::CabinetScreen (const face::Ink& i, const juce::Image& cap) : ink (i), slider (cap)
 {
+    // The slider: MIDDLE's frequency's, smaller, a mark a notch and none drawn longer.
+    slider.setAcross (true);
+    slider.scale = 0.7f;
+    slider.capLength = 10.0f;
+    slider.capSquash = 0.5f;
+    slider.marks = notches - 1;
+    slider.longMark = -1;
+    slider.onGestureStart = [this] { moving = notch != nullptr ? notch() : -1; };
+    slider.onChange = [this] (float t)
+    {
+        const int at = juce::jlimit (0, notches - 1, juce::roundToInt (t * last()));
+        if (at == moving)
+            return;
+        moving = at;
+        if (onMove)
+            onMove (at);
+        refresh();
+    };
+    slider.onGestureEnd = [this]
+    {
+        // Settled in the nearest notch — kept even where it began, the sound having passed through others.
+        const int at = juce::jlimit (0, notches - 1, juce::roundToInt (slider.getValue() * last()));
+        moving = -1;
+        slider.setValue ((float) at / last(), false);
+        if (onLetGo)
+            onLetGo (at);
+        refresh();
+    };
+    slider.onMenu = [this] { if (onMenu) onMenu(); };
+    addAndMakeVisible (slider);
     startTimerHz (4);
+}
+
+void CabinetScreen::resized()
+{
+    slider.marks = notches - 1;
+    slider.handLight = handLight;
+    const auto r = getLocalBounds();
+    slider.setBounds (r.withTrimmedRight (juce::roundToInt (chevronRoom) + 4).withTrimmedLeft (4).withTrimmedTop (juce::roundToInt (nameH) - 2));
 }
 
 void CabinetScreen::refresh()
@@ -269,22 +307,27 @@ void CabinetScreen::refresh()
         shown = now;
         repaint();
     }
+    // The cap where the cabinet that plays stands — unless the hand has it.
+    if (moving < 0 && notch != nullptr)
+        if (const int at = notch(); at >= 0 && std::abs (slider.getValue() - (float) at / last()) > 0.001f)
+            slider.setValue ((float) at / last(), false);
 }
 
 void CabinetScreen::paint (juce::Graphics& g)
 {
+    // The name over the slider, from its left edge — squeezed where it is wider than the room.
     const auto r = getLocalBounds().toFloat();
-    const auto text = r.withTrimmedLeft (12.0f).withTrimmedRight (chevronRoom + 6.0f);
+    const auto text = r.withTrimmedLeft (12.0f).withTrimmedRight (chevronRoom + 6.0f).withTrimmedTop (1.0f).withHeight (nameH);
     const float wide = juce::GlyphArrangement::getStringWidth (face::labelFont (face::stage::px13).withExtraKerningFactor (0.04f), shown);
     {
         const juce::Graphics::ScopedSaveState keep (g);
         if (wide > text.getWidth())
             g.addTransform (juce::AffineTransform::scale (text.getWidth() / wide, 1.0f, text.getX(), text.getCentreY()));
-        writeAsIs (g, ink, shown, juce::Rectangle<float> (wide + 4.0f, text.getHeight()).withPosition (text.getTopLeft()),     // from its left edge
+        writeAsIs (g, ink, shown, juce::Rectangle<float> (wide + 4.0f, text.getHeight()).withPosition (text.getTopLeft()),
                    face::stage::px13, shown == "OFF" ? ink.at (ink.values, 0.45f) : ink.values);
     }
 
-    // The divider and the chevron: what a click opens — the name left of it, what a drag steps.
+    // The divider and the chevron: what a click opens.
     const float x = r.getRight() - chevronRoom;
     g.setColour (juce::Colour (0xff51465f));
     g.fillRect (x, r.getY() + 4.0f, 1.2f, r.getHeight() - 8.0f);
@@ -296,10 +339,10 @@ void CabinetScreen::paint (juce::Graphics& g)
     g.setColour (ink.words);
     g.strokePath (chevron, juce::PathStrokeType (2.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
 
-    if (isMouseOver() && ! handLight.isTransparent())
+    if (isMouseOver() && onChevron (getMouseXYRelative().toFloat()) && ! handLight.isTransparent())
     {
         juce::Path rim;
-        rim.addRoundedRectangle (r.reduced (1.0f), 5.0f);
+        rim.addRoundedRectangle (juce::Rectangle<float> (x + 2.0f, r.getY() + 2.0f, chevronRoom - 4.0f, r.getHeight() - 4.0f), 5.0f);
         face::drawHandRim (g, rim, handLight);
     }
 }
@@ -311,45 +354,14 @@ void CabinetScreen::mouseDown (const juce::MouseEvent& e)
         if (onMenu)
             onMenu();
     }
-    else if (onChevron (e.position))
-    {
-        if (onClick)
-            onClick();
-    }
-    else
-    {
-        holding = true;
-        steps = 0;
-        moved = false;
-    }
-}
-
-void CabinetScreen::mouseDrag (const juce::MouseEvent& e)
-{
-    if (! holding)
-        return;
-    const int now = juce::roundToInt ((float) e.getDistanceFromDragStartX() / stepPx);
-    if (now != steps)
-    {
-        steps = now;
-        moved = true;
-        if (onDrag)
-            onDrag (steps);
-    }
-}
-
-void CabinetScreen::mouseUp (const juce::MouseEvent&)
-{
-    if (! holding)
-        return;
-    holding = false;
-    if (moved && onDragEnd)
-        onDragEnd();
+    else if (onChevron (e.position) && onClick)
+        onClick();
 }
 
 void CabinetScreen::mouseMove (const juce::MouseEvent& e)
 {
-    setMouseCursor (onChevron (e.position) ? juce::MouseCursor::PointingHandCursor : juce::MouseCursor::LeftRightResizeCursor);
+    setMouseCursor (onChevron (e.position) ? juce::MouseCursor::PointingHandCursor : juce::MouseCursor::NormalCursor);
+    repaint();
 }
 
 } // namespace orbitamp::redgroove

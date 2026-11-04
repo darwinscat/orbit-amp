@@ -129,43 +129,43 @@ private:
     int shown() const noexcept { return reversed ? count - 1 - at : at; }   // where the cap stands, left to right
 };
 
-/** THE CABINET'S SCREEN: the name of the cabinet that plays — OFF while it is out of the sound — and a chevron at its
-    right end. The name dragged left and right steps through the cabinets, a step every `stepPx` of the hand's travel
-    (onDrag, with the steps from where it took hold; onDragEnd when it lets go); the chevron clicked opens the cabinets'
-    window (onClick), and so does a right click anywhere on it (onMenu). Asks for the name four times a second, and
-    draws it again when it is another. */
+/** THE CABINET'S SCREEN: the name of the cabinet that plays — OFF while it is out of the sound — over a slider lying
+    across, a notch a cabinet (the faders' own, MIDDLE's frequency's look), and a chevron at its right end. The cap moved
+    is heard at the notch nearest it (onMove) and kept at the one it settles in when the hand lets go (onLetGo); the
+    chevron clicked opens the cabinets' window (onClick), and so does a right click anywhere on it (onMenu). Asks for the
+    name and the notch four times a second, and draws them again when they are others. */
 class CabinetScreen final : public juce::Component, private juce::Timer
 {
 public:
-    explicit CabinetScreen (const face::Ink&);
+    CabinetScreen (const face::Ink&, const juce::Image& cap);
 
     std::function<juce::String()> name;
+    std::function<int()> notch;                 // the one the cabinet that plays stands at; -1 for none of them
+    int notches = 6;
+    std::function<void (int)> onMove, onLetGo;
     std::function<void()> onClick, onMenu;
-    std::function<void (int steps)> onDrag;
-    std::function<void()> onDragEnd;
     juce::Colour handLight;
 
     /** What it says now. */
     const juce::String& says() const noexcept { return shown; }
 
     void paint (juce::Graphics&) override;
+    void resized() override;
     void mouseDown (const juce::MouseEvent&) override;
-    void mouseDrag (const juce::MouseEvent&) override;
-    void mouseUp (const juce::MouseEvent&) override;
     void mouseMove (const juce::MouseEvent&) override;
     void mouseEnter (const juce::MouseEvent&) override { repaint(); }
     void mouseExit (const juce::MouseEvent&) override  { repaint(); }
 
-    /** Asks for the name now, rather than at the next tick. */
+    /** Asks for the name and the notch now, rather than at the next tick. */
     void refresh();
 
 private:
-    static constexpr float chevronRoom = 34.0f, stepPx = 40.0f;     // the name's width: the six cabinets in one sweep
+    static constexpr float chevronRoom = 34.0f, nameH = 15.0f;
     const face::Ink ink;
+    face::ColumnFader slider;
     juce::String shown;
-    bool holding = false;       // the hand took hold of the name, and has not let go
-    int steps = 0;              // ...how many steps it has it moved now
-    bool moved = false;         // ...and whether it has moved it at all: back where it began is still a cabinet to keep
+    int moving = -1;            // the notch under the hand while it holds the cap; -1 when it does not
+    float last () const noexcept { return (float) juce::jmax (1, notches - 1); }
     bool onChevron (juce::Point<float> p) const { return p.x >= (float) getWidth() - chevronRoom; }
     void timerCallback() override { refresh(); }
 };

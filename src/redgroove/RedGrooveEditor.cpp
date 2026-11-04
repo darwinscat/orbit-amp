@@ -356,7 +356,7 @@ RedGrooveEditor::RedGrooveEditor (AmpProcessor& p)
       highCut (cabinInk(), "STYL", "F", "S"),
       ultraLo (cabinInk(), "U-LO", "-", "+", 3),
       ultraHi (cabinInk(), "U-HI", "0", "+", 2),
-      cabinet (cabinInk())
+      cabinet (cabinInk(), Art::of().faderCap)
 {
     // Everything this constructor sets is the face settling onto the state, not a player's edit.
     const felitronics::appkit::CompareHistory::ScopedSuppress settling (amp.history);
@@ -588,8 +588,9 @@ RedGrooveEditor::RedGrooveEditor (AmpProcessor& p)
     highCut.setComponentID ("highCut");
 
 
-    // THE CABINET'S SCREEN: the cabinet that plays, by its box's name — the one under the hand while it drags, OFF while
-    // the cabinet is out of the sound. Dragged, it steps through Ampeg's six; its chevron opens their window.
+    // THE CABINET'S SCREEN: the cabinet that plays, by its box's name — the one under the hand while it moves the slider,
+    // OFF while the cabinet is out of the sound — over the slider, a notch each of Ampeg's six; its chevron opens their
+    // window.
     cabinet.name = [this]
     {
         if (dragAt >= 0)
@@ -599,10 +600,12 @@ RedGrooveEditor::RedGrooveEditor (AmpProcessor& p)
         const auto synth = AmpProcessor::cabSynthOf (amp.cabChoice());
         return synth.valid ? synth.cab : juce::String();
     };
-    cabinet.onClick   = [this] { showCabinets(); };
-    cabinet.onMenu    = [this] { showCabinets(); };
-    cabinet.onDrag    = [this] (int steps) { dragCabinet (steps); };
-    cabinet.onDragEnd = [this] { keepDraggedCabinet(); };
+    cabinet.notches = CabPicker::ampegLine().size();
+    cabinet.notch   = [this] { return CabPicker::ampegLine().indexOf (AmpProcessor::cabSynthOf (amp.cabChoice()).cab); };
+    cabinet.onClick = [this] { showCabinets(); };
+    cabinet.onMenu  = [this] { showCabinets(); };
+    cabinet.onMove  = [this] (int at) { hearCabinetAt (at); };
+    cabinet.onLetGo = [this] (int at) { keepCabinetAt (at); };
     cabinet.handLight = handLight;
     addToStage (cabinet);
     cabinet.setBounds (layout::cabinetScreen.reduced (3.0f).toNearestInt());
@@ -694,39 +697,32 @@ void RedGrooveEditor::bindSwitch (SlideSwitch& sw, const char* paramId)
     a->sendInitialUpdate();
 }
 
-/** THE SCREEN DRAGGED: Ampeg's six in the order of their size, `steps` from the one that played when the hand took hold,
-    each heard as it comes — not kept — with the mics as a pick in the pile takes them (CabPicker::pickedWith). */
-void RedGrooveEditor::dragCabinet (int steps)
+/** THE SCREEN'S SLIDER MOVED: the cabinet at notch `at` of Ampeg's six, heard as the cap comes to it — not kept — with
+    the mics as they stood when the hand took hold, as a pick in the pile takes them (CabPicker::pickedWith). */
+void RedGrooveEditor::hearCabinetAt (int at)
 {
-    const auto& line = CabPicker::ampegLine();
     if (dragAt < 0)
     {
         const auto [cab, setup] = CabWindow::drawnOf (AmpProcessor::cabSynthOf (amp.cabChoice()));
         dragFromCab = cab;
         dragSetup = setup;
-        dragFrom = juce::jmax (0, cab >= 0 ? line.indexOf (CabPicker::cabs()[(size_t) cab].name) : 0);
     }
-    const int at = juce::jlimit (0, line.size() - 1, dragFrom + steps);
-    if (at == dragAt)
-        return;
     dragAt = at;
-    const int cab = CabPicker::indexOf (line[at]);
+    const int cab = CabPicker::indexOf (CabPicker::ampegLine()[at]);
     CabWindow::request (amp, cab, CabPicker::pickedWith (dragFromCab, cab, dragSetup), true);
-    cabinet.refresh();
 }
 
-/** ...and let go: the one under the hand kept — even the one it began on, the sound having passed through others — and
-    the cabinet back in the sound. One step of the history. */
-void RedGrooveEditor::keepDraggedCabinet()
+/** ...and let go in notch `at`: that one kept — even the one it began on, the sound having passed through others — and
+    the cabinet back in the sound. One step of the history. A click on the slider that moved nothing keeps nothing. */
+void RedGrooveEditor::keepCabinetAt (int at)
 {
     if (dragAt >= 0)
     {
-        const int cab = CabPicker::indexOf (CabPicker::ampegLine()[dragAt]);
+        const int cab = CabPicker::indexOf (CabPicker::ampegLine()[at]);
         CabWindow::request (amp, cab, CabPicker::pickedWith (dragFromCab, cab, dragSetup), false);
         channels.setCabinetOn (true);
     }
     dragAt = -1;
-    cabinet.refresh();
 }
 
 /** THE CABINETS, ON THE SCREEN'S CHEVRON: Ampeg's, drawn, in the window OrbitBass's are in (ui/CabWindow.h). A cabinet
