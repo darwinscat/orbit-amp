@@ -1177,6 +1177,7 @@ void AmpProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
         limiterCeilingSet = 1.0e9f;
     }
 
+    cab.setReference (ownProduct.chain == Chain::bass ? core::CabinetIr::Reference::bass : core::CabinetIr::Reference::guitar);
     cab.prepare (sampleRate, block, channels);
     cabIrStale = true;   // the pump reloads the chosen IR into the freshly prepared engine
 

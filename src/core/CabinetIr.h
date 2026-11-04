@@ -38,7 +38,8 @@ namespace orbitamp::core
     Level: the family reference-unity contract (felitronics::measurement::referenceUnityGain),
     the same one OrbitCab ships — the IR passes the guitar-band reference at unity RMS, so a cab
     contributes TONE, not gain, and swapping cabinets compares voicings at matched loudness. Taken
-    after the post, so a cut IR is as loud as the whole one was. JUCE's Normalise::yes is NOT
+    after the post, so a cut IR is as loud as the whole one was. A bass amp's cabinet passes the
+    bass's reference instead (Reference::bass, bassUnityGain). JUCE's Normalise::yes is NOT
     usable here: it scales the IR to 0.125 total energy (−18 dB full-band), which lands a
     band-limited guitar signal ~12 dB low and drifts with the session rate. Never load a cab IR
     raw either — 61k taps sum to enormous gain; the reference gain is clamped ±30 dB.
@@ -140,6 +141,21 @@ public:
     }
 
     const Post& currentPost() const noexcept { return post; }
+
+    /** What the IR's level is taken against: the guitar's band, or the bass's (bassUnityGain). Message thread. */
+    enum class Reference { guitar, bass };
+
+    void setReference (Reference r)
+    {
+        const std::scoped_lock lock (producer);
+
+        if (r == reference)
+            return;
+
+        reference = r;
+        if (raw.getNumSamples() > 0)
+            rebuild();
+    }
 
     void process (float* const* io, int numChannels, int numSamples, bool on)
     {
@@ -387,6 +403,50 @@ private:
         return taps;
     }
 
+    /** THE BASS'S UNITY: the gain that passes the bass's reference at unity RMS — white noise through second-order
+        Butterworth cuts at 40 and 120 Hz, the band a bass line's fundamentals fill. The guitar's reference weighs the
+        top that a bass cabinet rolls off, and left every one of them 4 to 8 dB hot on a real bass line (the owner's
+        TTMMPP take, DI and through an SVT); against this one the bass's own boxes, York's and OwnHammer's shots all land
+        within a dB of unity on it. The family's arithmetic otherwise (felitronics::measurement::referenceUnityGain): the
+        first second, the same clamp, a near-silent shot left alone. */
+    static float bassUnityGain (const float* taps, int numSamples, double rate)
+    {
+        namespace m = felitronics::measurement;
+        constexpr double low = 40.0, high = 120.0;
+
+        if (taps == nullptr || numSamples <= 0 || rate <= 0.0)
+            return 1.0f;
+
+        const int cap = juce::jmin (numSamples, (int) std::lround (m::kIrAnalysisSeconds * rate));
+        int n = 256;
+        while (n < cap * 2 && n < (1 << 21))
+            n <<= 1;
+
+        felitronics::core::fft::DefaultRealFft fft;
+        if (! fft.prepare (n))
+            return 1.0f;
+
+        std::vector<float> padded ((size_t) n, 0.0f), spec ((size_t) felitronics::core::fft::DefaultRealFft::spectrumFloats (n));
+        std::copy_n (taps, cap, padded.begin());
+        fft.forward (padded.data(), spec.data());
+
+        double num = 0.0, den = 0.0;
+        for (int k = 1; k < n / 2; ++k)
+        {
+            const double f = (double) k * rate / n, a = f / high, b = low / f;
+            const double w = 1.0 / ((1.0 + a * a * a * a) * (1.0 + b * b * b * b));
+            num += w * ((double) spec[(size_t) (2 * k)] * spec[(size_t) (2 * k)] + (double) spec[(size_t) (2 * k + 1)] * spec[(size_t) (2 * k + 1)]);
+            den += w;
+        }
+
+        const double gSq = den > 0.0 ? num / den : 0.0;
+        if (gSq < std::pow (10.0, m::kIrRefFloorDb / 10.0))
+            return 1.0f;
+
+        const float gDb = (float) (-10.0 * std::log10 (gSq));
+        return std::pow (10.0f, juce::jlimit (m::kIrNormMinDb, m::kIrNormMaxDb, gDb) / 20.0f);
+    }
+
     /** What the player does to the IR, over taps at `rate`: the trim, the cuts, the sign. */
     void bake (std::vector<float>& ir, double rate) const
     {
@@ -463,7 +523,8 @@ private:
         // cabinet would come out a tenth of a dB apart at 48 and 96 kHz.
         std::vector<float> own (raw.getReadPointer (0), raw.getReadPointer (0) + raw.getNumSamples());
         bake (own, rawRate);
-        const float gain = felitronics::measurement::referenceUnityGain (own.data(), (int) own.size(), rawRate);
+        const float gain = reference == Reference::bass ? bassUnityGain (own.data(), (int) own.size(), rawRate)
+                                                        : felitronics::measurement::referenceUnityGain (own.data(), (int) own.size(), rawRate);
 
         // What this speaker goes on saying after the guitar stops — the plugin has to be able to
         // tell a host, and an impulse is exactly as long as it is. The silence cut below may shorten
@@ -521,6 +582,7 @@ private:
     double rawRate = 48000.0;
     std::vector<float> atHost;       // the shot at the session's rate — see shotAtHost
     Post post;
+    Reference reference = Reference::guitar;
 };
 
 } // namespace orbitamp::core
