@@ -150,6 +150,31 @@ inherit = VB-210 cap, pos-edge
 [VB-210 offaxis]
 inherit = VB-210 cap, mic-sm57, pos-offaxis
 
+[VB-212 cap]
+inherit = defaults, mic-md421, pos-cap
+seed = 21201
+alignment = ported
+ts = 45, 0.38, 55
+chamber = 75, 2, 1
+fb_hz = 42
+baffle = 0.63, 0.48, 0.40
+driver_xy = -0.155/-0.02, 0.155/-0.02
+effective_radius_m = 0.13
+equivalent_port_xy = 0/-0.19
+horn_xy = 0/0.16
+horn_crossover_hz = 4000
+horn_at_mic_db = -12
+coil_corner_hz = 1800
+breakup_hz = 1300..6500
+woofer_lowpass_hz = 5500
+body_eq = 300/0.8/-1.5, 900/1/1.5
+cavity_modes = 300/5/0.10, 470/4/-0.08, 650/5/0.06
+panel_modes = 170/3/0.06
+[VB-212 edge]
+inherit = VB-212 cap, pos-edge
+[VB-212 offaxis]
+inherit = VB-212 cap, mic-sm57, pos-offaxis
+
 [VB-410 cap]
 inherit = defaults, mic-md421, pos-cap
 seed = 41001
@@ -370,4 +395,37 @@ horn = absent
 
 [SVT-610HLF cap horn-off]
 inherit = SVT-610HLF cap
+horn = absent
+
+# Venture's 8x8: eight 8" neodymium cones in two columns, front-ported, its HF driver between them. Class-typical
+# numbers: the maker gives no dimensions or response.
+[VB-88 cap]
+inherit = defaults, mic-md421, pos-cap
+seed = 88001
+alignment = ported
+ts = 62, 0.40, 10
+chamber = 115, 8, 1
+fb_hz = 48
+baffle = 0.56, 0.98, 0.42
+driver_xy = -0.13/0.33, 0.13/0.33, -0.13/0.11, 0.13/0.11, -0.13/-0.11, 0.13/-0.11, -0.13/-0.33, 0.13/-0.33
+effective_radius_m = 0.085
+equivalent_port_xy = 0/-0.45
+horn_xy = 0/0
+horn_crossover_hz = 4000
+horn_at_mic_db = -12
+coil_corner_hz = 2400
+breakup_hz = 2000..8000
+woofer_lowpass_hz = 6500
+body_eq = 300/0.8/-1, 1100/1/2
+cavity_modes = 260/5/0.08, 360/5/-0.08, 520/4/0.06
+panel_modes = 150/3/0.05
+[VB-88 edge]
+inherit = VB-88 cap, pos-edge
+[VB-88 offaxis]
+inherit = VB-88 cap, mic-sm57, pos-offaxis
+[VB-212 cap horn-off]
+inherit = VB-212 cap
+horn = absent
+[VB-88 cap horn-off]
+inherit = VB-88 cap
 horn = absent
