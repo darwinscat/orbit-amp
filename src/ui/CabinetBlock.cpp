@@ -246,19 +246,12 @@ void CabinetBlock::refreshIr (bool force, bool keepTrimWord)
 
     // ...and a number the product does not play (Product::playsCabIr) is no cabinet: a bass amp with none of
     // its own plays no IR at all, and says so rather than a guitar cabinet's name. One of the bass's cabinets says
-    // the mics heard too: "SVT-410HE · MD421", "+U87" with B heard beside A, B's alone with A off.
+    // the mics heard too (CabWindow::labelOf).
     const auto synth = AmpProcessor::cabSynthOf (choice);
     const bool factoryPlays = ! choice.isUser() && amp.product().playsCabIr (choice.factory);
     juce::String shown = choice.isUser() ? choice.name : factoryPlays ? juce::String (params::cabIrNames[choice.factory]) : juce::String (noIr);
     if (synth.valid)
-    {
-        const int at = CabPicker::indexOf (synth.cab);
-        const auto micOf = [at] (const AmpProcessor::CabSpot& s)
-        { return (s.mic.isNotEmpty() ? s.mic : at >= 0 ? CabPicker::cabs()[(size_t) at].mic : juce::String()).toUpperCase(); };
-        const auto& su = synth.setup;
-        shown = synth.cab + juce::String::fromUTF8 (" \xc2\xb7 ")
-              + (su.aOn ? micOf (su.a) : juce::String()) + (su.aOn && su.bOn ? "+" : "") + (su.bOn ? micOf (su.b) : juce::String());
-    }
+        shown = CabWindow::labelOf (synth);
     ir.setEntries ({ { shown, 0, false } });
     ir.setSelection (0);
 

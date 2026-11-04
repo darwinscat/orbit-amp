@@ -22,9 +22,10 @@ class CabWindow final : public juce::Component,
                         private juce::Timer
 {
 public:
-    /** Opens it over `anchor`, offering `range`. `picked`, when given, is told of every cabinet kept — the walker brings
-        its cabinet back into the sound by it. */
-    static void open (AmpProcessor&, juce::Component& anchor, CabPicker::Range range, std::function<void()> picked = {});
+    /** Opens it over `anchor`, offering `range`. `kept`, when given, is told of every cabinet kept, by the `from` it is
+        kept under — the walker puts it in the slot playing by it, and brings the cabinet back into the sound. */
+    using Kept = std::function<void (const juce::String& from)>;
+    static void open (AmpProcessor&, juce::Component& anchor, CabPicker::Range range, Kept kept = {});
 
     /** A rendered cabinet as the pictures draw it: its box, -1 for none of ours, and its mics. */
     static std::pair<int, CabPicker::Setup> drawnOf (const AmpProcessor::CabSynthChoice&);
@@ -32,15 +33,19 @@ public:
     /** ...and a box of CabPicker::cabs() with those mics asked of the engine: heard only while `live`, kept when not. */
     static void request (AmpProcessor&, int cab, const CabPicker::Setup&, bool live);
 
+    /** A rendered cabinet as a line says it: its box and the mics heard — "SVT-410HE · MD421", "+U87" with B heard
+        beside A, B's alone with A off. */
+    static juce::String labelOf (const AmpProcessor::CabSynthChoice&);
+
     void resized() override;
 
 private:
-    CabWindow (AmpProcessor&, CabPicker::Range, std::function<void()> picked);
+    CabWindow (AmpProcessor&, CabPicker::Range, Kept kept);
     void timerCallback() override;
 
     AmpProcessor& amp;
     CabPicker picker;
-    std::function<void()> picked;
+    Kept kept;
     juce::String showing;   // the state's cabinet the picker was last shown
 };
 

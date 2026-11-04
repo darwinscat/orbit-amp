@@ -35,18 +35,14 @@ struct Lineup
             const char* value   = nullptr;
         } held {};
 
-        /** ITS OWN CABINET, where the product's cabinets are drawn (drawnCabinets): the box the channel opens on, never
-            visited, with the box's own mic at its cap and its horn on or off — the lineup's openingCabinet when not said. */
-        struct Cabinet
-        {
-            const char* box = nullptr;
-            bool horn = true;
-        } cabinet {};
+        /** ITS CABINET'S SLOT, where the product's cabinets are drawn (drawnCabinets): the one of `cabinets` the
+            channel stands at, never visited. */
+        int cabinet = 0;
     };
 
     const char* nodeType;       // the product's node in the state tree, where the channels' memory is kept
     const char* parameterId;    // CHANNEL, the host's handle on the selector
-    const char* openingCabinet; // the cabinet a channel opens on, by the stem of its file's name (drawnCabinets: its box's)
+    const char* openingCabinet; // the cabinet a channel opens on, by the stem of its file's name (drawnCabinets: its slot)
 
     std::vector<Channel> channels;
 
@@ -79,10 +75,18 @@ struct Lineup
     const Channel& opener() const { return channels[(size_t) juce::jlimit (0, count() - 1, opensAt)]; }
 
     /** CABINETS DRAWN, NOT FILES: the walker plays the bass's own rendered cabinets alone (ui/CabWindow.h, Ampeg's pile)
-        — no file of the build's, none of the player's — and a channel keeps its cabinet as its mics stood (the state's
-        `from`, AmpProcessor::cabSynthOf), opening on its own box (Channel::cabinet) — or on `openingCabinet`, then a
-        box's name, with its own mic at its cap. */
+        — no file of the build's, none of the player's. */
     bool drawnCabinets = false;
+
+    /** ...IN SLOTS: so many cabinets, each a box and its mics as the player sets them in the window — one set for every
+        channel, kept in the state (Channels::slotFrom) — and each channel standing at one of them (Channel::cabinet).
+        What each slot holds until the player says otherwise: its box, the box's own mic at its cap, the horn on or off. */
+    struct Cabinet
+    {
+        const char* box = nullptr;
+        bool horn = true;
+    };
+    std::vector<Cabinet> cabinets {};
 
     int count() const noexcept { return (int) channels.size(); }
 };

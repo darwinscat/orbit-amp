@@ -219,6 +219,18 @@ public:
         that is an edit. */
     void align();
 
+    /** DRAWN CABINETS' SLOTS (Lineup::drawnCabinets, Lineup::cabinets): how many; the one the playing channel stands at;
+        and what one holds, as a `from` (AmpProcessor::cabSynthOf) — the player's, kept in the state, or the lineup's. */
+    int cabinetSlots() const noexcept { return (int) line.cabinets.size(); }
+    int cabinetSlot() const;
+    juce::String slotFrom (int slot) const;
+
+    /** A slot heard and not kept — the hand on its way along the slider; the playing channel moved to a slot, its
+        cabinet rendered and kept; and the slot it stands at given what the window kept. */
+    void hearSlot (int slot);
+    void chooseSlot (int slot);
+    void keepInSlot (const juce::String& from);
+
     /** The type of the product's node in the state tree. */
     juce::Identifier nodeType() const { return line.nodeType; }
 
@@ -250,9 +262,9 @@ private:
     void chooseCabinetNamed (const juce::String& stem);   // ...or the one a channel opens on, when that one is not here
 
     // DRAWN CABINETS (Lineup::drawnCabinets): the one playing as its `from` says it — or the one asked for and still
-    // rendering, so a channel left before it lands keeps what it was given — and a record's, rendered again.
+    // rendering — and a slot's, rendered and kept.
     juce::String drawnPlaying() const;
-    void playDrawn (const juce::String& from, int channel);   // ...or, empty or none of ours, the box `channel` opens on
+    void playDrawn (const juce::String& from);
     mutable juce::String drawnAsked, drawnOver;           // the one asked for, and the state's `from` when it was asked
 
     juce::ValueTree node() const;

@@ -23,22 +23,40 @@ std::pair<int, CabPicker::Setup> CabWindow::drawnOf (const AmpProcessor::CabSynt
                     su.aOn, su.bOn } };
 }
 
-void CabWindow::request (AmpProcessor& processor, int cab, const CabPicker::Setup& setup, bool live)
+namespace
 {
-    processor.requestCabSynth (CabPicker::cabs()[(size_t) cab].name,
-                         { toEngine (setup.a), toEngine (setup.b), setup.blend, setup.align, setup.invert, setup.aOn, setup.bOn },
-                         live);
+    AmpProcessor::CabSetup engineOf (const CabPicker::Setup& s)
+    {
+        return { toEngine (s.a), toEngine (s.b), s.blend, s.align, s.invert, s.aOn, s.bOn };
+    }
 }
 
-CabWindow::CabWindow (AmpProcessor& a, CabPicker::Range range, std::function<void()> p)
-    : amp (a), picker (range), picked (std::move (p))
+void CabWindow::request (AmpProcessor& processor, int cab, const CabPicker::Setup& setup, bool live)
+{
+    processor.requestCabSynth (CabPicker::cabs()[(size_t) cab].name, engineOf (setup), live);
+}
+
+juce::String CabWindow::labelOf (const AmpProcessor::CabSynthChoice& synth)
+{
+    if (! synth.valid)
+        return {};
+    const int at = CabPicker::indexOf (synth.cab);
+    const auto micOf = [at] (const AmpProcessor::CabSpot& s)
+    { return (s.mic.isNotEmpty() ? s.mic : at >= 0 ? CabPicker::cabs()[(size_t) at].mic : juce::String()).toUpperCase(); };
+    const auto& su = synth.setup;
+    return synth.cab + juce::String::fromUTF8 (" \xc2\xb7 ")
+         + (su.aOn ? micOf (su.a) : juce::String()) + (su.aOn && su.bOn ? "+" : "") + (su.bOn ? micOf (su.b) : juce::String());
+}
+
+CabWindow::CabWindow (AmpProcessor& a, CabPicker::Range range, Kept k)
+    : amp (a), picker (range), kept (std::move (k))
 {
     // The bass's own cabinets, rendered with the mics where the hand put them.
     picker.onSetup = [this] (int cab, CabPicker::Setup setup)
     {
         request (amp, cab, setup, false);
-        if (picked != nullptr)
-            picked();
+        if (kept != nullptr)
+            kept (AmpProcessor::cabSynthFrom (CabPicker::cabs()[(size_t) cab].name, engineOf (setup)));
     };
     picker.onMove  = [this] (int cab, CabPicker::Setup setup) { request (amp, cab, setup, true); };
     picker.onClose = [this] { if (auto* box = findParentComponentOfClass<juce::CallOutBox>()) box->dismiss(); };
@@ -65,12 +83,12 @@ void CabWindow::timerCallback()
     picker.show (cab, setup);
 }
 
-void CabWindow::open (AmpProcessor& amp, juce::Component& anchor, CabPicker::Range range, std::function<void()> picked)
+void CabWindow::open (AmpProcessor& amp, juce::Component& anchor, CabPicker::Range range, Kept kept)
 {
     // Over the face above what opened it, its arrow at that one's top, inside the window where it fits: what opened it
     // stays in sight, answering the hand.
     const auto at = anchor.getScreenBounds();
-    auto& box = juce::CallOutBox::launchAsynchronously (std::unique_ptr<CabWindow> (new CabWindow (amp, range, std::move (picked))), at, nullptr);
+    auto& box = juce::CallOutBox::launchAsynchronously (std::unique_ptr<CabWindow> (new CabWindow (amp, range, std::move (kept))), at, nullptr);
 
     // Ours, not JUCE's grey-green: the face's panel under it, the CAB's orange line round it and its arrow.
     struct Look final : juce::LookAndFeel_V4

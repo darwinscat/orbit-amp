@@ -28,9 +28,9 @@ const channels::Lineup& lineup()
     static const channels::Lineup walker {
         "walker", "walker_channel", "SVT-410HE",
         {
-            // Each gear on a box of its own (the owner, 04.11): B15 on the 1x15, its horn off; SVT on the sealed 4x10.
-            { "B15", "sgt-di-19a4", "Plate", std::nullopt, 0.0f, false, { "Voice", "B15" }, { "SVT-15E", false } },
-            { "SVT", "sgt-di-19a4", "Plate", std::nullopt, 0.0f, false, { "Voice", "SVT" }, { "SVT-410HE", true } },
+            // Each gear at a cabinet's slot of its own (the owner, 04.11): B15 at the first, SVT at the second.
+            { "B15", "sgt-di-19a4", "Plate", std::nullopt, 0.0f, false, { "Voice", "B15" }, 0 },
+            { "SVT", "sgt-di-19a4", "Plate", std::nullopt, 0.0f, false, { "Voice", "SVT" }, 1 },
         },
         false,
         {
@@ -52,6 +52,12 @@ const channels::Lineup& lineup()
         },
         1,      // ...and it opens on SVT (the owner, 03.11)
         true,   // ITS CABINETS ARE OURS, DRAWN — Ampeg's, nobody's files (the owner, 04.11)
+        {
+            // ...IN SIX SLOTS, a box of each size to begin with, each the player's to set in the window (the owner,
+            // 04.11): the 1x15 for B15, its horn off; the sealed 4x10 for SVT; then the 1x12, the 2x10, the 6x10, and the
+            // 8x10 with its horn off.
+            { "SVT-15E", false }, { "SVT-410HE" }, { "VB-112" }, { "VB-210" }, { "SVT-610HLF" }, { "SVT-810", false },
+        },
     };
     return walker;
 }

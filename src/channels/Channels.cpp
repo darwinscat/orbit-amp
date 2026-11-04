@@ -21,7 +21,10 @@ namespace
     const juce::Identifier activeId { "active" };
     const juce::Identifier indexId  { "i" };
     const juce::Identifier cabinetId { AmpProcessor::recordCabinetId };    // ...which a state of before is converted by
-    const juce::Identifier cabinetFromId { "cabinet_from" };               // ...and where a drawn one's mics stood
+    const juce::Identifier cabinetSlotId { "cabinet_slot" };               // ...or a drawn one's slot (Lineup::cabinets)
+
+    /** A drawn cabinet's slot, on the product's node: what it holds, as a `from`. */
+    juce::Identifier slotId (int slot) { return juce::Identifier ("cabinet_slot_" + juce::String (slot)); }
 
     // A pair's record (Lineup::pairs) says which of the two it was left playing, and the tones by their
     // knobs: the two packs may keep them in different places.
@@ -395,24 +398,59 @@ juce::String Channels::drawnPlaying() const
     return AmpProcessor::cabSynthOf (now).valid ? now : juce::String();
 }
 
-void Channels::playDrawn (const juce::String& from, int channel)
+void Channels::playDrawn (const juce::String& from)
 {
-    // The record's cabinet, its mics where they stood — or, with none of ours in it, the box the channel opens on, with
-    // its own mic at its cap and its horn as the lineup says (the walker's B15 on the SVT-15E, the horn off).
-    auto synth = AmpProcessor::cabSynthOf (from);
-    if (! synth.valid)
-    {
-        const auto& own = line.channels[(size_t) memoryOf (juce::jlimit (0, count() - 1, channel))].cabinet;
-        synth = { own.box != nullptr ? own.box : line.openingCabinet, {}, true };
-        synth.setup.a.horn = own.box != nullptr ? own.horn : true;
-    }
-    const auto asked = AmpProcessor::cabSynthFrom (synth.cab, synth.setup);
-    if (asked == drawnPlaying())
+    const auto synth = AmpProcessor::cabSynthOf (from);
+    if (! synth.valid || from == drawnPlaying())
         return;
-
     drawnOver  = amp.apvts.state.getProperty (params::cabIrUserFrom).toString();
-    drawnAsked = asked;
+    drawnAsked = from;
     amp.requestCabSynth (synth.cab, synth.setup);
+}
+
+int Channels::cabinetSlot() const
+{
+    const auto live = node().getProperty (cabinetSlotId);
+    const int slot = live.isVoid() ? line.channels[(size_t) memoryOf (active())].cabinet : (int) live;
+    return juce::jlimit (0, juce::jmax (0, cabinetSlots() - 1), slot);
+}
+
+juce::String Channels::slotFrom (int slot) const
+{
+    if (slot < 0 || slot >= cabinetSlots())
+        return {};
+    if (const auto set = node().getProperty (slotId (slot)).toString(); AmpProcessor::cabSynthOf (set).valid)
+        return set;
+    // Never set: the lineup's box, its own mic at its cap, the horn as the lineup says.
+    const auto& own = line.cabinets[(size_t) slot];
+    AmpProcessor::CabSetup setup;
+    setup.a.horn = own.horn;
+    return AmpProcessor::cabSynthFrom (own.box, setup);
+}
+
+void Channels::hearSlot (int slot)
+{
+    if (const auto synth = AmpProcessor::cabSynthOf (slotFrom (slot)); synth.valid)
+        amp.requestCabSynth (synth.cab, synth.setup, true);
+}
+
+void Channels::chooseSlot (int slot)
+{
+    // Rendered and kept even where the sound already names it: the hand on its way has had others heard.
+    ensureNode().setProperty (cabinetSlotId, juce::jlimit (0, cabinetSlots() - 1, slot), nullptr);
+    const auto from = slotFrom (cabinetSlot());
+    if (const auto synth = AmpProcessor::cabSynthOf (from); synth.valid)
+    {
+        drawnOver  = amp.apvts.state.getProperty (params::cabIrUserFrom).toString();
+        drawnAsked = from;
+        amp.requestCabSynth (synth.cab, synth.setup);
+    }
+}
+
+void Channels::keepInSlot (const juce::String& from)
+{
+    if (cabinetSlots() > 0 && AmpProcessor::cabSynthOf (from).valid)
+        ensureNode().setProperty (slotId (cabinetSlot()), from, nullptr);
 }
 
 void Channels::align()
@@ -426,8 +464,8 @@ void Channels::align()
 
     if (line.drawnCabinets)
     {
-        if (drawnPlaying().isEmpty())
-            playDrawn ({}, active());   // none of ours playing — a fresh instance, a file a state of before named: its box
+        if (drawnPlaying() != slotFrom (cabinetSlot()))
+            playDrawn (slotFrom (cabinetSlot()));   // the sound not the slot's — a fresh instance, a state of before
     }
     else if (const int playing = cabinet(); playing < 0)
     {
@@ -792,9 +830,13 @@ juce::ValueTree Channels::whole() const
                                           : record.hasProperty (cabinetId) ? record[cabinetId].toString() : opening,
                           nullptr);
         if (line.drawnCabinets)
-            full.setProperty (cabinetFromId, live ? drawnPlaying() : record.getProperty (cabinetFromId).toString(), nullptr);
+            full.setProperty (cabinetSlotId, live ? cabinetSlot()
+                                                  : record.hasProperty (cabinetSlotId) ? (int) record[cabinetSlotId] : line.channels[(size_t) c].cabinet,
+                              nullptr);
         out.appendChild (full, nullptr);
     }
+    for (int slot = 0; slot < cabinetSlots(); ++slot)     // the slots, one set for every channel: what each holds
+        out.setProperty (slotId (slot), slotFrom (slot), nullptr);
     return out;
 }
 
@@ -818,7 +860,7 @@ void Channels::store (juce::ValueTree record) const
         record.setProperty (flagIds[(size_t) f], flag ((Flag) f), nullptr);
     record.setProperty (cabinetId, cabinetPlaying(), nullptr);
     if (line.drawnCabinets)
-        record.setProperty (cabinetFromId, drawnPlaying(), nullptr);
+        record.setProperty (cabinetSlotId, cabinetSlot(), nullptr);
 }
 
 void Channels::recall (int channel, const juce::ValueTree& record)
@@ -841,7 +883,12 @@ void Channels::recall (int channel, const juce::ValueTree& record)
     for (int f = 0; f < numFlags; ++f)
         setFlag ((Flag) f, record.isValid() && (bool) record.getProperty (flagIds[(size_t) f], false));
     if (line.drawnCabinets)
-        playDrawn (record.getProperty (cabinetFromId).toString(), channel);
+    {
+        // The slot it stands at — the lineup's, never visited — and what that slot holds, rendered.
+        const int own = line.channels[(size_t) memoryOf (juce::jlimit (0, count() - 1, channel))].cabinet;
+        ensureNode().setProperty (cabinetSlotId, record.isValid() && record.hasProperty (cabinetSlotId) ? (int) record[cabinetSlotId] : own, nullptr);
+        playDrawn (slotFrom (cabinetSlot()));
+    }
     else
         chooseCabinetNamed (record.getProperty (cabinetId).toString());
 }
