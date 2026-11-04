@@ -39,7 +39,23 @@ void Readout::set (const juce::String& w)
 
 void Readout::paint (juce::Graphics& g)
 {
-    writeAsIs (g, ink, words, getLocalBounds().toFloat(), em, colour);
+    if (! plate)
+    {
+        writeAsIs (g, ink, words, getLocalBounds().toFloat(), em, colour);
+        return;
+    }
+    const auto r = getLocalBounds().toFloat().reduced (0.5f);
+    g.setColour (juce::Colour (0xff0b0910).withAlpha (0.88f));
+    g.fillRoundedRectangle (r, 4.0f);
+    g.setColour (ink.words.withAlpha (0.35f));
+    g.drawRoundedRectangle (r, 4.0f, 1.0f);
+
+    const auto text = r.reduced (8.0f, 0.0f);
+    const float wide = juce::GlyphArrangement::getStringWidth (face::labelFont (em).withExtraKerningFactor (0.04f), words) + 4.0f;
+    const juce::Graphics::ScopedSaveState keep (g);
+    if (wide > text.getWidth())
+        g.addTransform (juce::AffineTransform::scale (text.getWidth() / wide, 1.0f, text.getCentreX(), text.getCentreY()));
+    writeAsIs (g, ink, words, text.withSizeKeepingCentre (juce::jmax (wide, text.getWidth()), text.getHeight()), em, colour);
 }
 
 //==============================================================================
@@ -295,8 +311,7 @@ void CabinetScreen::resized()
 {
     slider.marks = notches - 1;
     slider.handLight = handLight;
-    const auto r = getLocalBounds();
-    slider.setBounds (r.withTrimmedRight (juce::roundToInt (chevronRoom) + 4).withTrimmedLeft (4).withTrimmedTop (juce::roundToInt (nameH) - 2));
+    slider.setBounds (getLocalBounds().withTrimmedRight (juce::roundToInt (gearRoom) + 2).withTrimmedLeft (4));
 }
 
 void CabinetScreen::refresh()
@@ -305,7 +320,11 @@ void CabinetScreen::refresh()
     if (now != shown)
     {
         shown = now;
-        repaint();
+        if (plate != nullptr)
+        {
+            plate->colour = shown == "OFF" ? ink.at (ink.values, 0.45f) : ink.values;
+            plate->set (shown);
+        }
     }
     // The cap where the cabinet that plays stands — unless the hand has it.
     if (moving < 0 && notch != nullptr)
@@ -315,36 +334,28 @@ void CabinetScreen::refresh()
 
 void CabinetScreen::paint (juce::Graphics& g)
 {
-    // The name over the slider, from its left edge — squeezed where it is wider than the room.
+    // The gear: what a click opens — eight teeth round a hole.
     const auto r = getLocalBounds().toFloat();
-    const auto text = r.withTrimmedLeft (12.0f).withTrimmedRight (chevronRoom + 6.0f).withTrimmedTop (1.0f).withHeight (nameH);
-    const float wide = juce::GlyphArrangement::getStringWidth (face::labelFont (face::stage::px13).withExtraKerningFactor (0.04f), shown);
+    const auto c = juce::Point<float> (r.getRight() - 0.5f * gearRoom, r.getCentreY());
+    constexpr int teeth = 8;
+    constexpr float outer = 8.0f, inner = 6.0f, half = juce::MathConstants<float>::pi / (float) teeth;
+    juce::Path gear;
+    for (int i = 0; i < teeth; ++i)
     {
-        const juce::Graphics::ScopedSaveState keep (g);
-        if (wide > text.getWidth())
-            g.addTransform (juce::AffineTransform::scale (text.getWidth() / wide, 1.0f, text.getX(), text.getCentreY()));
-        writeAsIs (g, ink, shown, juce::Rectangle<float> (wide + 4.0f, text.getHeight()).withPosition (text.getTopLeft()),
-                   face::stage::px13, shown == "OFF" ? ink.at (ink.values, 0.45f) : ink.values);
+        const float a = juce::MathConstants<float>::twoPi * (float) i / (float) teeth;
+        const auto at = [c] (float angle, float radius) { return c + juce::Point<float> (std::sin (angle), -std::cos (angle)) * radius; };
+        const auto p0 = at (a - 0.75f * half, inner), p1 = at (a - 0.42f * half, outer), p2 = at (a + 0.42f * half, outer), p3 = at (a + 0.75f * half, inner);
+        if (i == 0) gear.startNewSubPath (p0); else gear.lineTo (p0);
+        gear.lineTo (p1);
+        gear.lineTo (p2);
+        gear.lineTo (p3);
+        gear.lineTo (at (a + 1.25f * half, inner));
     }
-
-    // The divider and the chevron: what a click opens.
-    const float x = r.getRight() - chevronRoom;
-    g.setColour (juce::Colour (0xff51465f));
-    g.fillRect (x, r.getY() + 4.0f, 1.2f, r.getHeight() - 8.0f);
-    juce::Path chevron;
-    const auto c = juce::Point<float> (x + 0.5f * chevronRoom, r.getCentreY());
-    chevron.startNewSubPath (c.x - 6.0f, c.y - 3.0f);
-    chevron.lineTo (c.x, c.y + 3.5f);
-    chevron.lineTo (c.x + 6.0f, c.y - 3.0f);
-    g.setColour (ink.words);
-    g.strokePath (chevron, juce::PathStrokeType (2.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
-
-    if (isMouseOver() && onChevron (getMouseXYRelative().toFloat()) && ! handLight.isTransparent())
-    {
-        juce::Path rim;
-        rim.addRoundedRectangle (juce::Rectangle<float> (x + 2.0f, r.getY() + 2.0f, chevronRoom - 4.0f, r.getHeight() - 4.0f), 5.0f);
-        face::drawHandRim (g, rim, handLight);
-    }
+    gear.closeSubPath();
+    gear.addEllipse (juce::Rectangle<float> (5.0f, 5.0f).withCentre (c));
+    const bool lit = isMouseOver() && onGear (getMouseXYRelative().toFloat());
+    g.setColour (lit && ! handLight.isTransparent() ? handLight : ink.words);
+    g.strokePath (gear, juce::PathStrokeType (1.5f, juce::PathStrokeType::mitered, juce::PathStrokeType::rounded));
 }
 
 void CabinetScreen::mouseDown (const juce::MouseEvent& e)
@@ -354,13 +365,13 @@ void CabinetScreen::mouseDown (const juce::MouseEvent& e)
         if (onMenu)
             onMenu();
     }
-    else if (onChevron (e.position) && onClick)
+    else if (onGear (e.position) && onClick)
         onClick();
 }
 
 void CabinetScreen::mouseMove (const juce::MouseEvent& e)
 {
-    setMouseCursor (onChevron (e.position) ? juce::MouseCursor::PointingHandCursor : juce::MouseCursor::NormalCursor);
+    setMouseCursor (onGear (e.position) ? juce::MouseCursor::PointingHandCursor : juce::MouseCursor::NormalCursor);
     repaint();
 }
 

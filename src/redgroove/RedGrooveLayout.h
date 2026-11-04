@@ -148,5 +148,7 @@ inline constexpr float switchRuleX = 1325.0f;   // the line parting the column f
 
 // THE CABINET'S SCREEN, across the top of its panel.
 inline const juce::Rectangle<float> cabinetScreen { 1246.0f, 707.5f, 251.5f, 49.0f };
+// ...and the plate the cabinet's name is written on, over it in CABINET's title row, right of the title.
+inline const juce::Rectangle<float> cabinetPlate { 1352.0f, panelTitleY - 12.0f, cabinetScreen.getRight() - 1352.0f, 24.0f };
 
 } // namespace orbitamp::redgroove::layout

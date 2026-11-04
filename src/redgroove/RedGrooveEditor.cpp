@@ -588,9 +588,9 @@ RedGrooveEditor::RedGrooveEditor (AmpProcessor& p)
     highCut.setComponentID ("highCut");
 
 
-    // THE CABINET'S SCREEN: the cabinet that plays, by its box and its mics — the slot's under the hand while it moves
-    // the slider, OFF while the cabinet is out of the sound — over the slider, a notch a slot of the six (Channels'
-    // cabinet slots); its chevron opens the window, which sets the slot the slider stands at.
+    // THE CABINET'S SLOT: a slider, a notch a slot of the six (Channels' cabinet slots), and its gear, which opens the
+    // window that sets the slot the slider stands at; over it on a plate, the cabinet that plays by its box and its mics
+    // — the slot's under the hand while it moves the slider, OFF while the cabinet is out of the sound.
     cabinet.name = [this]
     {
         if (dragAt >= 0)
@@ -609,6 +609,9 @@ RedGrooveEditor::RedGrooveEditor (AmpProcessor& p)
     addToStage (cabinet);
     cabinet.setBounds (layout::cabinetScreen.reduced (3.0f).toNearestInt());
     cabinet.setComponentID ("cabinet");
+    auto& plate = readout (layout::cabinetPlate);   // the name on a plate of its own, over the slot on the panel
+    plate.plate = true;
+    cabinet.plate = &plate;
     cabinet.refresh();
 
     // LEARN — from GATE's menu, or a double click on its lamp — takes the tuner's glass while it runs.
