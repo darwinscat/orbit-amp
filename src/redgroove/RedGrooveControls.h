@@ -19,8 +19,7 @@ void writeAsIs (juce::Graphics&, const face::Ink&, const juce::String& words, ju
                 juce::Colour);
 
 /** A READING UNDER A CONTROL: what the control is set to, in words in their own case (writeAsIs), centred in its box.
-    Its owner says the words; it takes no click. On a `plate` of its own — a dark rounded one, a hairline round it —
-    where it stands over the panel by itself, the words squeezed rather than cut where they are wider than it. */
+    Its owner says the words; it takes no click. Words wider than the box are squeezed into it, not cut. */
 class Readout final : public juce::Component
 {
 public:
@@ -28,7 +27,6 @@ public:
 
     void set (const juce::String& words);
     juce::Colour colour;
-    bool plate = false;
 
     void paint (juce::Graphics&) override;
 
@@ -131,19 +129,20 @@ private:
     int shown() const noexcept { return reversed ? count - 1 - at : at; }   // where the cap stands, left to right
 };
 
-/** THE CABINET'S SLOT IN THE PANEL: a thin slider lying across it, a notch a cabinet (the faders' own, MIDDLE's
-    frequency's look), and a small gear at its right end; the name of the cabinet that plays — OFF while it is out of the
-    sound — written on a plate of its own over it on the panel (`plate`). The cap moved is heard at the notch nearest it
+/** THE CABINET'S SLIDER: lying across in its slot (the panel's, Cabin::paintStatic), a notch a cabinet, the walker's
+    faders' cap and marks; a small gear right of it; and the name of the cabinet that plays — OFF while it is out of the
+    sound — written over it on the panel (`label`). The cap moved is heard at the notch nearest it
     (onMove) and kept at the one it settles in when the hand lets go (onLetGo); the gear clicked opens the cabinets'
     window (onClick), and so does a right click anywhere on it (onMenu). Asks for the name and the notch four times a
     second, and shows them again when they are others. */
 class CabinetScreen final : public juce::Component, private juce::Timer
 {
 public:
-    CabinetScreen (const face::Ink&, const juce::Image& cap);
+    /** `cap` the faders' render, drawn `capLength` across the slot and `capSquash` of its own height. */
+    CabinetScreen (const face::Ink&, const juce::Image& cap, float capLength, float capSquash);
 
     std::function<juce::String()> name;
-    Readout* plate = nullptr;                   // where the name is written
+    Readout* label = nullptr;                   // where the name is written
     std::function<int()> notch;                 // the one the cabinet that plays stands at; -1 for none of them
     int notches = 6;
     std::function<void (int)> onMove, onLetGo;
@@ -164,7 +163,7 @@ public:
     void refresh();
 
 private:
-    static constexpr float gearRoom = 34.0f;
+    static constexpr float gearRoom = 38.0f;
     const face::Ink ink;
     face::ColumnFader slider;
     juce::String shown;

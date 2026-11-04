@@ -319,6 +319,35 @@ void Cabin::paintStatic (juce::Graphics& g, float scale) const
         // IN's slot where BLEND's knob was.
         g.drawImage (plainOf (inFaderSlot), blendSlot);
 
+        // The picture's screen under plain panel — the panel just under it, in three strips, clear of DI/CAB's socket, the
+        // middle one turned over so that each meets the next on the same row and no seam shows — and in its place the
+        // cabinet's slot: OCTAVE's socket turned a quarter, its ends as they are, its middle longer.
+        const auto screen = cabinetScreen.expanded (3.0f);
+        const float strip = screen.getHeight() / 3.0f;
+        const auto plain = plainOf (screen.withY (screen.getBottom() + 3.0f).withHeight (strip));
+        for (int i = 0; i < 3; ++i)
+        {
+            const auto to = screen.withY (screen.getY() + strip * (float) i).withHeight (strip);
+            const float sx = to.getWidth() / (float) plain.getWidth(), sy = to.getHeight() / (float) plain.getHeight();
+            g.drawImageTransformed (plain, i == 1 ? juce::AffineTransform::scale (sx, -sy).translated (to.getX(), to.getBottom())
+                                                  : juce::AffineTransform::scale (sx, sy).translated (to.getX(), to.getY()));
+        }
+        const auto across = [&g, &plainOf] (juce::Rectangle<float> from, juce::Rectangle<float> to)
+        {
+            // A piece of the upright socket, turned a quarter clockwise into `to`: its top at the right.
+            const auto piece = plainOf (from);
+            const float w = (float) piece.getWidth(), h = (float) piece.getHeight();
+            g.drawImageTransformed (piece, juce::AffineTransform::rotation (juce::MathConstants<float>::halfPi)
+                                               .translated (h, 0.0f)
+                                               .scaled (to.getWidth() / h, to.getHeight() / w)
+                                               .translated (to.getX(), to.getY()));
+        };
+        const auto socket = octaveSocketArt;
+        const float end = 24.0f;        // a rounded end, with the panel round it
+        across (socket.withTrimmedTop (socket.getHeight() - end), cabinetSlot.withWidth (end));                  // its foot at the left
+        across (socket.withHeight (end), cabinetSlot.withTrimmedLeft (cabinetSlot.getWidth() - end));             // its head at the right
+        across (socket.withTrimmedTop (0.5f * socket.getHeight() - 5.0f).withHeight (10.0f), cabinetSlot.reduced (end, 0.0f));
+
         // DI/CAB's socket under the plain panel beside it; IN's slot where the knob was, its middle left out.
         g.drawImage (plainOf (diCabPlainArt), diCabSocketArt);
         const float half = 0.5f * diCabSlot.getHeight();
@@ -356,7 +385,7 @@ RedGrooveEditor::RedGrooveEditor (AmpProcessor& p)
       highCut (cabinInk(), "STYL", "F", "S"),
       ultraLo (cabinInk(), "U-LO", "-", "+", 3),
       ultraHi (cabinInk(), "U-HI", "0", "+", 2),
-      cabinet (cabinInk(), Art::of().faderCap)
+      cabinet (cabinInk(), Art::of().faderCap, layout::faderCapLength, layout::faderCapSquash)
 {
     // Everything this constructor sets is the face settling onto the state, not a player's edit.
     const felitronics::appkit::CompareHistory::ScopedSuppress settling (amp.history);
@@ -588,9 +617,9 @@ RedGrooveEditor::RedGrooveEditor (AmpProcessor& p)
     highCut.setComponentID ("highCut");
 
 
-    // THE CABINET'S SLOT: a slider, a notch a slot of the six (Channels' cabinet slots), and its gear, which opens the
-    // window that sets the slot the slider stands at; over it on a plate, the cabinet that plays by its box and its mics
-    // — the slot's under the hand while it moves the slider, OFF while the cabinet is out of the sound.
+    // THE CABINET'S SLIDER: a notch a slot of the six (Channels' cabinet slots), and its gear, which opens the window that
+    // sets the slot the slider stands at; over it on the panel, the cabinet that plays by its box and its mics — the
+    // slot's under the hand while it moves the slider, OFF while the cabinet is out of the sound.
     cabinet.name = [this]
     {
         if (dragAt >= 0)
@@ -607,11 +636,9 @@ RedGrooveEditor::RedGrooveEditor (AmpProcessor& p)
     cabinet.onLetGo = [this] (int at) { chooseSlot (at); };
     cabinet.handLight = handLight;
     addToStage (cabinet);
-    cabinet.setBounds (layout::cabinetScreen.reduced (3.0f).toNearestInt());
+    cabinet.setBounds (layout::cabinetControl.toNearestInt());
     cabinet.setComponentID ("cabinet");
-    auto& plate = readout (layout::cabinetPlate);   // the name on a plate of its own, over the slot on the panel
-    plate.plate = true;
-    cabinet.plate = &plate;
+    cabinet.label = &readout (layout::cabinetName);     // the name over the slot, on the panel
     cabinet.refresh();
 
     // LEARN — from GATE's menu, or a double click on its lamp — takes the tuner's glass while it runs.

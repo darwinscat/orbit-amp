@@ -39,23 +39,13 @@ void Readout::set (const juce::String& w)
 
 void Readout::paint (juce::Graphics& g)
 {
-    if (! plate)
-    {
-        writeAsIs (g, ink, words, getLocalBounds().toFloat(), em, colour);
-        return;
-    }
-    const auto r = getLocalBounds().toFloat().reduced (0.5f);
-    g.setColour (juce::Colour (0xff0b0910).withAlpha (0.88f));
-    g.fillRoundedRectangle (r, 4.0f);
-    g.setColour (ink.words.withAlpha (0.35f));
-    g.drawRoundedRectangle (r, 4.0f, 1.0f);
-
-    const auto text = r.reduced (8.0f, 0.0f);
+    // Squeezed, not cut, where the words are wider than the box — a cabinet's name with its two mics.
+    const auto box = getLocalBounds().toFloat();
     const float wide = juce::GlyphArrangement::getStringWidth (face::labelFont (em).withExtraKerningFactor (0.04f), words) + 4.0f;
     const juce::Graphics::ScopedSaveState keep (g);
-    if (wide > text.getWidth())
-        g.addTransform (juce::AffineTransform::scale (text.getWidth() / wide, 1.0f, text.getCentreX(), text.getCentreY()));
-    writeAsIs (g, ink, words, text.withSizeKeepingCentre (juce::jmax (wide, text.getWidth()), text.getHeight()), em, colour);
+    if (wide > box.getWidth())
+        g.addTransform (juce::AffineTransform::scale (box.getWidth() / wide, 1.0f, box.getCentreX(), box.getCentreY()));
+    writeAsIs (g, ink, words, box.withSizeKeepingCentre (juce::jmax (wide, box.getWidth()), box.getHeight()), em, colour);
 }
 
 //==============================================================================
@@ -272,13 +262,13 @@ void SlideSwitch::mouseDown (const juce::MouseEvent& e)
 }
 
 //==============================================================================
-CabinetScreen::CabinetScreen (const face::Ink& i, const juce::Image& cap) : ink (i), slider (cap)
+CabinetScreen::CabinetScreen (const face::Ink& i, const juce::Image& cap, float capLength, float capSquash)
+    : ink (i), slider (cap)
 {
-    // The slider: MIDDLE's frequency's, smaller, a mark a notch and none drawn longer.
+    // The slider: the walker's faders', lying across, a mark a notch and none drawn longer.
     slider.setAcross (true);
-    slider.scale = 0.7f;
-    slider.capLength = 10.0f;
-    slider.capSquash = 0.5f;
+    slider.capLength = capLength;
+    slider.capSquash = capSquash;
     slider.marks = notches - 1;
     slider.longMark = -1;
     slider.onGestureStart = [this] { moving = notch != nullptr ? notch() : -1; };
@@ -311,7 +301,7 @@ void CabinetScreen::resized()
 {
     slider.marks = notches - 1;
     slider.handLight = handLight;
-    slider.setBounds (getLocalBounds().withTrimmedRight (juce::roundToInt (gearRoom) + 2).withTrimmedLeft (4));
+    slider.setBounds (getLocalBounds().withTrimmedRight (juce::roundToInt (gearRoom)));
 }
 
 void CabinetScreen::refresh()
@@ -320,10 +310,10 @@ void CabinetScreen::refresh()
     if (now != shown)
     {
         shown = now;
-        if (plate != nullptr)
+        if (label != nullptr)
         {
-            plate->colour = shown == "OFF" ? ink.at (ink.values, 0.45f) : ink.values;
-            plate->set (shown);
+            label->colour = shown == "OFF" ? ink.at (ink.values, 0.45f) : ink.values;
+            label->set (shown);
         }
     }
     // The cap where the cabinet that plays stands — unless the hand has it.

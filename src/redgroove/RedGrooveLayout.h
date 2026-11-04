@@ -146,9 +146,14 @@ inline constexpr float switchSlotX = 1409.0f, switchSlotW = 52.0f, switchSlotH =
 inline constexpr std::array<float, 4> switchLineY { 780.0f, 816.0f, 852.0f, 888.0f };
 inline constexpr float switchRuleX = 1325.0f;   // the line parting the column from DI/CAB, cut into the panel
 
-// THE CABINET'S SCREEN, across the top of its panel.
+// THE PICTURE'S SCREEN, across the top of CABINET's panel — gone under plain panel (Cabin::paintStatic): in its place
+// the cabinet's slot lying across, a slider in it, OCTAVE's socket turned a quarter and its middle drawn longer; the
+// gear right of it; and the cabinet's name over it, under CABINET (the owner, 05.11).
 inline const juce::Rectangle<float> cabinetScreen { 1246.0f, 707.5f, 251.5f, 49.0f };
-// ...and the plate the cabinet's name is written on, over it in CABINET's title row, right of the title.
-inline const juce::Rectangle<float> cabinetPlate { 1374.0f, panelTitleY - 12.0f, cabinetScreen.getRight() - 1374.0f, 24.0f };
+inline const juce::Rectangle<float> octaveSocketArt { effectX[0] - 10.0f, effectTop - 1.0f, 20.0f, 131.5f };   // to its rim's edge
+inline constexpr float cabinetSlotY = 742.0f;                                                                   // the slot's middle
+inline const juce::Rectangle<float> cabinetSlot { 1256.0f, cabinetSlotY - 10.0f, 206.0f, 20.0f };
+inline const juce::Rectangle<float> cabinetControl { cabinetSlot.getX(), cabinetSlotY - 22.0f, 244.0f, 44.0f };  // the slider, then the gear
+inline const juce::Rectangle<float> cabinetName { cabinetSlot.getX(), 704.0f, cabinetControl.getWidth(), 20.0f };
 
 } // namespace orbitamp::redgroove::layout
