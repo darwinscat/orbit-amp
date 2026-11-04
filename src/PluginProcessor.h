@@ -1249,6 +1249,7 @@ public:
         bool horn = true;
         juce::String mic;   // the table's mic by name (md421, sm57, re20, d112, u87, ribbon), or empty for the cabinet's own
         float angle = 0.0f; // degrees it leans back toward the cap
+        float hornDb = 0.0f; // the horn's attenuator while it is on: 0, -6 or -12 dB against the table's level
     };
 
     /** A CABINET OF THE BASS'S OWN, rendered with the mic at `spot` — on a worker, a tenth of a second or so — then
@@ -1256,12 +1257,13 @@ public:
         cabinet, its `from` saying where the mic stood (cabSynthOf reads it back). A later request supersedes one still
         rendering; the cabinet's own 50 ms crossfade carries the swap. Message thread. */
     /** ...and two mics as an engineer puts them up (core/CabSynth.h, renderPair): A, and B mixed in by `blend` — 0 is A
-        alone — on one clock unless `align`, B turned over by `invert`. The horn is A's. */
+        alone — on one clock unless `align` (on from the start, as the panel's: CabPicker::Setup), B turned over by
+        `invert`. The horn is A's. */
     struct CabSetup
     {
         CabSpot a, b;
         float blend = 0.0f;
-        bool align = false, invert = false;
+        bool align = true, invert = false;
     };
 
     void requestCabSynth (const juce::String& cab, CabSetup setup);

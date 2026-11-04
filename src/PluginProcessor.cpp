@@ -827,7 +827,7 @@ void AmpProcessor::requestCabSynth (const juce::String& cab, CabSetup setup)
             return;   // superseded before it began
 
         static const auto table = core::cabsynth::parseTable (std::string (BinaryData::cabinets_txt, (size_t) BinaryData::cabinets_txtSize));
-        const auto spot = [] (const CabSpot& s) { return core::cabsynth::Spot { s.x, s.y, s.distance, s.horn, s.mic.toStdString(), s.angle }; };
+        const auto spot = [] (const CabSpot& s) { return core::cabsynth::Spot { s.x, s.y, s.distance, s.horn, s.mic.toStdString(), s.angle, s.hornDb }; };
         const auto ir  = core::cabsynth::renderPair (table, cab.toStdString(), { spot (setup.a), spot (setup.b), setup.blend, setup.align, setup.invert });
         const auto wav = core::cabsynth::wav24 (ir, 48000);
         auto bytes = std::make_shared<juce::MemoryBlock> (wav.data(), wav.size());
@@ -845,8 +845,10 @@ void AmpProcessor::requestCabSynth (const juce::String& cab, CabSetup setup)
             apvts.state.setProperty (params::cabIrUserName, cab, nullptr);
             const auto& a = setup.a;
             const auto& b = setup.b;
+            // The horn: 0 off, 1 on at the table's level, or its attenuator's step in dB (-6, -12) while on.
+            const juce::String horn = ! a.horn ? "0" : a.hornDb < -0.5f ? juce::String (juce::roundToInt (a.hornDb)) : "1";
             apvts.state.setProperty (params::cabIrUserFrom, "synth:" + cab + "|" + juce::String (a.x, 3) + "|" + juce::String (a.y, 3)
-                                                                 + "|" + juce::String (a.distance, 3) + "|" + (a.horn ? "1" : "0") + "|" + a.mic
+                                                                 + "|" + juce::String (a.distance, 3) + "|" + horn + "|" + a.mic
                                                                  + "|" + juce::String (setup.blend, 3) + "|" + (setup.align ? "1" : "0") + "|" + (setup.invert ? "1" : "0")
                                                                  + "|" + juce::String (b.x, 3) + "|" + juce::String (b.y, 3) + "|" + juce::String (b.distance, 3)
                                                                  + "|" + b.mic + "|" + juce::String (a.angle, 1) + "|" + juce::String (b.angle, 1), nullptr);
@@ -866,13 +868,15 @@ AmpProcessor::CabSynthChoice AmpProcessor::cabSynthOf (const CabChoice& choice)
         return out;
 
     out.cab     = parts[0];
-    out.setup.a = { parts[1].getFloatValue(), parts[2].getFloatValue(), parts[3].getFloatValue(), parts[4] == "1", parts[5] };
+    out.setup.a = { parts[1].getFloatValue(), parts[2].getFloatValue(), parts[3].getFloatValue(), parts[4] != "0", parts[5] };
+    out.setup.a.hornDb = parts[4] == "1" || parts[4] == "0" ? 0.0f : parts[4].getFloatValue();
     if (parts.size() >= 13)
     {
         out.setup.blend  = parts[6].getFloatValue();
         out.setup.align  = parts[7] == "1";
         out.setup.invert = parts[8] == "1";
         out.setup.b      = { parts[9].getFloatValue(), parts[10].getFloatValue(), parts[11].getFloatValue(), out.setup.a.horn, parts[12] };
+        out.setup.b.hornDb = out.setup.a.hornDb;
     }
     if (parts.size() >= 15)
     {
@@ -991,7 +995,9 @@ void AmpProcessor::pumpDeviceWork()
     // second waits for a message-thread retry that a render with no message loop never makes.
     {
         core::CabinetIr::Post post;
-        post.trimOn       = cabTrimOnParam->load() > 0.5f;
+        // The bass trims nothing: its face has no trim (the place under its picture is its IRs' two doors), and a low
+        // end needs the IR's length.
+        post.trimOn       = ownProduct.chain != Chain::bass && cabTrimOnParam->load() > 0.5f;
         post.trimFraction = cabTrimParam->load();
         const auto slopeDb = [] (float v)
         { return params::eqSlopeValues[juce::jlimit (0, (int) std::size (params::eqSlopeValues) - 1,

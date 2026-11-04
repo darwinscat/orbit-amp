@@ -256,6 +256,7 @@ inline cd resonance (double f, double f0, double q)
 inline cd highpass2 (double f, double f0, double q) { const cd s (0, f / f0); return s * s / (s * s + s / q + 1.0); }
 inline cd lowpass2 (double f, double f0, double q)  { const cd s (0, f / f0); return 1.0 / (s * s + s / q + 1.0); }
 inline cd lowpass1 (double f, double f0) { return 1.0 / cd (1, f / f0); }
+inline cd highpass1 (double f, double f0) { const cd s (0, f / f0); return s / (1.0 + s); }
 
 struct Mode { double f, q, residue; int radial, azimuthal; double phase, psi, eps; };
 
@@ -268,7 +269,7 @@ struct Cab
     bool vented = false;
     double fsd = 50, qts = 0.4, vas = 30, vb = 60, perChamber = 1, chambers = 1, fb = 45, ql = 8;
     bool portRear = false, hornAtMic = false;
-    double fixedMass = 0, coilHz = 0, proxStrength = 1, micTop = 12000, depth = 0.4;
+    double fixedMass = 0, coilHz = 0, proxStrength = 1, proxCorner = 0, micTop = 12000, depth = 0.4;
     bool figure8 = false;   // a ribbon's: front and back alike, the back in the other polarity
     Xy port {};
     double portArea = 150, portLeakHz = 700;
@@ -289,7 +290,12 @@ struct Cab
     double micHp = 35, micHpQ = 0.707, micLp = 12000, proxHz = 140, prox50 = 2.5, proxMax = 6, offLoss = 4;
     std::vector<std::array<double, 3>> presence;
     double micD = 0.05, micOff = 0, micOffY = 0, tilt = 0;
+    // Where the table's horn level (horn_at_mic_db) was taken: its section's own mic. A live mic (cabAt) moves off it,
+    // and the horn's level follows the mic's real distance and angle to the horn from there.
+    double hornRefD = 0.05, hornRefOff = 0, hornRefTilt = 0;
     double baffleStepDb = 0.5;
+    // The floor the box stands on, floorGap under its bottom: what of a source's image under it comes back (0, no floor).
+    double floorGap = 0, floorRefl = 0;
     double lengthMs = 200, fadeMs = 30;
     double refDelay = -1;   // the time zero, s from the sound leaving: below zero, the first arrival's own
 };
@@ -314,6 +320,7 @@ inline Cab build (const Section& s)
     c.fixedMass = num (s, "cone_fixed_mass_fraction", 0);
     c.coilHz = num (s, "coil_corner_hz", 0);
     c.proxStrength = num (s, "proximity_strength", 1);
+    c.proxCorner = num (s, "proximity_corner_hz", 0);
     c.figure8 = str (s, "mic_pattern") == "figure8";
     c.micTop = num (s, "mic_top_corner_hz", 0);
     c.hornAtMic = s.count ("horn_at_mic_db") > 0;
@@ -356,7 +363,12 @@ inline Cab build (const Section& s)
     c.micD = num (s, "mic_distance_m", num (s, "mic_distance_from_cap_plane_m", 0.05));
     c.micOff = num (s, "mic_radial_offset_fraction", 0);
     c.tilt = num (s, "mic_axis_tilt_deg", 0);
+    c.hornRefD = c.micD;
+    c.hornRefOff = c.micOff;
+    c.hornRefTilt = c.tilt;
     c.baffleStepDb = num (s, "baffle_step_depth_db", 0.5);
+    c.floorGap = num (s, "floor_gap_m", 0);
+    c.floorRefl = num (s, "floor_reflection", 0);
     c.lengthMs = num (s, "length_ms", 200);
     c.fadeMs = num (s, "tail_fade_ms", 30);
 
@@ -447,9 +459,11 @@ inline cd heard (const Cab& c, const Mic& m, double dx, double dy, double dz, do
     const double cosT = std::clamp ((dx * m.ax + dy * m.ay + dz * m.az) / len, -1.0, 1.0);   // the axis points at the cab: in front, +1
     const double theta = std::acos (cosT) * 180 / pi;
     const double kr = 2 * pi * f / c0 * (len + 0.02);
+    // Below its corner the proximity stops growing: there the capsule's own gradient path lets go.
+    const cd prox = 0.55 * c.proxStrength / cd (0, kr) * (c.proxCorner > 0 ? highpass1 (f, c.proxCorner) : cd (1.0));
     if (c.figure8)   // all gradient: its proximity whole, no front-only loss at the top
-        return cosT * (1.0 + 0.55 * c.proxStrength / cd (0, kr));
-    const cd pattern = 0.5 + 0.5 * cosT * (1.0 + 0.55 * c.proxStrength / cd (0, kr));
+        return cosT * (1.0 + prox);
+    const cd pattern = 0.5 + 0.5 * cosT * (1.0 + prox);
     const double e = theta <= 60 ? 2.5 * theta / 60 : theta <= 90 ? 2.5 + 1.5 * (theta - 60) / 30 : 4 + 2 * (theta - 90) / 90;
     const double top = std::clamp (std::log2 (f / 1000) / 3, 0.0, 1.0);
     return pattern * std::pow (10.0, -e * top / 20);
@@ -493,6 +507,12 @@ inline std::vector<double> render (const Cab& c, size_t n)
         r = std::sqrt (dx * dx + dy * dy + dz * dz);
     };
 
+    // The floor: every cone, the port and the horn have their image under it, heard from below. Close to a cone the image
+    // is far and faint; a hand's span back it combs the low mids, and the box's low end gains the floor.
+    const double floorY = -c.bh / 2 - c.floorGap;
+    const int images = c.floorRefl > 0 ? 2 : 1;
+    const auto mirrored = [&] (int img, double y) { return img == 0 ? y : 2 * floorY - y; };
+
     // The four edges of the baffle, each a weak inverted source fed by the first cone, at the edge's nearest point.
     const Xy edges[4] { { -c.bw / 2, t.y }, { c.bw / 2, t.y }, { t.x, -c.bh / 2 }, { t.x, c.bh / 2 } };
 
@@ -530,6 +550,18 @@ inline std::vector<double> render (const Cab& c, size_t n)
     // The target cone's own near-field sum, as the cones' sum is scaled below: what the port and the horn stand against.
     double near = 0;
     for (const auto& p : patches[0]) { double r, dx, dy, dz; pathTo (p.x, p.y, p.z, r, dx, dy, dz); near += p.area / r; }
+    // The horn's level is the table's where the table's mic stood (hornRef*): the mic there, and the target cone's near sum
+    // there — so a mic moved nearer the horn hears more of it, one moved away or back from the cone hears the balance shift.
+    const double refTr = c.hornRefTilt * pi / 180, refUx = c.hornRefOff > 1e-6 ? -1.0 : c.hornRefOff < -1e-6 ? 1.0 : -1.0;
+    const Mic micRef { t.x + c.hornRefOff * c.radius, t.y, c.hornRefD, std::sin (refTr) * refUx, 0.0, -std::cos (refTr) };
+    double nearRef = 0;
+    for (const auto& p : patches[0])
+    {
+        const double dx = p.x - micRef.x, dy = p.y - micRef.y, dz = p.z - micRef.z;
+        nearRef += p.area / std::sqrt (dx * dx + dy * dy + dz * dz);
+    }
+    const double hdxR = c.hornXy.x - micRef.x, hdyR = c.hornXy.y - micRef.y, hdzR = -c.hornDepth - micRef.z;
+    const double hrR = std::sqrt (hdxR * hdxR + hdyR * hdyR + hdzR * hdzR);
     // The port against the cone at a cone-close mic (Keele's near field against the port's far field): n Sd / (2 pi r Delta).
     const double dc = c.micD + c.depthFrac * c.radius, delta = std::sqrt (dc * dc + c.radius * c.radius) - dc;
     std::vector<Biquad> bodyEq, presence, hornEq;
@@ -581,9 +613,14 @@ inline std::vector<double> render (const Cab& c, size_t n)
                 for (size_t m = 0; m < res.size(); ++m)
                     v += res[m] * shape[d][m][pi_];
                 v *= held;
-                double r, dx, dy, dz;
-                pathTo (p.x, p.y, p.z, r, dx, dy, dz);
-                drv += v * p.area * heard (c, mic, dx, dy, dz, f) / r * std::polar (1.0, -2 * pi * f * (r / c0 - minDelay));
+                cd at = 0.0;
+                for (int img = 0; img < images; ++img)
+                {
+                    double r, dx, dy, dz;
+                    pathTo (p.x, mirrored (img, p.y), p.z, r, dx, dy, dz);
+                    at += (img == 0 ? 1.0 : c.floorRefl) * heard (c, mic, dx, dy, dz, f) / r * std::polar (1.0, -2 * pi * f * (r / c0 - minDelay));
+                }
+                drv += v * p.area * at;
             }
             sum += drv * c.sens[d] * cone * box * coil[k];
         }
@@ -593,34 +630,44 @@ inline std::vector<double> render (const Cab& c, size_t n)
         sum *= r0 / 1.0;
 
         if (c.vented)
-        {
-            double r, dx, dy, dz;
-            pathTo (c.port.x, c.port.y, 0, r, dx, dy, dz);
-            if (c.fixedMass > 0)
+            for (int img = 0; img < images; ++img)
             {
-                // Round the box when it is at the back: the path wraps over the depth and half the width, and less arrives.
-                const double wrap = c.portRear ? c.depth + 0.5 * c.bw : 0, rp = r + wrap;
-                const double ratio = c.perChamber * c.chambers * pi * c.radius * c.radius / (2 * pi * rp * delta) * (c.portRear ? 0.35 : 1);
-                sum += port * coil[k] * ratio * (r0 * near) * lowpass2 (f, c.portLeakHz, 0.707) * heard (c, mic, dx, dy, dz, f)
-                     * std::polar (1.0, -2 * pi * f * (rp / c0 - minDelay));
+                const double back = img == 0 ? 1.0 : c.floorRefl;
+                double r, dx, dy, dz;
+                pathTo (c.port.x, mirrored (img, c.port.y), 0, r, dx, dy, dz);
+                if (c.fixedMass > 0)
+                {
+                    // Round the box when it is at the back: the path wraps over the depth and half the width, and less arrives.
+                    const double wrap = c.portRear ? c.depth + 0.5 * c.bw : 0, rp = r + wrap;
+                    const double ratio = c.perChamber * c.chambers * pi * c.radius * c.radius / (2 * pi * rp * delta) * (c.portRear ? 0.35 : 1);
+                    sum += back * port * coil[k] * ratio * (r0 * near) * lowpass2 (f, c.portLeakHz, 0.707) * heard (c, mic, dx, dy, dz, f)
+                         * std::polar (1.0, -2 * pi * f * (rp / c0 - minDelay));
+                }
+                else
+                {
+                    const double area = c.portArea / (pi * c.radius * c.radius * 1e4);   // against one cone's
+                    sum += back * port * area * c.perChamber * lowpass2 (f, c.portLeakHz, 0.707) * heard (c, mic, dx, dy, dz, f) * (r0 / r)
+                         * std::polar (1.0, -2 * pi * f * (r / c0 - minDelay));
+                }
             }
-            else
-            {
-                const double area = c.portArea / (pi * c.radius * c.radius * 1e4);   // against one cone's
-                sum += port * area * c.perChamber * lowpass2 (f, c.portLeakHz, 0.707) * heard (c, mic, dx, dy, dz, f) * (r0 / r)
-                     * std::polar (1.0, -2 * pi * f * (r / c0 - minDelay));
-            }
-        }
         if (c.horn)
         {
-            double r, dx, dy, dz;
-            pathTo (c.hornXy.x, c.hornXy.y, -c.hornDepth, r, dx, dy, dz);
             cd hn = highpass2 (f, c.hornXo, c.hornQ) * lowpass2 (f, c.hornLp, 0.707) * std::pow (10.0, c.hornDb / 20);
             for (auto& b : hornEq) hn *= b.at (f, fs);
-            if (c.hornAtMic)   // its level at the mic against the cone's pass band, its angle to the mic in that figure
-                sum += hn * (r0 * near) * std::polar (1.0, -2 * pi * f * (r / c0 - minDelay));
-            else
-                sum += hn * heard (c, mic, dx, dy, dz, f) * (r0 / r) * std::polar (1.0, -2 * pi * f * (r / c0 - minDelay));
+            for (int img = 0; img < images; ++img)
+            {
+                const double back = img == 0 ? 1.0 : c.floorRefl;
+                double r, dx, dy, dz;
+                pathTo (c.hornXy.x, mirrored (img, c.hornXy.y), -c.hornDepth, r, dx, dy, dz);
+                if (c.hornAtMic)   // its level against the cone's pass band where the table's mic stood, then as this mic hears it from there
+                {
+                    const double there = std::abs (heard (c, micRef, hdxR, hdyR, hdzR, f)) / hrR;
+                    const double here = std::abs (heard (c, mic, dx, dy, dz, f)) / r;
+                    sum += back * hn * (r0 * nearRef) * (here / there) * std::polar (1.0, -2 * pi * f * (r / c0 - minDelay));
+                }
+                else
+                    sum += back * hn * heard (c, mic, dx, dy, dz, f) * (r0 / r) * std::polar (1.0, -2 * pi * f * (r / c0 - minDelay));
+            }
         }
         // The baffle's edges: what the first cone sends along the baffle, inverted, coming back late and dark.
         {
@@ -672,13 +719,14 @@ inline double loudness (const std::vector<double>& ir, size_t n)
 }
 
 /** WHERE THE MIC STANDS, for a cabinet rendered live: across the first speaker in its radii from the cap (x right,
-    y up), and how far in front of the cap's plane; the horn on or off where the box has one. */
+    y up), and how far in front of the cap's plane; the horn on or off where the box has one, and its attenuator. */
 struct Spot
 {
     double x = 0, y = 0, distance = 0.05;
     bool horn = true;
     std::string mic;    // a "mic-<name>" section of the table laid over the cabinet's own, or empty for its own
     double angle = 0;   // degrees the mic leans back toward the cap
+    double hornDb = 0;  // the horn's level against the table's, its attenuator's step: 0, -6, -12
 };
 
 /** A cabinet of the table — its "<name> cap" section, the box as that section says, its mic or the one `spot` names
@@ -695,6 +743,7 @@ inline Cab cabAt (const Table& table, const std::string& cab, const Spot& spot)
     c.micD    = spot.distance;
     c.tilt    = spot.angle;
     c.horn    = c.horn && spot.horn;
+    c.hornDb += spot.hornDb;
     return c;
 }
 
@@ -751,6 +800,7 @@ inline std::vector<float> renderPair (const Table& table, const std::string& cab
 
     auto b = p.b;
     b.horn = p.a.horn;
+    b.hornDb = p.a.hornDb;
     auto ca = cabAt (table, cab, p.a), cb = cabAt (table, cab, b);
     const double da = firstArrival (ca), db = firstArrival (cb), first = std::min (da, db);
     ca.refDelay = p.align ? da : first;

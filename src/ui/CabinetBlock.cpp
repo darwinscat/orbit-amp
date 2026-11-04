@@ -34,7 +34,8 @@ struct CabinetBlock::BassRow
 };
 
 CabinetBlock::CabinetBlock (AmpProcessor& processor)
-    : BlockFrame ("Cab IR", BlockFrame::Kind::captured), amp (processor)
+    // The bass's says CAB: what it plays is mostly its own cabinets, drawn, and an IR only when the player brings one.
+    : BlockFrame (processor.product().chain == Chain::bass ? "Cab" : "Cab IR", BlockFrame::Kind::captured), amp (processor)
 {
     startTimerHz (30);
     attachPower (*amp.apvts.getParameter (params::cabOn));
@@ -58,8 +59,26 @@ CabinetBlock::CabinetBlock (AmpProcessor& processor)
         *amp.apvts.getParameter (params::cabIr),
         [this] (float) { refreshIr (false, true); });
 
-    // The bass opens its cabinets, drawn (showCabPanel); its own IRs are a door in there. The guitar opens its menu.
-    ir.onOpen = [this] { if (bassRow != nullptr) showCabPanel(); else showIrMenu(); };
+    // The guitar's name opens its menu. The bass's only says what plays: its two doors under the picture choose —
+    // FACTORY IRS, its cabinets drawn (showCabPanel), and MY IRS, the player's own, while there are any.
+    if (bassRow != nullptr)
+    {
+        ir.opens = false;
+        factoryIrs.text = "FACTORY IRS";
+        factoryIrs.onOpen = [this] { showCabPanel(); };
+        myIrs.text = "MY IRS";
+        myIrs.onOpen = [this] { showIrMenu (&myIrs); };
+        addAndMakeVisible (factoryIrs);
+        addChildComponent (myIrs);
+        lookAtLibrary();
+
+        pictureClick.onClick = [this] { if (AmpProcessor::cabSynthOf (amp.cabChoice()).valid) showCabPanel(); };
+        wave.addMouseListener (&pictureClick, false);
+    }
+    else
+    {
+        ir.onOpen = [this] { showIrMenu(); };
+    }
 
     // The picture: the IR, the cuts' curve and the trim's handle drawn on it, in the block's colour.
     wave.setAccent (theme::orange);
@@ -118,6 +137,8 @@ CabinetBlock::CabinetBlock (AmpProcessor& processor)
     };
 
     addAndMakeVisible (wave);
+    if (bassRow != nullptr)
+        addAndMakeVisible (sketch);   // over the picture
 
     // A handle dragged on the picture writes its parameter; the parameter's echo redraws it.
     wave.onHpfChanged  = [this] (bool, float hz) { hpfHzAtt->setValueAsCompleteGesture (hz); };
@@ -161,7 +182,10 @@ CabinetBlock::CabinetBlock (AmpProcessor& processor)
         }
     };
     trimCombo.onOpen = [this] { showTrimMenu(); };
-    addAndMakeVisible (trimCombo);
+    if (bassRow == nullptr)
+        addAndMakeVisible (trimCombo);   // the bass trims nothing: its doors stand there
+    else
+        addChildComponent (trimCombo);
 
     // The switches, each the truth of its parameter and nothing of its own.
     const char* ids[]    = { params::cabHpfOn, params::cabLpfOn, params::cabPhase };
@@ -220,20 +244,40 @@ void CabinetBlock::refreshIr (bool force, bool keepTrimWord)
     shownIr = choice.identity() + "|" + choice.name;
 
     // ...and a number the product does not play (Product::playsCabIr) is no cabinet: a bass amp with none of
-    // its own plays no IR at all, and says so rather than a guitar cabinet's name.
-    ir.setEntries ({ { choice.isUser() ? choice.name
-                                       : amp.product().playsCabIr (choice.factory) ? params::cabIrNames[choice.factory] : noIr,
-                       0, false } });
+    // its own plays no IR at all, and says so rather than a guitar cabinet's name. One of the bass's cabinets says
+    // its mics too: "SVT-410HE · MD421", "+U87" with a second one heard.
+    const auto synth = AmpProcessor::cabSynthOf (choice);
+    const bool factoryPlays = ! choice.isUser() && amp.product().playsCabIr (choice.factory);
+    juce::String shown = choice.isUser() ? choice.name : factoryPlays ? juce::String (params::cabIrNames[choice.factory]) : juce::String (noIr);
+    if (synth.valid)
+    {
+        const int at = CabPicker::indexOf (synth.cab);
+        const auto micOf = [at] (const AmpProcessor::CabSpot& s)
+        { return (s.mic.isNotEmpty() ? s.mic : at >= 0 ? CabPicker::cabs()[(size_t) at].mic : juce::String()).toUpperCase(); };
+        shown = synth.cab + juce::String::fromUTF8 (" \xc2\xb7 ") + micOf (synth.setup.a)
+              + (synth.setup.blend > 0.0f ? "+" + micOf (synth.setup.b) : juce::String());
+    }
+    ir.setEntries ({ { shown, 0, false } });
     ir.setSelection (0);
 
-    // The picture of the bass's cabinets says which plays, and where its mic stands — none for any other IR.
-    if (picker != nullptr)
+    // The bass's door whose IR plays, lit.
+    factoryIrs.lit = synth.valid || factoryPlays;
+    myIrs.lit = choice.isUser() && ! synth.valid;
+    factoryIrs.repaint();
+    myIrs.repaint();
+
+    // The pictures of the bass's cabinets — the panel's and the sketch over the IR — say which plays, and where its mics
+    // stand; none for any other IR.
     {
-        const auto synth = AmpProcessor::cabSynthOf (choice);
-        const auto spot = [] (const AmpProcessor::CabSpot& s) { return CabPicker::Spot { s.x, s.y, s.distance, s.horn, s.mic, s.angle }; };
+        const auto spot = [] (const AmpProcessor::CabSpot& s) { return CabPicker::Spot { s.x, s.y, s.distance, s.horn, s.mic, s.angle, s.hornDb }; };
         const auto& su = synth.setup;
-        picker->show (synth.valid ? CabPicker::indexOf (synth.cab) : -1,
-                      { spot (su.a), su.blend > 0.0f ? spot (su.b) : CabPicker::Setup{}.b, su.blend, su.align, su.invert });
+        const int cab = synth.valid ? CabPicker::indexOf (synth.cab) : -1;
+        const CabPicker::Setup setup { spot (su.a), su.blend > 0.0f ? spot (su.b) : CabPicker::Setup{}.b, su.blend, su.align, su.invert };
+        if (picker != nullptr)
+            picker->show (cab, setup);
+        sketch.cab = cab;
+        sketch.setup = setup;
+        sketch.repaint();
     }
 
     // The same bytes the engine convolves, whichever shelf they came off.
@@ -274,6 +318,37 @@ namespace
             total += irsBeneath (c);
         return total;
     }
+}
+
+void CabinetBlock::lookAtLibrary()
+{
+    // MY IRS stands while the library holds any — looked at now and then, the player adding them in SETUP.
+    const bool any = irsBeneath (device::IrLibrary::scan (device::IrLibrary::directory (amp.product().irsFolder()))) > 0;
+    if (any != myIrs.isVisible())
+    {
+        myIrs.setVisible (any);
+        resized();
+    }
+}
+
+int CabinetBlock::Door::idealWidth() const
+{
+    return juce::roundToInt (theme::trackedWidth (text, theme::displayFont (13.0f), 0.06f)) + 18;
+}
+
+void CabinetBlock::Door::paint (juce::Graphics& g)
+{
+    const auto r = getLocalBounds().toFloat();
+    g.setColour (lit ? theme::orange : theme::txDim);
+    theme::drawTracked (g, text, r.withTrimmedRight (14.0f), theme::displayFont (13.0f), 0.06f, juce::Justification::centredLeft);
+
+    // The chevron that says "this opens".
+    juce::Path v;
+    const float cx = r.getRight() - 6.0f, cy = r.getCentreY() - 1.0f;
+    v.startNewSubPath (cx - 3.0f, cy);
+    v.lineTo (cx, cy + 3.0f);
+    v.lineTo (cx + 3.0f, cy);
+    g.strokePath (v, juce::PathStrokeType (1.2f));
 }
 
 juce::PopupMenu CabinetBlock::irMenu (const AmpProcessor& amp, std::vector<juce::File>& files)
@@ -385,12 +460,12 @@ juce::PopupMenu CabinetBlock::irMenu (const AmpProcessor& amp, std::vector<juce:
     return menu;
 }
 
-void CabinetBlock::showIrMenu()
+void CabinetBlock::showIrMenu (juce::Component* from)
 {
     auto files = std::make_shared<std::vector<juce::File>>();
     auto menu = irMenu (amp, *files);
 
-    onfirst::show (menu, this, juce::PopupMenu::Options().withTargetComponent (&ir),
+    onfirst::show (menu, this, juce::PopupMenu::Options().withTargetComponent (from != nullptr ? from : &ir),
                         [safe = juce::Component::SafePointer<CabinetBlock> (this), files] (int r)
                         {
                             if (safe == nullptr || r <= 0)
@@ -413,27 +488,24 @@ void CabinetBlock::showIrMenu()
 void CabinetBlock::showCabPanel()
 {
     auto content = std::make_unique<CabPicker>();
-    content->setSize (640, 260);
+    content->setSize (CabPicker::panelW, CabPicker::panelH);
 
     // The bass's own cabinets, rendered live with the mic where the hand put it (AmpProcessor::requestCabSynth).
     content->onSetup = [this] (int cab, CabPicker::Setup setup)
     {
-        const auto spot = [] (const CabPicker::Spot& s) { return AmpProcessor::CabSpot { s.x, s.y, s.distance, s.horn, s.mic, s.angle }; };
+        const auto spot = [] (const CabPicker::Spot& s) { return AmpProcessor::CabSpot { s.x, s.y, s.distance, s.horn, s.mic, s.angle, s.hornDb }; };
         amp.requestCabSynth (CabPicker::cabs()[(size_t) cab].name, { spot (setup.a), spot (setup.b), setup.blend, setup.align, setup.invert });
     };
-    content->onOwnIrs = [this]
-    {
-        if (pickerBox != nullptr)
-            pickerBox->dismiss();
-        showIrMenu();
-    };
+
+    content->onClose = [this] { if (pickerBox != nullptr) pickerBox->dismiss(); };
 
     picker = content.get();
     shownIr.clear();
     refreshIr (true);   // what plays, shown in it
 
-    // Over the face, its arrow on the name, inside the window where it fits (as the DSP figure's breakdown opens).
-    const auto anchor = ir.getScreenBounds();
+    // Over the face above the block, its arrow at the block's top, inside the window where it fits: the block stays in
+    // sight, its picture and its name answering the hand.
+    const auto anchor = getScreenBounds();
     auto& box = juce::CallOutBox::launchAsynchronously (std::move (content), anchor, nullptr);
 
     // Ours, not JUCE's grey-green: the face's panel under it, the CAB's orange line round it and its arrow.
@@ -746,6 +818,7 @@ void CabinetBlock::layOutContent (juce::Rectangle<int> area)
     switches[1].sw.setTooltip (narrow ? "LPF" : juce::String());
 
     auto row = area.removeFromBottom (switchRow);
+    const auto wholeRow = row;   // the bass's doors take it edge to edge: its cuts' seats stand empty
     area.removeFromBottom (gap);
 
     if (narrow)
@@ -777,7 +850,19 @@ void CabinetBlock::layOutContent (juce::Rectangle<int> area)
     trimCombo.setBounds (row.withSizeKeepingCentre (juce::jmin (90, row.getWidth() - 12),
                                                     row.getHeight()));
 
+    // The bass's two doors where the trim stands: FACTORY IRS at the left, MY IRS at the right.
+    if (bassRow != nullptr)
+    {
+        factoryIrs.setBounds (wholeRow.withWidth (juce::jmin (wholeRow.getWidth(), factoryIrs.idealWidth())));
+        myIrs.setBounds (wholeRow.withTrimmedLeft (juce::jmax (0, wholeRow.getWidth() - myIrs.idealWidth())));
+    }
+
     wave.setBounds (area);
+
+    // The bass's sketch over the whole picture, drawn at its right (CabPicker::paintSketch) — over the time and dB marks
+    // there and the IR's line, the tolex letting them through.
+    if (bassRow != nullptr)
+        sketch.setBounds (area);
 }
 
 void CabinetBlock::paintContent (juce::Graphics&) {}
@@ -789,6 +874,12 @@ GuardRail* CabinetBlock::diRail() noexcept { return bassRow != nullptr ? &bassRo
 void CabinetBlock::timerCallback()
 {
     refreshIr();   // before the early return: what plays is shown whether or not the block is on
+
+    if (bassRow != nullptr && isShowing() && --libraryLook <= 0)
+    {
+        libraryLook = 90;   // three seconds
+        lookAtLibrary();
+    }
 
     if (! isBlockOn() || ! wave.isShowing())
         return;

@@ -57,7 +57,7 @@ public:
     int idealWidth() const
     {
         const float text = theme::trackedWidth (label(), theme::displayFont (fontHeight), tracking);
-        return juce::roundToInt (text) + 2 * padX + (int) chevronW;
+        return juce::roundToInt (text) + 2 * padX + (opens ? (int) chevronW : 0);
     }
 
     /** A pick out of the list. */
@@ -77,6 +77,10 @@ public:
         a mask painted by this control would go half-transparent with a switched-off block and let
         the line strike the name through). Hover lifts the text. */
     bool boxed = true;
+
+    /** False: a name that only says what is chosen — no chevron, no hover, no click (OrbitBass's cabinet, chosen by the
+        doors under its picture). */
+    bool opens = true;
 
     /** A list with no character ramp — a DSP block's own choices, PLATE or HALL — wears one colour,
         the block's accent, instead of a place on the green-to-red. */
@@ -110,7 +114,7 @@ public:
         // The name fits the room it was given. A long one — "GUITAR BUTLER CLEAN" on a half-width
         // block — comes down in size to a reading floor, and past that loses its end to an
         // ellipsis rather than both ends to the edges.
-        const auto textArea = cell.reduced ((float) padX, 0.0f).withTrimmedRight (chevronW);
+        const auto textArea = cell.reduced ((float) padX, 0.0f).withTrimmedRight (opens ? chevronW : 0.0f);
         auto  text = label();
         float size = fontHeight;
 
@@ -126,6 +130,9 @@ public:
         theme::drawTracked (g, text, textArea, theme::displayFont (size), tracking,
                             juce::Justification::centred);
 
+        if (! opens)
+            return;
+
         // The chevron that says "a list": down, at the right, in the same tint as the name.
         juce::Path v;
         const float cx = cell.getRight() - 12.0f, cy = cell.getCentreY() - 1.0f;
@@ -137,7 +144,7 @@ public:
 
     void mouseDown (const juce::MouseEvent& e) override
     {
-        if (! cellArea().contains (e.getPosition()))
+        if (! opens || ! cellArea().contains (e.getPosition()))
             return;
 
         if (onOpen)
@@ -169,7 +176,7 @@ public:
                             [this] (int choice) { if (choice > 0) pick (choice - 1); });
     }
 
-    void mouseMove (const juce::MouseEvent& e) override { setHover (cellArea().contains (e.getPosition())); }
+    void mouseMove (const juce::MouseEvent& e) override { setHover (opens && cellArea().contains (e.getPosition())); }
     void mouseExit (const juce::MouseEvent&) override   { setHover (false); }
 
 private:

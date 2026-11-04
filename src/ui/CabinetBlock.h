@@ -53,8 +53,8 @@ private:
 
     /** The IR list: the shelf as one submenu per cabinet, each opening on a line that says what
         its IRs are; below them, when the library holds any of the player's own, the library as its
-        folder tree. */
-    void showIrMenu();
+        folder tree. Opened from the block's name — the bass's from its MY IRS under the picture (`from`). */
+    void showIrMenu (juce::Component* from = nullptr);
 
     juce::String shownIr;   // CabChoice::identity + "|" + name of what the face last showed
 
@@ -71,14 +71,58 @@ private:
     struct BassRow;
     std::unique_ptr<BassRow> bassRow;
 
-    /** OrbitBass's cabinets, drawn (ui/CabPicker.h), in a panel over the face that the name on the border opens: the
-        block is too narrow for them beside a delay and a reverb. Set while the panel is open. */
+    /** OrbitBass's cabinets, drawn (ui/CabPicker.h), in a panel over the face that FACTORY IRS opens: the block is
+        too narrow for them beside a delay and a reverb. Set while the panel is open. */
     juce::Component::SafePointer<CabPicker> picker;
     juce::Component::SafePointer<juce::CallOutBox> pickerBox;
     void showCabPanel();
 
+    /** OrbitBass's two doors under the picture, where the guitar's trim stands: FACTORY IRS (the cabinets, drawn) and
+        MY IRS (the player's own, while the library holds any) — the one whose IR plays in the block's orange. The name
+        on the border only says what plays. */
+    struct Door final : public juce::Component
+    {
+        juce::String text;
+        bool lit = false;
+        std::function<void()> onOpen;
+        int idealWidth() const;
+        void paint (juce::Graphics&) override;
+        void mouseDown (const juce::MouseEvent&) override { if (onOpen) onOpen(); }
+    };
+    Door factoryIrs, myIrs;
+    int libraryLook = 0;   // timer ticks to the next look at whether the library holds any IRs
+    void lookAtLibrary();
+
+    /** OrbitBass: a click on the picture while one of its cabinets plays opens their panel — the picture is that
+        cabinet's. A drag or a right click is the picture's own. Declared before the picture, so it outlives it. */
+    struct PictureClick final : public juce::MouseListener
+    {
+        std::function<void()> onClick;
+        void mouseUp (const juce::MouseEvent& e) override
+        {
+            if (onClick != nullptr && e.mouseWasClicked() && ! e.mods.isPopupMenu())
+                onClick();
+        }
+    };
+    PictureClick pictureClick;
+
     VoicingSelector ir;
     felitronics::appkit::IrWaveView wave;
+
+    /** OrbitBass: the cabinet that plays and its mics, small, over the picture's right — where a bass cabinet's IR is only
+        its tail (CabPicker::paintSketch). Clicks go through it to the picture; none while an IR of the player's own plays. */
+    struct Sketch final : public juce::Component
+    {
+        int cab = -1;
+        CabPicker::Setup setup;
+        Sketch() { setInterceptsMouseClicks (false, false); setBufferedToImage (true); }
+        void paint (juce::Graphics& g) override
+        {
+            // Between the picture's time marks along its top and the IR's line along its bottom (IrWaveView's own).
+            CabPicker::paintSketch (g, cab, setup, getLocalBounds().toFloat().withTrimmedTop (14.0f).withTrimmedBottom (24.0f));
+        }
+    };
+    Sketch sketch;
 
 public:
     juce::Component& waveView() noexcept { return wave; }
