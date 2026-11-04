@@ -28,9 +28,10 @@ namespace orbitamp
     the speaker, dragged across it and just past its rim; their two columns either side, each its mic, its places (CAP,
     EDGE, OFF and ROOM, one click each), distance and angle; BLEND, ALIGN and Ø under it, and two buttons: DEFAULT, the
     box's own mic back at its cap — SURE? at the first click, done at the second — and CLOSE. A mic's row clicked again
-    while both are heard takes that mic away; the last one stays. While the hand moves, the cabinet is heard as it goes
-    (onMove) — each position the worker reaches next, a tenth of a second for one mic, near a second for two on the 8x10
-    — and what is set is kept when the hand lets go (onSetup).
+    while both are heard turns that mic off where it stands, its column dark, BLEND left where it is and not heard while
+    one mic is (the owner, 04.11); a click in the dark column brings it back; the last one stays. While the hand moves,
+    the cabinet is heard as it goes (onMove) — each position the worker reaches next, a tenth of a second for one mic,
+    near a second for two on the 8x10 — and what is set is kept when the hand lets go (onSetup).
 
     A dumb view: the cabinets in (cabs(), geometry from tools/cabgen/cabinets.txt — metres, the baffle's centre the
     origin, up positive), what plays in (show), a pick out (onSetup). */
@@ -55,14 +56,15 @@ public:
         float hornDb = 0.0f;                          // the horn's attenuator while it is on: 0, -6, -12 (A's counts)
     };
 
-    /** Two mics on the box (AmpProcessor::CabSetup): A, and B mixed in by `blend` — 0 is A alone — on one clock unless
-        `align`, B turned over by `invert`. The horn is A's. ALIGN from the start: two mics at two distances, unaligned,
-        comb — rarely what a second mic is put up for. */
+    /** Two mics on the box (AmpProcessor::CabSetup), each on or off: both on, B mixed into A by `blend` on one clock
+        unless `align`, B turned over by `invert`; one on, that one alone, and `blend` not heard. The horn is A's. ALIGN
+        from the start: two mics at two distances, unaligned, comb — rarely what a second mic is put up for. */
     struct Setup
     {
         Spot a, b { 0.0f, 0.0f, 0.25f, true, "u87" };
-        float blend = 0.0f;
+        float blend = 0.5f;
         bool align = true, invert = false;
+        bool aOn = true, bOn = false;
     };
 
     /** The mics to choose from, as the table names them (its "mic-<name>" sections), and as the columns write them. */
@@ -641,8 +643,10 @@ public:
         {
             const auto o = onBox (box, s, c.drivers.front());
             const float r = c.radius * s;
-            for (int m = setup.blend > 0.0f ? 1 : 0; m >= 0; --m)
+            for (int m = 1; m >= 0; --m)
             {
+                if (! (m == 0 ? setup.aOn : setup.bOn))
+                    continue;
                 const auto& sp = m == 0 ? setup.a : setup.b;
                 g.setColour (m == 0 ? theme::orange : theme::lilac);
                 g.fillEllipse (juce::Rectangle<float> (5, 5).withCentre (o + juce::Point<float> (sp.x * r, -sp.y * r)));
@@ -671,14 +675,14 @@ public:
 
     /** The mics on a speaker drawn at `o`, radius `R`, in perspective, the farther from the cone drawn last (nearest the
         eye): its shadow on the cone, then the glyph, its capsule over the spot, as tall as it is near the eye, leaning back
-        toward the cap; B only while it is heard. `k` the scene's size, the panel's 1. */
+        toward the cap; each only while it is on. `k` the scene's size, the panel's 1. */
     static void paintMicsOn (juce::Graphics& g, const Cab& cab, const Setup& setup, juce::Point<float> o, float R, float k)
     {
         int order[2] { 0, 1 };
         if (setup.b.distance < setup.a.distance) std::swap (order[0], order[1]);
         for (int m : order)
         {
-            if (m == 1 && setup.blend <= 0.0f)
+            if (! (m == 0 ? setup.aOn : setup.bOn))
                 continue;
             const auto& sp = m == 0 ? setup.a : setup.b;
             const float near = nearness (sp.distance);
@@ -809,11 +813,11 @@ private:
                                       { "OFF", 0.5f, 0.05f, 35.0f }, { "ROOM", 0.0f, 0.30f, 0.0f } };
     void putAt (int m, const Place& p)
     {
-        if (m == 1) takeUpB();
+        takeUp (m);
         auto& sp = mic (m);
         float side = sp.x > 0.05f ? 1.0f : sp.x < -0.05f ? -1.0f : 0.0f;
-        if (side == 0.0f)   // on the axis: the side away from the other mic
-            side = mic (1 - m).x > 0.0f && (m == 1 || heardB()) ? -1.0f : 1.0f;
+        if (side == 0.0f)   // on the axis: the side away from the other mic, while that one is on
+            side = mic (1 - m).x > 0.0f && heard (1 - m) ? -1.0f : 1.0f;
         sp.x = side * p.r;
         sp.y = 0.0f;
         sp.distance = p.distance;
@@ -842,15 +846,21 @@ private:
         return std::log (juce::jlimit (minCm, maxCm, distance * 100.0f) / minCm) / std::log (maxCm / minCm);
     }
 
-    bool heardB() const { return setup_.blend > 0.0f; }
+    bool heard (int m) const { return m == 0 ? setup_.aOn : setup_.bOn; }
+    bool bothHeard() const { return setup_.aOn && setup_.bOn; }
 
-    /** B's column taken up: B is heard, half and half, from the first touch — and stands on the other side of the cone
-        from A, not on top of it, where it was only waiting. */
-    void takeUpB()
+    /** A dark column taken up: its mic heard again where it stood, BLEND where it was left. B taken up the first time
+        stands on the other side of the cone from A, not on top of it, where it was only waiting. */
+    void takeUp (int m)
     {
-        if (heardB())
+        if (heard (m))
             return;
-        setup_.blend = 0.5f;
+        if (m == 0)
+        {
+            setup_.aOn = true;
+            return;
+        }
+        setup_.bOn = true;
         if (std::hypot (setup_.b.x - setup_.a.x, setup_.b.y - setup_.a.y) < 0.4f)
         {
             setup_.b.x = setup_.a.x >= 0.0f ? -0.6f : 0.6f;
@@ -885,26 +895,16 @@ private:
             for (int i = 0; i < mics().size(); ++i)
                 if (micRow (m, i).contains (pos))
                 {
-                    // The lit one clicked again, with both mics heard: that mic goes. A going hands its place to B, and
-                    // B keeps A's for when it is taken up again. The last mic never goes.
+                    // The lit one clicked again, with both mics heard: that mic goes off where it stands, the other
+                    // stays where it is, BLEND too. The last mic never goes.
                     const auto& own = mic (m).mic.isNotEmpty() ? mic (m).mic : cabs()[(size_t) chosen].mic;
-                    if (heardB() && mics()[i] == own)
+                    if (bothHeard() && mics()[i] == own)
                     {
-                        if (m == 0)
-                        {
-                            auto& a = setup_.a;
-                            auto& b = setup_.b;
-                            std::swap (a.x, b.x);
-                            std::swap (a.y, b.y);
-                            std::swap (a.distance, b.distance);
-                            std::swap (a.mic, b.mic);
-                            std::swap (a.angle, b.angle);
-                        }
-                        setup_.blend = 0.0f;
+                        (m == 0 ? setup_.aOn : setup_.bOn) = false;
                         send();
                         return;
                     }
-                    if (m == 1) takeUpB();
+                    takeUp (m);
                     mic (m).mic = mics()[i];
                     send();
                     return;
@@ -912,7 +912,7 @@ private:
             for (int which = 0; which < 2; ++which)
                 if (track (m, which).expanded (2.0f, 10.0f).contains (e.position))
                 {
-                    if (m == 1) takeUpB();
+                    takeUp (m);
                     drag = which == 0 ? Drag::distance : Drag::angle;
                     dragMic = m;
                     dragging = true;
@@ -947,7 +947,7 @@ private:
         }
         if (alignArea().expanded (4, 2).contains (pos)) { setup_.align = ! setup_.align; send(); return; }
         if (invertArea().expanded (4, 2).contains (pos)) { setup_.invert = ! setup_.invert; send(); return; }
-        if (blendTrack().expanded (8.0f, 8.0f).contains (e.position))
+        if (bothHeard() && blendTrack().expanded (8.0f, 8.0f).contains (e.position))
         {
             drag = Drag::blend;
             dragging = true;
@@ -957,9 +957,9 @@ private:
 
         if (scene().contains (e.position))
         {
-            // The nearer mic of the two (B only once it is heard) is the one taken; elsewhere, A moves.
-            int m = 0;
-            if (heardB() && e.position.getDistanceFrom (spotOf (1)) < e.position.getDistanceFrom (spotOf (0)))
+            // The nearer mic of the two heard is the one taken; with one heard, that one.
+            int m = heard (0) ? 0 : 1;
+            if (bothHeard() && e.position.getDistanceFrom (spotOf (1)) < e.position.getDistanceFrom (spotOf (0)))
                 m = 1;
             drag = Drag::spot;
             dragMic = m;
@@ -986,7 +986,7 @@ private:
         const auto font = theme::displayFont (13.0f);
         const auto c = column (m);
         const auto colour = colourOf (m);
-        const bool live = m == 0 || heardB();
+        const bool live = heard (m);
         const float dim = live ? 1.0f : 0.45f;
         const auto& sp = mic (m);
         const auto& cab = cabs()[(size_t) chosen];
@@ -1082,23 +1082,24 @@ private:
             paintMicsOn (g, cab, setup_, o, R, 1.0f);
         }
 
-        // The blend: A..B on a track, ALIGN, and Ø for B.
+        // The blend: A..B on a track, ALIGN, and Ø for B — faint while one mic is heard, the blend not heard then.
         {
+            const float dim = bothHeard() ? 1.0f : 0.45f;
             const auto row = foot().toFloat();
             g.setColour (theme::txFaint);
             theme::drawTracked (g, "BLEND", row, font, 0.06f, juce::Justification::centredLeft);
             const auto t = blendTrack();
-            g.setColour (theme::orange);
+            g.setColour (theme::orange.withMultipliedAlpha (dim));
             theme::drawTracked (g, "A", juce::Rectangle<float> (t.getX() - 18.0f, row.getY(), 14.0f, row.getHeight()), font, 0.0f, juce::Justification::centred);
-            g.setColour (theme::lilac);
+            g.setColour (theme::lilac.withMultipliedAlpha (dim));
             theme::drawTracked (g, "B", juce::Rectangle<float> (t.getRight() + 4.0f, row.getY(), 14.0f, row.getHeight()), font, 0.0f, juce::Justification::centred);
             g.setColour (theme::hair2);
             g.fillRoundedRectangle (t.withSizeKeepingCentre (t.getWidth(), 2.0f), 1.0f);
-            g.setColour (theme::orange.interpolatedWith (theme::lilac, setup_.blend));
+            g.setColour (theme::orange.interpolatedWith (theme::lilac, setup_.blend).withMultipliedAlpha (dim));
             g.fillRoundedRectangle (juce::Rectangle<float> (6.0f, 14.0f).withCentre ({ t.getX() + setup_.blend * t.getWidth(), t.getCentreY() }), 2.0f);
-            g.setColour (heardB() && setup_.align ? theme::orange : theme::txFaint);
+            g.setColour (bothHeard() && setup_.align ? theme::orange : theme::txFaint);
             theme::drawTracked (g, "ALIGN", alignArea().toFloat(), font, 0.06f, juce::Justification::centredLeft);
-            g.setColour (heardB() && setup_.invert ? theme::orange : theme::txFaint);
+            g.setColour (bothHeard() && setup_.invert ? theme::orange : theme::txFaint);
             theme::drawTracked (g, juce::String::fromUTF8 ("\xc3\x98"), invertArea().toFloat(), font, 0.0f, juce::Justification::centred);
             // DEFAULT and CLOSE, buttons: a box round each word.
             const auto button = [&] (const char* word, juce::Rectangle<int> r, bool asking)

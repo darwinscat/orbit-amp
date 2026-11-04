@@ -828,7 +828,17 @@ void AmpProcessor::requestCabSynth (const juce::String& cab, CabSetup setup, boo
 
         static const auto table = core::cabsynth::parseTable (std::string (BinaryData::cabinets_txt, (size_t) BinaryData::cabinets_txtSize));
         const auto spot = [] (const CabSpot& s) { return core::cabsynth::Spot { s.x, s.y, s.distance, s.horn, s.mic.toStdString(), s.angle, s.hornDb }; };
-        const auto ir  = core::cabsynth::renderPair (table, cab.toStdString(), { spot (setup.a), spot (setup.b), setup.blend, setup.align, setup.invert });
+        core::cabsynth::Pair pair { spot (setup.a), spot (setup.b), setup.blend, setup.align, setup.invert };
+        if (! setup.bOn)
+            pair.blend = 0;                 // A alone: the blend not heard
+        else if (! setup.aOn)
+        {
+            pair.a = spot (setup.b);        // B alone, as one mic is rendered — the horn as A's says it
+            pair.a.horn   = setup.a.horn;
+            pair.a.hornDb = setup.a.hornDb;
+            pair.blend = 0;
+        }
+        const auto ir  = core::cabsynth::renderPair (table, cab.toStdString(), pair);
         const auto wav = core::cabsynth::wav24 (ir, 48000);
         auto bytes = std::make_shared<juce::MemoryBlock> (wav.data(), wav.size());
 
@@ -869,7 +879,8 @@ juce::String AmpProcessor::cabSynthFrom (const juce::String& box, const CabSetup
          + "|" + juce::String (a.distance, 3) + "|" + horn + "|" + a.mic
          + "|" + juce::String (setup.blend, 3) + "|" + (setup.align ? "1" : "0") + "|" + (setup.invert ? "1" : "0")
          + "|" + juce::String (b.x, 3) + "|" + juce::String (b.y, 3) + "|" + juce::String (b.distance, 3)
-         + "|" + b.mic + "|" + juce::String (a.angle, 1) + "|" + juce::String (b.angle, 1);
+         + "|" + b.mic + "|" + juce::String (a.angle, 1) + "|" + juce::String (b.angle, 1)
+         + "|" + (setup.aOn ? "1" : "0") + "|" + (setup.bOn ? "1" : "0");
 }
 
 AmpProcessor::CabSynthChoice AmpProcessor::cabSynthOf (const CabChoice& choice)
@@ -897,11 +908,17 @@ AmpProcessor::CabSynthChoice AmpProcessor::cabSynthOf (const juce::String& from)
         out.setup.invert = parts[8] == "1";
         out.setup.b      = { parts[9].getFloatValue(), parts[10].getFloatValue(), parts[11].getFloatValue(), out.setup.a.horn, parts[12] };
         out.setup.b.hornDb = out.setup.a.hornDb;
+        out.setup.bOn    = out.setup.blend > 0.0f;    // ...as a `from` said it before each mic was on or off: B heard by a blend
     }
     if (parts.size() >= 15)
     {
         out.setup.a.angle = parts[13].getFloatValue();
         out.setup.b.angle = parts[14].getFloatValue();
+    }
+    if (parts.size() >= 17)
+    {
+        out.setup.aOn = parts[15] == "1";
+        out.setup.bOn = parts[16] == "1";
     }
     out.valid = true;
     return out;

@@ -18,7 +18,9 @@ std::pair<int, CabPicker::Setup> CabWindow::drawnOf (const AmpProcessor::CabSynt
 {
     const auto& su = synth.setup;
     const int cab = synth.valid ? CabPicker::indexOf (synth.cab) : -1;
-    return { cab, { toPicture (su.a), su.blend > 0.0f ? toPicture (su.b) : CabPicker::Setup{}.b, su.blend, su.align, su.invert } };
+    // B where it stood, on or off, once it has stood anywhere — the mic it was given says so; else where B waits.
+    return { cab, { toPicture (su.a), su.b.mic.isNotEmpty() ? toPicture (su.b) : CabPicker::Setup{}.b, su.blend, su.align, su.invert,
+                    su.aOn, su.bOn } };
 }
 
 CabWindow::CabWindow (AmpProcessor& a, CabPicker::Range range, std::function<void()> p)
@@ -28,7 +30,8 @@ CabWindow::CabWindow (AmpProcessor& a, CabPicker::Range range, std::function<voi
     const auto request = [this] (int cab, const CabPicker::Setup& setup, bool live)
     {
         amp.requestCabSynth (CabPicker::cabs()[(size_t) cab].name,
-                             { toEngine (setup.a), toEngine (setup.b), setup.blend, setup.align, setup.invert }, live);
+                             { toEngine (setup.a), toEngine (setup.b), setup.blend, setup.align, setup.invert, setup.aOn, setup.bOn },
+                             live);
     };
     picker.onSetup = [this, request] (int cab, CabPicker::Setup setup)
     {
