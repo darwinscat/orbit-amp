@@ -275,11 +275,29 @@ private:
         return f == 0 ? juce::Rectangle<int> (0, 0, svtW, 18) : juce::Rectangle<int> (svtW + 14, 0, ventW, 18);
     }
 
+    /** MY IRS: top right in the boxes' view, between the way back and HORN over the speaker. */
     juce::Rectangle<int> ownArea() const
     {
         const auto font = theme::displayFont (13.0f);
-        const int w = juce::roundToInt (theme::trackedWidth ("MY IRS", font, 0.08f)) + 4;
-        return { getWidth() - w, 0, w, 18 };
+        const int w = juce::roundToInt (theme::trackedWidth ("MY IRS", font, 0.08f)) + 18;
+        if (! zoomed)
+            return { getWidth() - w, 0, w, 18 };
+        return { (getWidth() - w) / 2, 0, w, 18 };
+    }
+
+    void paintOwn (juce::Graphics& g) const
+    {
+        if (onOwnIrs == nullptr)
+            return;
+        const auto r = ownArea().toFloat();
+        g.setColour (theme::tx);
+        theme::drawTracked (g, "MY IRS", r.withTrimmedRight (14.0f), theme::displayFont (13.0f), 0.08f, juce::Justification::centredRight);
+        juce::Path v;   // the menu's arrow, as the border's names carry it
+        const float x = r.getRight() - 6.0f, y = r.getCentreY();
+        v.startNewSubPath (x - 4.0f, y - 2.0f);
+        v.lineTo (x, y + 2.0f);
+        v.lineTo (x + 4.0f, y - 2.0f);
+        g.strokePath (v, juce::PathStrokeType (1.3f));
     }
 
     juce::Rectangle<int> rowArea() const { return getLocalBounds().withTrimmedTop (24).reduced (2, 0); }
@@ -333,6 +351,31 @@ private:
         return { box.getCentreX() + p.x * s, box.getCentreY() - p.y * s };
     }
 
+    /** A HF horn as it faces the player: its mouth a rounded rectangle, its walls narrowing to the throat, the driver a
+        dark slot at the bottom of it — `s` px a metre; dim when it is turned off. */
+    static void paintHorn (juce::Graphics& g, juce::Point<float> c, float s, juce::Colour colour)
+    {
+        // A tunnel: the mouth, the flare narrowing inside it a little above the centre, the throat dark at its end.
+        const auto mouth  = juce::Rectangle<float> (0.12f * s, 0.065f * s).withCentre (c);
+        const auto flare  = juce::Rectangle<float> (0.075f * s, 0.038f * s).withCentre (c.translated (0, -0.004f * s));
+        const auto throat = juce::Rectangle<float> (0.03f * s, 0.016f * s).withCentre (c.translated (0, -0.007f * s));
+        const float line = juce::jlimit (0.7f, 1.2f, 0.01f * s);
+        g.setColour (juce::Colours::black.withAlpha (0.6f));
+        g.fillRoundedRectangle (mouth, 0.014f * s);
+        g.setColour (colour.withMultipliedAlpha (0.10f));
+        g.fillRoundedRectangle (mouth.reduced (line), 0.012f * s);
+        g.setColour (juce::Colours::black.withAlpha (0.45f));
+        g.fillRoundedRectangle (flare, 0.009f * s);
+        g.setColour (juce::Colours::black);
+        g.fillRoundedRectangle (throat, 0.005f * s);
+        g.setColour (colour.withMultipliedAlpha (0.45f));
+        g.drawRoundedRectangle (flare, 0.009f * s, line * 0.7f);
+        g.setColour (colour.withMultipliedAlpha (0.8f));
+        g.drawRoundedRectangle (throat, 0.005f * s, line * 0.7f);
+        g.setColour (colour);
+        g.drawRoundedRectangle (mouth, 0.014f * s, line);
+    }
+
     void paintRow (juce::Graphics& g) const
     {
         // The two families, as words to click: the one shown in the block's orange, the other faint.
@@ -343,11 +386,7 @@ private:
             theme::drawTracked (g, f == 0 ? "SVT" : "VENTURE", tabArea (f).toFloat(), font, 0.08f, juce::Justification::centredLeft);
         }
 
-        if (onOwnIrs != nullptr)
-        {
-            g.setColour (theme::txDim);
-            theme::drawTracked (g, "MY IRS", ownArea().toFloat(), font, 0.08f, juce::Justification::centredRight);
-        }
+        paintOwn (g);
 
         const auto row = rowArea();
         g.setColour (theme::hair);
@@ -387,9 +426,8 @@ private:
 
         if (c.horn)
         {
-            const auto r = juce::Rectangle<float> (0.10f * s, 0.05f * s).withCentre (onBox (box, s, c.hornAt));
-            g.setColour (isChosen && ! setup_.a.horn ? theme::txFaint.withAlpha (0.4f) : theme::lilac.withAlpha (isChosen ? 0.9f : 0.55f));
-            g.drawRoundedRectangle (r, 1.5f, 1.0f);
+            paintHorn (g, onBox (box, s, c.hornAt), s,
+                       isChosen && ! setup_.a.horn ? theme::txFaint.withAlpha (0.4f) : theme::lilac.withAlpha (isChosen ? 0.9f : 0.55f));
         }
 
         // The mics where they stand on the first speaker, A orange and B lilac; farther off, a ring as wide as the distance.
@@ -514,6 +552,11 @@ private:
         {
             zoomed = false;
             repaint();
+            return;
+        }
+        if (onOwnIrs != nullptr && ownArea().contains (pos))
+        {
+            onOwnIrs();
             return;
         }
         const auto& cab = cabs()[(size_t) chosen];
@@ -641,6 +684,7 @@ private:
             theme::drawTracked (g, "HORN", hornArea().toFloat(), font, 0.08f, juce::Justification::centredRight);
         }
 
+        paintOwn (g);
         paintColumn (g, 0);
         paintColumn (g, 1);
 
@@ -664,8 +708,7 @@ private:
             if (cab.horn)
             {
                 const auto d = cab.hornAt - cab.drivers.front();
-                g.setColour (setup_.a.horn ? theme::lilac.withAlpha (0.6f) : theme::txFaint.withAlpha (0.3f));
-                g.drawRoundedRectangle (juce::Rectangle<float> (0.10f * s, 0.05f * s).withCentre (o + juce::Point<float> (d.x * s, -d.y * s)), 3.0f, 1.0f);
+                paintHorn (g, o + juce::Point<float> (d.x * s, -d.y * s), s, setup_.a.horn ? theme::lilac.withAlpha (0.8f) : theme::txFaint.withAlpha (0.35f));
             }
 
             // The speaker, flat: its surround, its cone in rings, its cap.
