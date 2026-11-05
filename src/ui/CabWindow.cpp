@@ -143,6 +143,7 @@ void CabWindow::placeB (int cab, const CabPicker::Setup& setup, bool thorough)
             moved.b.x = (float) place.x;
             moved.b.y = (float) place.y;
             moved.b.distance = (float) place.distance;
+            moved.shiftMs = (float) place.shiftMs;
             safe->picker.show (cab, moved);
             safe->picker.onSetup (cab, moved);
         });
