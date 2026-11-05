@@ -49,7 +49,7 @@ public:
     CabPicker() = default;
 
     /** The size it is drawn for — small enough to open over a cabin's face too. */
-    static constexpr int panelW = 996, panelH = 384;
+    static constexpr int panelW = 906, panelH = 384;
 
     struct Spot
     {
@@ -74,7 +74,7 @@ public:
 
     /** The mics to choose from, as the table names them (its "mic-<name>" sections), and as the columns write them. */
     static const juce::StringArray& mics()      { static const juce::StringArray m { "md421", "sm57", "re20", "d112", "u87", "u47", "ribbon" }; return m; }
-    static const juce::StringArray& micWords()  { static const juce::StringArray m { "MD421", "SM57", "RE20", "D112", "U87", "U47", "RIBBON" }; return m; }
+    static const juce::StringArray& micWords()  { static const juce::StringArray m { "MD421", "SM57", "RE20", "D112", "U87", "U47", "RIBB" }; return m; }
 
     struct Cab
     {
@@ -253,15 +253,18 @@ public:
 
     void mouseMove (const juce::MouseEvent& e) override
     {
-        const int was = hover;
+        const int was = hover, wasDist = distHover;
         hover = cabAt (e.position);
-        if (hover != was)
+        distHover = distHoverAt (e.position);
+        if (hover != was || distHover != wasDist)
             repaint();
     }
 
     void mouseExit (const juce::MouseEvent&) override
     {
         hover = -1;
+        if (! dragging)
+            distHover = -1;
         repaint();
     }
 
@@ -294,7 +297,7 @@ public:
         }
         else if (drag == Drag::distance)
         {
-            const auto t = distTrack (dragMic);
+            const auto t = dragTrack;
             m.distance = minCm * std::pow (maxCm / minCm, juce::jlimit (0.0f, 1.0f, (t.getBottom() - e.position.y) / t.getHeight())) / 100.0f;
         }
         else if (drag == Drag::angle)
@@ -306,12 +309,13 @@ public:
             onMove (chosen, setup_);
     }
 
-    void mouseUp (const juce::MouseEvent&) override
+    void mouseUp (const juce::MouseEvent& e) override
     {
         if (drag != Drag::none)
         {
             drag = Drag::none;
             dragging = false;
+            distHover = distHoverAt (e.position);   // a slider out stays only while the hand is still on it
             send();
         }
     }
@@ -319,7 +323,7 @@ public:
 private:
     static constexpr float maxReach = 1.1f;    // how far from the cap the mic may go, in radii: just past the rim, in sight
     static constexpr float minCm = 1.0f, maxCm = 30.0f, maxAngle = 60.0f;
-    static constexpr int leftW = 444, gutter = 14;   // the pile's half; the hair between the halves
+    static constexpr int leftW = 460, gutter = 14;   // the pile's half; the hair between the halves
     static constexpr int footH = 26, responseH = 104;  // the foot's row under it all; the response's band over it
 
     /** Down to the response's band: the pile, the columns and the speaker over it, the feet under it. */
@@ -328,6 +332,8 @@ private:
     enum class Drag { none, spot, distance, angle, blend };
 
     int chosen = -1, hover = -1;
+    int distHover = -1;                 // the mic whose distance the hand is over, on the speaker: its slider out
+    juce::Rectangle<float> dragTrack;   // the distance track a drag began on: the column's, or the one out on the speaker
     Setup setup_;
     bool dragging = false;
     Drag drag = Drag::none;
@@ -817,11 +823,12 @@ private:
 
     // ---------------------------------------------------------------- the speaker
     // Its mics in two columns, A at the left in the block's orange and B at the right in lilac, B's a mirror of A's —
-    // each its list of mics, its places and its angle; each mic's distance a slider standing beside the speaker on its
-    // side; between them the speaker, flat, as the player faces it, and on it the mics in perspective: the nearer the
-    // cone, the smaller (the farther from the eye), a shadow on the cone that grows and fades with the distance, the
-    // glyph leaning back toward the cap by the angle. BLEND under the speaker, ALIGN and Ø at its left (the owner, 05.11).
-    static constexpr int colW = 108, rowH = 18, distW = 44, sideGap = 6, edge = 6;   // edge: B's column off the panel's
+    // each its list of mics, its distance standing beside the list, its places and its angle; between them the speaker,
+    // flat, as the player faces it, and on it the mics in perspective: the nearer the cone, the smaller (the farther
+    // from the eye), a shadow on the cone that grows and fades with the distance, the glyph leaning back toward the cap
+    // by the angle, its centimetres under it — a slider out at the hand. BLEND right under the speaker, ALIGN and Ø
+    // after it (the owner, 05.11).
+    static constexpr int colW = 108, rowH = 18, edge = 6;   // edge: B's column off the panel's
 
     static juce::Colour colourOf (int m) { return m == 0 ? theme::orange : theme::lilac; }
 
@@ -829,7 +836,7 @@ private:
 
     juce::Rectangle<int> column (int m) const
     {
-        const int h = bodyH();
+        const int h = bodyH() - blendH;   // down to BLEND's row
         return m == 0 ? juce::Rectangle<int> (rightX(), 0, colW, h) : juce::Rectangle<int> (getWidth() - edge - colW, 0, colW, h);
     }
 
@@ -855,33 +862,87 @@ private:
         return juce::Rectangle<float> ((float) c.getX() + (m == 0 ? 4.0f : 8.0f), (float) (top + rowH + 2), (float) c.getWidth() - 12.0f, 6.0f);
     }
 
-    /** A mic's distance, standing between its column and the speaker along its list of mics, no lower (the owner,
-        05.11): DIST level with the column's name, the track beside the list, far at the top, its value under it. */
-    juce::Rectangle<int> distArea (int m) const
+    /** A mic's distance in its column, along its list of mics and no lower (the owner, 05.11) — over EDGE's GE in A's,
+        over CAP's CA in B's, where the names leave room — its centimetres level with the column's name, far at the top. */
+    float distX (int m) const
     {
-        const int x = m == 0 ? column (0).getRight() + sideGap : column (1).getX() - sideGap - distW;
-        const int top = column (m).getY(), bottom = micRow (m, mics().size() - 1).getBottom() + rowH;
-        return { x, top, distW, bottom - top };
+        const auto font = theme::displayFont (13.0f);
+        const auto width = [&font] (const juce::String& word) { return theme::trackedWidth (word, font, 0.06f); };
+        float longest = 0.0f;   // ...and clear of the longest name by a little
+        for (const auto& word : micWords())
+            longest = juce::jmax (longest, width (word));
+        const auto c = column (m).toFloat();
+        if (m == 0)
+            return juce::jmax ((float) placeArea (0, 1).getX() + width ("EDGE") - 0.5f * width ("GE"), c.getX() + 20.0f + longest + 14.0f);
+        return juce::jmin ((float) placeArea (1, 0).getRight() - 4.0f - width ("CAP") + 0.5f * width ("CA"), c.getRight() - 20.0f - longest - 14.0f);
+    }
+
+    juce::Rectangle<int> distArea (int m) const   // the hand's: the value over the track and the track
+    {
+        const int top = column (m).getY(), bottom = micRow (m, mics().size() - 1).getBottom();
+        return { juce::roundToInt (distX (m)) - 12, top, 24, bottom - top };
     }
 
     juce::Rectangle<float> distTrack (int m) const
     {
-        const auto a = distArea (m).toFloat();
         const float top = (float) micRow (m, 0).getY() + 4.0f, bottom = (float) micRow (m, mics().size() - 1).getBottom() - 4.0f;
-        return { a.getCentreX() - 3.0f, top, 6.0f, bottom - top };
+        return { distX (m) - 3.0f, top, 6.0f, bottom - top };
     }
+
+    static juce::String cmOf (float distance) { return juce::String (juce::roundToInt (distance * 100.0f)) + " cm"; }
+
+    /** ...and by the mic on the speaker, under its spot; the hand over it brings a slider out beside it (the owner, 05.11). */
+    juce::Rectangle<float> distLabel (int m) const
+    {
+        const auto at = spotOf (m);
+        const float w = theme::trackedWidth (cmOf (mic (m).distance), theme::displayFont (13.0f), 0.0f) + 8.0f;
+        return { at.x - 0.5f * w, at.y + 8.0f, w, 16.0f };
+    }
+
+    juce::Rectangle<float> distPopup (int m) const
+    {
+        const auto at = spotOf (m);
+        const auto sc = scene();
+        const float h = 110.0f;
+        const float y = juce::jlimit (sc.getY() + 8.0f, sc.getBottom() - 8.0f - h, at.y + 16.0f - 0.5f * h);
+        float x = at.x + 34.0f;   // right of the value, or left where the scene ends
+        if (x + 15.0f > sc.getRight())
+            x = at.x - 40.0f;
+        return { x, y, 6.0f, h };
+    }
+
+    /** The mic whose value or slider the hand is over — a slider once out stays while the hand is on its way to it. */
+    int distHoverAt (juce::Point<float> p) const
+    {
+        if (chosen < 0)
+            return -1;
+        for (int m = 0; m < 2; ++m)
+            if (heard (m) && (distLabel (m).contains (p)
+                              || (distHover == m && distPopup (m).expanded (12.0f, 8.0f).getUnion (distLabel (m)).contains (p))))
+                return m;
+        return -1;
+    }
+
+    static constexpr int blendH = 26;   // BLEND's row, right under the speaker
 
     juce::Rectangle<float> scene() const
     {
-        const int x0 = column (0).getRight() + sideGap + distW + sideGap, x1 = column (1).getX() - sideGap - distW - sideGap;
-        return juce::Rectangle<int> (x0, 4, x1 - x0, bodyH() - 4).toFloat();
+        const int x0 = column (0).getRight() + 8, x1 = column (1).getX() - 8;
+        return juce::Rectangle<int> (x0, 4, x1 - x0, bodyH() - 4 - blendH).toFloat();
     }
 
     float radius() const { const auto s = scene(); return juce::jmax (10.0f, juce::jmin (s.getWidth(), s.getHeight()) * 0.5f / 1.2f); }
 
+    /** Under the speaker (the owner, 05.11): BLEND, A, its track as wide as the speaker's scene, B — ALIGN and Ø after. */
+    juce::Rectangle<int> blendRow() const
+    {
+        const int y = scene().toNearestInt().getBottom() + 2;
+        return { rightX(), y, getWidth() - rightX(), bodyH() - y };
+    }
+
     juce::Rectangle<int> foot() const { return { rightX(), getHeight() - footH + 4, getWidth() - rightX(), footH - 4 }; }
 
-    /** The foot: ALIGN and Ø at the left, BLEND's track under the speaker, CLOSE and DEFAULT, buttons, at the right. */
+    /** The foot: CLOSE and DEFAULT, buttons, at the right. */
     static int wordW (const char* word) { return juce::roundToInt (theme::trackedWidth (word, theme::displayFont (13.0f), 0.06f)) + 4; }
 
     juce::Rectangle<int> closeArea() const
@@ -896,20 +957,21 @@ private:
         return { closeArea().getX() - (onClose != nullptr ? 6 : 0) - w, foot().getY(), w, foot().getHeight() };
     }
 
-    juce::Rectangle<int> alignArea() const { return { foot().getX(), foot().getY(), wordW ("ALIGN"), foot().getHeight() }; }
+    juce::Rectangle<int> alignArea() const { return { column (1).getX(), blendRow().getY(), wordW ("ALIGN"), blendRow().getHeight() }; }
 
-    juce::Rectangle<int> invertArea() const { return { alignArea().getRight() + 8, foot().getY(), 20, foot().getHeight() }; }
+    juce::Rectangle<int> invertArea() const { return { alignArea().getRight() + 8, blendRow().getY(), 20, blendRow().getHeight() }; }
 
     juce::Rectangle<float> blendTrack() const
     {
         const auto sc = scene();
-        return { sc.getX() + 18.0f, foot().toFloat().getCentreY() - 3.0f, sc.getWidth() - 36.0f, 6.0f };
+        return { sc.getX() + 18.0f, blendRow().toFloat().getCentreY() - 3.0f, sc.getWidth() - 36.0f, 6.0f };
     }
 
     juce::Rectangle<float> blendWordArea() const
     {
         const float w = theme::trackedWidth ("BLEND", theme::displayFont (13.0f), 0.06f) + 4.0f;
-        return { blendTrack().getX() - 22.0f - w, (float) foot().getY(), w, (float) foot().getHeight() };
+        const auto row = blendRow().toFloat();
+        return { blendTrack().getX() - 22.0f - w, row.getY(), w, row.getHeight() };
     }
 
     /** The places a mic is put at with one click, as the table's positions stand them: at the cap, at the cone's edge,
@@ -988,11 +1050,27 @@ private:
                     return;
                 }
 
+        // A distance: the slider out on the speaker, its value there (the slider's to come), or the column's.
+        for (int m = 0; m < 2; ++m)
+        {
+            if (distHover == m && distPopup (m).expanded (9.0f, 8.0f).contains (e.position))
+            {
+                drag = Drag::distance;
+                dragTrack = distPopup (m);
+                dragMic = m;
+                dragging = true;
+                mouseDrag (e);
+                return;
+            }
+            if (heard (m) && distLabel (m).contains (e.position))
+                return;
+        }
         for (int m = 0; m < 2; ++m)
             if (distArea (m).contains (pos))
             {
                 takeUp (m);
                 drag = Drag::distance;
+                dragTrack = distTrack (m);
                 dragMic = m;
                 dragging = true;
                 mouseDrag (e);
@@ -1147,15 +1225,12 @@ private:
             g.fillRoundedRectangle (juce::Rectangle<float> (6.0f, 12.0f).withCentre ({ t.getX() + sp.angle / maxAngle * t.getWidth(), t.getCentreY() }), 2.0f);
         }
 
-        // Its distance, standing beside its list: DIST over it, the centimetres under it, far at the top.
+        // Its distance, beside its list: its centimetres level with the column's name, far at the top.
         {
-            const auto a = distArea (m).toFloat();
             const auto t = distTrack (m);
-            g.setColour (theme::txFaint.withMultipliedAlpha (dim));
-            theme::drawTracked (g, "DIST", a.withHeight ((float) rowH), font, 0.06f, juce::Justification::centred);
             g.setColour (theme::txDim.withMultipliedAlpha (dim));
-            theme::drawTracked (g, juce::String (juce::roundToInt (sp.distance * 100.0f)) + " cm", a.withTrimmedTop (a.getHeight() - (float) rowH),
-                                font, 0.0f, juce::Justification::centred);
+            theme::drawTracked (g, cmOf (sp.distance), { t.getCentreX() - 24.0f, (float) c.getY(), 48.0f, (float) rowH }, font, 0.0f,
+                                juce::Justification::centred);
             g.setColour (theme::hair2);
             g.fillRoundedRectangle (t.withSizeKeepingCentre (2.0f, t.getHeight()), 1.0f);
             g.setColour (colour.withMultipliedAlpha (dim));
@@ -1212,12 +1287,33 @@ private:
 
             paintCone (g, o, R);
             paintMicsOn (g, cab, setup_, o, R, 1.0f);
+
+            // Each heard mic's centimetres under it; the one the hand is over with its slider out beside it.
+            for (int m = 0; m < 2; ++m)
+            {
+                if (! heard (m))
+                    continue;
+                g.setColour (colourOf (m));
+                theme::drawTracked (g, cmOf (mic (m).distance), distLabel (m), font, 0.0f, juce::Justification::centred);
+                if (distHover != m && ! (drag == Drag::distance && dragMic == m && dragTrack == distPopup (m)))
+                    continue;
+                const auto t = distPopup (m);
+                const auto back = t.expanded (9.0f, 8.0f);
+                g.setColour (theme::panel2.withAlpha (0.95f));
+                g.fillRoundedRectangle (back, 4.0f);
+                g.setColour (colourOf (m).withAlpha (0.6f));
+                g.drawRoundedRectangle (back, 4.0f, 1.0f);
+                g.setColour (theme::hair2);
+                g.fillRoundedRectangle (t.withSizeKeepingCentre (2.0f, t.getHeight()), 1.0f);
+                g.setColour (colourOf (m));
+                g.fillRoundedRectangle (juce::Rectangle<float> (12.0f, 6.0f).withCentre ({ t.getCentreX(), t.getBottom() - nearness (mic (m).distance) * t.getHeight() }), 2.0f);
+            }
         }
 
         // The blend: A..B on a track, ALIGN, and Ø for B — faint while one mic is heard, the blend not heard then.
         {
             const float dim = bothHeard() ? 1.0f : 0.45f;
-            const auto row = foot().toFloat();
+            const auto row = blendRow().toFloat();
             g.setColour (theme::txFaint);
             theme::drawTracked (g, "BLEND", blendWordArea(), font, 0.06f, juce::Justification::centredRight);
             const auto t = blendTrack();
