@@ -7,6 +7,7 @@
 
 #include <panel/Response.h>
 #include <synth/CabSynth.h>
+#include <synth/MicSearch.h>
 
 #include <BinaryData.h>
 
@@ -50,12 +51,12 @@ CabWindow::CabWindow (AmpProcessor& a, Kept k)
         if (kept != nullptr)
             kept (AmpProcessor::cabSynthFrom (stateOf (cab, setup)));
         if (bTakenUp)
-            placeB (cab, setup);
+            findPlace (cab, setup);
     };
     picker.onMove  = [this] (int cab, CabPicker::Setup setup) { request (amp, cab, setup, true); };
     picker.onClose = [this] { if (auto* box = findParentComponentOfClass<juce::CallOutBox>()) box->dismiss(); };
     picker.onDownload = [this] { download (amp); };
-    picker.onFind     = [this] (int cab, CabPicker::Setup setup) { placeB (cab, setup, true); };   // FIND looks harder
+    picker.onFind     = [this] (int cab, CabPicker::Setup setup) { findPlace (cab, setup, true); };   // FIND looks harder
 
     addAndMakeVisible (picker);
     setSize (CabPicker::panelW, CabPicker::panelH);
@@ -112,38 +113,45 @@ void CabWindow::timerCallback()
     picker.show (cab, setup);
 }
 
-void CabWindow::placeB (int cab, const CabPicker::Setup& setup, bool thorough)
+void CabWindow::findPlace (int cab, const CabPicker::Setup& setup, bool thorough)
 {
-    // B just taken up, or FIND: where it combs least with A, found off the message thread (a second or so), each place it
-    // judges drawn on the speaker as it goes; B moves there unless the hand moved it first — what plays still has B where
-    // it was put — or the window went.
+    // B just taken up, or FIND: with both mics heard where B combs least with A, with one where that one stands without
+    // a pit, about where it is (cab-ir-generator 0.1.0) — found off the message thread (a second or so), each place it
+    // judges drawn on the speaker as it goes; the mic moves there unless the hand moved it first — what plays still has
+    // it where it was put — or the window went.
     static juce::ThreadPool searcher { 1 };
     const auto state = stateOf (cab, setup);
+    const bool pair = setup.aOn && setup.bOn, alone = setup.aOn;   // alone: which mic, with one heard — A, else B
     juce::Component::SafePointer<CabWindow> safe (this);
-    searcher.addJob ([safe, state, cab, setup, thorough]
+    searcher.addJob ([safe, state, cab, setup, thorough, pair, alone]
     {
         static const auto table = cabir::synth::parseTable (std::string (BinaryData::cabinets_txt, (size_t) BinaryData::cabinets_txtSize));
-        const auto place = cabir::synth::quietPlaceForB (table, state, (size_t) 1 << 13, [safe] (const cabir::synth::Place& p, double score)
+        const auto tried = [safe] (const cabir::synth::Place& p, double score)
         {
             juce::MessageManager::callAsync ([safe, p, score]
             {
                 if (safe != nullptr)
                     safe->picker.showSearch ((float) p.x, (float) p.y, (float) score);
             });
-        }, thorough);
-        juce::MessageManager::callAsync ([safe, state, cab, setup, place]
+        };
+        const auto place = pair ? cabir::synth::quietPlaceForB (table, state, (size_t) 1 << 13, tried, thorough)
+                                : cabir::synth::smoothPlaceForMic (table, state, (size_t) 1 << 14, tried);
+        juce::MessageManager::callAsync ([safe, state, cab, setup, place, pair, alone]
         {
             if (safe == nullptr)
                 return;
             safe->picker.endSearch();
             const auto now = AmpProcessor::cabSynthOf (safe->amp.cabChoice());
-            if (! now.valid || ! (now.state.b == state.b) || now.state.box != state.box)
+            const auto mic = [pair, alone] (const cabir::State& s) { return pair || ! alone ? s.b : s.a; };
+            if (! now.valid || ! (mic (now.state) == mic (state)) || now.state.box != state.box)
                 return;
             auto moved = setup;
-            moved.b.x = (float) place.x;
-            moved.b.y = (float) place.y;
-            moved.b.distance = (float) place.distance;
-            moved.shiftMs = (float) place.shiftMs;
+            auto& m = pair || ! alone ? moved.b : moved.a;
+            m.x = (float) place.x;
+            m.y = (float) place.y;
+            m.distance = (float) place.distance;
+            if (pair)
+                moved.shiftMs = (float) place.shiftMs;
             safe->picker.show (cab, moved);
             safe->picker.onSetup (cab, moved);
         });

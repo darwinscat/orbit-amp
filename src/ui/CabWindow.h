@@ -54,7 +54,7 @@ private:
 
     /** DOWNLOAD IR: the cabinet that plays saved as a WAV where the player says — Downloads to begin with. */
     static void download (AmpProcessor&);
-    void placeB (int cab, const CabPicker::Setup&, bool thorough = false);   // FIND looks harder
+    void findPlace (int cab, const CabPicker::Setup&, bool thorough = false);   // B, or one mic alone — FIND looks harder
 
     void timerCallback() override;
 
@@ -62,7 +62,7 @@ private:
     CabPicker picker;
     Kept kept;
     juce::String showing;          // the state's cabinet the picker was last shown
-    bool bHeard = false;           // ...whether its B is heard: B taken up moves where it combs least (placeB)
+    bool bHeard = false;           // ...whether its B is heard: B taken up moves where it combs least (findPlace)
     int heardSerial = -1;          // ...and the IR heard it last drew (AmpProcessor::cabHeard)
     std::vector<float> keptCurve;  // the kept one's response: the ghost under a live one, and under the next kept
 };
