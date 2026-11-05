@@ -1278,7 +1278,14 @@ public:
     /** THE IR LAST LOADED INTO THE CABINET, for a picture of what plays: a rendered one live under a moving hand, or what
         the state keeps (`kept`) — a rendered cabinet, the player's own, the factory's. `serial` grows with each; the
         same one loaded again (a prepare) is no new one. Message thread. */
-    struct CabHeard { std::shared_ptr<const juce::MemoryBlock> bytes; int serial = 0; bool kept = false; };
+    struct CabParts { std::vector<float> a, b; };   // a rendered pair's two mics, each at the mix's level, 48 kHz
+    struct CabHeard
+    {
+        std::shared_ptr<const juce::MemoryBlock> bytes;
+        int serial = 0;
+        bool kept = false;
+        std::shared_ptr<const CabParts> parts;   // ...with both mics heard; none otherwise
+    };
     CabHeard cabHeard() const { return cabHeardNow; }
 
     /** The rendered cabinet a choice plays, and where its mics stood — or `valid` false for any other IR. */
@@ -1659,7 +1666,10 @@ private:
     device::EmbeddedIrs cabIrEmbeds;
     CabHeard cabHeardNow;          // cabHeard's
     juce::String cabHeardIdentity; // ...and which IR it is, so one loaded again is not heard anew
-    void heardCab (std::shared_ptr<const juce::MemoryBlock>, const juce::String& identity, bool kept);
+    void heardCab (std::shared_ptr<const juce::MemoryBlock>, const juce::String& identity, bool kept,
+                   std::shared_ptr<const CabParts> parts = {});
+    juce::String cabKeptPartsKey;                      // the kept render's key, and its parts — for the pump to hand on
+    std::shared_ptr<const CabParts> cabKeptParts;      // with the IR when it loads it
 
     /** Adds to a tree bound for disk every player's-own IR any state inside it names — the live
         one, and each register's. */

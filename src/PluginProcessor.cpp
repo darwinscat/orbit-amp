@@ -839,11 +839,12 @@ void AmpProcessor::requestCabSynth (const juce::String& cab, CabSetup setup, boo
             pair.blend = 0;
         }
         pair.a.back = setup.back;
-        const auto ir  = core::cabsynth::renderPair (table, cab.toStdString(), pair);
-        const auto wav = core::cabsynth::wav24 (ir, 48000);
+        const auto ir  = core::cabsynth::renderPairParts (table, cab.toStdString(), pair);
+        const auto wav = core::cabsynth::wav24 (ir.mix, 48000);
         auto bytes = std::make_shared<juce::MemoryBlock> (wav.data(), wav.size());
+        auto parts = ir.a.empty() ? std::shared_ptr<const CabParts>() : std::make_shared<const CabParts> (CabParts { ir.a, ir.b });
 
-        juce::MessageManager::callAsync ([this, alive, mine, cab, setup, bytes, live]
+        juce::MessageManager::callAsync ([this, alive, mine, cab, setup, bytes, parts, live]
         {
             if (alive.lock() == nullptr || bytes->getSize() == 0)
                 return;
@@ -856,7 +857,7 @@ void AmpProcessor::requestCabSynth (const juce::String& cab, CabSetup setup, boo
                     return;
                 cabSynthHeard = mine;
                 this->cab.load (bytes->getData(), bytes->getSize());   // heard, not kept: the state still names the last kept
-                heardCab (bytes, "live:" + juce::String (mine), false);
+                heardCab (bytes, "live:" + juce::String (mine), false, parts);
                 return;
             }
 
@@ -872,6 +873,8 @@ void AmpProcessor::requestCabSynth (const juce::String& cab, CabSetup setup, boo
             const auto key = cabIrEmbeds.add (std::move (*bytes));
             if (key.isEmpty())
                 return;
+            cabKeptPartsKey = key;
+            cabKeptParts = parts;
 
             apvts.state.setProperty (params::cabIrUserKey, key, nullptr);
             apvts.state.setProperty (params::cabIrUserName, cab, nullptr);
@@ -881,11 +884,12 @@ void AmpProcessor::requestCabSynth (const juce::String& cab, CabSetup setup, boo
     });
 }
 
-void AmpProcessor::heardCab (std::shared_ptr<const juce::MemoryBlock> bytes, const juce::String& identity, bool kept)
+void AmpProcessor::heardCab (std::shared_ptr<const juce::MemoryBlock> bytes, const juce::String& identity, bool kept,
+                             std::shared_ptr<const CabParts> parts)
 {
     if (kept && cabHeardNow.kept && identity == cabHeardIdentity)
         return;   // the same IR loaded again: nothing new heard
-    cabHeardNow = { std::move (bytes), cabHeardNow.serial + 1, kept };
+    cabHeardNow = { std::move (bytes), cabHeardNow.serial + 1, kept, std::move (parts) };
     cabHeardIdentity = identity;
 }
 
@@ -1116,7 +1120,8 @@ void AmpProcessor::pumpDeviceWork()
             if (choice.isUser())
             {
                 cab.load (choice.bytes->getData(), choice.bytes->getSize());
-                heardCab (std::make_shared<const juce::MemoryBlock> (*choice.bytes), choice.identity(), true);
+                heardCab (std::make_shared<const juce::MemoryBlock> (*choice.bytes), choice.identity(), true,
+                          choice.key == cabKeptPartsKey ? cabKeptParts : nullptr);
             }
             else if (const auto& bytes = cabIrBytes (ownProduct, choice.factory); bytes.data != nullptr)
             {

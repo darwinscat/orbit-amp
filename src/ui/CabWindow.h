@@ -42,6 +42,10 @@ public:
         to its own middle (100 Hz .. 5 kHz). Empty for bytes that do not decode. */
     static std::vector<float> responseOf (const juce::MemoryBlock& bytes);
 
+    /** ...and where a pair's two mics meet, at the same points: in dB, the mix against the two powers apart — above
+        nought where they add in phase, below where they cancel. */
+    static std::vector<float> combOf (const AmpProcessor::CabParts&);
+
     void resized() override;
 
 private:

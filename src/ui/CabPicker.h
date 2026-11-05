@@ -38,7 +38,8 @@ namespace orbitamp
     near a second for two on the 8x10 — and what is set is kept when the hand lets go (onSetup).
 
     THE RESPONSE, across the panel under it all: what plays, 30 Hz to 12 kHz — the cabinet heard in orange, following
-    a moving hand, and the one kept before it a violet ghost, so every click and every drag reads as before and after.
+    a moving hand, and the one kept before it a violet ghost, so every click and every drag reads as before and
+    after; with two mics heard, green under it where they add in phase and red where they cancel.
 
     A dumb view: the cabinets in (cabs(), geometry from tools/cabgen/cabinets.txt — metres, the baffle's centre the
     origin, up positive), what plays in (show, showResponse), a pick out (onSetup). */
@@ -225,14 +226,16 @@ public:
     std::function<void()> onDownload;
 
     /** THE RESPONSE of what plays, in dB at responseHz — `now` the cabinet heard, `before` what was kept before it
-        (empty, none): each level to its own middle, so the two read as shapes. */
+        (empty, none): each level to its own middle, so the two read as shapes; and with two mics heard `comb`, where
+        they meet: dB above nought where they add in phase, below where they cancel (empty, one mic). */
     static constexpr int responsePoints = 240;
     static float responseHz (int i) { return 30.0f * std::pow (12000.0f / 30.0f, (float) i / (float) (responsePoints - 1)); }
 
-    void showResponse (std::vector<float> now, std::vector<float> before)
+    void showResponse (std::vector<float> now, std::vector<float> before, std::vector<float> comb = {})
     {
         responseNow = std::move (now);
         responseBefore = std::move (before);
+        responseComb = std::move (comb);
         repaint (responseArea());
     }
 
@@ -1250,7 +1253,7 @@ private:
     // ---------------------------------------------------------------- the response
     // Across the panel under it all: the cabinet's response, 30 Hz to 12 kHz on a log scale, +-18 dB — the one heard in
     // the block's orange line, the one kept before it a violet ghost; dB at the left, the frequencies under it.
-    std::vector<float> responseNow, responseBefore;
+    std::vector<float> responseNow, responseBefore, responseComb;
     static constexpr float responseDb = 18.0f;
 
     juce::Rectangle<int> responseArea() const { return { 0, bodyH(), getWidth(), responseH }; }
@@ -1270,6 +1273,18 @@ private:
 
         const auto xOf = [p] (float hz) { return p.getX() + p.getWidth() * std::log (hz / 30.0f) / std::log (12000.0f / 30.0f); };
         const auto yOf = [p] (float db) { return p.getCentreY() - db / responseDb * 0.5f * p.getHeight(); };
+
+        // Under it all, with two mics heard, where they meet (the owner, 05.11): green where they add in phase, red
+        // where they cancel — the stronger, the deeper, full at 6 dB.
+        if ((int) responseComb.size() == responsePoints)
+            for (int i = 0; i < responsePoints; ++i)
+            {
+                const float x0 = i == 0 ? p.getX() : 0.5f * (xOf (responseHz (i - 1)) + xOf (responseHz (i)));
+                const float x1 = i == responsePoints - 1 ? p.getRight() : 0.5f * (xOf (responseHz (i)) + xOf (responseHz (i + 1)));
+                const float v = responseComb[(size_t) i];
+                g.setColour ((v > 0.0f ? juce::Colour (0xff3fae6a) : juce::Colour (0xffd5455a)).withAlpha (0.45f * juce::jmin (1.0f, std::abs (v) / 6.0f)));
+                g.fillRect (juce::Rectangle<float> (x0, p.getY(), x1 - x0 + 0.5f, p.getHeight()));
+            }
 
         struct Mark { float hz; const char* word; };
         static constexpr Mark marks[] { { 50.0f, "50" }, { 100.0f, "100" }, { 200.0f, "200" }, { 500.0f, "500" },

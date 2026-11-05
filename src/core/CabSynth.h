@@ -882,10 +882,14 @@ struct Pair
     bool align = false, invertB = false;
 };
 
-inline std::vector<float> renderPair (const Table& table, const std::string& cab, const Pair& p, size_t n = 1 << 14)
+/** The pair, and each mic's part of it at the mix's own level — `a` + `b` is `mix` — for a picture of where the two
+    meet in phase and where they cancel; a pair with one mic heard (blend 0) has no parts. */
+struct PairParts { std::vector<float> mix, a, b; };
+
+inline PairParts renderPairParts (const Table& table, const std::string& cab, const Pair& p, size_t n = 1 << 14)
 {
     if (p.blend <= 0)
-        return renderAt (table, cab, p.a, n);
+        return { renderAt (table, cab, p.a, n), {}, {} };
 
     auto b = p.b;
     b.horn = p.a.horn;
@@ -906,9 +910,23 @@ inline std::vector<float> renderPair (const Table& table, const std::string& cab
         return std::sqrt (e);
     };
     const double ga = (1 - p.blend) / middle (ia), gb = p.blend / middle (ib) * (p.invertB ? -1 : 1);
-    std::vector<double> mix (std::min (ia.size(), ib.size()));
-    for (size_t i = 0; i < mix.size(); ++i) mix[i] = ga * ia[i] + gb * ib[i];
-    return peakAt (mix, 0.5);
+    const size_t len = std::min (ia.size(), ib.size());
+    double peak = 1e-12;
+    for (size_t i = 0; i < len; ++i) peak = std::max (peak, std::abs (ga * ia[i] + gb * ib[i]));
+    const double to = 0.5 / peak;   // the mix's peak at -6 dBFS, as peakAt puts it
+    PairParts out { std::vector<float> (len), std::vector<float> (len), std::vector<float> (len) };
+    for (size_t i = 0; i < len; ++i)
+    {
+        out.a[i] = (float) (ga * ia[i] * to);
+        out.b[i] = (float) (gb * ib[i] * to);
+        out.mix[i] = (float) ((ga * ia[i] + gb * ib[i]) * to);
+    }
+    return out;
+}
+
+inline std::vector<float> renderPair (const Table& table, const std::string& cab, const Pair& p, size_t n = 1 << 14)
+{
+    return renderPairParts (table, cab, p, n).mix;
 }
 
 /** The cabinets the table holds, by the names their cap sections give them, in the table's order. */
