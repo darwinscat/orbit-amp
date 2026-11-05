@@ -855,18 +855,20 @@ private:
         return juce::Rectangle<float> ((float) c.getX() + (m == 0 ? 4.0f : 8.0f), (float) (top + rowH + 2), (float) c.getWidth() - 12.0f, 6.0f);
     }
 
-    /** A mic's distance, standing between its column and the speaker: DIST over it, its value under it, far at the top. */
+    /** A mic's distance, standing between its column and the speaker along its list of mics, no lower (the owner,
+        05.11): DIST level with the column's name, the track beside the list, far at the top, its value under it. */
     juce::Rectangle<int> distArea (int m) const
     {
-        const auto sc = scene().toNearestInt();
         const int x = m == 0 ? column (0).getRight() + sideGap : column (1).getX() - sideGap - distW;
-        return { x, sc.getY(), distW, sc.getHeight() };
+        const int top = column (m).getY(), bottom = micRow (m, mics().size() - 1).getBottom() + rowH;
+        return { x, top, distW, bottom - top };
     }
 
     juce::Rectangle<float> distTrack (int m) const
     {
         const auto a = distArea (m).toFloat();
-        return { a.getCentreX() - 3.0f, a.getY() + (float) rowH + 8.0f, 6.0f, a.getHeight() - 2.0f * ((float) rowH + 8.0f) };
+        const float top = (float) micRow (m, 0).getY() + 4.0f, bottom = (float) micRow (m, mics().size() - 1).getBottom() - 4.0f;
+        return { a.getCentreX() - 3.0f, top, 6.0f, bottom - top };
     }
 
     juce::Rectangle<float> scene() const
@@ -1145,7 +1147,7 @@ private:
             g.fillRoundedRectangle (juce::Rectangle<float> (6.0f, 12.0f).withCentre ({ t.getX() + sp.angle / maxAngle * t.getWidth(), t.getCentreY() }), 2.0f);
         }
 
-        // Its distance, standing beside the speaker: DIST over it, the centimetres under it, far at the top.
+        // Its distance, standing beside its list: DIST over it, the centimetres under it, far at the top.
         {
             const auto a = distArea (m).toFloat();
             const auto t = distTrack (m);
