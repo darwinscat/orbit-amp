@@ -22,10 +22,10 @@ class CabWindow final : public juce::Component,
                         private juce::Timer
 {
 public:
-    /** Opens it over `anchor`, offering `range`. `kept`, when given, is told of every cabinet kept, by the `from` it is
+    /** Opens it over `anchor`. `kept`, when given, is told of every cabinet kept, by the `from` it is
         kept under — the walker puts it in the slot playing by it, and brings the cabinet back into the sound. */
     using Kept = std::function<void (const juce::String& from)>;
-    static void open (AmpProcessor&, juce::Component& anchor, CabPicker::Range range, Kept kept = {});
+    static void open (AmpProcessor&, juce::Component& anchor, Kept kept = {});
 
     /** A rendered cabinet as the pictures draw it: its box, -1 for none of ours, and its mics. */
     static std::pair<int, CabPicker::Setup> drawnOf (const AmpProcessor::CabSynthChoice&);
@@ -41,7 +41,7 @@ public:
     void resized() override;
 
 private:
-    CabWindow (AmpProcessor&, CabPicker::Range, Kept kept);
+    CabWindow (AmpProcessor&, Kept kept);
     void timerCallback() override;
 
     AmpProcessor& amp;

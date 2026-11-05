@@ -477,7 +477,7 @@ void CabinetBlock::showIrMenu (juce::Component* from)
 
 void CabinetBlock::showCabPanel()
 {
-    CabWindow::open (amp, *this, CabPicker::Range::all);
+    CabWindow::open (amp, *this);
 }
 
 void CabinetBlock::pushToWave()

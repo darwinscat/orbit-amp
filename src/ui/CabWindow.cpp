@@ -52,8 +52,8 @@ juce::String CabWindow::labelOf (const AmpProcessor::CabSynthChoice& synth)
          + (su.aOn ? micOf (su.a) : juce::String()) + (su.aOn && su.bOn ? "+" : "") + (su.bOn ? micOf (su.b) : juce::String());
 }
 
-CabWindow::CabWindow (AmpProcessor& a, CabPicker::Range range, Kept k)
-    : amp (a), picker (range), kept (std::move (k))
+CabWindow::CabWindow (AmpProcessor& a, Kept k)
+    : amp (a), kept (std::move (k))
 {
     // The bass's own cabinets, rendered with the mics where the hand put them.
     picker.onSetup = [this] (int cab, CabPicker::Setup setup)
@@ -87,12 +87,12 @@ void CabWindow::timerCallback()
     picker.show (cab, setup);
 }
 
-void CabWindow::open (AmpProcessor& amp, juce::Component& anchor, CabPicker::Range range, Kept kept)
+void CabWindow::open (AmpProcessor& amp, juce::Component& anchor, Kept kept)
 {
     // Over the face above what opened it, its arrow at that one's top, inside the window where it fits: what opened it
     // stays in sight, answering the hand.
     const auto at = anchor.getScreenBounds();
-    auto& box = juce::CallOutBox::launchAsynchronously (std::unique_ptr<CabWindow> (new CabWindow (amp, range, std::move (kept))), at, nullptr);
+    auto& box = juce::CallOutBox::launchAsynchronously (std::unique_ptr<CabWindow> (new CabWindow (amp, std::move (kept))), at, nullptr);
 
     // Ours, not JUCE's grey-green: the face's panel under it, the CAB's orange line round it and its arrow.
     struct Look final : juce::LookAndFeel_V4

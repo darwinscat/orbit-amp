@@ -750,7 +750,7 @@ void RedGrooveEditor::chooseSlot (int at)
     keeps put in the slot the slider stands at, and the cabinet back in the sound. */
 void RedGrooveEditor::showCabinets()
 {
-    CabWindow::open (amp, cabinet, CabPicker::Range::ampeg, [safe = juce::Component::SafePointer<RedGrooveEditor> (this)] (const juce::String& from)
+    CabWindow::open (amp, cabinet, [safe = juce::Component::SafePointer<RedGrooveEditor> (this)] (const juce::String& from)
     {
         if (safe == nullptr)
             return;

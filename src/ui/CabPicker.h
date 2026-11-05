@@ -19,8 +19,8 @@ namespace orbitamp
     THE PILE: a box of each size, no maker's name over them (the owner, 05.11), to scale and stacked as a backline stands
     them, the small on the big; each with its speakers, its horn and its port where it has them; under them the chosen
     box's size; over them its BACK, CLOSED, PORTED or OPEN, each the box drawn cut through from the side, a click each —
-    a box comes with its own, a sealed one turned ported gets a port at its foot. OrbitBass's every size the table holds;
-    the walker's (Range::ampeg) its six.
+    a box comes with its own, a sealed one turned ported gets a port at its foot. Every bass of the family offers the
+    same ten (the owner, 05.11): none knows a cabinet of its own.
     A click on a box picks it, the mics staying where they stand, and the horn too — but a box whose horn comes off
     (Cab::hornOn, the SVT-15E's and the 8x10's) takes it off, and the next box puts it back; a click on the chosen box's
     horn turns the horn off and on, its step kept.
@@ -40,10 +40,7 @@ namespace orbitamp
 class CabPicker final : public juce::Component
 {
 public:
-    /** WHICH CABINETS IT OFFERS: every size — OrbitBass's — or the walker's six (pile). */
-    enum class Range { all, ampeg };
-
-    explicit CabPicker (Range r = Range::all) : range (r) {}
+    CabPicker() = default;
 
     /** The size it is drawn for — small enough to open over a cabin's face too. */
     static constexpr int panelW = 780, panelH = 280;
@@ -141,17 +138,15 @@ public:
 
     /** The boxes it offers, as they stand: a box of each size, no maker's name over them (the owner, 05.11), its columns
         left to right, each from the floor up — the small on the big, the tall ones alone, the way a backline is stacked.
-        OrbitBass's every size the table holds — 1x15, 1x12, 8x10, 4x10, 2x10, 6x10, 2x12, 2x15, 4x6, 8x8 — the walker's
-        the six of them its screen steps through, each with a horn the player turns on and off (the owner, 04.11). The
-        table's other boxes stay in cabs(): a state that kept one still reads as its size. */
-    static const std::vector<juce::StringArray>& pile (Range r)
+        Every size the table holds — 1x15, 1x12, 8x10, 4x10, 2x10, 6x10, 2x12, 2x15, 4x6, 8x8 — the same for every bass
+        of the family (the owner, 05.11). The table's other boxes stay in cabs(): a state that kept one still reads as
+        its size. */
+    static const std::vector<juce::StringArray>& pile()
     {
         static const std::vector<juce::StringArray> every {
             { "SVT-15E", "VB-112" }, { "SVT-810" }, { "SVT-410HE", "VB-210" }, { "SVT-610HLF", "VB-212" },
             { "SUBWAY-215", "NY-604" }, { "VB-88" } };
-        static const std::vector<juce::StringArray> six {
-            { "SVT-15E", "VB-112" }, { "SVT-810" }, { "SVT-410HE", "VB-210" }, { "SVT-610HLF" } };
-        return r == Range::ampeg ? six : every;
+        return every;
     }
 
     /** A BOX AS THE PLAYER READS IT: its speakers and their size — "4x10" — and no maker's model (the owner, 05.11). The
@@ -180,13 +175,6 @@ public:
     /** Where a box's port is drawn: the table's, or the one a sealed box is given when turned ported — in the middle of
         its foot (core::cabsynth::portAtFoot). */
     static juce::Point<float> portOf (const Cab& c) { return c.port ? c.portAt : juce::Point<float> (0.0f, -0.5f * c.h + 0.045f); }
-
-    /** Ampeg's six in the order of their size, as the walker's cabinet screen steps through them. */
-    static const juce::StringArray& ampegLine()
-    {
-        static const juce::StringArray line { "SVT-15E", "VB-112", "VB-210", "SVT-410HE", "SVT-610HLF", "SVT-810" };
-        return line;
-    }
 
     /** THE MICS A BOX IS PICKED WITH, `from` the one that was playing: where they stood — the same cap, the same
         centimetres, the way a cabinet is compared — only a mic never chosen following the box's own; the horn as it
@@ -306,7 +294,6 @@ private:
 
     enum class Drag { none, spot, distance, angle, blend };
 
-    const Range range;
     int chosen = -1, hover = -1;
     Setup setup_;
     bool dragging = false;
@@ -483,7 +470,7 @@ private:
     {
         const auto area = pileArea().toFloat();
         float w = 0, h = 0;
-        for (const auto& column : pile (range))
+        for (const auto& column : pile())
         {
             float cw = 0, ch = 0;
             for (const auto& name : column)
@@ -495,7 +482,7 @@ private:
             w += cw;
             h = juce::jmax (h, ch);
         }
-        w += columnGapM * (float) (pile (range).size() - 1);
+        w += columnGapM * (float) (pile().size() - 1);
         return juce::jmin ((area.getWidth() - 8.0f) / w, (area.getHeight() - 8.0f) / h);
     }
 
@@ -504,7 +491,7 @@ private:
     {
         const auto area = pileArea().toFloat();
         const float s = pileScale();
-        const auto& columns = pile (range);
+        const auto& columns = pile();
 
         float width = columnGapM * (float) (columns.size() - 1);
         for (const auto& column : columns)
