@@ -41,7 +41,8 @@
 #include <felitronics/delay/TapeDelay.h>
 #include <felitronics/dynamics/NoiseGate.h>
 #include <felitronics/reverb/AmpReverb.h>
-#include <synth/State.h>                  // the bass's own cabinets, as cab-ir-generator says one
+#include <synth/State.h>
+namespace cabir::synth { class PairRenderer; }                  // the bass's own cabinets, as cab-ir-generator says one
 #include "core/SpaceTap.h"
 #include <juce_audio_processors/juce_audio_processors.h>
 
@@ -88,7 +89,7 @@ public:
         and declares it LAST, so it is the first member destroyed. Adding a clear here changes
         nothing at all. I wrote one anyway, on a reading of the wrong destructor, and the review
         caught it. */
-    ~AmpProcessor() override { apvts.state.removeListener (this); }
+    ~AmpProcessor() override;   // in the .cpp: it ends what only the .cpp sees whole (cabRenderer)
 
     /** The hum stage's type (removeHum): room for 128 harmonics, 6.4 kHz at 50 Hz. */
     using HumStage = felitronics::dehum::HumRemover<128>;
@@ -1045,6 +1046,7 @@ private:
     std::atomic<int> cabSynthLatest { 0 };
     int cabSynthHeard = 0;   // the latest request whose render was loaded — the message thread's alone
     std::shared_ptr<int> cabSynthAlive = std::make_shared<int> (0);
+    std::unique_ptr<cabir::synth::PairRenderer> cabRenderer;   // the worker's alone: each mic's last IR kept (before the pool: gone after it)
     juce::ThreadPool cabSynthPool { 1 };
 
 public:

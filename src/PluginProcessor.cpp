@@ -816,6 +816,11 @@ bool AmpProcessor::chooseCabFile (const juce::File& file)
     return true;
 }
 
+AmpProcessor::~AmpProcessor()
+{
+    apvts.state.removeListener (this);
+}
+
 void AmpProcessor::requestCabSynth (const cabir::State& state, bool live)
 {
     const int mine = ++cabSynthLatest;
@@ -827,7 +832,10 @@ void AmpProcessor::requestCabSynth (const cabir::State& state, bool live)
             return;   // superseded before it began
 
         static const auto table = cabir::synth::parseTable (std::string (BinaryData::cabinets_txt, (size_t) BinaryData::cabinets_txtSize));
-        const auto ir  = cabir::synth::renderPairParts (table, state.box, cabir::synth::pairOf (state));
+        // The mic that did not move kept, the one that did rendered at half the size while the hand is on it.
+        if (cabRenderer == nullptr)
+            cabRenderer = std::make_unique<cabir::synth::PairRenderer>();
+        const auto ir  = cabRenderer->render (table, state.box, cabir::synth::pairOf (state), live ? (size_t) 1 << 13 : (size_t) 1 << 14);
         const auto wav = cabir::synth::wav24 (ir.mix, 48000);
         auto bytes = std::make_shared<juce::MemoryBlock> (wav.data(), wav.size());
         auto parts = ir.a.empty() ? std::shared_ptr<const CabParts>() : std::make_shared<const CabParts> (CabParts { ir.a, ir.b });

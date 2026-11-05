@@ -59,7 +59,7 @@ CabWindow::CabWindow (AmpProcessor& a, Kept k)
     addAndMakeVisible (picker);
     setSize (CabPicker::panelW, CabPicker::panelH);
     timerCallback();        // what plays, from the first frame
-    startTimerHz (10);
+    startTimerHz (30);      // ...and the response as fast as a moving hand's renders land
 }
 
 void CabWindow::resized()
