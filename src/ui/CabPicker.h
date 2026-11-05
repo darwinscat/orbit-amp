@@ -626,6 +626,8 @@ private:
         const auto area = pileArea();
         g.setColour (theme::hair);
         g.fillRect (juce::Rectangle<float> ((float) area.getX(), (float) area.getBottom() - 1.0f, (float) area.getWidth(), 1.0f));
+        // The back over the pile kept apart from it, as the halves are, by a hair across up to theirs (the owner, 05.11).
+        g.fillRect (juce::Rectangle<float> (0.0f, (float) pileTop - 3.0f, (float) leftW + 0.5f * gutter, 1.0f));
 
         for (const auto& [index, box] : layOut())
             paintCab (g, cabs()[(size_t) index], box, setup_, index == chosen, index == hover);
