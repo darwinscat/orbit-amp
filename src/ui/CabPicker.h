@@ -38,7 +38,7 @@ namespace orbitamp
     near a second for two on the 8x10 — and what is set is kept when the hand lets go (onSetup).
 
     THE RESPONSE, across the panel under it all: what plays, 30 Hz to 12 kHz — the cabinet heard in orange, following
-    a moving hand, and the one kept before it a violet ghost, so every click and every drag reads as before and
+    a moving hand, and the one kept before it a faint grey ghost, so every click and every drag reads as before and
     after; with two mics heard, green under it where they add in phase and red where they cancel.
 
     A dumb view: the cabinets in (cabs(), geometry from tools/cabgen/cabinets.txt — metres, the baffle's centre the
@@ -1252,7 +1252,7 @@ private:
 
     // ---------------------------------------------------------------- the response
     // Across the panel under it all: the cabinet's response, 30 Hz to 12 kHz on a log scale, +-18 dB — the one heard in
-    // the block's orange line, the one kept before it a violet ghost; dB at the left, the frequencies under it.
+    // the block's orange line, the one kept before it a faint grey ghost; dB at the left, the frequencies under it.
     std::vector<float> responseNow, responseBefore, responseComb;
     static constexpr float responseDb = 18.0f;
 
@@ -1326,7 +1326,7 @@ private:
         };
         juce::Graphics::ScopedSaveState keep (g);
         g.reduceClipRegion (p.toNearestInt().expanded (0, 2));
-        curve (responseBefore, theme::violet.withAlpha (0.55f), 1.2f);
+        curve (responseBefore, theme::txDim.withAlpha (0.3f), 1.2f);   // barely there: a second line reads as a second mic
         curve (responseNow, theme::orange, 1.6f);
     }
 
