@@ -41,6 +41,7 @@
 #include <felitronics/delay/TapeDelay.h>
 #include <felitronics/dynamics/NoiseGate.h>
 #include <felitronics/reverb/AmpReverb.h>
+#include <synth/State.h>                  // the bass's own cabinets, as cab-ir-generator says one
 #include "core/SpaceTap.h"
 #include <juce_audio_processors/juce_audio_processors.h>
 
@@ -1242,38 +1243,16 @@ public:
         is too big to be an IR or that does not decode as audio. Message thread only. */
     bool chooseCabFile (const juce::File& file);
 
-    /** WHERE THE MIC STANDS at a cabinet rendered live (core/CabSynth.h): across its first speaker in radii from the cap,
-        x right and y up; how far in front of it; the horn on or off. */
-    struct CabSpot
-    {
-        float x = 0.0f, y = 0.0f, distance = 0.05f;
-        bool horn = true;
-        juce::String mic;   // the table's mic by name (md421, sm57, re20, d112, u87, ribbon), or empty for the cabinet's own
-        float angle = 0.0f; // degrees it leans back toward the cap
-        float hornDb = 0.0f; // the horn's attenuator while it is on: 0, -6 or -12 dB against the table's level
-    };
-
-    /** A CABINET OF THE BASS'S OWN, rendered with the mic at `spot` — on a worker, a tenth of a second or so — then
-        played as an IR of the player's own is: its bytes kept by key, so a session or a preset carries it, named by the
-        cabinet, its `from` saying where the mic stood (cabSynthOf reads it back). A later request supersedes one still
-        rendering; the cabinet's own 50 ms crossfade carries the swap. Message thread. */
-    /** ...and two mics as an engineer puts them up (core/CabSynth.h, renderPair), each on or off: both on, B mixed into A
-        by `blend` on one clock unless `align` (on from the start, as the panel's: CabPicker::Setup), B turned over by
-        `invert`; one on, that one alone — `blend` kept where it stands, and not heard. The horn is A's.
+    /** A CABINET OF THE BASS'S OWN — the box, its back and horn, its mics where the player put them (cabir::State,
+        cab-ir-generator) — rendered on a worker, a tenth of a second or so for one mic, then played as an IR of the
+        player's own is: its bytes kept by key, so a session or a preset carries it, named by the box, its `from` the
+        state as TOML (cabSynthOf reads it back). A later request supersedes one still rendering; the cabinet's own 50 ms
+        crossfade carries the swap. Message thread.
 
         `live`: a hand still moving a mic. The cabinet is only HEARD — loaded straight into the convolution, nothing kept,
         no key, no host told: a drag renders as often as the worker keeps up, and every position kept would stay in the
         store for the plugin's life. The hand letting go asks once more without it, and that one is kept. */
-    struct CabSetup
-    {
-        CabSpot a, b;
-        float blend = 0.5f;
-        bool align = true, invert = false;
-        bool aOn = true, bOn = false;
-        int back = -1;   // the box's back: -1 as the table has it; 0 closed, 1 ported, 2 open (core::cabsynth::Back)
-    };
-
-    void requestCabSynth (const juce::String& cab, CabSetup setup, bool live = false);
+    void requestCabSynth (const cabir::State& state, bool live = false);
 
     /** THE IR LAST LOADED INTO THE CABINET, for a picture of what plays: a rendered one live under a moving hand, or what
         the state keeps (`kept`) — a rendered cabinet, the player's own, the factory's. `serial` grows with each; the
@@ -1288,11 +1267,11 @@ public:
     };
     CabHeard cabHeard() const { return cabHeardNow; }
 
-    /** The rendered cabinet a choice plays, and where its mics stood — or `valid` false for any other IR. */
-    struct CabSynthChoice { juce::String cab; CabSetup setup; bool valid = false; };
+    /** The rendered cabinet a choice plays — or `valid` false for any other IR. */
+    struct CabSynthChoice { cabir::State state; bool valid = false; };
     static CabSynthChoice cabSynthOf (const CabChoice&);
     static CabSynthChoice cabSynthOf (const juce::String& from);   // ...as its `from` says it, wherever that is kept
-    static juce::String cabSynthFrom (const juce::String& box, const CabSetup&);   // ...and the `from` a kept one is given
+    static juce::String cabSynthFrom (const cabir::State&);        // ...and the `from` a kept one is given: its TOML
 
     /** TEMPORARY — the audition loop player. Goes with the demo strip it belongs to. */
     core::DemoPlayer demo;

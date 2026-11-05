@@ -14,46 +14,60 @@ namespace orbitamp
 
 namespace
 {
-    AmpProcessor::CabSpot toEngine (const CabPicker::Spot& s) { return { s.x, s.y, s.distance, s.horn, s.mic, s.angle, s.hornDb }; }
-    CabPicker::Spot toPicture (const AmpProcessor::CabSpot& s) { return { s.x, s.y, s.distance, s.horn, s.mic, s.angle, s.hornDb }; }
+    // The panel's setup and the state the engine keeps (cabir::State), one into the other — the horn and its step the
+    // panel keeps on A's spot.
+    CabPicker::Spot spotOf (const cabir::Mic& m, const cabir::State& s)
+    {
+        return { (float) m.x, (float) m.y, (float) m.distance, s.horn, juce::String (m.model), (float) m.angle, (float) s.hornDb };
+    }
+
+    cabir::Mic micOf (const CabPicker::Spot& sp, bool on)
+    {
+        return { on, sp.mic.toStdString(), sp.x, sp.y, sp.distance, sp.angle };
+    }
 }
 
 std::pair<int, CabPicker::Setup> CabWindow::drawnOf (const AmpProcessor::CabSynthChoice& synth)
 {
-    const auto& su = synth.setup;
-    const int cab = synth.valid ? CabPicker::indexOf (synth.cab) : -1;
-    // B where it stood, on or off, once it has stood anywhere — the mic it was given says so; else where B waits.
-    return { cab, { toPicture (su.a), su.b.mic.isNotEmpty() ? toPicture (su.b) : CabPicker::Setup{}.b, su.blend, su.align, su.invert,
-                    su.aOn, su.bOn, su.back } };
+    const auto& s = synth.state;
+    const int cab = synth.valid ? CabPicker::indexOf (juce::String (s.box)) : -1;
+    return { cab, { spotOf (s.a, s), spotOf (s.b, s), (float) s.blend, s.align, s.invert, s.a.on, s.b.on, s.back } };
 }
 
-namespace
+cabir::State CabWindow::stateOf (int cab, const CabPicker::Setup& su)
 {
-    AmpProcessor::CabSetup engineOf (const CabPicker::Setup& s)
-    {
-        return { toEngine (s.a), toEngine (s.b), s.blend, s.align, s.invert, s.aOn, s.bOn, s.back };
-    }
+    cabir::State s;
+    s.box = CabPicker::cabs()[(size_t) cab].name.toStdString();
+    s.back = su.back;
+    s.horn = su.a.horn;
+    s.hornDb = su.a.hornDb;
+    s.a = micOf (su.a, su.aOn);
+    s.b = micOf (su.b, su.bOn);
+    s.blend = su.blend;
+    s.align = su.align;
+    s.invert = su.invert;
+    return s;
 }
 
 void CabWindow::request (AmpProcessor& processor, int cab, const CabPicker::Setup& setup, bool live)
 {
-    processor.requestCabSynth (CabPicker::cabs()[(size_t) cab].name, engineOf (setup), live);
+    processor.requestCabSynth (stateOf (cab, setup), live);
 }
 
 juce::String CabWindow::labelOf (const AmpProcessor::CabSynthChoice& synth)
 {
     if (! synth.valid)
         return {};
-    const int at = CabPicker::indexOf (synth.cab);
-    const auto micOf = [at] (const AmpProcessor::CabSpot& s)
-    { return (s.mic.isNotEmpty() ? s.mic : at >= 0 ? CabPicker::cabs()[(size_t) at].mic : juce::String()).toUpperCase(); };
-    const auto& su = synth.setup;
+    const auto& s = synth.state;
+    const int at = CabPicker::indexOf (juce::String (s.box));
+    const auto micWord = [at] (const cabir::Mic& m)
+    { return (m.model.empty() ? at >= 0 ? CabPicker::cabs()[(size_t) at].mic : juce::String() : juce::String (m.model)).toUpperCase(); };
     // The back said only where the player turned it from the box's own: "4x10 PORTED".
-    const auto box = at < 0 ? synth.cab
-                   : CabPicker::wordOf (at) + (su.back >= 0 && su.back != CabPicker::ownBack (at)
-                                                   ? " " + juce::String (CabPicker::backWords[su.back]) : juce::String());
+    const auto box = at < 0 ? juce::String (s.box)
+                   : CabPicker::wordOf (at) + (s.back >= 0 && s.back != CabPicker::ownBack (at)
+                                                   ? " " + juce::String (CabPicker::backWords[s.back]) : juce::String());
     return box + juce::String::fromUTF8 (" \xc2\xb7 ")
-         + (su.aOn ? micOf (su.a) : juce::String()) + (su.aOn && su.bOn ? "+" : "") + (su.bOn ? micOf (su.b) : juce::String());
+         + (s.a.on ? micWord (s.a) : juce::String()) + (s.a.on && s.b.on ? "+" : "") + (s.b.on ? micWord (s.b) : juce::String());
 }
 
 CabWindow::CabWindow (AmpProcessor& a, Kept k)
@@ -65,7 +79,7 @@ CabWindow::CabWindow (AmpProcessor& a, Kept k)
     {
         request (amp, cab, setup, false);
         if (kept != nullptr)
-            kept (AmpProcessor::cabSynthFrom (CabPicker::cabs()[(size_t) cab].name, engineOf (setup)));
+            kept (AmpProcessor::cabSynthFrom (stateOf (cab, setup)));
     };
     picker.onMove  = [this] (int cab, CabPicker::Setup setup) { request (amp, cab, setup, true); };
     picker.onClose = [this] { if (auto* box = findParentComponentOfClass<juce::CallOutBox>()) box->dismiss(); };

@@ -816,35 +816,23 @@ bool AmpProcessor::chooseCabFile (const juce::File& file)
     return true;
 }
 
-void AmpProcessor::requestCabSynth (const juce::String& cab, CabSetup setup, bool live)
+void AmpProcessor::requestCabSynth (const cabir::State& state, bool live)
 {
     const int mine = ++cabSynthLatest;
     std::weak_ptr<int> alive = cabSynthAlive;
 
-    cabSynthPool.addJob ([this, alive, mine, cab, setup, live]
+    cabSynthPool.addJob ([this, alive, mine, state, live]
     {
         if (mine != cabSynthLatest.load())
             return;   // superseded before it began
 
         static const auto table = cabir::synth::parseTable (std::string (BinaryData::cabinets_txt, (size_t) BinaryData::cabinets_txtSize));
-        const auto spot = [] (const CabSpot& s) { return cabir::synth::Spot { s.x, s.y, s.distance, s.horn, s.mic.toStdString(), s.angle, s.hornDb }; };
-        cabir::synth::Pair pair { spot (setup.a), spot (setup.b), setup.blend, setup.align, setup.invert };
-        if (! setup.bOn)
-            pair.blend = 0;                 // A alone: the blend not heard
-        else if (! setup.aOn)
-        {
-            pair.a = spot (setup.b);        // B alone, as one mic is rendered — the horn as A's says it
-            pair.a.horn   = setup.a.horn;
-            pair.a.hornDb = setup.a.hornDb;
-            pair.blend = 0;
-        }
-        pair.a.back = setup.back;
-        const auto ir  = cabir::synth::renderPairParts (table, cab.toStdString(), pair);
+        const auto ir  = cabir::synth::renderPairParts (table, state.box, cabir::synth::pairOf (state));
         const auto wav = cabir::synth::wav24 (ir.mix, 48000);
         auto bytes = std::make_shared<juce::MemoryBlock> (wav.data(), wav.size());
         auto parts = ir.a.empty() ? std::shared_ptr<const CabParts>() : std::make_shared<const CabParts> (CabParts { ir.a, ir.b });
 
-        juce::MessageManager::callAsync ([this, alive, mine, cab, setup, bytes, parts, live]
+        juce::MessageManager::callAsync ([this, alive, mine, state, bytes, parts, live]
         {
             if (alive.lock() == nullptr || bytes->getSize() == 0)
                 return;
@@ -877,8 +865,8 @@ void AmpProcessor::requestCabSynth (const juce::String& cab, CabSetup setup, boo
             cabKeptParts = parts;
 
             apvts.state.setProperty (params::cabIrUserKey, key, nullptr);
-            apvts.state.setProperty (params::cabIrUserName, cab, nullptr);
-            apvts.state.setProperty (params::cabIrUserFrom, cabSynthFrom (cab, setup), nullptr);
+            apvts.state.setProperty (params::cabIrUserName, juce::String (state.box), nullptr);
+            apvts.state.setProperty (params::cabIrUserFrom, cabSynthFrom (state), nullptr);
             updateHostDisplay (ChangeDetails{}.withNonParameterStateChanged (true));
         });
     });
@@ -893,18 +881,9 @@ void AmpProcessor::heardCab (std::shared_ptr<const juce::MemoryBlock> bytes, con
     cabHeardIdentity = identity;
 }
 
-juce::String AmpProcessor::cabSynthFrom (const juce::String& box, const CabSetup& setup)
+juce::String AmpProcessor::cabSynthFrom (const cabir::State& state)
 {
-    const auto& a = setup.a;
-    const auto& b = setup.b;
-    // The horn: 0 off, 1 on at the table's level, or its attenuator's step in dB (-6, -12) while on.
-    const juce::String horn = ! a.horn ? "0" : a.hornDb < -0.5f ? juce::String (juce::roundToInt (a.hornDb)) : "1";
-    return "synth:" + box + "|" + juce::String (a.x, 3) + "|" + juce::String (a.y, 3)
-         + "|" + juce::String (a.distance, 3) + "|" + horn + "|" + a.mic
-         + "|" + juce::String (setup.blend, 3) + "|" + (setup.align ? "1" : "0") + "|" + (setup.invert ? "1" : "0")
-         + "|" + juce::String (b.x, 3) + "|" + juce::String (b.y, 3) + "|" + juce::String (b.distance, 3)
-         + "|" + b.mic + "|" + juce::String (a.angle, 1) + "|" + juce::String (b.angle, 1)
-         + "|" + (setup.aOn ? "1" : "0") + "|" + (setup.bOn ? "1" : "0") + "|" + juce::String (setup.back);
+    return juce::String (cabir::toToml (state));
 }
 
 AmpProcessor::CabSynthChoice AmpProcessor::cabSynthOf (const CabChoice& choice)
@@ -914,40 +893,9 @@ AmpProcessor::CabSynthChoice AmpProcessor::cabSynthOf (const CabChoice& choice)
 
 AmpProcessor::CabSynthChoice AmpProcessor::cabSynthOf (const juce::String& from)
 {
-    CabSynthChoice out;
-    if (! from.startsWith ("synth:"))
-        return out;
-
-    const auto parts = juce::StringArray::fromTokens (from.fromFirstOccurrenceOf ("synth:", false, false), "|", "");
-    if (parts.size() < 5)
-        return out;
-
-    out.cab     = parts[0];
-    out.setup.a = { parts[1].getFloatValue(), parts[2].getFloatValue(), parts[3].getFloatValue(), parts[4] != "0", parts[5] };
-    out.setup.a.hornDb = parts[4] == "1" || parts[4] == "0" ? 0.0f : parts[4].getFloatValue();
-    if (parts.size() >= 13)
-    {
-        out.setup.blend  = parts[6].getFloatValue();
-        out.setup.align  = parts[7] == "1";
-        out.setup.invert = parts[8] == "1";
-        out.setup.b      = { parts[9].getFloatValue(), parts[10].getFloatValue(), parts[11].getFloatValue(), out.setup.a.horn, parts[12] };
-        out.setup.b.hornDb = out.setup.a.hornDb;
-        out.setup.bOn    = out.setup.blend > 0.0f;    // ...as a `from` said it before each mic was on or off: B heard by a blend
-    }
-    if (parts.size() >= 15)
-    {
-        out.setup.a.angle = parts[13].getFloatValue();
-        out.setup.b.angle = parts[14].getFloatValue();
-    }
-    if (parts.size() >= 17)
-    {
-        out.setup.aOn = parts[15] == "1";
-        out.setup.bOn = parts[16] == "1";
-    }
-    if (parts.size() >= 18)
-        out.setup.back = juce::jlimit (-1, 2, parts[17].getIntValue());
-    out.valid = true;
-    return out;
+    if (const auto state = cabir::fromToml (from.toStdString()))
+        return { *state, true };
+    return {};
 }
 
 void AmpProcessor::embedCabIrs (juce::ValueTree& tree) const

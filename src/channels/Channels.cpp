@@ -405,7 +405,7 @@ void Channels::playDrawn (const juce::String& from)
         return;
     drawnOver  = amp.apvts.state.getProperty (params::cabIrUserFrom).toString();
     drawnAsked = from;
-    amp.requestCabSynth (synth.cab, synth.setup);
+    amp.requestCabSynth (synth.state);
 }
 
 int Channels::cabinetSlot() const
@@ -424,22 +424,22 @@ juce::String Channels::slotFrom (int slot) const
     // Never set: the lineup's box, its own mic at its cap, the horn as the lineup says — and its second mic, where it
     // has one, 30 cm out on the axis, on one clock, a third of the blend.
     const auto& own = line.cabinets[(size_t) slot];
-    AmpProcessor::CabSetup setup;
-    setup.a.horn = own.horn;
+    cabir::State state;
+    state.box = own.box;
+    state.horn = own.horn;
     if (own.second != nullptr)
     {
-        setup.b = { 0.0f, 0.0f, 0.30f, own.horn, own.second };
-        setup.bOn = true;
-        setup.blend = 0.35f;
-        setup.align = true;
+        state.b = { true, own.second, 0.0, 0.0, 0.30, 0.0 };
+        state.blend = 0.35;
+        state.align = true;
     }
-    return AmpProcessor::cabSynthFrom (own.box, setup);
+    return AmpProcessor::cabSynthFrom (state);
 }
 
 void Channels::hearSlot (int slot)
 {
     if (const auto synth = AmpProcessor::cabSynthOf (slotFrom (slot)); synth.valid)
-        amp.requestCabSynth (synth.cab, synth.setup, true);
+        amp.requestCabSynth (synth.state, true);
 }
 
 void Channels::chooseSlot (int slot)
@@ -451,7 +451,7 @@ void Channels::chooseSlot (int slot)
     {
         drawnOver  = amp.apvts.state.getProperty (params::cabIrUserFrom).toString();
         drawnAsked = from;
-        amp.requestCabSynth (synth.cab, synth.setup);
+        amp.requestCabSynth (synth.state);
     }
 }
 
