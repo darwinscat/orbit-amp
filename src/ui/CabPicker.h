@@ -18,7 +18,8 @@ namespace orbitamp
 
     THE PILE: a box of each size, no maker's name over them (the owner, 05.11), to scale and stacked as a backline stands
     them, the small on the big; each with its speakers, its horn and its port where it has them; under them the chosen
-    box's size. OrbitBass's every size the table holds; the walker's (Range::ampeg) its six.
+    box's size, and at its right its BACK, CLOSED or PORTED, a click each — a box comes with its own, a sealed one turned
+    ported gets a port at its foot. OrbitBass's every size the table holds; the walker's (Range::ampeg) its six.
     A click on a box picks it, the mics staying where they stand, and the horn too — but a box whose horn comes off
     (Cab::hornOn, the SVT-15E's and the 8x10's) takes it off, and the next box puts it back; a click on the chosen box's
     horn turns the horn off and on, its step kept.
@@ -64,6 +65,7 @@ public:
         float blend = 0.5f;
         bool align = true, invert = false;
         bool aOn = true, bOn = false;
+        int back = -1;   // the box's back as the player turned it — an index of backWords — or -1, the box's own (ownBack)
     };
 
     /** The mics to choose from, as the table names them (its "mic-<name>" sections), and as the columns write them. */
@@ -167,6 +169,17 @@ public:
         return closed.contains (name);
     }
 
+    /** THE BOX'S BACK, as its switch is marked — a click each, the one it stands at in the block's orange; the index the
+        engine's (core::cabsynth::Back). A box comes with its own (ownBack); turned, a sealed one gets a port at its foot. */
+    static constexpr const char* backWords[] { "CLOSED", "PORTED" };
+    static constexpr int backs = 2;
+    static int ownBack (int cab) { return sealed (cabs()[(size_t) cab].name) ? 0 : 1; }
+    static int backOf (int cab, const Setup& s) { return s.back >= 0 ? s.back : ownBack (cab); }
+
+    /** Where a box's port is drawn: the table's, or the one a sealed box is given when turned ported — in the middle of
+        its foot (core::cabsynth::portAtFoot). */
+    static juce::Point<float> portOf (const Cab& c) { return c.port ? c.portAt : juce::Point<float> (0.0f, -0.5f * c.h + 0.045f); }
+
     /** Ampeg's six in the order of their size, as the walker's cabinet screen steps through them. */
     static const juce::StringArray& ampegLine()
     {
@@ -177,13 +190,14 @@ public:
     /** THE MICS A BOX IS PICKED WITH, `from` the one that was playing: where they stood — the same cap, the same
         centimetres, the way a cabinet is compared — only a mic never chosen following the box's own; the horn as it
         stood, unless the two boxes come with theirs otherwise (Cab::hornOn): the SVT-15E's and the 8x10's go off, the
-        next one's on. A click in the pile picks by it, and so does the walker's screen. */
+        next one's on — and the back the box's own. A click in the pile picks by it. */
     static Setup pickedWith (int from, int to, Setup s)
     {
         if (from < 0 || cabs()[(size_t) from].hornOn != cabs()[(size_t) to].hornOn)
             s.a.horn = cabs()[(size_t) to].hornOn;
         if (s.a.mic.isEmpty())
             s.a.mic = cabs()[(size_t) to].mic;
+        s.back = -1;
         return s;
     }
 
@@ -329,8 +343,26 @@ private:
 
     juce::Rectangle<int> pileArea() const { return { 0, pileTop, leftW, getHeight() - pileTop - nameH }; }
 
-    /** The line under the pile: the chosen box's name, or the one under the hand. */
+    /** The line under the pile: the chosen box's name, or the one under the hand; at its right the chosen box's back. */
     juce::Rectangle<int> nameRow() const { return { 0, getHeight() - nameH + 4, leftW, nameH - 4 }; }
+
+    /** BACK's steps, laid from the name row's right; BACK itself left of the first. */
+    juce::Rectangle<float> backArea (int i) const
+    {
+        const auto font = theme::displayFont (13.0f);
+        const auto width = [&font] (const char* word) { return theme::trackedWidth (word, font, 0.06f) + 4.0f; };
+        float x = (float) nameRow().getRight() - 2.0f;
+        for (int k = backs - 1; k >= i; --k)
+            x -= width (backWords[k]) + (k < backs - 1 ? hornGap : 0.0f);
+        const auto row = nameRow().toFloat();
+        return { x, row.getY(), width (backWords[i]), row.getHeight() };
+    }
+
+    juce::Rectangle<float> backWordArea() const
+    {
+        const float w = theme::trackedWidth ("BACK", theme::displayFont (13.0f), 0.08f) + 4.0f;
+        return backArea (0).withX (backArea (0).getX() - 10.0f - w).withWidth (w);
+    }
 
     /** The chosen box's horn over its speaker, big, in the scene's corner on the side the horn stands — above or below
         the speaker, left, right or over it — clear of the cone; none where the box has no horn. */
@@ -481,6 +513,16 @@ private:
 
     void pileDown (const juce::MouseEvent& e)
     {
+        // The chosen box's back, a word each: its own one stored as none, so the next box comes with its own.
+        if (chosen >= 0)
+            for (int i = 0; i < backs; ++i)
+                if (backArea (i).expanded (hornGap / 2, 2.0f).contains (e.position))
+                {
+                    setup_.back = i == ownBack (chosen) ? -1 : i;
+                    send();
+                    return;
+                }
+
         const int at = cabAt (e.position);
         if (at < 0)
             return;
@@ -544,6 +586,18 @@ private:
             g.setColour (named == chosen ? theme::tx : theme::txDim);
             theme::drawTracked (g, wordOf (named), row, font, 0.06f, juce::Justification::centredLeft);
         }
+
+        // ...and at its right the chosen box's back: BACK, then its steps, the one it stands at in the block's orange.
+        if (chosen >= 0)
+        {
+            g.setColour (theme::txFaint);
+            theme::drawTracked (g, "BACK", backWordArea(), font, 0.08f, juce::Justification::centredLeft);
+            for (int i = 0; i < backs; ++i)
+            {
+                g.setColour (i == backOf (chosen, setup_) ? theme::orange : theme::txDim);
+                theme::drawTracked (g, backWords[i], backArea (i), font, 0.06f, juce::Justification::centred);
+            }
+        }
     }
 
 public:
@@ -564,11 +618,13 @@ public:
         g.setColour (orange ? theme::orange : isHover ? theme::violet.withAlpha (0.7f) : theme::hair2);
         g.drawRoundedRectangle (box, c.family == 1 ? 4.0f : 2.0f, orange ? 1.5f : 1.0f);
 
-        if (c.port)
+        // The port where the back the chosen one is turned to has one: none closed, at its foot on a sealed box ported.
+        if (const int back = isChosen ? setup.back : -1; back < 0 ? c.port : back == 1)
         {
+            const auto at = portOf (c);
             g.setColour (juce::Colours::black);
-            const float w = juce::jmin (0.20f, 2.0f * (0.5f * c.w - std::abs (c.portAt.x)) - 0.04f);
-            g.fillRoundedRectangle (juce::Rectangle<float> (w * s, juce::jmax (2.0f, 0.035f * s)).withCentre (onBox (box, s, c.portAt)), 1.0f);
+            const float w = juce::jmin (0.20f, 2.0f * (0.5f * c.w - std::abs (at.x)) - 0.04f);
+            g.fillRoundedRectangle (juce::Rectangle<float> (w * s, juce::jmax (2.0f, 0.035f * s)).withCentre (onBox (box, s, at)), 1.0f);
         }
 
         const auto line = theme::violet.withAlpha (isChosen ? 0.85f : 0.5f);

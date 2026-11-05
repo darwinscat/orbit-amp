@@ -33,8 +33,9 @@ public:
     /** ...and a box of CabPicker::cabs() with those mics asked of the engine: heard only while `live`, kept when not. */
     static void request (AmpProcessor&, int cab, const CabPicker::Setup&, bool live);
 
-    /** A rendered cabinet as a line says it: its box as the player reads it (CabPicker::wordOf) and the mics heard —
-        "4x10 · MD421", "+U87" with B heard beside A, B's alone with A off. */
+    /** A rendered cabinet as a line says it: its box as the player reads it (CabPicker::wordOf), its back where the
+        player turned it, and the mics heard — "4x10 · MD421", "4x10 PORTED", "+U87" with B heard beside A, B's alone
+        with A off. */
     static juce::String labelOf (const AmpProcessor::CabSynthChoice&);
 
     void resized() override;

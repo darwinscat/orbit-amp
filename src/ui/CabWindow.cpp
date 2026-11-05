@@ -20,14 +20,14 @@ std::pair<int, CabPicker::Setup> CabWindow::drawnOf (const AmpProcessor::CabSynt
     const int cab = synth.valid ? CabPicker::indexOf (synth.cab) : -1;
     // B where it stood, on or off, once it has stood anywhere — the mic it was given says so; else where B waits.
     return { cab, { toPicture (su.a), su.b.mic.isNotEmpty() ? toPicture (su.b) : CabPicker::Setup{}.b, su.blend, su.align, su.invert,
-                    su.aOn, su.bOn } };
+                    su.aOn, su.bOn, su.back } };
 }
 
 namespace
 {
     AmpProcessor::CabSetup engineOf (const CabPicker::Setup& s)
     {
-        return { toEngine (s.a), toEngine (s.b), s.blend, s.align, s.invert, s.aOn, s.bOn };
+        return { toEngine (s.a), toEngine (s.b), s.blend, s.align, s.invert, s.aOn, s.bOn, s.back };
     }
 }
 
@@ -44,7 +44,11 @@ juce::String CabWindow::labelOf (const AmpProcessor::CabSynthChoice& synth)
     const auto micOf = [at] (const AmpProcessor::CabSpot& s)
     { return (s.mic.isNotEmpty() ? s.mic : at >= 0 ? CabPicker::cabs()[(size_t) at].mic : juce::String()).toUpperCase(); };
     const auto& su = synth.setup;
-    return (at >= 0 ? CabPicker::wordOf (at) : synth.cab) + juce::String::fromUTF8 (" \xc2\xb7 ")
+    // The back said only where the player turned it from the box's own: "4x10 PORTED".
+    const auto box = at < 0 ? synth.cab
+                   : CabPicker::wordOf (at) + (su.back >= 0 && su.back != CabPicker::ownBack (at)
+                                                   ? " " + juce::String (CabPicker::backWords[su.back]) : juce::String());
+    return box + juce::String::fromUTF8 (" \xc2\xb7 ")
          + (su.aOn ? micOf (su.a) : juce::String()) + (su.aOn && su.bOn ? "+" : "") + (su.bOn ? micOf (su.b) : juce::String());
 }
 

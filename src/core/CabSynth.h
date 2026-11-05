@@ -719,7 +719,8 @@ inline double loudness (const std::vector<double>& ir, size_t n)
 }
 
 /** WHERE THE MIC STANDS, for a cabinet rendered live: across the first speaker in its radii from the cap (x right,
-    y up), and how far in front of the cap's plane; the horn on or off where the box has one, and its attenuator. */
+    y up), and how far in front of the cap's plane; the horn on or off where the box has one, and its attenuator; and
+    the box's back, as the table has it or as the player turns it. */
 struct Spot
 {
     double x = 0, y = 0, distance = 0.05;
@@ -727,10 +728,16 @@ struct Spot
     std::string mic;    // a "mic-<name>" section of the table laid over the cabinet's own, or empty for its own
     double angle = 0;   // degrees the mic leans back toward the cap
     double hornDb = 0;  // the horn's level against the table's, its attenuator's step: 0, -6, -12
+    int back = -1;      // -1 the table's; 0 closed, 1 ported (Back)
 };
 
+/** THE BOX'S BACK, turned: closed, the cone on the air inside alone; ported, the port tuned as the table tunes it —
+    or, on a box the table seals, at fb_hz's own 45 Hz in the middle of the baffle's foot (portAtFoot over its floor). */
+enum Back { closedBack = 0, portedBack = 1 };
+constexpr double portAtFoot = 0.045;
+
 /** A cabinet of the table — its "<name> cap" section, the box as that section says, its mic or the one `spot` names
-    laid over it — with the mic at `spot`, aimed straight at the baffle. */
+    laid over it — with the mic at `spot`, aimed straight at the baffle, its back as `spot` turns it. */
 inline Cab cabAt (const Table& table, const std::string& cab, const Spot& spot)
 {
     auto s = resolve (table, cab + " cap");
@@ -744,6 +751,15 @@ inline Cab cabAt (const Table& table, const std::string& cab, const Spot& spot)
     c.tilt    = spot.angle;
     c.horn    = c.horn && spot.horn;
     c.hornDb += spot.hornDb;
+    if (spot.back == closedBack)
+        c.vented = false;
+    else if (spot.back == portedBack && ! c.vented)
+    {
+        c.vented   = true;
+        c.portRear = false;
+        if (s.count ("equivalent_port_xy") == 0)
+            c.port = { 0, -c.bh / 2 + portAtFoot };
+    }
     return c;
 }
 
@@ -785,7 +801,7 @@ inline std::vector<float> renderAt (const Table& table, const std::string& cab, 
 /** TWO MICS on one cabinet, as an engineer puts them up: each at its own spot, both on one clock — the farther heard
     late by its path, so the two comb where they meet — unless `align` slides the later one onto the first; each brought
     to the same level in the middle (500 Hz-2 kHz) before `blend` mixes them, the second turned over by `invertB`. The
-    horn is A's. Blend 0 is A alone. */
+    horn and the back are A's. Blend 0 is A alone. */
 struct Pair
 {
     Spot a, b;
@@ -801,6 +817,7 @@ inline std::vector<float> renderPair (const Table& table, const std::string& cab
     auto b = p.b;
     b.horn = p.a.horn;
     b.hornDb = p.a.hornDb;
+    b.back = p.a.back;
     auto ca = cabAt (table, cab, p.a), cb = cabAt (table, cab, b);
     const double da = firstArrival (ca), db = firstArrival (cb), first = std::min (da, db);
     ca.refDelay = p.align ? da : first;

@@ -838,6 +838,7 @@ void AmpProcessor::requestCabSynth (const juce::String& cab, CabSetup setup, boo
             pair.a.hornDb = setup.a.hornDb;
             pair.blend = 0;
         }
+        pair.a.back = setup.back;
         const auto ir  = core::cabsynth::renderPair (table, cab.toStdString(), pair);
         const auto wav = core::cabsynth::wav24 (ir, 48000);
         auto bytes = std::make_shared<juce::MemoryBlock> (wav.data(), wav.size());
@@ -880,7 +881,7 @@ juce::String AmpProcessor::cabSynthFrom (const juce::String& box, const CabSetup
          + "|" + juce::String (setup.blend, 3) + "|" + (setup.align ? "1" : "0") + "|" + (setup.invert ? "1" : "0")
          + "|" + juce::String (b.x, 3) + "|" + juce::String (b.y, 3) + "|" + juce::String (b.distance, 3)
          + "|" + b.mic + "|" + juce::String (a.angle, 1) + "|" + juce::String (b.angle, 1)
-         + "|" + (setup.aOn ? "1" : "0") + "|" + (setup.bOn ? "1" : "0");
+         + "|" + (setup.aOn ? "1" : "0") + "|" + (setup.bOn ? "1" : "0") + "|" + juce::String (setup.back);
 }
 
 AmpProcessor::CabSynthChoice AmpProcessor::cabSynthOf (const CabChoice& choice)
@@ -920,6 +921,8 @@ AmpProcessor::CabSynthChoice AmpProcessor::cabSynthOf (const juce::String& from)
         out.setup.aOn = parts[15] == "1";
         out.setup.bOn = parts[16] == "1";
     }
+    if (parts.size() >= 18)
+        out.setup.back = juce::jlimit (-1, 1, parts[17].getIntValue());
     out.valid = true;
     return out;
 }
