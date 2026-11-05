@@ -268,10 +268,10 @@ struct Cab
     double radius = 0.105, depthFrac = 0.25, bw = 0.6, bh = 0.6;
     // low end
     bool vented = false;
-    // Open at the back: each cone in free air, its back heard inverted round the box's side, dark above `openLp`, by
-    // `openWrap` of it — whole: a box this small does not shadow a bass's wavelength.
+    // Open at the back: each cone in free air but for the open box behind it, a pipe shut at the cone and open at the
+    // back, `openLoss` its damping (openPipe); its back heard inverted from the back's plane, dark above `openLp`.
     bool open = false;
-    double openLp = 500, openWrap = 1.0;
+    double openLp = 150, openLoss = 0.48;
     double fsd = 50, qts = 0.4, vas = 30, vb = 60, perChamber = 1, chambers = 1, fb = 45, ql = 8;
     bool portRear = false, hornAtMic = false;
     double fixedMass = 0, coilHz = 0, proxStrength = 1, proxCorner = 0, micTop = 12000, depth = 0.4;
@@ -317,8 +317,8 @@ inline Cab build (const Section& s)
 
     c.vented = str (s, "alignment") == "ported";
     c.open = str (s, "alignment") == "open";
-    c.openLp = num (s, "open_back_lowpass_hz", 500);
-    c.openWrap = num (s, "open_back_wrap", 1.0);
+    c.openLp = num (s, "open_back_lowpass_hz", 150);
+    c.openLoss = num (s, "open_back_loss", 0.48);
     const auto ts = nums (str (s, "ts", "50,0.4,30"));
     c.fsd = ts[0]; c.qts = ts[1]; c.vas = ts[2];
     const auto ch = nums (str (s, "chamber", "60,1,1"));
@@ -464,6 +464,26 @@ inline void lowEnd (const Cab& c, double f, cd& cone, cd& port)
     port = -s * s * (s * wb / ql + wb * wb) / d;
 }
 
+/** AN OPEN BACK'S PIPE, at f: the box behind each cone a pipe of its share of the back (bw x bh over the cones), as long
+    as the box is deep plus the open end's correction (0.6 of the back's equivalent radius), shut at the cone and open at
+    the back, damped by `openLoss` (radiation off a back that wide: Q about 2). The cone carries it — the driver's own
+    mechanical impedance from fs, Qts and Vas against the pipe's input — so it moves less round the pipe's quarter wave,
+    and the back hands out more there: `cone` what the cone's motion is multiplied by, `back` what the back hands out for
+    what the cone moves. */
+inline void openPipe (const Cab& c, double f, cd& cone, cd& back)
+{
+    constexpr double rho = 1.2;
+    const double sd = pi * c.radius * c.radius, ws = 2 * pi * c.fsd, w = 2 * pi * f;
+    const double cms = c.vas / 1000 / (rho * c0 * c0 * sd * sd), mms = 1 / (ws * ws * cms), rms = ws * mms / c.qts;
+    const cd zm = cd (rms, w * mms - 1 / (w * cms));
+    const double duct = c.bw * c.bh / (double) std::max<size_t> (1, c.drivers.size());
+    const double length = c.depth + 0.6 * std::sqrt (c.bw * c.bh / pi);
+    const cd kl (w / c0 * length, -c.openLoss);
+    const cd zu = cd (0, 1) * (rho * c0 / duct) * std::tan (kl);
+    cone = zm / (zm + sd * sd * zu);
+    back = 1.0 / std::cos (kl);
+}
+
 struct Mic { double x, y, z, ax, ay, az; };
 
 /** What the mic makes of a source at (dx,dy,dz) from it, at f: a cardioid, half pressure and half gradient — the
@@ -591,11 +611,20 @@ inline std::vector<double> render (const Cab& c, size_t n)
         const double f = fs * (double) k / (double) n;
         cd cone, port;
         lowEnd (c, f, cone, port);
+        cd pipe = 0.0;   // an open back's: what it hands out for what the cone moves
+        if (c.open)
+        {
+            cd by;
+            openPipe (c, f, by, pipe);
+            cone *= by;
+        }
 
         // What the box adds to every cone's motion: its cavity and panel modes, then the voicing.
         cd box = 1.0;
-        if (! c.open)   // no air shut in behind an open back: nothing of the cavity rings
-            for (auto& m : c.cavity) box += m[2] * resonance (f, m[0], m[1]);
+        // An open back lets go of the depth's mode, the air shut between baffle and back; across, the box still rings.
+        for (auto& m : c.cavity)
+            if (! (c.open && std::abs (m[0] - c0 / (2 * c.depth)) < 0.08 * m[0]))
+                box += m[2] * resonance (f, m[0], m[1]);
         for (auto& m : c.panel) box += m[2] * resonance (f, m[0], m[1]);
         for (auto& b : bodyEq) box *= b.at (f, fs);
         // The baffle step: the low end, radiating into the whole room, a few tenths of a dB under the top.
@@ -667,26 +696,25 @@ inline std::vector<double> render (const Cab& c, size_t n)
                          * std::polar (1.0, -2 * pi * f * (r / c0 - minDelay));
                 }
             }
-        // An open back: each cone's back, inverted, out of the back and round the box to the front — from the cone to the
-        // back's rim on a side, forward along that side, then from the baffle's edge to the mic, by the side that makes it
-        // shortest — by openWrap of it and dark (openLp); against the cone's near field as the port is (Keele).
+        // An open back: each cone's back, inverted, out of the back's plane straight to the mic — a box this small does
+        // not shadow a bass's wavelength, its baffle only stands in the way (B: a rigid disc of the baffle's area in the
+        // flow from a source `depth` behind it, at the mic `micD` in front) — into the whole space where the front has
+        // half (1/2), as the cone's volume velocity in the cones' own 1/r (r0/d), dark above openLp as the box shadows it
+        // more; the floor's image too, as every source has.
         if (c.open)
+        {
+            const double disc = std::sqrt (c.bw * c.bh / pi), z = std::max (c.micD, 0.005);
             for (size_t d = 0; d < c.drivers.size(); ++d)
-            {
-                const auto& o = c.drivers[d];
-                const Xy sides[4] { { -c.bw / 2, o.y }, { c.bw / 2, o.y }, { o.x, -c.bh / 2 }, { o.x, c.bh / 2 } };
-                double rp = 1e9, ex = 0, ey = 0, ez = 0;
-                for (const auto& e : sides)
+                for (int img = 0; img < images; ++img)
                 {
+                    const double floorBy = img == 0 ? 1.0 : c.floorRefl;
                     double r, dx, dy, dz;
-                    pathTo (e.x, e.y, 0, r, dx, dy, dz);
-                    const double way = std::hypot (c.depth, std::hypot (e.x - o.x, e.y - o.y)) + c.depth + r;
-                    if (way < rp) { rp = way; ex = dx; ey = dy; ez = dz; }
+                    pathTo (c.drivers[d].x, mirrored (img, c.drivers[d].y), -c.depth, r, dx, dy, dz);
+                    const double block = std::clamp (1 - 2 / pi * (disc - z * std::atan (disc / z)) * r / (c.depth * c.depth), 0.2, 1.0);
+                    sum -= floorBy * cone * pipe * coil[k] * c.sens[d] * 0.5 * block * (r0 / r) * lowpass1 (f, c.openLp)
+                         * heard (c, mic, dx, dy, dz, f) * std::polar (1.0, -2 * pi * f * (r / c0 - minDelay));
                 }
-                const double ratio = pi * c.radius * c.radius / (2 * pi * rp * delta) * c.openWrap;
-                sum -= cone * coil[k] * c.sens[d] * ratio * (r0 * near) * lowpass2 (f, c.openLp, 0.707) * heard (c, mic, ex, ey, ez, f)
-                     * std::polar (1.0, -2 * pi * f * (rp / c0 - minDelay));
-            }
+        }
         if (c.horn)
         {
             cd hn = highpass2 (f, c.hornXo, c.hornQ) * lowpass2 (f, c.hornLp, 0.707) * std::pow (10.0, c.hornDb / 20);
@@ -769,8 +797,9 @@ struct Spot
 };
 
 /** THE BOX'S BACK, turned: closed, the cone on the air inside alone; ported, the port tuned as the table tunes it —
-    or, on a box the table seals, at fb_hz's own 45 Hz in the middle of the baffle's foot (portAtFoot over its floor);
-    open, each cone in free air, its back wrapping round the box to the mic. */
+    or, on a box the table seals, tuned a little under the driver's resonance in the middle of the baffle's foot
+    (portAtFoot over its floor); open, each cone in free air but for the open box's pipe behind it, its back heard
+    from the back's plane. */
 enum Back { closedBack = 0, portedBack = 1, openBack = 2 };
 constexpr double portAtFoot = 0.045;
 
@@ -801,6 +830,8 @@ inline Cab cabAt (const Table& table, const std::string& cab, const Spot& spot)
         c.portRear = false;
         if (s.count ("equivalent_port_xy") == 0)
             c.port = { 0, -c.bh / 2 + portAtFoot };
+        if (s.count ("fb_hz") == 0)
+            c.fb = std::clamp (0.85 * c.fsd, 35.0, 55.0);   // a little under the driver's own resonance
     }
     return c;
 }
