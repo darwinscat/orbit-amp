@@ -55,6 +55,7 @@ CabWindow::CabWindow (AmpProcessor& a, Kept k)
     picker.onMove  = [this] (int cab, CabPicker::Setup setup) { request (amp, cab, setup, true); };
     picker.onClose = [this] { if (auto* box = findParentComponentOfClass<juce::CallOutBox>()) box->dismiss(); };
     picker.onDownload = [this] { download (amp); };
+    picker.onFind     = [this] (int cab, CabPicker::Setup setup) { placeB (cab, setup); };
 
     addAndMakeVisible (picker);
     setSize (CabPicker::panelW, CabPicker::panelH);
@@ -113,19 +114,28 @@ void CabWindow::timerCallback()
 
 void CabWindow::placeB (int cab, const CabPicker::Setup& setup)
 {
-    // B just taken up: where it combs least with A, found off the message thread (a second or so); it moves there unless
-    // the hand moved it first — what plays still has B where it was put — or the window went.
+    // B just taken up, or FIND: where it combs least with A, found off the message thread (a second or so), each place it
+    // judges drawn on the speaker as it goes; B moves there unless the hand moved it first — what plays still has B where
+    // it was put — or the window went.
     static juce::ThreadPool searcher { 1 };
     const auto state = stateOf (cab, setup);
     juce::Component::SafePointer<CabWindow> safe (this);
     searcher.addJob ([safe, state, cab, setup]
     {
         static const auto table = cabir::synth::parseTable (std::string (BinaryData::cabinets_txt, (size_t) BinaryData::cabinets_txtSize));
-        const auto place = cabir::synth::quietPlaceForB (table, state);
+        const auto place = cabir::synth::quietPlaceForB (table, state, (size_t) 1 << 13, [safe] (const cabir::synth::Place& p, double score)
+        {
+            juce::MessageManager::callAsync ([safe, p, score]
+            {
+                if (safe != nullptr)
+                    safe->picker.showSearch ((float) p.x, (float) p.y, (float) score);
+            });
+        });
         juce::MessageManager::callAsync ([safe, state, cab, setup, place]
         {
             if (safe == nullptr)
                 return;
+            safe->picker.endSearch();
             const auto now = AmpProcessor::cabSynthOf (safe->amp.cabChoice());
             if (! now.valid || ! (now.state.b == state.b) || now.state.box != state.box)
                 return;
