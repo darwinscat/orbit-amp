@@ -1315,7 +1315,8 @@ private:
             juce::Path path;
             for (int i = 0; i < responsePoints; ++i)
             {
-                const juce::Point<float> at (xOf (responseHz (i)), yOf (juce::jlimit (-responseDb, responseDb, db[(size_t) i])));
+                // Past the scale it goes out of the frame, as a dip does, not along its floor (the owner, 05.11).
+                const juce::Point<float> at (xOf (responseHz (i)), yOf (juce::jlimit (-4.0f * responseDb, 4.0f * responseDb, db[(size_t) i])));
                 if (i == 0)
                     path.startNewSubPath (at);
                 else
