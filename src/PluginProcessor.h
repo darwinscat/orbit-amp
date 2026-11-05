@@ -1042,6 +1042,7 @@ private:
     // requestCabSynth's: which request is the latest, whether the processor still stands, and the worker — declared
     // last of the three, so it is gone (its job finished) before what the job reads.
     std::atomic<int> cabSynthLatest { 0 };
+    int cabSynthHeard = 0;   // the latest request whose render was loaded — the message thread's alone
     std::shared_ptr<int> cabSynthAlive = std::make_shared<int> (0);
     juce::ThreadPool cabSynthPool { 1 };
 

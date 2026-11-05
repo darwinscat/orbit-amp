@@ -845,14 +845,24 @@ void AmpProcessor::requestCabSynth (const juce::String& cab, CabSetup setup, boo
 
         juce::MessageManager::callAsync ([this, alive, mine, cab, setup, bytes, live]
         {
-            if (alive.lock() == nullptr || mine != cabSynthLatest.load() || bytes->getSize() == 0)
+            if (alive.lock() == nullptr || bytes->getSize() == 0)
                 return;
 
+            // A hand still moving asks again before the worker is done, every time: what it finished is heard all the
+            // same, unless a later one was heard already — so the sound follows the hand as fast as the worker renders.
             if (live)
             {
+                if (mine <= cabSynthHeard)
+                    return;
+                cabSynthHeard = mine;
                 this->cab.load (bytes->getData(), bytes->getSize());   // heard, not kept: the state still names the last kept
                 return;
             }
+
+            // Kept: only the latest asked.
+            if (mine != cabSynthLatest.load())
+                return;
+            cabSynthHeard = mine;
 
             // Kept: and loaded even when it is the very cabinet the state already named — a drag that ends where it
             // began has left a live one playing in between.
