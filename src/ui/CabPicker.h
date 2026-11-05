@@ -1358,10 +1358,12 @@ private:
     }
 
     // ---------------------------------------------------------------- the response
-    // Across the panel under it all: the cabinet's response, 30 Hz to 12 kHz on a log scale, +-18 dB — the one heard in
-    // the block's orange line, the one kept before it a faint grey ghost; dB at the left, the frequencies under it.
+    // Across the panel under it all: the cabinet's response, 30 Hz to 12 kHz on a log scale, +15 to -30 dB — the one
+    // heard in the block's orange line, the one kept before it a faint grey ghost; dB at the left, the frequencies under.
     std::vector<float> responseNow, responseBefore, responseComb;
-    static constexpr float responseDb = 18.0f;
+    // +15 over the middle, -30 under it: a cabinet's response rarely climbs past +10, its roll-offs and a comb's dips
+    // go to -20 and -30, and under that nothing more is heard (the owner, 05.11).
+    static constexpr float responseTop = 15.0f, responseBottom = -30.0f;
 
     juce::Rectangle<int> responseArea() const { return { 0, bodyH(), getWidth(), responseH }; }
 
@@ -1379,7 +1381,7 @@ private:
         g.fillRect (area.withHeight (1.0f));
 
         const auto xOf = [p] (float hz) { return p.getX() + p.getWidth() * std::log (hz / 30.0f) / std::log (12000.0f / 30.0f); };
-        const auto yOf = [p] (float db) { return p.getCentreY() - db / responseDb * 0.5f * p.getHeight(); };
+        const auto yOf = [p] (float db) { return p.getY() + (responseTop - db) / (responseTop - responseBottom) * p.getHeight(); };
 
         // Under it all, with two mics heard, where they meet (the owner, 05.11): green where they add in phase, red
         // where they cancel — the stronger, the deeper, full at 6 dB.
@@ -1405,7 +1407,7 @@ private:
             theme::drawTracked (g, m.word, { x - 20.0f, p.getBottom() + 3.0f, 40.0f, 16.0f }, font, 0.0f, juce::Justification::centred);
         }
         struct Level { float db; const char* word; };
-        static constexpr Level levels[] { { 10.0f, "+10" }, { 0.0f, "0" }, { -10.0f, "-10" } };
+        static constexpr Level levels[] { { 10.0f, "+10" }, { 0.0f, "0" }, { -10.0f, "-10" }, { -20.0f, "-20" }, { -30.0f, "-30" } };
         for (const auto& l : levels)
         {
             const float y = yOf (l.db);
@@ -1423,7 +1425,7 @@ private:
             for (int i = 0; i < responsePoints; ++i)
             {
                 // Past the scale it goes out of the frame, as a dip does, not along its floor (the owner, 05.11).
-                const juce::Point<float> at (xOf (responseHz (i)), yOf (juce::jlimit (-4.0f * responseDb, 4.0f * responseDb, db[(size_t) i])));
+                const juce::Point<float> at (xOf (responseHz (i)), yOf (juce::jlimit (3.0f * responseBottom, 3.0f * responseTop, db[(size_t) i])));
                 if (i == 0)
                     path.startNewSubPath (at);
                 else
