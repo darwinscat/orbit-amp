@@ -42,6 +42,9 @@ public:
 
 private:
     CabWindow (AmpProcessor&, Kept kept);
+
+    /** DOWNLOAD IR: the cabinet that plays saved as a WAV where the player says — Downloads to begin with. */
+    static void download (AmpProcessor&);
     void timerCallback() override;
 
     AmpProcessor& amp;

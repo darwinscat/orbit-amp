@@ -64,6 +64,7 @@ CabWindow::CabWindow (AmpProcessor& a, Kept k)
     };
     picker.onMove  = [this] (int cab, CabPicker::Setup setup) { request (amp, cab, setup, true); };
     picker.onClose = [this] { if (auto* box = findParentComponentOfClass<juce::CallOutBox>()) box->dismiss(); };
+    picker.onDownload = [this] { download (amp); };
 
     addAndMakeVisible (picker);
     setSize (CabPicker::panelW, CabPicker::panelH);
@@ -85,6 +86,38 @@ void CabWindow::timerCallback()
     showing = now;
     const auto [cab, setup] = drawnOf (AmpProcessor::cabSynthOf (choice));
     picker.show (cab, setup);
+}
+
+namespace
+{
+    // The save dialog outlives the window: a native dialog takes the focus, and the call-out goes when it loses it.
+    std::unique_ptr<juce::FileChooser> saving;
+}
+
+void CabWindow::download (AmpProcessor& amp)
+{
+    const auto choice = amp.cabChoice();
+    if (! choice.isUser())
+        return;
+
+    // The bytes the cabinet plays — a rendered one is a WAV already — under the name its line reads, in Downloads.
+    auto bytes = std::make_shared<juce::MemoryBlock> (*choice.bytes);
+    auto name = labelOf (AmpProcessor::cabSynthOf (choice)).replace (juce::String::fromUTF8 (" \xc2\xb7 "), " ");
+    if (name.isEmpty())
+        name = choice.name;
+    auto folder = juce::File::getSpecialLocation (juce::File::userHomeDirectory).getChildFile ("Downloads");
+    if (! folder.isDirectory())
+        folder = juce::File::getSpecialLocation (juce::File::userDocumentsDirectory);
+
+    saving = std::make_unique<juce::FileChooser> ("Download IR", folder.getChildFile (juce::File::createLegalFileName (name) + ".wav"), "*.wav");
+    saving->launchAsync (juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::canSelectFiles
+                             | juce::FileBrowserComponent::warnAboutOverwriting,
+                         [bytes] (const juce::FileChooser& chooser)
+                         {
+                             if (const auto file = chooser.getResult(); file != juce::File())
+                                 file.withFileExtension ("wav").replaceWithData (bytes->getData(), bytes->getSize());
+                             juce::MessageManager::callAsync ([] { saving.reset(); });   // not from inside its own call
+                         });
 }
 
 void CabWindow::open (AmpProcessor& amp, juce::Component& anchor, Kept kept)

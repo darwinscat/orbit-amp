@@ -18,9 +18,10 @@ namespace orbitamp
 
     THE PILE: a box of each size, no maker's name over them (the owner, 05.11), to scale and stacked as a backline stands
     them, the small on the big; each with its speakers, its horn and its port where it has them; under them the chosen
-    box's size; over them its BACK, CLOSED, PORTED or OPEN, each the box drawn cut through from the side, a click each —
-    a box comes with its own, a sealed one turned ported gets a port at its foot. Every bass of the family offers the
-    same ten (the owner, 05.11): none knows a cabinet of its own.
+    box's size, and DOWNLOAD IR beside it, the cabinet that plays saved as a file; over them its BACK, CLOSED, PORTED or
+    OPEN, each the box drawn cut through from the side, a click each — a box comes with its own, a sealed one turned
+    ported gets a port at its foot. Every bass of the family offers the same ten (the owner, 05.11): none knows a
+    cabinet of its own.
     A click on a box picks it, the mics staying where they stand, and the horn too — but a box whose horn comes off
     (Cab::hornOn, the SVT-15E's and the 8x10's) takes it off, and the next box puts it back; a click on the chosen box's
     horn turns the horn off and on, its step kept.
@@ -216,6 +217,9 @@ public:
     /** CLOSE: whoever opened the panel takes it away. No button without it. */
     std::function<void()> onClose;
 
+    /** DOWNLOAD IR: whoever opened the panel saves the cabinet that plays as a file. No button without it. */
+    std::function<void()> onDownload;
+
 
     void paint (juce::Graphics& g) override
     {
@@ -328,13 +332,21 @@ private:
 
     // ---------------------------------------------------------------- the pile
     // Over it the chosen box's back, in the room the pile leaves there (the owner, 05.11); under it the box's size.
-    static constexpr int backTop = 6, backIconH = 30, backWordH = 16, nameH = 22;
+    static constexpr int backTop = 6, backIconH = 30, backWordH = 16, nameH = 26;
     static constexpr int pileTop = backTop + backIconH + 2 + backWordH + 6;
 
     juce::Rectangle<int> pileArea() const { return { 0, pileTop, leftW, getHeight() - pileTop - nameH }; }
 
-    /** The line under the pile: the chosen box's name, or the one under the hand. */
+    /** The line under the pile: the chosen box's name, or the one under the hand; at its right DOWNLOAD IR. */
     juce::Rectangle<int> nameRow() const { return { 0, getHeight() - nameH + 4, leftW, nameH - 4 }; }
+
+    juce::Rectangle<int> downloadArea() const
+    {
+        if (onDownload == nullptr || chosen < 0)
+            return {};
+        const int w = wordW ("DOWNLOAD IR") + 14;
+        return nameRow().removeFromRight (w);
+    }
 
     /** THE BACK over the pile, centred: BACK, then a cell each — the box cut through from the side (paintBack), its word
         under it. */
@@ -546,6 +558,12 @@ private:
 
     void pileDown (const juce::MouseEvent& e)
     {
+        if (downloadArea().contains (e.getPosition()))
+        {
+            onDownload();
+            return;
+        }
+
         // The chosen box's back, a cell each: its own one stored as none, so the next box comes with its own.
         if (chosen >= 0)
             for (int i = 0; i < backs; ++i)
@@ -619,6 +637,8 @@ private:
             g.setColour (named == chosen ? theme::tx : theme::txDim);
             theme::drawTracked (g, wordOf (named), row, font, 0.06f, juce::Justification::centredLeft);
         }
+
+        paintButton (g, "DOWNLOAD IR", downloadArea(), false);
 
         // Over the pile the chosen box's back: BACK, then each drawn with its word, the one it stands at in the block's
         // orange line.
@@ -1145,22 +1165,23 @@ private:
             theme::drawTracked (g, "ALIGN", alignArea().toFloat(), font, 0.06f, juce::Justification::centredLeft);
             g.setColour (bothHeard() && setup_.invert ? theme::orange : theme::txFaint);
             theme::drawTracked (g, juce::String::fromUTF8 ("\xc3\x98"), invertArea().toFloat(), font, 0.0f, juce::Justification::centred);
-            // DEFAULT and CLOSE, buttons: a box round each word.
-            const auto button = [&] (const char* word, juce::Rectangle<int> r, bool asking)
-            {
-                if (r.isEmpty())
-                    return;
-                const auto b = r.toFloat().reduced (0.5f, 1.5f);
-                g.setColour (theme::panel2);
-                g.fillRoundedRectangle (b, 4.0f);
-                g.setColour (asking ? theme::orange : theme::txFaint);
-                g.drawRoundedRectangle (b, 4.0f, asking ? 1.2f : 1.0f);
-                g.setColour (asking ? theme::orange : theme::txDim);
-                theme::drawTracked (g, word, b, font, 0.06f, juce::Justification::centred);
-            };
-            button (defaultArmed ? "SURE?" : "DEFAULT", defaultArea(), defaultArmed);
-            button ("CLOSE", closeArea(), false);
+            paintButton (g, defaultArmed ? "SURE?" : "DEFAULT", defaultArea(), defaultArmed);
+            paintButton (g, "CLOSE", closeArea(), false);
         }
+    }
+
+    /** A button: a box round its word — DEFAULT, CLOSE, DOWNLOAD IR — orange while it asks. */
+    static void paintButton (juce::Graphics& g, const char* word, juce::Rectangle<int> r, bool asking)
+    {
+        if (r.isEmpty())
+            return;
+        const auto b = r.toFloat().reduced (0.5f, 1.5f);
+        g.setColour (theme::panel2);
+        g.fillRoundedRectangle (b, 4.0f);
+        g.setColour (asking ? theme::orange : theme::txFaint);
+        g.drawRoundedRectangle (b, 4.0f, asking ? 1.2f : 1.0f);
+        g.setColour (asking ? theme::orange : theme::txDim);
+        theme::drawTracked (g, word, b, theme::displayFont (13.0f), 0.06f, juce::Justification::centred);
     }
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (CabPicker)
