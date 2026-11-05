@@ -328,6 +328,26 @@ set(FELITRONICS_APPKIT_WEBP ON CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(felitronics_appkit)
 
 # ----------------------------------------------------------------------------
+# cab-ir-generator — the bass's own cabinets: their synthesis (cabir::synth, JUCE-free), the panel and the
+# miniature the CAB block draws (cabir::panel, JUCE views in our theme — CabWindow::useOurLook), and the
+# table they read (CABIR_CABINETS). The same code is the cabinets' own app and web page.
+# ----------------------------------------------------------------------------
+set(ORBITAMP_CABIR_TAG "main" CACHE STRING "cab-ir-generator ref (fetched when no local checkout)")
+set(ORBITAMP_CABIR_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../cab-ir-generator"
+    CACHE PATH "Local cab-ir-generator checkout (used if present); else the ref is fetched")
+if(ORBITAMP_CABIR_DIR AND EXISTS "${ORBITAMP_CABIR_DIR}/CMakeLists.txt")
+    message(STATUS "cab-ir-generator: local checkout — ${ORBITAMP_CABIR_DIR}")
+    FetchContent_Declare(cab_ir_generator SOURCE_DIR "${ORBITAMP_CABIR_DIR}")
+else()
+    message(STATUS "cab-ir-generator: fetching ${ORBITAMP_CABIR_TAG} from GitHub")
+    FetchContent_Declare(cab_ir_generator
+        GIT_REPOSITORY https://github.com/darwinscat/cab-ir-generator.git
+        GIT_TAG        ${ORBITAMP_CABIR_TAG}
+        GIT_SHALLOW    TRUE)
+endif()
+FetchContent_MakeAvailable(cab_ir_generator)
+
+# ----------------------------------------------------------------------------
 # OrbitAmpVersion.h — git-describe build stamp, baked into the binary (end users have no repo).
 # Regenerated on EVERY build (the target is always out-of-date) so the stamp reflects the tree AT
 # BUILD TIME; also generated once at configure so clangd + the first compile have the header. Never
@@ -1066,8 +1086,8 @@ juce_add_binary_data(OrbitAmpData
         "${CMAKE_CURRENT_SOURCE_DIR}/resources/notice.txt"
         "${CMAKE_CURRENT_SOURCE_DIR}/resources/disclaimer.txt"   # ...and its long form, with the list
 
-        # The bass's cabinets, as core/CabSynth.h renders them live with the mic where the player put it.
-        "${CMAKE_CURRENT_SOURCE_DIR}/tools/cabgen/cabinets.txt"
+        # The bass's cabinets, as cab-ir-generator's synthesis renders them live with the mics where the player put them.
+        "${CABIR_CABINETS}"
 )
 # ...and the table the cabinet shelf is played by: its IRs themselves lie in the factory folder.
 target_link_libraries(OrbitAmpData INTERFACE OrbitAmpCabinetCatalog)
@@ -1153,6 +1173,7 @@ set(AMP_ENGINE_LIBRARIES
     felitronics::octave              # the bass's OCTAVE (Octaver) and its slider's law
     felitronics::envfilter           # the bass's FILTER (EnvelopeFilter, keyed) and its slider's law
     felitronics::chorus              # the bass's CHORUS (BassChorus) and its slider's law
+    cabir::panel                     # the bass's own cabinets: synthesis, panel, miniature (cab-ir-generator)
     juce::juce_audio_utils           # pulls audio_processors / audio_basics / gui_basics ...
     juce::juce_dsp                   # the chain stages will build on this
     juce::juce_data_structures)      # ValueTree behind the workspace / presets

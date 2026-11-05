@@ -38,6 +38,7 @@ CabinetBlock::CabinetBlock (AmpProcessor& processor)
     // The bass's says CAB: what it plays is mostly its own cabinets, drawn, and an IR only when the player brings one.
     : BlockFrame (processor.product().chain == Chain::bass ? "Cab" : "Cab IR", BlockFrame::Kind::captured), amp (processor)
 {
+    CabWindow::useOurLook();   // the miniature over the IR, in our theme
     startTimerHz (30);
     attachPower (*amp.apvts.getParameter (params::cabOn));
 

@@ -10,7 +10,7 @@
 #include <felitronics/octave/OctaveLaw.h>
 
 #include <cstring>
-#include "core/CabSynth.h"
+#include <synth/CabSynth.h>
 #include <BinaryData.h>
 #include "device/FactoryShelf.h"
 #include "device/IrLibrary.h"
@@ -826,9 +826,9 @@ void AmpProcessor::requestCabSynth (const juce::String& cab, CabSetup setup, boo
         if (mine != cabSynthLatest.load())
             return;   // superseded before it began
 
-        static const auto table = core::cabsynth::parseTable (std::string (BinaryData::cabinets_txt, (size_t) BinaryData::cabinets_txtSize));
-        const auto spot = [] (const CabSpot& s) { return core::cabsynth::Spot { s.x, s.y, s.distance, s.horn, s.mic.toStdString(), s.angle, s.hornDb }; };
-        core::cabsynth::Pair pair { spot (setup.a), spot (setup.b), setup.blend, setup.align, setup.invert };
+        static const auto table = cabir::synth::parseTable (std::string (BinaryData::cabinets_txt, (size_t) BinaryData::cabinets_txtSize));
+        const auto spot = [] (const CabSpot& s) { return cabir::synth::Spot { s.x, s.y, s.distance, s.horn, s.mic.toStdString(), s.angle, s.hornDb }; };
+        cabir::synth::Pair pair { spot (setup.a), spot (setup.b), setup.blend, setup.align, setup.invert };
         if (! setup.bOn)
             pair.blend = 0;                 // A alone: the blend not heard
         else if (! setup.aOn)
@@ -839,8 +839,8 @@ void AmpProcessor::requestCabSynth (const juce::String& cab, CabSetup setup, boo
             pair.blend = 0;
         }
         pair.a.back = setup.back;
-        const auto ir  = core::cabsynth::renderPairParts (table, cab.toStdString(), pair);
-        const auto wav = core::cabsynth::wav24 (ir.mix, 48000);
+        const auto ir  = cabir::synth::renderPairParts (table, cab.toStdString(), pair);
+        const auto wav = cabir::synth::wav24 (ir.mix, 48000);
         auto bytes = std::make_shared<juce::MemoryBlock> (wav.data(), wav.size());
         auto parts = ir.a.empty() ? std::shared_ptr<const CabParts>() : std::make_shared<const CabParts> (CabParts { ir.a, ir.b });
 

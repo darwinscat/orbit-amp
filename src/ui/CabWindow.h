@@ -4,13 +4,15 @@
 #pragma once
 
 #include "../PluginProcessor.h"
-#include "CabPicker.h"
+#include <panel/CabPicker.h>
 
 #include <functional>
 #include <utility>
 
 namespace orbitamp
 {
+
+using cabir::CabPicker;   // the cabinets' panel lives in cab-ir-generator
 
 /** THE BASS'S CABINETS' WINDOW: the cabinets drawn (CabPicker) in a call-out over whatever opened it — OrbitBass's CAB
     block, the walker's cabinet screen — its arrow at that, inside the window where it fits. What the hand sets there is
@@ -38,13 +40,9 @@ public:
         with A off. */
     static juce::String labelOf (const AmpProcessor::CabSynthChoice&);
 
-    /** An IR's response as the picker draws it (CabPicker::responseHz): a sixth of an octave wide each, in dB, levelled
-        to its own middle (100 Hz .. 5 kHz). Empty for bytes that do not decode. */
-    static std::vector<float> responseOf (const juce::MemoryBlock& bytes);
-
-    /** ...and where a pair's two mics meet, at the same points: in dB, the mix against the two powers apart — above
-        nought where they add in phase, below where they cancel. */
-    static std::vector<float> combOf (const AmpProcessor::CabParts&);
+    /** The cabinets' panel and miniature drawn in our theme: its colours, Michroma and its tracking (cabir::look). Any
+        face that draws them calls it first. */
+    static void useOurLook();
 
     void resized() override;
 

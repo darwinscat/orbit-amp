@@ -5,7 +5,7 @@
 
 #include "../Parameters.h"
 #include "BlockFrame.h"
-#include "CabPicker.h"
+#include "CabWindow.h"
 #include "GuardRail.h"
 #include "VoicingSelector.h"
 #include "ZoneSwitch.h"
