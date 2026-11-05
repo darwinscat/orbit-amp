@@ -7,8 +7,32 @@
 #include "../PluginProcessor.h"
 #include "../channels/Engine.h"
 
+#include <BassCabinets.h>
+
+#include <cstring>
+
 namespace orbitamp::redgroove
 {
+
+namespace
+{
+    /** The slot of the bass's dozen (BassCabinets.h) a preset stands at. */
+    int dozenAt (const char* stem)
+    {
+        for (int i = 0; i < (int) std::size (bassCabinets); ++i)
+            if (std::strcmp (bassCabinets[i], stem) == 0)
+                return i;
+        return 0;
+    }
+
+    std::vector<channels::Lineup::Cabinet> dozen()
+    {
+        std::vector<channels::Lineup::Cabinet> all;
+        for (const auto* stem : bassCabinets)
+            all.push_back ({ .preset = stem });
+        return all;
+    }
+}
 
 const channels::Lineup& lineup()
 {
@@ -28,9 +52,9 @@ const channels::Lineup& lineup()
     static const channels::Lineup walker {
         "walker", "walker_channel", "SVT-410HE",
         {
-            // Each gear at a cabinet's slot of its own (the owner, 04.11): B15 at the first, SVT at the second.
-            { "B15", "sgt-di-19a4", "Plate", std::nullopt, 0.0f, false, { "Voice", "B15" }, 0 },
-            { "SVT", "sgt-di-19a4", "Plate", std::nullopt, 0.0f, false, { "Voice", "SVT" }, 1 },
+            // Each gear at a cabinet of its own (the owner, 04.11): B15 at the dozen's 1x15, SVT at its 8x10.
+            { "B15", "sgt-di-19a4", "Plate", std::nullopt, 0.0f, false, { "Voice", "B15" }, dozenAt ("rock-14-1x15-thump") },
+            { "SVT", "sgt-di-19a4", "Plate", std::nullopt, 0.0f, false, { "Voice", "SVT" }, dozenAt ("rock-03-8x10-stack") },
         },
         false,
         {
@@ -52,14 +76,9 @@ const channels::Lineup& lineup()
         },
         1,      // ...and it opens on SVT (the owner, 03.11)
         true,   // ITS CABINETS ARE OURS, DRAWN — Ampeg's, nobody's files (the owner, 04.11)
-        {
-            // ...IN SIX SLOTS, a box of each size to begin with, each the player's to set in the window (the owner,
-            // 04.11): the 1x15 for B15, its horn off; the sealed 4x10 for SVT; then the 1x12, the 2x10, and two as a
-            // studio puts them up, a dynamic close and a condenser 30 cm out — the 6x10's MD421 with a U87, the 8x10's
-            // RE20 with a U47, its horn off.
-            { "SVT-15E", false }, { "SVT-410HE" }, { "VB-112" }, { "VB-210" },
-            { "SVT-610HLF", true, "u87" }, { "SVT-810", false, "u47" },
-        },
+        // ...THE BASS'S DOZEN, set and fixed, no window to change them (the owner, 06.11): twelve of cab-ir-generator's
+        // presets, the most unlike of its punk, rock, metal and modern ones, the biggest box first (CMakeLists.txt).
+        dozen(),
     };
     return walker;
 }

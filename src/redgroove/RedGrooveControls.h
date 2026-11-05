@@ -133,7 +133,7 @@ private:
     faders' cap and marks; a small gear right of it; and the name of the cabinet that plays — OFF while it is out of the
     sound — written over it on the panel (`label`). The cap moved is heard at the notch nearest it
     (onMove) and kept at the one it settles in when the hand lets go (onLetGo); the gear clicked opens the cabinets'
-    window (onClick), and so does a right click anywhere on it (onMenu). Asks for the name and the notch four times a
+    window (onClick), and so does a right click anywhere on it (onMenu) — no gear where there is no window. Asks for the name and the notch four times a
     second, and shows them again when they are others. */
 class CabinetScreen final : public juce::Component, private juce::Timer
 {
@@ -163,13 +163,14 @@ public:
     void refresh();
 
 private:
-    static constexpr float gearRoom = 38.0f;
+    static constexpr float gearSize = 38.0f;
+    float gearRoom() const noexcept { return onClick != nullptr ? gearSize : 0.0f; }   // no window to open, no gear
     const face::Ink ink;
     face::ColumnFader slider;
     juce::String shown;
     int moving = -1;            // the notch under the hand while it holds the cap; -1 when it does not
     float last () const noexcept { return (float) juce::jmax (1, notches - 1); }
-    bool onGear (juce::Point<float> p) const { return p.x >= (float) getWidth() - gearRoom; }
+    bool onGear (juce::Point<float> p) const { return gearRoom() > 0.0f && p.x >= (float) getWidth() - gearRoom(); }
     void timerCallback() override { refresh(); }
 };
 

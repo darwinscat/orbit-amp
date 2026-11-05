@@ -1077,6 +1077,34 @@ orbitamp_cabinet_catalog("${CMAKE_CURRENT_SOURCE_DIR}/resources/cabinets.txt"
 add_library(OrbitAmpCabinetCatalog INTERFACE)
 target_include_directories(OrbitAmpCabinetCatalog INTERFACE "${ORBITAMP_GENERATED_DIR}")   # CabinetCatalog.h
 
+# THE BASS'S DOZEN: twelve of cab-ir-generator's factory presets, the most unlike of its punk, rock, metal and modern ones
+# (the owner, 06.11), the biggest box first — the cabinets RedGrooveBass plays, and OrbitBass's list. The presets' files
+# ride in the binary as cab-ir-generator writes them; BassCabinets.h names them in this order.
+set(ORBITAMP_BASS_CABINETS
+    rock-03-8x10-stack rock-09-6x10-wall rock-08-4x10-crunch modern-02-4x10-sheen metal-14-2x12-torque
+    punk-07-2x10-gutter rock-14-1x15-thump modern-18-1x15-extended punk-17-1x12-squat rock-17-1x12-club
+    punk-19-4x6-box modern-13-4x6-neo)
+set(ORBITAMP_BASS_CABINET_FILES "")
+set(_orbitamp_bass_stems "")
+foreach(stem IN LISTS ORBITAMP_BASS_CABINETS)
+    set(file "${cab_ir_generator_SOURCE_DIR}/data/presets/${stem}.toml")
+    if(NOT EXISTS "${file}")
+        message(FATAL_ERROR "The bass's dozen names ${stem}, which cab-ir-generator (${cab_ir_generator_SOURCE_DIR}) has no preset of")
+    endif()
+    list(APPEND ORBITAMP_BASS_CABINET_FILES "${file}")
+    string(APPEND _orbitamp_bass_stems "    \"${stem}\",\n")
+endforeach()
+file(CONFIGURE OUTPUT "${ORBITAMP_GENERATED_DIR}/BassCabinets.h" @ONLY CONTENT
+"// Written by CMakeLists.txt (THE BASS'S DOZEN): cab-ir-generator's presets the bass plays, by their files' stems, in order.
+#pragma once
+namespace orbitamp
+{
+inline constexpr const char* bassCabinets[] =
+{
+@_orbitamp_bass_stems@};
+}
+")
+
 juce_add_binary_data(OrbitAmpData
     SOURCES
         "${felitronics_appkit_SOURCE_DIR}/assets/catlogo.svg"
@@ -1088,6 +1116,7 @@ juce_add_binary_data(OrbitAmpData
 
         # The bass's cabinets, as cab-ir-generator's synthesis renders them live with the mics where the player put them.
         "${CABIR_CABINETS}"
+        ${ORBITAMP_BASS_CABINET_FILES}      # ...and its dozen of them, set (THE BASS'S DOZEN)
 )
 # ...and the table the cabinet shelf is played by: its IRs themselves lie in the factory folder.
 target_link_libraries(OrbitAmpData INTERFACE OrbitAmpCabinetCatalog)

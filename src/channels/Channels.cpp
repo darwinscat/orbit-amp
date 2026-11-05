@@ -7,6 +7,8 @@
 #include "../Parameters.h"
 #include "../device/IrLibrary.h"
 
+#include <BinaryData.h>
+
 #include <algorithm>
 #include <array>
 
@@ -415,10 +417,46 @@ int Channels::cabinetSlot() const
     return juce::jlimit (0, juce::jmax (0, cabinetSlots() - 1), slot);
 }
 
+namespace
+{
+    /** One of cab-ir-generator's factory presets the binary carries (THE BASS'S DOZEN), by its file's stem: its text. */
+    juce::String presetText (const char* stem)
+    {
+        const auto file = juce::String (stem) + ".toml";
+        for (int i = 0; i < BinaryData::namedResourceListSize; ++i)
+            if (file == BinaryData::originalFilenames[i])
+            {
+                int size = 0;
+                const char* data = BinaryData::getNamedResource (BinaryData::namedResourceList[i], size);
+                return juce::String::fromUTF8 (data, size);
+            }
+        return {};
+    }
+
+    /** ...its state, as the cabinets' window keeps one; empty where the binary carries no such preset. */
+    juce::String presetFrom (const char* stem)
+    {
+        const auto state = cabir::fromToml (presetText (stem).toStdString());
+        return state ? AmpProcessor::cabSynthFrom (*state) : juce::String();
+    }
+}
+
+juce::String Channels::slotName (int slot) const
+{
+    if (slot < 0 || slot >= cabinetSlots() || line.cabinets[(size_t) slot].preset == nullptr)
+        return {};
+    // The preset's name, `name = "ROCK · 8x10 STACK"`, without its style.
+    const auto text = presetText (line.cabinets[(size_t) slot].preset);
+    const auto name = text.fromFirstOccurrenceOf ("name = \"", false, false).upToFirstOccurrenceOf ("\"", false, false);
+    return name.fromFirstOccurrenceOf (juce::String::fromUTF8 ("\xc2\xb7 "), false, false).trim();
+}
+
 juce::String Channels::slotFrom (int slot) const
 {
     if (slot < 0 || slot >= cabinetSlots())
         return {};
+    if (const auto* preset = line.cabinets[(size_t) slot].preset)   // a preset's: fixed, nothing of the player's over it
+        return presetFrom (preset);
     if (const auto set = node().getProperty (slotId (slot)).toString(); AmpProcessor::cabSynthOf (set).valid)
         return set;
     // Never set: the lineup's box, its own mic at its cap, the horn as the lineup says — and its second mic, where it

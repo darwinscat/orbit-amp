@@ -303,7 +303,7 @@ void CabinetScreen::resized()
 {
     slider.marks = notches - 1;
     slider.handLight = handLight;
-    slider.setBounds (getLocalBounds().withTrimmedRight (juce::roundToInt (gearRoom)));
+    slider.setBounds (getLocalBounds().withTrimmedRight (juce::roundToInt (gearRoom())));
 }
 
 void CabinetScreen::refresh()
@@ -328,7 +328,9 @@ void CabinetScreen::paint (juce::Graphics& g)
 {
     // The gear: what a click opens — eight teeth round a hole.
     const auto r = getLocalBounds().toFloat();
-    const auto c = juce::Point<float> (r.getRight() - 0.5f * gearRoom, r.getCentreY());
+    if (gearRoom() <= 0.0f)
+        return;
+    const auto c = juce::Point<float> (r.getRight() - 0.5f * gearRoom(), r.getCentreY());
     constexpr int teeth = 8;
     constexpr float outer = 8.0f, inner = 6.0f, half = juce::MathConstants<float>::pi / (float) teeth;
     juce::Path gear;

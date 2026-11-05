@@ -87,6 +87,9 @@ struct Lineup
         const char* box = nullptr;
         bool horn = true;
         const char* second = nullptr;
+        /** ...or one of cab-ir-generator's factory presets, by its file's stem (THE BASS'S DOZEN, CMakeLists.txt): the
+            whole cabinet as the preset stands it — box, back, horn, both mics, BLEND — fixed, and named by the preset. */
+        const char* preset = nullptr;
     };
     std::vector<Cabinet> cabinets {};
 

@@ -618,21 +618,27 @@ RedGrooveEditor::RedGrooveEditor (AmpProcessor& p)
     highCut.setComponentID ("highCut");
 
 
-    // THE CABINET'S SLIDER: a notch a slot of the six (Channels' cabinet slots), and its gear, which opens the window that
-    // sets the slot the slider stands at; over it on the panel, the cabinet that plays by its box and its mics — the
-    // slot's under the hand while it moves the slider, OFF while the cabinet is out of the sound.
+    // THE CABINET'S SLIDER: a notch a cabinet of the bass's dozen (Channels' cabinet slots), set and fixed — no gear, no
+    // window to change them (the owner, 06.11); over it on the panel, the cabinet that plays by its name — the slot's
+    // under the hand while it moves the slider, OFF while the cabinet is out of the sound.
     cabinet.name = [this]
     {
+        const auto named = [this] (int slot)
+        {
+            const auto name = channels.slotName (slot);
+            return name.isNotEmpty() ? name : CabWindow::labelOf (AmpProcessor::cabSynthOf (channels.slotFrom (slot)));
+        };
         if (dragAt >= 0)
-            return CabWindow::labelOf (AmpProcessor::cabSynthOf (channels.slotFrom (dragAt)));
+            return named (dragAt);
         if (! channels.cabinetOn())
             return juce::String ("OFF");
-        return CabWindow::labelOf (AmpProcessor::cabSynthOf (amp.cabChoice()));
+        const auto playing = AmpProcessor::cabSynthOf (amp.cabChoice());
+        if (const auto slot = AmpProcessor::cabSynthOf (channels.slotFrom (channels.cabinetSlot())); playing.valid && slot.valid && playing.state == slot.state)
+            return named (channels.cabinetSlot());
+        return CabWindow::labelOf (playing);
     };
     cabinet.notches = channels.cabinetSlots();
     cabinet.notch   = [this] { return channels.cabinetSlot(); };
-    cabinet.onClick = [this] { showCabinets(); };
-    cabinet.onMenu  = [this] { showCabinets(); };
     cabinet.onMove  = [this] (int at) { hearSlot (at); };
     cabinet.onLetGo = [this] (int at) { chooseSlot (at); };
     cabinet.handLight = handLight;
@@ -748,18 +754,6 @@ void RedGrooveEditor::chooseSlot (int at)
 
 /** THE CABINETS, ON THE SCREEN'S CHEVRON: Ampeg's, drawn, in the window OrbitBass's are in (ui/CabWindow.h) — what it
     keeps put in the slot the slider stands at, and the cabinet back in the sound. */
-void RedGrooveEditor::showCabinets()
-{
-    CabWindow::open (amp, cabinet, [safe = juce::Component::SafePointer<RedGrooveEditor> (this)] (const juce::String& from)
-    {
-        if (safe == nullptr)
-            return;
-        safe->channels.keepInSlot (from);
-        safe->channels.setCabinetOn (true);
-        safe->cabinet.refresh();
-    });
-}
-
 /** The lever goes where the state's channel is — unless the hand holds it. */
 void RedGrooveEditor::showSelector (int channel)
 {

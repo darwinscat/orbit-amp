@@ -224,6 +224,9 @@ public:
     int cabinetSlots() const noexcept { return (int) line.cabinets.size(); }
     int cabinetSlot() const;
     juce::String slotFrom (int slot) const;
+    /** A slot's name where it holds one of cab-ir-generator's presets — "8x10 STACK", the preset's own without its style —
+        and empty where it holds a box the player sets. */
+    juce::String slotName (int slot) const;
 
     /** A slot heard and not kept — the hand on its way along the slider; the playing channel moved to a slot, its
         cabinet rendered and kept; and the slot it stands at given what the window kept. */

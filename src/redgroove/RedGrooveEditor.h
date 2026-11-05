@@ -93,13 +93,12 @@ private:
 
     // THE WALKER'S HAND ON THE CHANNELS AND THE CUTS. The lever picks the gear — and the number keys, a Program
     // Change, a host's CHANNEL with it; the two switches throw 5 STR / 4 STR and FINGERS / SLAP, each its frequency
-    // on its right click; the cabinet's screen names the cabinet that plays over a slider, a notch each of the six
-    // cabinet slots, and its chevron opens the window that sets the slot it stands at.
+    // on its right click; the cabinet's screen names the cabinet that plays over a slider, a notch each of the bass's
+    // dozen, set and fixed (the owner, 06.11).
     ChannelLever lever;
     SlideSwitch lowCut, highCut, ultraLo, ultraHi;
     CabinetScreen cabinet;
     void bindSwitch (SlideSwitch&, const char* paramId);
-    void showCabinets();
     void hearSlot (int notch);
     void chooseSlot (int notch);
     int dragAt = -1;                       // the slot under the hand while it moves the slider; -1 when it does not
