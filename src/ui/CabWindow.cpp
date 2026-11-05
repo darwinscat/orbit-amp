@@ -12,41 +12,16 @@
 namespace orbitamp
 {
 
-namespace
-{
-    // The panel's setup and the state the engine keeps (cabir::State), one into the other — the horn and its step the
-    // panel keeps on A's spot.
-    CabPicker::Spot spotOf (const cabir::Mic& m, const cabir::State& s)
-    {
-        return { (float) m.x, (float) m.y, (float) m.distance, s.horn, juce::String (m.model), (float) m.angle, (float) s.hornDb };
-    }
-
-    cabir::Mic micOf (const CabPicker::Spot& sp, bool on)
-    {
-        return { on, sp.mic.toStdString(), sp.x, sp.y, sp.distance, sp.angle };
-    }
-}
-
 std::pair<int, CabPicker::Setup> CabWindow::drawnOf (const AmpProcessor::CabSynthChoice& synth)
 {
-    const auto& s = synth.state;
-    const int cab = synth.valid ? CabPicker::indexOf (juce::String (s.box)) : -1;
-    return { cab, { spotOf (s.a, s), spotOf (s.b, s), (float) s.blend, s.align, s.invert, s.a.on, s.b.on, s.back } };
+    if (! synth.valid)
+        return { -1, {} };
+    return CabPicker::setupOf (synth.state);
 }
 
-cabir::State CabWindow::stateOf (int cab, const CabPicker::Setup& su)
+cabir::State CabWindow::stateOf (int cab, const CabPicker::Setup& setup)
 {
-    cabir::State s;
-    s.box = CabPicker::cabs()[(size_t) cab].name.toStdString();
-    s.back = su.back;
-    s.horn = su.a.horn;
-    s.hornDb = su.a.hornDb;
-    s.a = micOf (su.a, su.aOn);
-    s.b = micOf (su.b, su.bOn);
-    s.blend = su.blend;
-    s.align = su.align;
-    s.invert = su.invert;
-    return s;
+    return CabPicker::stateOf (cab, setup);
 }
 
 void CabWindow::request (AmpProcessor& processor, int cab, const CabPicker::Setup& setup, bool live)
@@ -56,18 +31,7 @@ void CabWindow::request (AmpProcessor& processor, int cab, const CabPicker::Setu
 
 juce::String CabWindow::labelOf (const AmpProcessor::CabSynthChoice& synth)
 {
-    if (! synth.valid)
-        return {};
-    const auto& s = synth.state;
-    const int at = CabPicker::indexOf (juce::String (s.box));
-    const auto micWord = [at] (const cabir::Mic& m)
-    { return (m.model.empty() ? at >= 0 ? CabPicker::cabs()[(size_t) at].mic : juce::String() : juce::String (m.model)).toUpperCase(); };
-    // The back said only where the player turned it from the box's own: "4x10 PORTED".
-    const auto box = at < 0 ? juce::String (s.box)
-                   : CabPicker::wordOf (at) + (s.back >= 0 && s.back != CabPicker::ownBack (at)
-                                                   ? " " + juce::String (CabPicker::backWords[s.back]) : juce::String());
-    return box + juce::String::fromUTF8 (" \xc2\xb7 ")
-         + (s.a.on ? micWord (s.a) : juce::String()) + (s.a.on && s.b.on ? "+" : "") + (s.b.on ? micWord (s.b) : juce::String());
+    return synth.valid ? CabPicker::labelOf (synth.state) : juce::String();
 }
 
 CabWindow::CabWindow (AmpProcessor& a, Kept k)
