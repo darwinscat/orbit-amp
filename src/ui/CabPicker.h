@@ -19,7 +19,8 @@ namespace orbitamp
     THE PILE: a box of each size, no maker's name over them (the owner, 05.11), to scale and stacked as a backline stands
     them, the small on the big; each with its speakers, its horn and its port where it has them; under them the chosen
     box's size, and DOWNLOAD IR beside it, the cabinet that plays saved as a file; over them its BACK, CLOSED, PORTED or
-    OPEN, each the box drawn cut through from the side, a click each — a box comes with its own, a sealed one turned
+    OPEN, each the box drawn cut through from the side, a click each — a box comes with its own until the player turns
+    one, and the one turned goes on with every box after, as the mics do (the owner, 05.11); a sealed one turned
     ported gets a port at its foot. Every bass of the family offers the same ten (the owner, 05.11): none knows a
     cabinet of its own.
     A click on a box picks it, the mics staying where they stand, and the horn too — but a box whose horn comes off
@@ -167,7 +168,8 @@ public:
     }
 
     /** THE BOX'S BACK, as its switch is marked — a click each, the one it stands at in the block's orange; the index the
-        engine's (core::cabsynth::Back). A box comes with its own (ownBack); turned, a sealed one gets a port at its foot. */
+        engine's (core::cabsynth::Back). A box comes with its own (ownBack) until one is turned, and that one stays from
+        box to box; turned, a sealed one gets a port at its foot. */
     static constexpr const char* backWords[] { "CLOSED", "PORTED", "OPEN" };
     static constexpr int backs = 3;
     static int ownBack (int cab) { return sealed (cabs()[(size_t) cab].name) ? 0 : 1; }
@@ -180,14 +182,13 @@ public:
     /** THE MICS A BOX IS PICKED WITH, `from` the one that was playing: where they stood — the same cap, the same
         centimetres, the way a cabinet is compared — only a mic never chosen following the box's own; the horn as it
         stood, unless the two boxes come with theirs otherwise (Cab::hornOn): the SVT-15E's and the 8x10's go off, the
-        next one's on — and the back the box's own. A click in the pile picks by it. */
+        next one's on — and the back as it was turned, or the box's own where none was. A click in the pile picks by it. */
     static Setup pickedWith (int from, int to, Setup s)
     {
         if (from < 0 || cabs()[(size_t) from].hornOn != cabs()[(size_t) to].hornOn)
             s.a.horn = cabs()[(size_t) to].hornOn;
         if (s.a.mic.isEmpty())
             s.a.mic = cabs()[(size_t) to].mic;
-        s.back = -1;
         return s;
     }
 
@@ -564,12 +565,12 @@ private:
             return;
         }
 
-        // The chosen box's back, a cell each: its own one stored as none, so the next box comes with its own.
+        // The chosen box's back, a cell each: kept as turned, its own one too, so every box after comes with it.
         if (chosen >= 0)
             for (int i = 0; i < backs; ++i)
                 if (backCell (i).expanded (backCellGap / 2, 2.0f).contains (e.position))
                 {
-                    setup_.back = i == ownBack (chosen) ? -1 : i;
+                    setup_.back = i;
                     send();
                     return;
                 }
@@ -678,7 +679,7 @@ public:
         g.drawRoundedRectangle (box, c.family == 1 ? 4.0f : 2.0f, orange ? 1.5f : 1.0f);
 
         // The port where the back the chosen one is turned to has one: none closed, at its foot on a sealed box ported.
-        if (const int back = isChosen ? setup.back : -1; back < 0 ? c.port : back == 1)
+        if (const int back = isChosen ? setup.back : -1; back < 0 || back == (sealed (c.name) ? 0 : 1) ? c.port : back == 1)
         {
             const auto at = portOf (c);
             g.setColour (juce::Colours::black);
