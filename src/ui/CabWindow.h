@@ -38,6 +38,10 @@ public:
         with A off. */
     static juce::String labelOf (const AmpProcessor::CabSynthChoice&);
 
+    /** An IR's response as the picker draws it (CabPicker::responseHz): a sixth of an octave wide each, in dB, levelled
+        to its own middle (100 Hz .. 5 kHz). Empty for bytes that do not decode. */
+    static std::vector<float> responseOf (const juce::MemoryBlock& bytes);
+
     void resized() override;
 
 private:
@@ -45,12 +49,15 @@ private:
 
     /** DOWNLOAD IR: the cabinet that plays saved as a WAV where the player says — Downloads to begin with. */
     static void download (AmpProcessor&);
+
     void timerCallback() override;
 
     AmpProcessor& amp;
     CabPicker picker;
     Kept kept;
-    juce::String showing;   // the state's cabinet the picker was last shown
+    juce::String showing;          // the state's cabinet the picker was last shown
+    int heardSerial = -1;          // ...and the IR heard it last drew (AmpProcessor::cabHeard)
+    std::vector<float> keptCurve;  // the kept one's response: the ghost under a live one, and under the next kept
 };
 
 } // namespace orbitamp

@@ -856,6 +856,7 @@ void AmpProcessor::requestCabSynth (const juce::String& cab, CabSetup setup, boo
                     return;
                 cabSynthHeard = mine;
                 this->cab.load (bytes->getData(), bytes->getSize());   // heard, not kept: the state still names the last kept
+                heardCab (bytes, "live:" + juce::String (mine), false);
                 return;
             }
 
@@ -878,6 +879,14 @@ void AmpProcessor::requestCabSynth (const juce::String& cab, CabSetup setup, boo
             updateHostDisplay (ChangeDetails{}.withNonParameterStateChanged (true));
         });
     });
+}
+
+void AmpProcessor::heardCab (std::shared_ptr<const juce::MemoryBlock> bytes, const juce::String& identity, bool kept)
+{
+    if (kept && cabHeardNow.kept && identity == cabHeardIdentity)
+        return;   // the same IR loaded again: nothing new heard
+    cabHeardNow = { std::move (bytes), cabHeardNow.serial + 1, kept };
+    cabHeardIdentity = identity;
 }
 
 juce::String AmpProcessor::cabSynthFrom (const juce::String& box, const CabSetup& setup)
@@ -1105,9 +1114,15 @@ void AmpProcessor::pumpDeviceWork()
             lastCabIr = choice.identity();
 
             if (choice.isUser())
+            {
                 cab.load (choice.bytes->getData(), choice.bytes->getSize());
+                heardCab (std::make_shared<const juce::MemoryBlock> (*choice.bytes), choice.identity(), true);
+            }
             else if (const auto& bytes = cabIrBytes (ownProduct, choice.factory); bytes.data != nullptr)
+            {
                 cab.load (bytes.data, (size_t) bytes.size);     // none, with the factory folder missing
+                heardCab (std::make_shared<const juce::MemoryBlock> (bytes.data, (size_t) bytes.size), choice.identity(), true);
+            }
         }
     }
     else if (cabIrStale.exchange (false))

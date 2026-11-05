@@ -1275,6 +1275,12 @@ public:
 
     void requestCabSynth (const juce::String& cab, CabSetup setup, bool live = false);
 
+    /** THE IR LAST LOADED INTO THE CABINET, for a picture of what plays: a rendered one live under a moving hand, or what
+        the state keeps (`kept`) — a rendered cabinet, the player's own, the factory's. `serial` grows with each; the
+        same one loaded again (a prepare) is no new one. Message thread. */
+    struct CabHeard { std::shared_ptr<const juce::MemoryBlock> bytes; int serial = 0; bool kept = false; };
+    CabHeard cabHeard() const { return cabHeardNow; }
+
     /** The rendered cabinet a choice plays, and where its mics stood — or `valid` false for any other IR. */
     struct CabSynthChoice { juce::String cab; CabSetup setup; bool valid = false; };
     static CabSynthChoice cabSynthOf (const CabChoice&);
@@ -1651,6 +1657,9 @@ private:
 
     /** The player's own IRs a state refers to — see `device::EmbeddedIrs`. */
     device::EmbeddedIrs cabIrEmbeds;
+    CabHeard cabHeardNow;          // cabHeard's
+    juce::String cabHeardIdentity; // ...and which IR it is, so one loaded again is not heard anew
+    void heardCab (std::shared_ptr<const juce::MemoryBlock>, const juce::String& identity, bool kept);
 
     /** Adds to a tree bound for disk every player's-own IR any state inside it names — the live
         one, and each register's. */

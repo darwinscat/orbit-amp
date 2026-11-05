@@ -37,15 +37,18 @@ namespace orbitamp
     the cabinet is heard as it goes (onMove) — each position the worker reaches next, a tenth of a second for one mic,
     near a second for two on the 8x10 — and what is set is kept when the hand lets go (onSetup).
 
+    THE RESPONSE, across the panel under it all: what plays, 30 Hz to 12 kHz — the cabinet heard in orange, following
+    a moving hand, and the one kept before it a violet ghost, so every click and every drag reads as before and after.
+
     A dumb view: the cabinets in (cabs(), geometry from tools/cabgen/cabinets.txt — metres, the baffle's centre the
-    origin, up positive), what plays in (show), a pick out (onSetup). */
+    origin, up positive), what plays in (show, showResponse), a pick out (onSetup). */
 class CabPicker final : public juce::Component
 {
 public:
     CabPicker() = default;
 
     /** The size it is drawn for — small enough to open over a cabin's face too. */
-    static constexpr int panelW = 780, panelH = 280;
+    static constexpr int panelW = 900, panelH = 384;
 
     struct Spot
     {
@@ -221,13 +224,28 @@ public:
     /** DOWNLOAD IR: whoever opened the panel saves the cabinet that plays as a file. No button without it. */
     std::function<void()> onDownload;
 
+    /** THE RESPONSE of what plays, in dB at responseHz — `now` the cabinet heard, `before` what was kept before it
+        (empty, none): each level to its own middle, so the two read as shapes. */
+    static constexpr int responsePoints = 240;
+    static float responseHz (int i) { return 30.0f * std::pow (12000.0f / 30.0f, (float) i / (float) (responsePoints - 1)); }
+
+    void showResponse (std::vector<float> now, std::vector<float> before)
+    {
+        responseNow = std::move (now);
+        responseBefore = std::move (before);
+        repaint (responseArea());
+    }
+
 
     void paint (juce::Graphics& g) override
     {
         paintPile (g);
         g.setColour (theme::hair);
-        g.fillRect (juce::Rectangle<float> ((float) leftW + 0.5f * gutter, 0.0f, 1.0f, (float) getHeight()));
+        const float x = (float) leftW + 0.5f * gutter;
+        g.fillRect (juce::Rectangle<float> (x, 0.0f, 1.0f, (float) bodyH()));
+        g.fillRect (juce::Rectangle<float> (x, (float) (getHeight() - footH), 1.0f, (float) footH));
         paintSpeaker (g);
+        paintResponse (g);
     }
 
     void mouseMove (const juce::MouseEvent& e) override
@@ -295,7 +313,11 @@ public:
 private:
     static constexpr float maxReach = 1.1f;    // how far from the cap the mic may go, in radii: just past the rim, in sight
     static constexpr float minCm = 1.0f, maxCm = 30.0f, maxAngle = 60.0f;
-    static constexpr int leftW = 340, gutter = 14;   // the pile's half; the hair between the halves
+    static constexpr int leftW = 460, gutter = 14;   // the pile's half; the hair between the halves
+    static constexpr int footH = 26, responseH = 104;  // the foot's row under it all; the response's band over it
+
+    /** Down to the response's band: the pile, the columns and the speaker over it, the feet under it. */
+    int bodyH() const { return getHeight() - footH - responseH; }
 
     enum class Drag { none, spot, distance, angle, blend };
 
@@ -333,10 +355,10 @@ private:
 
     // ---------------------------------------------------------------- the pile
     // Over it the chosen box's back, in the room the pile leaves there (the owner, 05.11); under it the box's size.
-    static constexpr int backTop = 6, backIconH = 30, backWordH = 16, nameH = 26;
+    static constexpr int backTop = 6, backIconH = 40, backWordH = 16, nameH = footH;
     static constexpr int pileTop = backTop + backIconH + 2 + backWordH + 6;
 
-    juce::Rectangle<int> pileArea() const { return { 0, pileTop, leftW, getHeight() - pileTop - nameH }; }
+    juce::Rectangle<int> pileArea() const { return { 0, pileTop, leftW, bodyH() - pileTop - 2 }; }
 
     /** The line under the pile: the chosen box's name, or the one under the hand; at its right DOWNLOAD IR. */
     juce::Rectangle<int> nameRow() const { return { 0, getHeight() - nameH + 4, leftW, nameH - 4 }; }
@@ -351,7 +373,7 @@ private:
 
     /** THE BACK over the pile, centred: BACK, then a cell each — the box cut through from the side (paintBack), its word
         under it. */
-    static constexpr float backCellW = 66.0f, backCellGap = 14.0f, backLabelGap = 14.0f;
+    static constexpr float backCellW = 84.0f, backCellGap = 18.0f, backLabelGap = 16.0f;
 
     juce::Rectangle<float> backWordArea() const
     {
@@ -654,7 +676,7 @@ private:
                 const bool on = i == backOf (chosen, setup_);
                 auto cell = backCell (i);
                 const auto word = cell.removeFromBottom ((float) backWordH);
-                paintBack (g, i, cell.withHeight ((float) backIconH).withSizeKeepingCentre (42.0f, 26.0f),
+                paintBack (g, i, cell.withHeight ((float) backIconH).withSizeKeepingCentre (56.0f, 34.0f),
                            on ? theme::orange : theme::violet.withAlpha (0.6f));
                 g.setColour (on ? theme::orange : theme::txDim);
                 theme::drawTracked (g, backWords[i], word, font, 0.06f, juce::Justification::centred);
@@ -800,7 +822,7 @@ private:
     // its distance and its angle; between them the speaker, flat, as the player faces it, and on it the mics in
     // perspective: the nearer the cone, the smaller (the farther from the eye), a shadow on the cone that grows and
     // fades with the distance, the glyph leaning back toward the cap by the angle. BLEND, ALIGN and Ø under it all.
-    static constexpr int colW = 108, rowH = 18, footH = 26;
+    static constexpr int colW = 108, rowH = 18;
 
     static juce::Colour colourOf (int m) { return m == 0 ? theme::orange : theme::lilac; }
 
@@ -808,7 +830,7 @@ private:
 
     juce::Rectangle<int> column (int m) const
     {
-        const int h = getHeight() - footH;
+        const int h = bodyH();
         return m == 0 ? juce::Rectangle<int> (rightX(), 0, colW, h) : juce::Rectangle<int> (getWidth() - colW, 0, colW, h);
     }
 
@@ -836,7 +858,7 @@ private:
 
     juce::Rectangle<float> scene() const
     {
-        return juce::Rectangle<int> (rightX() + colW + 8, 4, getWidth() - rightX() - 2 * (colW + 8), getHeight() - 4 - footH).toFloat();
+        return juce::Rectangle<int> (rightX() + colW + 8, 4, getWidth() - rightX() - 2 * (colW + 8), bodyH() - 4).toFloat();
     }
 
     float radius() const { const auto s = scene(); return juce::jmax (10.0f, juce::jmin (s.getWidth(), s.getHeight()) * 0.5f / 1.2f); }
@@ -1105,7 +1127,7 @@ private:
         {
             // An IR of the player's own plays (or the factory's): the speaker waits for a box.
             g.setColour (theme::txFaint);
-            theme::drawTracked (g, "CHOOSE A CABINET", juce::Rectangle<int> (rightX(), 0, getWidth() - rightX(), getHeight()).toFloat(),
+            theme::drawTracked (g, "CHOOSE A CABINET", juce::Rectangle<int> (rightX(), 0, getWidth() - rightX(), bodyH()).toFloat(),
                                 font, 0.08f, juce::Justification::centred);
             return;
         }
@@ -1185,6 +1207,74 @@ private:
         g.drawRoundedRectangle (b, 4.0f, asking ? 1.2f : 1.0f);
         g.setColour (asking ? theme::orange : theme::txDim);
         theme::drawTracked (g, word, b, theme::displayFont (13.0f), 0.06f, juce::Justification::centred);
+    }
+
+    // ---------------------------------------------------------------- the response
+    // Across the panel under it all: the cabinet's response, 30 Hz to 12 kHz on a log scale, +-18 dB — the one heard in
+    // the block's orange line, the one kept before it a violet ghost; dB at the left, the frequencies under it.
+    std::vector<float> responseNow, responseBefore;
+    static constexpr float responseDb = 18.0f;
+
+    juce::Rectangle<int> responseArea() const { return { 0, bodyH(), getWidth(), responseH }; }
+
+    juce::Rectangle<float> responsePlot() const
+    {
+        return responseArea().toFloat().withTrimmedLeft (36.0f).withTrimmedRight (12.0f).withTrimmedTop (9.0f).withTrimmedBottom (20.0f);
+    }
+
+    void paintResponse (juce::Graphics& g) const
+    {
+        const auto font = theme::displayFont (13.0f);
+        const auto area = responseArea().toFloat();
+        const auto p = responsePlot();
+        g.setColour (theme::hair);
+        g.fillRect (area.withHeight (1.0f));
+
+        const auto xOf = [p] (float hz) { return p.getX() + p.getWidth() * std::log (hz / 30.0f) / std::log (12000.0f / 30.0f); };
+        const auto yOf = [p] (float db) { return p.getCentreY() - db / responseDb * 0.5f * p.getHeight(); };
+
+        struct Mark { float hz; const char* word; };
+        static constexpr Mark marks[] { { 50.0f, "50" }, { 100.0f, "100" }, { 200.0f, "200" }, { 500.0f, "500" },
+                                        { 1000.0f, "1k" }, { 2000.0f, "2k" }, { 5000.0f, "5k" }, { 10000.0f, "10k" } };
+        for (const auto& m : marks)
+        {
+            const float x = xOf (m.hz);
+            g.setColour (theme::hair);
+            g.fillRect (juce::Rectangle<float> (x, p.getY(), 1.0f, p.getHeight()));
+            g.setColour (theme::txFaint);
+            theme::drawTracked (g, m.word, { x - 20.0f, p.getBottom() + 3.0f, 40.0f, 16.0f }, font, 0.0f, juce::Justification::centred);
+        }
+        struct Level { float db; const char* word; };
+        static constexpr Level levels[] { { 10.0f, "+10" }, { 0.0f, "0" }, { -10.0f, "-10" } };
+        for (const auto& l : levels)
+        {
+            const float y = yOf (l.db);
+            g.setColour (std::abs (l.db) < 1.0f ? theme::hair2 : theme::hair);
+            g.fillRect (juce::Rectangle<float> (p.getX(), y, p.getWidth(), 1.0f));
+            g.setColour (theme::txFaint);
+            theme::drawTracked (g, l.word, { area.getX() + 2.0f, y - 8.0f, 28.0f, 16.0f }, font, 0.0f, juce::Justification::centredRight);
+        }
+
+        const auto curve = [&] (const std::vector<float>& db, juce::Colour colour, float width)
+        {
+            if ((int) db.size() != responsePoints)
+                return;
+            juce::Path path;
+            for (int i = 0; i < responsePoints; ++i)
+            {
+                const juce::Point<float> at (xOf (responseHz (i)), yOf (juce::jlimit (-responseDb, responseDb, db[(size_t) i])));
+                if (i == 0)
+                    path.startNewSubPath (at);
+                else
+                    path.lineTo (at);
+            }
+            g.setColour (colour);
+            g.strokePath (path, juce::PathStrokeType (width, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+        };
+        juce::Graphics::ScopedSaveState keep (g);
+        g.reduceClipRegion (p.toNearestInt().expanded (0, 2));
+        curve (responseBefore, theme::violet.withAlpha (0.55f), 1.2f);
+        curve (responseNow, theme::orange, 1.6f);
     }
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (CabPicker)
