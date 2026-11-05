@@ -17,8 +17,8 @@ namespace orbitamp
 /** THE BASS'S CABINETS, DRAWN — one panel, the boxes at the left and the chosen one's speaker at the right.
 
     THE PILE: a box of each size, no maker's name over them (the owner, 05.11), to scale and stacked as a backline stands
-    them, the small on the big; each with its speakers, its horn and its port where it has them; under them the chosen
-    box's size, and DOWNLOAD IR beside it, the cabinet that plays saved as a file; over them its BACK, CLOSED, PORTED or
+    them, the small on the big; each with its speakers, its horn and its port where it has them; the chosen box's size
+    big at their top left; under them DOWNLOAD IR, the cabinet that plays saved as a file; over them its BACK, CLOSED, PORTED or
     OPEN, each the box drawn cut through from the side, a click each — a box comes with its own until the player turns
     one, and the one turned goes on with every box after, as the mics do (the owner, 05.11); a sealed one turned
     ported gets a port at its foot. Every bass of the family offers the same ten (the owner, 05.11): none knows a
@@ -49,7 +49,7 @@ public:
     CabPicker() = default;
 
     /** The size it is drawn for — small enough to open over a cabin's face too. */
-    static constexpr int panelW = 906, panelH = 384;
+    static constexpr int panelW = 906, panelH = 488;
 
     struct Spot
     {
@@ -324,7 +324,7 @@ private:
     static constexpr float maxReach = 1.1f;    // how far from the cap the mic may go, in radii: just past the rim, in sight
     static constexpr float minCm = 1.0f, maxCm = 30.0f, maxAngle = 60.0f;
     static constexpr int leftW = 460, gutter = 14;   // the pile's half; the hair between the halves
-    static constexpr int footH = 26, responseH = 104;  // the foot's row under it all; the response's band over it
+    static constexpr int footH = 26, responseH = 208;  // the foot's row under it all; the response's band over it
 
     /** Down to the response's band: the pile, the columns and the speaker over it, the feet under it. */
     int bodyH() const { return getHeight() - footH - responseH; }
@@ -372,7 +372,7 @@ private:
 
     juce::Rectangle<int> pileArea() const { return { 0, pileTop, leftW, bodyH() - pileTop - 2 }; }
 
-    /** The line under the pile: the chosen box's name, or the one under the hand; at its right DOWNLOAD IR. */
+    /** The line under the pile: DOWNLOAD IR at its right. */
     juce::Rectangle<int> nameRow() const { return { 0, getHeight() - nameH + 4, leftW, nameH - 4 }; }
 
     juce::Rectangle<int> downloadArea() const
@@ -658,13 +658,22 @@ private:
         for (const auto& [index, box] : layOut())
             paintCab (g, cabs()[(size_t) index], box, setup_, index == chosen, index == hover);
 
-        // Under the pile: the box under the hand, else the chosen one.
-        const auto row = nameRow().toFloat();
+        // In the pile at its top left, big: the box under the hand, else the chosen one — its letters' tops level with the
+        // pile's top, the 2x12's (the owner, 05.11).
         const int named = hover >= 0 ? hover : chosen;
         if (named >= 0)
         {
+            const auto big = theme::displayFont (24.0f);
+            float left = (float) area.getRight(), top = (float) area.getBottom();
+            for (const auto& [index, box] : layOut())
+            {
+                left = juce::jmin (left, box.getX());
+                top = juce::jmin (top, box.getY());
+            }
+            const float capGap = big.getAscent() - 0.72f * big.getHeight();   // the ascent over the capitals' tops
             g.setColour (named == chosen ? theme::tx : theme::txDim);
-            theme::drawTracked (g, wordOf (named), row, font, 0.06f, juce::Justification::centredLeft);
+            theme::drawTracked (g, wordOf (named), { left, top - capGap, (float) leftW - left, big.getHeight() }, big, 0.06f,
+                                juce::Justification::topLeft);
         }
 
         paintButton (g, "DOWNLOAD IR", downloadArea(), false);
