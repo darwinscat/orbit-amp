@@ -7,7 +7,7 @@
 #include "../PluginProcessor.h"
 #include "../channels/Engine.h"
 
-#include <BassCabinets.h>
+#include <BassDozen.h>
 
 #include <cstring>
 

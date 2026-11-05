@@ -6,6 +6,7 @@
 #include "../Parameters.h"
 #include "BlockFrame.h"
 #include "CabWindow.h"
+#include "CabinetSlots.h"
 #include "GuardRail.h"
 #include "VoicingSelector.h"
 #include "ZoneSwitch.h"
@@ -75,9 +76,10 @@ private:
         the block is too narrow for them beside a delay and a reverb. */
     void showCabPanel();
 
-    /** OrbitBass's two doors under the picture, where the guitar's trim stands: FACTORY IRS (the cabinets, drawn) and
-        MY IRS (the player's own, while the library holds any) — the one whose IR plays in the block's orange. The name
-        on the border only says what plays. */
+    /** OrbitBass's row under the picture, where the guitar's trim stands (the owner, 06.11): the bass's dozen on a slider
+        (CabinetSlots), CABINETS — the dozen by name, the player's own, EDIT… and SAVE AS… — and MY IRS (the player's
+        own IRs, while the library holds any); the door whose cabinet plays in the block's orange. The name on the
+        border says what plays: the dozen's by its number, "7: 1x15 THUMP", a player's own by its name. */
     struct Door final : public juce::Component
     {
         juce::String text;
@@ -87,7 +89,11 @@ private:
         void paint (juce::Graphics&) override;
         void mouseDown (const juce::MouseEvent&) override { if (onOpen) onOpen(); }
     };
-    Door factoryIrs, myIrs;
+    Door factoryIrs, myIrs;     // factoryIrs: CABINETS
+    CabinetSlots slots;
+    void showCabinetsMenu();
+    void saveCabinetAs();
+    void renameCabinet (const juce::File&, const juce::String& name);
     int libraryLook = 0;   // timer ticks to the next look at whether the library holds any IRs
     void lookAtLibrary();
 
