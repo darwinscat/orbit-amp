@@ -6,6 +6,9 @@
 #include "Theme.h"
 
 #include <panel/Response.h>
+#include <synth/CabSynth.h>
+
+#include <BinaryData.h>
 
 #include <juce_audio_formats/juce_audio_formats.h>
 
@@ -41,9 +44,13 @@ CabWindow::CabWindow (AmpProcessor& a, Kept k)
     // The bass's own cabinets, rendered with the mics where the hand put them.
     picker.onSetup = [this] (int cab, CabPicker::Setup setup)
     {
+        const bool bTakenUp = ! bHeard && setup.bOn;
+        bHeard = setup.bOn;
         request (amp, cab, setup, false);
         if (kept != nullptr)
             kept (AmpProcessor::cabSynthFrom (stateOf (cab, setup)));
+        if (bTakenUp)
+            placeB (cab, setup);
     };
     picker.onMove  = [this] (int cab, CabPicker::Setup setup) { request (amp, cab, setup, true); };
     picker.onClose = [this] { if (auto* box = findParentComponentOfClass<juce::CallOutBox>()) box->dismiss(); };
@@ -100,7 +107,36 @@ void CabWindow::timerCallback()
         return;
     showing = now;
     const auto [cab, setup] = drawnOf (AmpProcessor::cabSynthOf (choice));
+    bHeard = setup.bOn;
     picker.show (cab, setup);
+}
+
+void CabWindow::placeB (int cab, const CabPicker::Setup& setup)
+{
+    // B just taken up: where it combs least with A, found off the message thread (a second or so); it moves there unless
+    // the hand moved it first — what plays still has B where it was put — or the window went.
+    static juce::ThreadPool searcher { 1 };
+    const auto state = stateOf (cab, setup);
+    juce::Component::SafePointer<CabWindow> safe (this);
+    searcher.addJob ([safe, state, cab, setup]
+    {
+        static const auto table = cabir::synth::parseTable (std::string (BinaryData::cabinets_txt, (size_t) BinaryData::cabinets_txtSize));
+        const auto place = cabir::synth::quietPlaceForB (table, state);
+        juce::MessageManager::callAsync ([safe, state, cab, setup, place]
+        {
+            if (safe == nullptr)
+                return;
+            const auto now = AmpProcessor::cabSynthOf (safe->amp.cabChoice());
+            if (! now.valid || ! (now.state.b == state.b) || now.state.box != state.box)
+                return;
+            auto moved = setup;
+            moved.b.x = (float) place.x;
+            moved.b.y = (float) place.y;
+            moved.b.distance = (float) place.distance;
+            safe->picker.show (cab, moved);
+            safe->picker.onSetup (cab, moved);
+        });
+    });
 }
 
 namespace
