@@ -18,8 +18,9 @@ namespace orbitamp
 
     THE PILE: a box of each size, no maker's name over them (the owner, 05.11), to scale and stacked as a backline stands
     them, the small on the big; each with its speakers, its horn and its port where it has them; under them the chosen
-    box's size, and at its right its BACK, CLOSED, PORTED or OPEN, a click each — a box comes with its own, a sealed one
-    turned ported gets a port at its foot. OrbitBass's every size the table holds; the walker's (Range::ampeg) its six.
+    box's size; over them its BACK, CLOSED, PORTED or OPEN, each the box drawn cut through from the side, a click each —
+    a box comes with its own, a sealed one turned ported gets a port at its foot. OrbitBass's every size the table holds;
+    the walker's (Range::ampeg) its six.
     A click on a box picks it, the mics staying where they stand, and the horn too — but a box whose horn comes off
     (Cab::hornOn, the SVT-15E's and the 8x10's) takes it off, and the next box puts it back; a click on the chosen box's
     horn turns the horn off and on, its step kept.
@@ -339,29 +340,74 @@ private:
     }
 
     // ---------------------------------------------------------------- the pile
-    static constexpr int pileTop = 8, nameH = 22;
+    // Over it the chosen box's back, in the room the pile leaves there (the owner, 05.11); under it the box's size.
+    static constexpr int backTop = 6, backIconH = 30, backWordH = 16, nameH = 22;
+    static constexpr int pileTop = backTop + backIconH + 2 + backWordH + 6;
 
     juce::Rectangle<int> pileArea() const { return { 0, pileTop, leftW, getHeight() - pileTop - nameH }; }
 
-    /** The line under the pile: the chosen box's name, or the one under the hand; at its right the chosen box's back. */
+    /** The line under the pile: the chosen box's name, or the one under the hand. */
     juce::Rectangle<int> nameRow() const { return { 0, getHeight() - nameH + 4, leftW, nameH - 4 }; }
 
-    /** BACK's steps, laid from the name row's right; BACK itself left of the first. */
-    juce::Rectangle<float> backArea (int i) const
-    {
-        const auto font = theme::displayFont (13.0f);
-        const auto width = [&font] (const char* word) { return theme::trackedWidth (word, font, 0.06f) + 4.0f; };
-        float x = (float) nameRow().getRight() - 2.0f;
-        for (int k = backs - 1; k >= i; --k)
-            x -= width (backWords[k]) + (k < backs - 1 ? hornGap : 0.0f);
-        const auto row = nameRow().toFloat();
-        return { x, row.getY(), width (backWords[i]), row.getHeight() };
-    }
+    /** THE BACK over the pile, centred: BACK, then a cell each — the box cut through from the side (paintBack), its word
+        under it. */
+    static constexpr float backCellW = 66.0f, backCellGap = 14.0f, backLabelGap = 14.0f;
 
     juce::Rectangle<float> backWordArea() const
     {
-        const float w = theme::trackedWidth ("BACK", theme::displayFont (13.0f), 0.08f) + 4.0f;
-        return backArea (0).withX (backArea (0).getX() - 10.0f - w).withWidth (w);
+        const float label = theme::trackedWidth ("BACK", theme::displayFont (13.0f), 0.08f) + 4.0f;
+        const float total = label + backLabelGap + (float) backs * backCellW + (float) (backs - 1) * backCellGap;
+        return { 0.5f * ((float) leftW - total), (float) backTop, label, (float) backIconH };
+    }
+
+    juce::Rectangle<float> backCell (int i) const
+    {
+        const float x = backWordArea().getRight() + backLabelGap + (float) i * (backCellW + backCellGap);
+        return { x, (float) backTop, backCellW, (float) (backIconH + 2 + backWordH) };
+    }
+
+    /** A BOX CUT THROUGH FROM THE SIDE, as its back is: the baffle at the left with the speaker on it in profile, its cone
+        narrowing in to the magnet, the top and the bottom, and at the right the back — whole (CLOSED); whole, the port's
+        tube in from the baffle under the speaker (PORTED); gone but for a lip at the top, the sound out of it (OPEN). */
+    static void paintBack (juce::Graphics& g, int kind, juce::Rectangle<float> b, juce::Colour colour)
+    {
+        const float x0 = b.getX(), x1 = b.getRight(), y0 = b.getY(), y1 = b.getBottom(), w = b.getWidth(), h = b.getHeight();
+        const float line = 1.2f, baffle = 1.8f;
+        g.setColour (colour);
+        g.drawLine (x0, y0, x1, y0, line);
+        g.drawLine (x0, y1, x1, y1, line);
+
+        const float portTop = y1 - 0.30f * h, portBottom = y1 - 0.12f * h;
+        if (kind == 1)
+        {
+            g.drawLine (x0, y0, x0, portTop, baffle);
+            g.drawLine (x0, portBottom, x0, y1, baffle);
+            g.drawLine (x0, portTop, x0 + 0.45f * w, portTop, line);
+            g.drawLine (x0, portBottom, x0 + 0.45f * w, portBottom, line);
+        }
+        else
+            g.drawLine (x0, y0, x0, y1, baffle);
+
+        if (kind != 2)
+            g.drawLine (x1, y0, x1, y1, line);
+        else
+        {
+            g.drawLine (x1, y0, x1, y0 + 0.22f * h, line);
+            juce::Path out;
+            for (const float r : { 5.0f, 10.0f })
+                out.addCentredArc (x1 - 1.0f, y0 + 0.62f * h, r, r, 0.0f, 0.5f * juce::MathConstants<float>::pi - 0.7f,
+                                   0.5f * juce::MathConstants<float>::pi + 0.7f, true);
+            g.strokePath (out, juce::PathStrokeType (line));
+        }
+
+        const float cy = kind == 1 ? y0 + 0.40f * h : b.getCentreY(), half = 0.27f * h;
+        juce::Path cone;
+        cone.startNewSubPath (x0, cy - half);
+        cone.lineTo (x0 + 0.22f * w, cy - 0.09f * h);
+        cone.lineTo (x0 + 0.22f * w, cy + 0.09f * h);
+        cone.lineTo (x0, cy + half);
+        g.strokePath (cone, juce::PathStrokeType (line));
+        g.fillRect (juce::Rectangle<float> (0.10f * w, 0.18f * h).withPosition (x0 + 0.22f * w, cy - 0.09f * h));
     }
 
     /** The chosen box's horn over its speaker, big, in the scene's corner on the side the horn stands — above or below
@@ -513,10 +559,10 @@ private:
 
     void pileDown (const juce::MouseEvent& e)
     {
-        // The chosen box's back, a word each: its own one stored as none, so the next box comes with its own.
+        // The chosen box's back, a cell each: its own one stored as none, so the next box comes with its own.
         if (chosen >= 0)
             for (int i = 0; i < backs; ++i)
-                if (backArea (i).expanded (hornGap / 2, 2.0f).contains (e.position))
+                if (backCell (i).expanded (backCellGap / 2, 2.0f).contains (e.position))
                 {
                     setup_.back = i == ownBack (chosen) ? -1 : i;
                     send();
@@ -587,15 +633,21 @@ private:
             theme::drawTracked (g, wordOf (named), row, font, 0.06f, juce::Justification::centredLeft);
         }
 
-        // ...and at its right the chosen box's back: BACK, then its steps, the one it stands at in the block's orange.
+        // Over the pile the chosen box's back: BACK, then each drawn with its word, the one it stands at in the block's
+        // orange line.
         if (chosen >= 0)
         {
             g.setColour (theme::txFaint);
             theme::drawTracked (g, "BACK", backWordArea(), font, 0.08f, juce::Justification::centredLeft);
             for (int i = 0; i < backs; ++i)
             {
-                g.setColour (i == backOf (chosen, setup_) ? theme::orange : theme::txDim);
-                theme::drawTracked (g, backWords[i], backArea (i), font, 0.06f, juce::Justification::centred);
+                const bool on = i == backOf (chosen, setup_);
+                auto cell = backCell (i);
+                const auto word = cell.removeFromBottom ((float) backWordH);
+                paintBack (g, i, cell.withHeight ((float) backIconH).withSizeKeepingCentre (42.0f, 26.0f),
+                           on ? theme::orange : theme::violet.withAlpha (0.6f));
+                g.setColour (on ? theme::orange : theme::txDim);
+                theme::drawTracked (g, backWords[i], word, font, 0.06f, juce::Justification::centred);
             }
         }
     }
