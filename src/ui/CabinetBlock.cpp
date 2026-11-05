@@ -251,7 +251,7 @@ void CabinetBlock::refreshIr (bool force, bool keepTrimWord)
     const bool factoryPlays = ! choice.isUser() && amp.product().playsCabIr (choice.factory);
     juce::String shown = choice.isUser() ? choice.name : factoryPlays ? juce::String (params::cabIrNames[choice.factory]) : juce::String (noIr);
     if (synth.valid)
-        shown = CabWindow::labelOf (synth, true);     // OrbitBass's families have two of a size
+        shown = CabWindow::labelOf (synth);
     ir.setEntries ({ { shown, 0, false } });
     ir.setSelection (0);
 

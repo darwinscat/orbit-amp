@@ -16,9 +16,9 @@ namespace orbitamp
 
 /** THE BASS'S CABINETS, DRAWN — one panel, the boxes at the left and the chosen one's speaker at the right.
 
-    THE PILE: one family at a time (SVT, VENTURE, ORANGE, MARKBASS, MESA — words to click), its boxes to scale and stacked as a backline stands
+    THE PILE: a box of each size, no maker's name over them (the owner, 05.11), to scale and stacked as a backline stands
     them, the small on the big; each with its speakers, its horn and its port where it has them; under them the chosen
-    box's name. The walker's (Range::ampeg) is Ampeg's alone, the SVTs and the Ventures in one pile and no words over it.
+    box's size. OrbitBass's every size the table holds; the walker's (Range::ampeg) its six.
     A click on a box picks it, the mics staying where they stand, and the horn too — but a box whose horn comes off
     (Cab::hornOn, the SVT-15E's and the 8x10's) takes it off, and the next box puts it back; a click on the chosen box's
     horn turns the horn off and on, its step kept.
@@ -38,8 +38,7 @@ namespace orbitamp
 class CabPicker final : public juce::Component
 {
 public:
-    /** WHICH CABINETS IT OFFERS: every maker's, a pile each under its word — OrbitBass's — or Ampeg's alone in one pile
-        (ampegPile) — the walker's. */
+    /** WHICH CABINETS IT OFFERS: every size — OrbitBass's — or the walker's six (pile). */
     enum class Range { all, ampeg };
 
     explicit CabPicker (Range r = Range::all) : range (r) {}
@@ -74,7 +73,7 @@ public:
     struct Cab
     {
         juce::String name;                       // as the table names it: "SVT-410HE"
-        int family = 0;                          // an index of families()
+        int family = 0;                          // whose box it is, for its corners: 1 the rounded ones
         float w = 0.6f, h = 0.6f;                // the baffle
         std::vector<juce::Point<float>> drivers; // the first is the one the mic stands at
         float radius = 0.105f;                   // a cone's radiating radius
@@ -137,51 +136,28 @@ public:
         return all;
     }
 
-    /** The families, as the words over the pile write them. */
-    static const juce::StringArray& families() { static const juce::StringArray f { "SVT", "VENTURE", "ORANGE", "MARKBASS", "MESA" }; return f; }
-
-    /** How each family's pile stands: its columns left to right, each from the floor up — the small on the big, the tall
-        ones alone, the way a backline is stacked. */
-    static const std::vector<std::vector<juce::StringArray>>& piles()
+    /** The boxes it offers, as they stand: a box of each size, no maker's name over them (the owner, 05.11), its columns
+        left to right, each from the floor up — the small on the big, the tall ones alone, the way a backline is stacked.
+        OrbitBass's every size the table holds — 1x15, 1x12, 8x10, 4x10, 2x10, 6x10, 2x12, 2x15, 4x6, 8x8 — the walker's
+        the six of them its screen steps through, each with a horn the player turns on and off (the owner, 04.11). The
+        table's other boxes stay in cabs(): a state that kept one still reads as its size. */
+    static const std::vector<juce::StringArray>& pile (Range r)
     {
-        static const std::vector<std::vector<juce::StringArray>> all {
-            { { "SVT-410HLF" }, { "SVT-15E", "SVT-210HE" }, { "SVT-810" }, { "SVT-410HE", "SVT-210AV" }, { "SVT-610HLF" } },
-            { { "VB-212" }, { "VB-115", "VB-112" }, { "VB-410", "VB-210" }, { "VB-88" } },
-            { { "OBC410" }, { "OBC115", "OBC210" }, { "OBC810" } },
-            { { "STD-104HF", "STD-102HF" }, { "STD-151HR" }, { "NY-122", "NY-604" } },
-            { { "SUBWAY-115", "SUBWAY-112" }, { "SUBWAY-212" }, { "SUBWAY-410", "SUBWAY-210" }, { "SUBWAY-215" } },
-        };
-        return all;
+        static const std::vector<juce::StringArray> every {
+            { "SVT-15E", "VB-112" }, { "SVT-810" }, { "SVT-410HE", "VB-210" }, { "SVT-610HLF", "VB-212" },
+            { "SUBWAY-215", "NY-604" }, { "VB-88" } };
+        static const std::vector<juce::StringArray> six {
+            { "SVT-15E", "VB-112" }, { "SVT-810" }, { "SVT-410HE", "VB-210" }, { "SVT-610HLF" } };
+        return r == Range::ampeg ? six : every;
     }
 
-    /** Ampeg's, the walker's, in one pile: a box of each size — 1x15, 1x12, 2x10, 4x10, 6x10, 8x10 — the SVTs and the
-        Ventures together, each with a horn the player turns on and off (the owner, 04.11). */
-    static const std::vector<std::vector<juce::StringArray>>& ampegPile()
+    /** A BOX AS THE PLAYER READS IT: its speakers and their size — "4x10" — and no maker's model (the owner, 05.11). The
+        table's name stays the key a state keeps. */
+    static juce::String wordOf (int cab)
     {
-        static const std::vector<std::vector<juce::StringArray>> one {
-            { { "SVT-15E", "VB-112" }, { "SVT-810" }, { "SVT-410HE", "VB-210" }, { "SVT-610HLF" } },
-        };
-        return one;
-    }
-
-    /** A BOX AS THE PLAYER READS IT: its speakers and their size — "4x10" — and no maker's model (the owner, 05.11); with
-        `kind`, where its family has two of that size, whether it is CLOSED or PORTED. The table's name stays the key a
-        state keeps. */
-    static juce::String wordOf (int cab, bool kind)
-    {
-        const auto sizeOf = [] (const Cab& c)
-        {
-            const int inches = c.radius > 0.15f ? 15 : c.radius > 0.12f ? 12 : c.radius > 0.095f ? 10 : c.radius > 0.07f ? 8 : 6;
-            return juce::String ((int) c.drivers.size()) + "x" + juce::String (inches);
-        };
         const auto& c = cabs()[(size_t) cab];
-        const auto word = sizeOf (c);
-        if (! kind)
-            return word;
-        for (int i = 0; i < (int) cabs().size(); ++i)
-            if (i != cab && cabs()[(size_t) i].family == c.family && sizeOf (cabs()[(size_t) i]) == word)
-                return word + (sealed (c.name) ? " CLOSED" : " PORTED");
-        return word;
+        const int inches = c.radius > 0.15f ? 15 : c.radius > 0.12f ? 12 : c.radius > 0.095f ? 10 : c.radius > 0.07f ? 8 : 6;
+        return juce::String ((int) c.drivers.size()) + "x" + juce::String (inches);
     }
 
     /** The boxes the table calls sealed (tools/cabgen/cabinets.txt, `alignment`); every other one is ported. */
@@ -224,9 +200,6 @@ public:
     {
         if (dragging)
             return;   // the hand's, until it lets go
-        if (cab >= 0 && cab != chosen)
-            if (const int pile = pileOf (cab); pile >= 0)
-                family = pile;                      // the pile it stands in; a pile only looked at stays shown
         chosen = cab;
         setup_ = setup;
         repaint();
@@ -319,7 +292,7 @@ private:
     enum class Drag { none, spot, distance, angle, blend };
 
     const Range range;
-    int chosen = -1, hover = -1, family = 0;     // `family`: an index of shownPiles()
+    int chosen = -1, hover = -1;
     Setup setup_;
     bool dragging = false;
     Drag drag = Drag::none;
@@ -352,52 +325,9 @@ private:
     }
 
     // ---------------------------------------------------------------- the pile
-    static constexpr int headH = 22, nameH = 22;
+    static constexpr int pileTop = 8, nameH = 22;
 
-    static constexpr int tabH = 18, tabGap = 14;
-
-    /** The piles it offers (Range), and the words over them: one a pile, none over a single one. */
-    const std::vector<std::vector<juce::StringArray>>& shownPiles() const { return range == Range::ampeg ? ampegPile() : piles(); }
-    const juce::StringArray& words() const
-    {
-        static const juce::StringArray none;
-        return range == Range::ampeg ? none : families();
-    }
-
-    /** The shown pile a box stands in; -1 for one it does not offer. */
-    int pileOf (int cab) const
-    {
-        const auto& all = shownPiles();
-        for (size_t p = 0; p < all.size(); ++p)
-            for (const auto& column : all[p])
-                if (column.contains (cabs()[(size_t) cab].name))
-                    return (int) p;
-        return -1;
-    }
-
-    /** The families' words, left to right, a new line wherever the next would pass the pile's half. */
-    juce::Rectangle<int> tabArea (int f) const
-    {
-        const auto font = theme::displayFont (13.0f);
-        int x = 0, y = 0;
-        for (int i = 0;; ++i)
-        {
-            const int w = juce::roundToInt (theme::trackedWidth (words()[i], font, 0.08f)) + 4;
-            if (x > 0 && x + w > leftW)
-            {
-                x = 0;
-                y += tabH;
-            }
-            if (i == f)
-                return { x, y, w, tabH };
-            x += w + tabGap;
-        }
-    }
-
-    /** Where the pile starts: under the families' last line — near the top with no words over it. */
-    int pileTop() const { return words().isEmpty() ? 8 : tabArea (words().size() - 1).getBottom() + headH - tabH; }
-
-    juce::Rectangle<int> pileArea() const { return { 0, pileTop(), leftW, getHeight() - pileTop() - nameH }; }
+    juce::Rectangle<int> pileArea() const { return { 0, pileTop, leftW, getHeight() - pileTop - nameH }; }
 
     /** The line under the pile: the chosen box's name, or the one under the hand. */
     juce::Rectangle<int> nameRow() const { return { 0, getHeight() - nameH + 4, leftW, nameH - 4 }; }
@@ -469,42 +399,37 @@ private:
     static constexpr float columnGapM = 0.04f;   // between a pile's columns, m
     static constexpr float stackGapPx = 2.0f;    // between a box and the one on it
 
-    /** One scale for every family, so a box is as big as itself whichever pile is shown: the widest and the tallest
-        pile fitted to the area. */
+    /** One scale for the whole pile, so a box is as big as itself against the others: its width and its tallest column
+        fitted to the area. */
     float pileScale() const
     {
         const auto area = pileArea().toFloat();
-        float s = 1.0e6f;
-        for (const auto& pile : shownPiles())
+        float w = 0, h = 0;
+        for (const auto& column : pile (range))
         {
-            float w = 0, h = 0;
-            for (const auto& column : pile)
+            float cw = 0, ch = 0;
+            for (const auto& name : column)
             {
-                float cw = 0, ch = 0;
-                for (const auto& name : column)
-                {
-                    const auto& c = cabs()[(size_t) indexOf (name)];
-                    cw = juce::jmax (cw, c.w);
-                    ch += c.h;
-                }
-                w += cw;
-                h = juce::jmax (h, ch);
+                const auto& c = cabs()[(size_t) indexOf (name)];
+                cw = juce::jmax (cw, c.w);
+                ch += c.h;
             }
-            w += columnGapM * (float) (pile.size() - 1);
-            s = juce::jmin (s, (area.getWidth() - 8.0f) / w, (area.getHeight() - 8.0f) / h);
+            w += cw;
+            h = juce::jmax (h, ch);
         }
-        return s;
+        w += columnGapM * (float) (pile (range).size() - 1);
+        return juce::jmin ((area.getWidth() - 8.0f) / w, (area.getHeight() - 8.0f) / h);
     }
 
-    /** Each box of the shown family, to scale, standing as piles() stacks them, the pile centred on its floor. */
+    /** Each box, to scale, standing as pile() stacks them, the pile centred on its floor. */
     std::vector<std::pair<int, juce::Rectangle<float>>> layOut() const
     {
         const auto area = pileArea().toFloat();
         const float s = pileScale();
-        const auto& pile = shownPiles()[(size_t) juce::jlimit (0, (int) shownPiles().size() - 1, family)];
+        const auto& columns = pile (range);
 
-        float width = columnGapM * (float) (pile.size() - 1);
-        for (const auto& column : pile)
+        float width = columnGapM * (float) (columns.size() - 1);
+        for (const auto& column : columns)
         {
             float cw = 0;
             for (const auto& name : column)
@@ -515,7 +440,7 @@ private:
         std::vector<std::pair<int, juce::Rectangle<float>>> out;
         float x = area.getCentreX() - 0.5f * width * s;
         const float floor = area.getBottom() - 2.0f;
-        for (const auto& column : pile)
+        for (const auto& column : columns)
         {
             float cw = 0;
             for (const auto& name : column)
@@ -556,16 +481,6 @@ private:
 
     void pileDown (const juce::MouseEvent& e)
     {
-        const auto pos = e.getPosition();
-        for (int f = 0; f < words().size(); ++f)
-            if (tabArea (f).contains (pos))
-            {
-                family = f;
-                hover = -1;
-                repaint();
-                return;
-            }
-
         const int at = cabAt (e.position);
         if (at < 0)
             return;
@@ -613,14 +528,7 @@ private:
 
     void paintPile (juce::Graphics& g) const
     {
-        // The families, as words to click: the one shown in the block's orange, the others faint.
         const auto font = theme::displayFont (13.0f);
-        for (int f = 0; f < words().size(); ++f)
-        {
-            g.setColour (f == family ? theme::orange : theme::txFaint);
-            theme::drawTracked (g, words()[f], tabArea (f).toFloat(), font, 0.08f, juce::Justification::centredLeft);
-        }
-
         const auto area = pileArea();
         g.setColour (theme::hair);
         g.fillRect (juce::Rectangle<float> ((float) area.getX(), (float) area.getBottom() - 1.0f, (float) area.getWidth(), 1.0f));
@@ -634,7 +542,7 @@ private:
         if (named >= 0)
         {
             g.setColour (named == chosen ? theme::tx : theme::txDim);
-            theme::drawTracked (g, wordOf (named, range == Range::all), row, font, 0.06f, juce::Justification::centredLeft);
+            theme::drawTracked (g, wordOf (named), row, font, 0.06f, juce::Justification::centredLeft);
         }
     }
 
