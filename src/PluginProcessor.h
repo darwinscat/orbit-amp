@@ -1269,7 +1269,7 @@ public:
         float blend = 0.5f;
         bool align = true, invert = false;
         bool aOn = true, bOn = false;
-        int back = -1;   // the box's back: -1 as the table has it; 0 closed, 1 ported (core::cabsynth::Back)
+        int back = -1;   // the box's back: -1 as the table has it; 0 closed, 1 ported, 2 open (core::cabsynth::Back)
     };
 
     void requestCabSynth (const juce::String& cab, CabSetup setup, bool live = false);

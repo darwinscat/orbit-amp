@@ -922,7 +922,7 @@ AmpProcessor::CabSynthChoice AmpProcessor::cabSynthOf (const juce::String& from)
         out.setup.bOn = parts[16] == "1";
     }
     if (parts.size() >= 18)
-        out.setup.back = juce::jlimit (-1, 1, parts[17].getIntValue());
+        out.setup.back = juce::jlimit (-1, 2, parts[17].getIntValue());
     out.valid = true;
     return out;
 }

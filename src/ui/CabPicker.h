@@ -18,8 +18,8 @@ namespace orbitamp
 
     THE PILE: a box of each size, no maker's name over them (the owner, 05.11), to scale and stacked as a backline stands
     them, the small on the big; each with its speakers, its horn and its port where it has them; under them the chosen
-    box's size, and at its right its BACK, CLOSED or PORTED, a click each — a box comes with its own, a sealed one turned
-    ported gets a port at its foot. OrbitBass's every size the table holds; the walker's (Range::ampeg) its six.
+    box's size, and at its right its BACK, CLOSED, PORTED or OPEN, a click each — a box comes with its own, a sealed one
+    turned ported gets a port at its foot. OrbitBass's every size the table holds; the walker's (Range::ampeg) its six.
     A click on a box picks it, the mics staying where they stand, and the horn too — but a box whose horn comes off
     (Cab::hornOn, the SVT-15E's and the 8x10's) takes it off, and the next box puts it back; a click on the chosen box's
     horn turns the horn off and on, its step kept.
@@ -171,8 +171,8 @@ public:
 
     /** THE BOX'S BACK, as its switch is marked — a click each, the one it stands at in the block's orange; the index the
         engine's (core::cabsynth::Back). A box comes with its own (ownBack); turned, a sealed one gets a port at its foot. */
-    static constexpr const char* backWords[] { "CLOSED", "PORTED" };
-    static constexpr int backs = 2;
+    static constexpr const char* backWords[] { "CLOSED", "PORTED", "OPEN" };
+    static constexpr int backs = 3;
     static int ownBack (int cab) { return sealed (cabs()[(size_t) cab].name) ? 0 : 1; }
     static int backOf (int cab, const Setup& s) { return s.back >= 0 ? s.back : ownBack (cab); }
 

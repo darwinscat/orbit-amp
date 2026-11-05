@@ -4,8 +4,9 @@
 #pragma once
 
 // CABSYNTH — a close-miked bass cabinet, synthesized: every cone a surface of patches, each moving as a piston below its
-// breakup and as a sum of seeded modes above it, summed at the mic with its true path delays; the box's low end (sealed
-// or vented, cone and port apart), the horn on its crossover, the baffle's edges, the box's cavity and panel modes, the
+// breakup and as a sum of seeded modes above it, summed at the mic with its true path delays; the box's low end (sealed,
+// vented, cone and port apart, or open at the back, the cones' backs wrapping round), the horn on its crossover, the
+// baffle's edges, the box's cavity and panel modes, the
 // mic's capsule, pattern and proximity. Frequency domain, one complex sum per bin, then one inverse FFT.
 //
 // The cabinets are a table, "[section] key = value" with `inherit` (tools/cabgen/cabinets.txt): the tool renders every
@@ -267,6 +268,10 @@ struct Cab
     double radius = 0.105, depthFrac = 0.25, bw = 0.6, bh = 0.6;
     // low end
     bool vented = false;
+    // Open at the back: each cone in free air, its back heard inverted round the box's side, dark above `openLp`, by
+    // `openWrap` of it — whole: a box this small does not shadow a bass's wavelength.
+    bool open = false;
+    double openLp = 500, openWrap = 1.0;
     double fsd = 50, qts = 0.4, vas = 30, vb = 60, perChamber = 1, chambers = 1, fb = 45, ql = 8;
     bool portRear = false, hornAtMic = false;
     double fixedMass = 0, coilHz = 0, proxStrength = 1, proxCorner = 0, micTop = 12000, depth = 0.4;
@@ -311,6 +316,9 @@ inline Cab build (const Section& s)
     c.bh = baffle.size() > 1 ? baffle[1] : 0.6;
 
     c.vented = str (s, "alignment") == "ported";
+    c.open = str (s, "alignment") == "open";
+    c.openLp = num (s, "open_back_lowpass_hz", 500);
+    c.openWrap = num (s, "open_back_wrap", 1.0);
     const auto ts = nums (str (s, "ts", "50,0.4,30"));
     c.fsd = ts[0]; c.qts = ts[1]; c.vas = ts[2];
     const auto ch = nums (str (s, "chamber", "60,1,1"));
@@ -426,11 +434,19 @@ inline Cab build (const Section& s)
     return c;
 }
 
-/** The cone's and the port's shares of the box's low end, at f: sealed, the cone alone; vented, the two apart. */
+/** The cone's and the port's shares of the box's low end, at f: sealed, the cone alone; vented, the two apart; open,
+    the cone on no air but its own — its free-air resonance, Qts. */
 inline void lowEnd (const Cab& c, double f, cd& cone, cd& port)
 {
     const double alpha = c.perChamber * c.vas / c.vb;
     const cd s (0, 2 * pi * f);
+    if (c.open)
+    {
+        const double ws = 2 * pi * c.fsd;
+        cone = s * s / (s * s + s * ws / c.qts + ws * ws);
+        port = 0;
+        return;
+    }
     if (! c.vented)
     {
         const double wc = 2 * pi * c.fsd * std::sqrt (1 + alpha), qtc = c.qts * std::sqrt (1 + alpha);
@@ -578,7 +594,8 @@ inline std::vector<double> render (const Cab& c, size_t n)
 
         // What the box adds to every cone's motion: its cavity and panel modes, then the voicing.
         cd box = 1.0;
-        for (auto& m : c.cavity) box += m[2] * resonance (f, m[0], m[1]);
+        if (! c.open)   // no air shut in behind an open back: nothing of the cavity rings
+            for (auto& m : c.cavity) box += m[2] * resonance (f, m[0], m[1]);
         for (auto& m : c.panel) box += m[2] * resonance (f, m[0], m[1]);
         for (auto& b : bodyEq) box *= b.at (f, fs);
         // The baffle step: the low end, radiating into the whole room, a few tenths of a dB under the top.
@@ -649,6 +666,26 @@ inline std::vector<double> render (const Cab& c, size_t n)
                     sum += back * port * area * c.perChamber * lowpass2 (f, c.portLeakHz, 0.707) * heard (c, mic, dx, dy, dz, f) * (r0 / r)
                          * std::polar (1.0, -2 * pi * f * (r / c0 - minDelay));
                 }
+            }
+        // An open back: each cone's back, inverted, out of the back and round the box to the front — from the cone to the
+        // back's rim on a side, forward along that side, then from the baffle's edge to the mic, by the side that makes it
+        // shortest — by openWrap of it and dark (openLp); against the cone's near field as the port is (Keele).
+        if (c.open)
+            for (size_t d = 0; d < c.drivers.size(); ++d)
+            {
+                const auto& o = c.drivers[d];
+                const Xy sides[4] { { -c.bw / 2, o.y }, { c.bw / 2, o.y }, { o.x, -c.bh / 2 }, { o.x, c.bh / 2 } };
+                double rp = 1e9, ex = 0, ey = 0, ez = 0;
+                for (const auto& e : sides)
+                {
+                    double r, dx, dy, dz;
+                    pathTo (e.x, e.y, 0, r, dx, dy, dz);
+                    const double way = std::hypot (c.depth, std::hypot (e.x - o.x, e.y - o.y)) + c.depth + r;
+                    if (way < rp) { rp = way; ex = dx; ey = dy; ez = dz; }
+                }
+                const double ratio = pi * c.radius * c.radius / (2 * pi * rp * delta) * c.openWrap;
+                sum -= cone * coil[k] * c.sens[d] * ratio * (r0 * near) * lowpass2 (f, c.openLp, 0.707) * heard (c, mic, ex, ey, ez, f)
+                     * std::polar (1.0, -2 * pi * f * (rp / c0 - minDelay));
             }
         if (c.horn)
         {
@@ -728,12 +765,13 @@ struct Spot
     std::string mic;    // a "mic-<name>" section of the table laid over the cabinet's own, or empty for its own
     double angle = 0;   // degrees the mic leans back toward the cap
     double hornDb = 0;  // the horn's level against the table's, its attenuator's step: 0, -6, -12
-    int back = -1;      // -1 the table's; 0 closed, 1 ported (Back)
+    int back = -1;      // -1 the table's; 0 closed, 1 ported, 2 open (Back)
 };
 
 /** THE BOX'S BACK, turned: closed, the cone on the air inside alone; ported, the port tuned as the table tunes it —
-    or, on a box the table seals, at fb_hz's own 45 Hz in the middle of the baffle's foot (portAtFoot over its floor). */
-enum Back { closedBack = 0, portedBack = 1 };
+    or, on a box the table seals, at fb_hz's own 45 Hz in the middle of the baffle's foot (portAtFoot over its floor);
+    open, each cone in free air, its back wrapping round the box to the mic. */
+enum Back { closedBack = 0, portedBack = 1, openBack = 2 };
 constexpr double portAtFoot = 0.045;
 
 /** A cabinet of the table — its "<name> cap" section, the box as that section says, its mic or the one `spot` names
@@ -751,11 +789,15 @@ inline Cab cabAt (const Table& table, const std::string& cab, const Spot& spot)
     c.tilt    = spot.angle;
     c.horn    = c.horn && spot.horn;
     c.hornDb += spot.hornDb;
-    if (spot.back == closedBack)
+    if (spot.back == closedBack || spot.back == openBack)
+    {
         c.vented = false;
+        c.open   = spot.back == openBack;
+    }
     else if (spot.back == portedBack && ! c.vented)
     {
         c.vented   = true;
+        c.open     = false;
         c.portRear = false;
         if (s.count ("equivalent_port_xy") == 0)
             c.port = { 0, -c.bh / 2 + portAtFoot };
