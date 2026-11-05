@@ -55,7 +55,7 @@ CabWindow::CabWindow (AmpProcessor& a, Kept k)
     picker.onMove  = [this] (int cab, CabPicker::Setup setup) { request (amp, cab, setup, true); };
     picker.onClose = [this] { if (auto* box = findParentComponentOfClass<juce::CallOutBox>()) box->dismiss(); };
     picker.onDownload = [this] { download (amp); };
-    picker.onFind     = [this] (int cab, CabPicker::Setup setup) { placeB (cab, setup); };
+    picker.onFind     = [this] (int cab, CabPicker::Setup setup) { placeB (cab, setup, true); };   // FIND looks harder
 
     addAndMakeVisible (picker);
     setSize (CabPicker::panelW, CabPicker::panelH);
@@ -112,7 +112,7 @@ void CabWindow::timerCallback()
     picker.show (cab, setup);
 }
 
-void CabWindow::placeB (int cab, const CabPicker::Setup& setup)
+void CabWindow::placeB (int cab, const CabPicker::Setup& setup, bool thorough)
 {
     // B just taken up, or FIND: where it combs least with A, found off the message thread (a second or so), each place it
     // judges drawn on the speaker as it goes; B moves there unless the hand moved it first — what plays still has B where
@@ -120,7 +120,7 @@ void CabWindow::placeB (int cab, const CabPicker::Setup& setup)
     static juce::ThreadPool searcher { 1 };
     const auto state = stateOf (cab, setup);
     juce::Component::SafePointer<CabWindow> safe (this);
-    searcher.addJob ([safe, state, cab, setup]
+    searcher.addJob ([safe, state, cab, setup, thorough]
     {
         static const auto table = cabir::synth::parseTable (std::string (BinaryData::cabinets_txt, (size_t) BinaryData::cabinets_txtSize));
         const auto place = cabir::synth::quietPlaceForB (table, state, (size_t) 1 << 13, [safe] (const cabir::synth::Place& p, double score)
@@ -130,7 +130,7 @@ void CabWindow::placeB (int cab, const CabPicker::Setup& setup)
                 if (safe != nullptr)
                     safe->picker.showSearch ((float) p.x, (float) p.y, (float) score);
             });
-        });
+        }, thorough);
         juce::MessageManager::callAsync ([safe, state, cab, setup, place]
         {
             if (safe == nullptr)

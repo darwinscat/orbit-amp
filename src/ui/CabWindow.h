@@ -54,7 +54,7 @@ private:
 
     /** DOWNLOAD IR: the cabinet that plays saved as a WAV where the player says — Downloads to begin with. */
     static void download (AmpProcessor&);
-    void placeB (int cab, const CabPicker::Setup&);
+    void placeB (int cab, const CabPicker::Setup&, bool thorough = false);   // FIND looks harder
 
     void timerCallback() override;
 
