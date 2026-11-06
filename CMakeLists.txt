@@ -1767,6 +1767,7 @@ add_dependencies(orbitamp_gates OrbitAmpVersionGen Family_Factory)
 target_compile_definitions(orbitamp_gates PRIVATE
     ORBITAMP_VERSION="${ORBITAMP_FAMILY_VERSION}"
     ORBITAMP_GATES_BINARY=1
+    JUCE_MODAL_LOOPS_PERMITTED=1     # a gate may run the message loop until what lands there has (a drawn cabinet)
     JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 ${AMP_UNREAD_CODECS})
 set_source_files_properties(tests/Gates.cpp PROPERTIES COMPILE_DEFINITIONS
     "ORBITAMP_GATES_FACTORY=\"${ORBITAMP_FACTORY_DIR}\";ORBITAMP_GATES_NO_FACTORY=\"${CMAKE_CURRENT_BINARY_DIR}/no-factory/Factory\"")
