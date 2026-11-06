@@ -97,14 +97,17 @@ UsedUserAreasWarning=no
 Name: "full";   Description: "Every plug-in format, every app"
 Name: "custom"; Description: "Custom"; Flags: iscustom
 
+#if Pos("OrbitAmp", Amps) > 0
 [InstallDelete]
 ; OrbitAmp's own installer kept its app and its uninstaller in {autopf}\OrbitAmp. The uninstaller
 ; goes whatever is ticked: the AppId is this Setup's now, and the old one would remove plug-ins that
 ; are this Setup's. The app goes when OrbitAmp's standalone is ticked, which places it again in the
-; family's folder; unticked, it stays as it was.
+; family's folder; unticked, it stays as it was. The amps' family alone: the basses' (installer\bass.ini)
+; carries no OrbitAmp and has nothing of it to take away.
 Type: files;      Name: "{autopf}\OrbitAmp\unins*.*"
 Type: files;      Name: "{autopf}\OrbitAmp\OrbitAmp.exe"; Components: standalone\orbitamp
 Type: dirifempty; Name: "{autopf}\OrbitAmp"
+#endif
 
 [Components]
 Name: "factory";    Description: "The amps' data: packs, cabinets, pictures (always installed)"; Types: full custom; Flags: fixed
