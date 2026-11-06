@@ -847,6 +847,17 @@ void Console::exportForWeb (const juce::File& dir)
             }
             return juce::var (v);
         };
+        // A ROOM OR AN ECHO THE PRODUCT KEEPS OUT OF ITS STRIP (Lineup::pinned — the walker's, which holds no delay and
+        // no room) is none of either on any channel: its share is 0 here, whatever the channel's own would be. The
+        // keys stay, the room's name with them: what plays it reads them all.
+        const auto inStrip = [&line] (const char* present)
+        {
+            for (const auto& pin : line.pinned)
+                if (pin.param == present)
+                    return pin.value > 0.5f;
+            return true;
+        };
+        const bool roomIn = inStrip (params::reverbPresent), echoIn = inStrip (params::delayPresent);
         juce::Array<juce::var> list;
         for (int c = 0; c < channels.count(); ++c)
         {
@@ -861,8 +872,8 @@ void Console::exportForWeb (const juce::File& dir)
             x->setProperty ("pair", line.pairs ? juce::var (c ^ 1) : juce::var());
             x->setProperty ("hot", ch.hot);
             x->setProperty ("reverb", params::reverbCharacters[juce::roundToInt (channels.defaultOf (c, params::reverbType))]);
-            x->setProperty ("reverbMix", channels.defaultOf (c, params::reverbMix));
-            x->setProperty ("delayMix", channels.defaultOf (c, params::delayMix));
+            x->setProperty ("reverbMix", roomIn ? channels.defaultOf (c, params::reverbMix) : 0.0f);
+            x->setProperty ("delayMix", echoIn ? channels.defaultOf (c, params::delayMix) : 0.0f);
             x->setProperty ("drive", ranged (params::preampGain, channels.defaultOf (c, params::preampGain)));
             juce::Array<juce::var> tones;
             const auto toneNames = channels.toneNamesOf (c);     // the pack's tones, knob i its tone i
