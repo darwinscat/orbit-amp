@@ -7,13 +7,14 @@
 #
 #     source ~/emsdk/emsdk_env.sh
 #     emcmake cmake -S tools/worlds-wasm -B build-wasm -G Ninja
-#     cmake --build build-wasm            # -> build-wasm/plains-wasm.mjs + .wasm, ice-wasm.*, titan-wasm.*, sky-wasm.*
+#     cmake --build build-wasm            # -> build-wasm/plains-wasm.mjs + .wasm, ice-wasm.*, titan-wasm.*, sky-wasm.*, walker-wasm.*
 #
 # Each world is an ES module the page imports — plains-wasm.mjs exports createPlainsView (plains-view.js),
 # ice-wasm.mjs createIceView (ice-view.js), titan-wasm.mjs createTitanView (titan-view.js), sky-wasm.mjs
-# CatpitAmp's createCatpitSky (sky-view.js), each behind the one view of view.js — and the .wasm beside it is
-# fetched by it. The renderers and the worlds are the app's (src/redpaw/view, src/frostpaw/view,
-# src/amberpaw/view, src/catpit) over WebGL 2 (src/shaders/Gpu.h); the shaders are
+# CatpitAmp's createCatpitSky (sky-view.js), walker-wasm.mjs RedGrooveBass's createWalkerView (walker-view.js), each
+# behind the one view of view.js — and the .wasm beside it is fetched by it. The renderers and the worlds are the
+# app's (src/redpaw/view, src/frostpaw/view, src/amberpaw/view, src/catpit, src/redgroove/view) over WebGL 2
+# (src/shaders/Gpu.h); the shaders are
 # resources/shaders, carried into the .wasm the way the app's build carries them (CMakeLists.txt, THE SHADERS)
 # and put together by the same src/shaders/Shaders.cpp.
 
@@ -171,3 +172,10 @@ orbitamp_world(titan createTitanModule SOURCES
 orbitamp_world(sky createSkyModule SOURCES
     "${ORBITAMP_ROOT}/src/catpit/CatpitSkyGl.cpp"
     EXTRA _view_throttle _view_place)
+
+# THE WALKER: RedGrooveBass's dome over the glowing forest. Its world is matched to its prototype to the last bit,
+# compiled without contraction as the app's build compiles it (a fused multiply-add rounds once where the JS rounds
+# twice; WebAssembly has none to fuse into, and this says so where a compiler might one day find one).
+orbitamp_world(walker createWalkerModule SOURCES
+    "${ORBITAMP_ROOT}/src/redgroove/view/WalkerGl.cpp" "${ORBITAMP_ROOT}/src/redgroove/view/WalkerWorld.cpp")
+set_source_files_properties("${ORBITAMP_ROOT}/src/redgroove/view/WalkerWorld.cpp" PROPERTIES COMPILE_OPTIONS "-ffp-contract=off")
