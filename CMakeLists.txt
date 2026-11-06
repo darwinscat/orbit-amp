@@ -1040,11 +1040,13 @@ endif()
 # A RELEASE SHIPS NO PACK OF AN AMP IT LEAVES OUT. A release (ORBITAMP_DEV_FACTORY OFF) carries the amps
 # installer/family.ini names; the packs only an amp it leaves out plays — today AmberPawAmp's V4 — are not
 # OrbitAmp's there either, so they wait for their own amp. Built here, OrbitAmp
-# plays them all.
+# plays them all — and in a release that leaves OrbitAmp out too (the basses, installer/bass.ini): nothing of
+# OrbitAmp ships there (the release's folder holds its amps' lists alone), and the gates, which play every amp,
+# hear OrbitAmp as it is built here.
 file(STRINGS "${FAMILY_INI}" ORBITAMP_RELEASED REGEX "^amps=")
 string(REGEX REPLACE "^amps=" "" ORBITAMP_RELEASED "${ORBITAMP_RELEASED}")
 separate_arguments(ORBITAMP_RELEASED)
-if(NOT ORBITAMP_DEV_FACTORY)
+if(NOT ORBITAMP_DEV_FACTORY AND "OrbitAmp" IN_LIST ORBITAMP_RELEASED)
     set(kept "")
     set(left "")
     foreach(amp CatpitAmp RedPawAmp FrostPawAmp AmberPawAmp)
