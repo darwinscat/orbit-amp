@@ -97,10 +97,12 @@ AmpProcessor::AmpProcessor (const Product& product)
                },
                felitronics::appkit::CompareHistory::Config {}),
       // GitHub's latest release of THIS repo, the running version, and the badge's own settings file.
-      // The checker asks nothing on its own — see updateChecker(). The repository releases every amp
-      // together, under the family's plain vX.Y.Z, so every amp asks for that "latest release", as
-      // OrbitAmp always has: no tag prefix (see Product.h).
+      // The checker asks nothing on its own — see updateChecker(). The amps are released together under
+      // the family's plain vX.Y.Z, and ask for that "latest release", as OrbitAmp always has; the basses
+      // are a family of their own, tagged bass-vX.Y.Z (installer/bass.ini), and ask for the highest of
+      // those (see Product.h).
       updater ({ .ownerRepo      = "darwinscat/orbit-amp",
+                 .tagPrefix      = ownProduct.chain == Chain::bass ? "bass-" : "",
                  .productName    = ownProduct.name,
                  .currentVersion = ORBITAMP_VERSION,
                  .settings       = [this] { return updateStore->file(); } })

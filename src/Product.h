@@ -30,7 +30,8 @@
     whichever it plays.
 
     Every amp asks for the repository's LATEST release — the family's vX.Y.Z — as OrbitAmp always has:
-    no tag prefix, since every release of the repository is every amp's. */
+    no tag prefix. A bass (Chain::bass) is of the basses' family, released apart (installer/bass.ini) and
+    tagged bass-vX.Y.Z: it asks for the highest of those, by the tag prefix "bass-". */
 namespace orbitamp
 {
 

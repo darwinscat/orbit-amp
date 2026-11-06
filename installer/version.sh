@@ -11,11 +11,24 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-TREE="$(sed -n 's/^project(OrbitAmp VERSION \([0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\)[ )].*/\1/p' CMakeLists.txt)"
+# A family that keeps a version of its own — the basses, installer/bass.ini's `version=` — is read where FAMILY_INI
+# names it; its tags wear its `tag_prefix=` (bass-v0.1.0), which a tag is read without.
+INI="${FAMILY_INI:-installer/family.ini}"
+ini() { sed -n "s/^$1=//p" "$INI" | tr -d '\r'; }
+OWN="$(ini version)"
+PREFIX="$(ini tag_prefix)"
+if [ -n "$OWN" ]; then
+  TREE="$OWN"; SAYS="$INI"
+else
+  TREE="$(sed -n 's/^project(OrbitAmp VERSION \([0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\)[ )].*/\1/p' CMakeLists.txt)"; SAYS="CMakeLists.txt"
+fi
 if [ -z "$TREE" ]; then
   echo "version.sh: no project(OrbitAmp VERSION X.Y.Z …) in CMakeLists.txt" >&2; exit 1
 fi
-if [ $# -gt 0 ] && [ "${1#v}" != "$TREE" ]; then
-  echo "version.sh: the tag says '$1', CMakeLists.txt says $TREE — bump one or re-tag" >&2; exit 1
+if [ $# -gt 0 ]; then
+  TAG="$1"; TAG="${TAG#"${PREFIX:-v}"}"; TAG="${TAG#v}"
+  if [ "$TAG" != "$TREE" ]; then
+    echo "version.sh: the tag says '$1', $SAYS says $TREE — bump one or re-tag" >&2; exit 1
+  fi
 fi
 echo "$TREE"

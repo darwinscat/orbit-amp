@@ -51,7 +51,8 @@ set -f   # no pathname expansion: family.ini's words are names, never patterns
 VERSION="${1:?usage: build-family-pkg.sh <version> <build-dir> <out-dir>}"
 BUILD="${2:?missing build dir}"
 OUT="${3:?missing output dir}"
-INI="$(cd "$(dirname "$0")" && pwd)/family.ini"
+HERE="$(cd "$(dirname "$0")" && pwd)"
+INI="${FAMILY_INI:-$HERE/family.ini}"   # the family to pack: FAMILY_INI where said (installer/bass.ini), else this one
 die() { echo "build-family-pkg.sh: $*" >&2; exit 1; }
 ini() { sed -n "s/^$1=//p" "$INI" | tr -d '\r'; }
 lower() { printf '%s' "$1" | tr '[:upper:]' '[:lower:]'; }
@@ -226,7 +227,7 @@ component() {   # component <id> <bundle> <install folder> <scripts folder>
 outline=""; choices=""; refs=""
 
 # The data first, as the folder its install location holds — with no bundle in it, nothing to pin.
-fid="com.darwinscat.amps.factory"
+fid="$(ini bundle_id).factory"
 mkdir -p "$work/stage/$fid"
 ditto --norsrc --noextattr --noacl "$FACTORY" "$work/stage/$fid/Factory"
 pkgbuild --quiet "${COMPRESS[@]}" \
@@ -246,7 +247,7 @@ refs+="    <pkg-ref id=\"$fid\" version=\"$VERSION\" onConclusion=\"none\">$fid.
 every="$(listing $AMPS)"
 for f in $PLUGINS; do
   format "$f"
-  id="com.darwinscat.amps.$f"
+  id="$(ini bundle_id).$f"
   component "$id" "$PLUGS/$DIR/$BUNDLE.$EXT" "$DEST" "$(plugin_scripts "$f")"
   olds=""
   # shellcheck disable=SC2086
@@ -280,7 +281,7 @@ cat > "$work/Distribution.xml" <<EOF
 <?xml version="1.0" encoding="utf-8"?>
 <installer-gui-script minSpecVersion="2">
     <title>$FAMILY $VERSION</title>
-    <product id="com.darwinscat.amps" version="$VERSION"/>
+    <product id="$(ini bundle_id)" version="$VERSION"/>
     <options customize="allow" require-scripts="false" hostArchitectures="arm64,x86_64"/>
     <domains enable_localSystem="true" enable_currentUserHome="false" enable_anywhere="false"/>
     <choices-outline>
@@ -288,7 +289,7 @@ $outline    </choices-outline>
 $choices$refs</installer-gui-script>
 EOF
 
-PKG="$OUT/darwinscat-amps-$VERSION-macos.pkg"
+PKG="$OUT/$(ini archive)-$VERSION-macos.pkg"
 if [ -n "${INSTALLER_IDENTITY:-}" ]; then
   productbuild --distribution "$work/Distribution.xml" --package-path "$work/components" "$work/unsigned.pkg"
   productsign --sign "$INSTALLER_IDENTITY" "$work/unsigned.pkg" "$PKG"

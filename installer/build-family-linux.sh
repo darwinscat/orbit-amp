@@ -24,7 +24,7 @@ BUILD="${2:?missing build dir}"
 OUT="${3:?missing output dir}"
 ARCH="${4:-$(uname -m)}"
 HERE="$(cd "$(dirname "$0")" && pwd)"
-INI="$HERE/family.ini"
+INI="${FAMILY_INI:-$HERE/family.ini}"   # the family to pack: FAMILY_INI where said (installer/bass.ini), else this one
 ini() { sed -n "s/^$1=//p" "$INI" | tr -d '\r'; }
 
 FAMILY="$(ini name)"
@@ -35,7 +35,7 @@ OLD="$(ini old_bundles)"
 if [ -z "$FAMILY" ] || [ -z "$AMPS" ] || [ -z "$BUNDLE" ] || [ -z "$TARGET" ]; then
   echo "build-family-linux.sh: no name, amps, bundle or bundle_target in $INI" >&2; exit 1
 fi
-NAME="darwinscat-amps-$VERSION-linux-$ARCH"
+NAME="$(ini archive)-$VERSION-linux-$ARCH"
 PLUGS="$BUILD/${TARGET}_artefacts/Release"
 
 # Everything is found before anything is packed. A VST3 is there when its bundle holds a library

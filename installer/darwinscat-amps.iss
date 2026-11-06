@@ -44,24 +44,29 @@
   #define BuildDir "..\build"
 #endif
 
-#define FamilyIni    AddBackslash(SourcePath) + "family.ini"
+; The family to pack: /DFamilyIni=<file> where said (installer\bass.ini), else family.ini beside this script.
+#ifndef FamilyIni
+  #define FamilyIni  AddBackslash(SourcePath) + "family.ini"
+#endif
 #define AppName      ReadIni(FamilyIni, "family", "name", "")
 #define Amps         ReadIni(FamilyIni, "family", "amps", "")
 #define Bundle       ReadIni(FamilyIni, "family", "bundle", "")
 #define BundleTarget ReadIni(FamilyIni, "family", "bundle_target", "")
 #define OldBundles   ReadIni(FamilyIni, "family", "old_bundles", "")
+#define AppGuid      ReadIni(FamilyIni, "family", "app_id", "")
+#define Archive      ReadIni(FamilyIni, "family", "archive", "")
 #define Plugs        BuildDir + "\" + BundleTarget + "_artefacts\Release"
 #define AppPublisher "Darwin's Cat"
 #define AppURL       "https://darwinscat.com"
-#if AppName == "" || Amps == "" || Bundle == "" || BundleTarget == ""
-  #error installer\family.ini names no family, amps, bundle or bundle_target
+#if AppName == "" || Amps == "" || Bundle == "" || BundleTarget == "" || AppGuid == "" || Archive == ""
+  #error the family's ini names no family, amps, bundle, bundle_target, app_id or archive
 #endif
 
 [Setup]
-; OrbitAmp's AppId (its own installer's, up to 0.7.0), kept on purpose: OrbitAmp's installer came first, so an
-; OrbitAmp already installed is upgraded by this Setup in place — one entry under Installed apps, now
-; the family's — rather than left beside it. Do NOT change it.
-AppId={{62EA38AA-F6FB-446B-B92A-7F097A8ED667}
+; The family's AppId, its ini's app_id: for the amps OrbitAmp's own (its installer's, up to 0.7.0), kept on purpose,
+; so an OrbitAmp already installed is upgraded by this Setup in place — one entry under Installed apps — rather than
+; left beside it. A family's AppId never changes once released. "{{" is Inno's literal brace.
+AppId={{{#AppGuid}}
 AppName={#AppName}
 AppVersion={#AppVersion}
 AppPublisher={#AppPublisher}
@@ -75,7 +80,7 @@ UsePreviousSetupType=no
 DisableProgramGroupPage=yes
 DisableDirPage=yes
 OutputDir=output
-OutputBaseFilename=darwinscat-amps-{#AppVersion}-windows-x64-setup
+OutputBaseFilename={#Archive}-{#AppVersion}-windows-x64-setup
 ; The strongest LZMA2 Inno has, in a process of its own, so the compressor has the memory it asks for.
 Compression=lzma2/ultra64
 LZMAUseSeparateProcess=yes

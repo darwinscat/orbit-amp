@@ -42,7 +42,8 @@ case "$SYSTEM" in
   macos-x86_64) THIN=x86_64 ;;
   *)            THIN="" ;;
 esac
-INI="$(cd "$(dirname "$0")" && pwd)/family.ini"
+HERE="$(cd "$(dirname "$0")" && pwd)"
+INI="${FAMILY_INI:-$HERE/family.ini}"   # the family to pack: FAMILY_INI where said (installer/bass.ini), else this one
 ini() { sed -n "s/^$1=//p" "$INI" | tr -d '\r'; }
 
 AMPS="$(ini amps)"
@@ -52,7 +53,7 @@ OLD="$(ini old_bundles)"
 if [ -z "$AMPS" ] || [ -z "$BUNDLE" ] || [ -z "$TARGET" ]; then
   echo "build-family-zip.sh: no amps, bundle or bundle_target in $INI" >&2; exit 1
 fi
-NAME="darwinscat-amps-$VERSION-$SYSTEM"
+NAME="$(ini archive)-$VERSION-$SYSTEM"
 PLUGS="$BUILD/${TARGET}_artefacts/Release"
 
 case "$(uname -s)" in
