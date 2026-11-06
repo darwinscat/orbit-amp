@@ -36,9 +36,8 @@ namespace
 
 const channels::Lineup& lineup()
 {
-    // A channel's pack is the capture it plays, known by the `rig_id` its manifest carries. Until the bass's
-    // captures are trained, TWO TEMPORARY PACKS, a guitar amp's clean and crunch, each with its Boost held
-    // off, to play the bass's chain through (CMakeLists.txt: REDGROOVEBASS_SET). No room and no delay: the
+    // A channel's pack is the capture it plays, known by the `rig_id` its manifest carries: the Ampeg SGT-DI's,
+    // its two voices, B15 and SVT, a gear each (CMakeLists.txt: REDGROOVEBASS_SET). No room and no delay: the
     // bass's chain holds neither (params::bassChainHolds).
     //
     // EACH GEAR IS AN AMP OF ITS OWN: beside what every channel keeps — DRIVE, the tones (the bass's standard's
