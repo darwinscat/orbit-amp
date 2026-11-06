@@ -49,6 +49,7 @@
 #include "channels/Engine.h"
 #include "channels/Presets.h"
 
+#include <algorithm>
 #include <array>
 #include <atomic>
 #include <chrono>
@@ -380,10 +381,36 @@ int ORBITAMP_GATE_MAIN()
         const auto& redGiant = device::shelf::irs (products::orbitAmp().name)[(size_t) params::cabIrDefault];
         const auto bassIrs   = device::IrLibrary::directory (bass.irsFolder());
         const auto guitarIrs = device::IrLibrary::directory (products::orbitAmp().irsFolder());
+
+        // ...and what the two hold before this gate puts anything there. On a Mac and on Linux the home is the gate's own,
+        // and both are empty. Windows finds AppData without asking the environment, so there every gate before this one
+        // wrote into the same folders (tools/run-gates.sh): what this gate adds is told from what it found.
+        const auto bassBefore   = device::IrLibrary::listed (bassIrs);
+        const auto guitarBefore = device::IrLibrary::listed (guitarIrs);
+        const auto treeRows = [] (IrTreeView& view)
+        {
+            view.rebuild();
+            for (auto* c : view.getChildren())
+                if (auto* t = dynamic_cast<juce::TreeView*> (c); t != nullptr && t->getRootItem() != nullptr)
+                    return t->getRootItem()->getNumSubItems();
+            return -1;
+        };
+        int bassRowsBefore = 0, guitarRowsBefore = 0;
+        if (! bassBefore.isEmpty())   { IrTreeView v (bass.irsFolder());                 bassRowsBefore   = treeRows (v); }
+        if (! guitarBefore.isEmpty()) { IrTreeView v (products::orbitAmp().irsFolder()); guitarRowsBefore = treeRows (v); }
+        bool inTheirOwn = true;
+        for (const auto& f : bassBefore)   inTheirOwn = inTheirOwn && f.isAChildOf (bassIrs);
+        for (const auto& f : guitarBefore) inTheirOwn = inTheirOwn && f.isAChildOf (guitarIrs);
+       #if JUCE_WINDOWS
+        const bool foundAsItShould = inTheirOwn;
+       #else
+        const bool foundAsItShould = bassBefore.isEmpty() && guitarBefore.isEmpty();
+       #endif
         check (redGiant.data != nullptr && bassIrs == device::DeviceLibrary::familyRoot().getChildFile ("Bass IRs")
-                   && guitarIrs == device::DeviceLibrary::familyRoot().getChildFile ("IRs")
-                   && device::IrLibrary::listed (bassIrs).isEmpty() && device::IrLibrary::listed (guitarIrs).isEmpty(),
-               "the bass's own IRs in `Bass IRs`, the guitar's in `IRs`, side by side in the family's folder, both empty yet");
+                   && guitarIrs == device::DeviceLibrary::familyRoot().getChildFile ("IRs") && foundAsItShould,
+               "the bass's own IRs in `Bass IRs`, the guitar's in `IRs`, side by side in the family's folder, empty yet but for "
+                   "what the gates before this one left on Windows (" + juce::String (bassBefore.size()) + " and "
+                   + juce::String (guitarBefore.size()) + ")");
 
         const auto menuOf = [] (const AmpProcessor& a, std::vector<juce::File>& files)
         {
@@ -560,37 +587,33 @@ int ORBITAMP_GATE_MAIN()
 
         // EACH LISTS ITS OWN AND NONE OF THE OTHER'S: the library, the CAB menu, the SETUP tree, a face's channels.
         {
-            const auto names = [] (const juce::Array<juce::File>& fs)
+            // What this gate put there, by its path from the family's folder written with `/` on every system.
+            const auto names = [] (const juce::Array<juce::File>& fs, const juce::Array<juce::File>& before)
             {
                 juce::StringArray n;
                 for (const auto& f : fs)
-                    n.add (f.getRelativePathFrom (device::DeviceLibrary::familyRoot()));
+                    if (! before.contains (f))
+                        n.add (f.getRelativePathFrom (device::DeviceLibrary::familyRoot()).replaceCharacter ('\\', '/'));
                 return n.joinIntoString (", ");
             };
-            check (names (device::IrLibrary::listed (bassIrs)) == "Bass IRs/Fixture 1.wav, Bass IRs/Fixture 2.wav"
-                       && names (device::IrLibrary::listed (guitarIrs)) == "IRs/Guitar own.wav",
-                   "the bass's library lists `Bass IRs` alone, the guitar's `IRs` alone: " + names (device::IrLibrary::listed (bassIrs))
-                       + " | " + names (device::IrLibrary::listed (guitarIrs)));
+            check (names (device::IrLibrary::listed (bassIrs), bassBefore) == "Bass IRs/Fixture 1.wav, Bass IRs/Fixture 2.wav"
+                       && names (device::IrLibrary::listed (guitarIrs), guitarBefore) == "IRs/Guitar own.wav",
+                   "the bass's library lists `Bass IRs` alone, the guitar's `IRs` alone: "
+                       + names (device::IrLibrary::listed (bassIrs), bassBefore) + " | " + names (device::IrLibrary::listed (guitarIrs), guitarBefore));
 
             auto guitar = make (products::orbitAmp());
             std::vector<juce::File> files;
             const auto items = menuOf (*guitar, files);
-            bool shelfAsBefore = items.size() == params::cabIrNames.size() + 1;
+            bool shelfAsBefore = items.size() == params::cabIrNames.size() + 1 + guitarBefore.size();
             for (int i = 0; i < params::cabIrNames.size() && shelfAsBefore; ++i)
                 shelfAsBefore = items.contains (params::cabIrNames[i] + (i == params::cabIrDefault ? " (ticked)" : ""));
-            check (shelfAsBefore && items.contains ("Guitar own") && files.size() == 1 && files[0] == guitarOwn,
+            check (shelfAsBefore && items.contains ("Guitar own") && files.size() == (size_t) (1 + guitarBefore.size())
+                       && std::find (files.begin(), files.end(), guitarOwn) != files.end(),
                    "OrbitAmp's CAB menu: the whole shelf as before, RED GIANT ticked, and of the player's `IRs` alone");
 
-            const auto rows = [] (IrTreeView& view)
-            {
-                view.rebuild();
-                for (auto* c : view.getChildren())
-                    if (auto* t = dynamic_cast<juce::TreeView*> (c); t != nullptr && t->getRootItem() != nullptr)
-                        return t->getRootItem()->getNumSubItems();
-                return -1;
-            };
             IrTreeView bassTree (bass.irsFolder()), guitarTree (products::orbitAmp().irsFolder());
-            check (rows (bassTree) == 2 && rows (guitarTree) == 1, "the SETUP tree of each: the bass's two rows, the guitar's one");
+            check (treeRows (bassTree) == 2 + bassRowsBefore && treeRows (guitarTree) == 1 + guitarRowsBefore,
+                   "the SETUP tree of each: the bass's two rows, the guitar's one");
 
             auto cockpit = make (products::catpitAmp());
             const auto& cabinets = channels::Engine::of (*cockpit).channels.cabinets();
