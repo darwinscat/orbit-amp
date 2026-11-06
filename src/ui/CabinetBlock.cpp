@@ -498,7 +498,7 @@ namespace
     /** The player's own cabinet `state` is — its file — or none: one the same as the dozen's is the dozen's, fixed. */
     juce::File ownFileOf (const cabir::State& state)
     {
-        if (device::BassCabinets::dozenOf (state) >= 0)
+        if (device::BassCabinets::dozenOf (state) >= 0 || device::BassCabinets::allOf (state) >= 0)
             return {};
         for (const auto& c : device::BassCabinets::own())
             if (c.state == state)
@@ -558,23 +558,63 @@ void CabinetBlock::editIn (const juce::File& own)
 
 void CabinetBlock::showCabinetsMenu()
 {
-    // The dozen by name, the player's own under them, then what makes and keeps one: EDIT… opens the player's own that
-    // plays in the cabinets' window, NEW FROM… copies the dozen's first (the dozen is fixed), SAVE AS… keeps what plays
-    // as the player's own, by a name; RENAME and DELETE for those kept.
+    // The dozen by name, ALL of them under it by style and by size, the player's own under those, then what makes and
+    // keeps one: EDIT… opens the player's own that plays in the cabinets' window, NEW FROM… copies a factory one first
+    // (they are fixed), SAVE AS… keeps what plays as the player's own, by a name; RENAME and DELETE for those kept.
     const auto playing = AmpProcessor::cabSynthOf (amp.cabChoice());
     const auto& dozen = device::BassCabinets::dozen();
+    const auto& every = device::BassCabinets::all();
     const auto own = device::BassCabinets::own();
     const auto plays = [&playing] (const cabir::State& s) { return playing.valid && playing.state == s; };
-    enum { pickDozen = 1, pickOwn = 100, edit = 300, saveAs = 301, renameOwn = 400, deleteOwn = 600 };
-    const int atDozen = playing.valid ? device::BassCabinets::dozenOf (playing.state) : -1;
+    enum { pickDozen = 1, pickOwn = 100, edit = 300, saveAs = 301, renameOwn = 400, deleteOwn = 600, pickAll = 1000 };
+    const auto named = playing.valid ? device::BassCabinets::nameOf (playing.state) : juce::String();
     const auto editWord = ! playing.valid                                ? juce::String ("EDIT...")
                         : ownFileOf (playing.state) != juce::File()      ? juce::String ("EDIT...")
-                        : atDozen >= 0                                   ? "NEW FROM " + dozen[(size_t) atDozen].name + "..."
+                        : named.isNotEmpty()                             ? "NEW FROM " + named + "..."
                                                                          : juce::String ("NEW FROM THIS...");
 
     juce::PopupMenu menu;
     for (int i = 0; i < (int) dozen.size(); ++i)
         menu.addItem (pickDozen + i, dozen[(size_t) i].name, true, plays (dozen[(size_t) i].state));
+
+    // ALL (the owner, 06.11): the IR packs' 190 — by style, each under its name without the style's word; by size, the
+    // sizes in the packs page's order, each named with its style.
+    if (! every.empty())
+    {
+        const auto dot = juce::String::fromUTF8 (" \xc2\xb7 ");
+        const auto shortName = [&dot] (const device::BassCabinets::Cabinet& c)
+        {
+            const auto lead = c.style.toUpperCase() + dot;
+            return c.name.startsWithIgnoreCase (lead) ? c.name.substring (lead.length()) : c.name;
+        };
+        std::vector<std::pair<juce::String, juce::PopupMenu>> styles, sizes;
+        for (const auto* word : { "1x15", "1x12", "2x10", "4x10", "6x10", "8x10", "2x12", "2x15", "4x6", "8x8" })
+            sizes.push_back ({ word, {} });
+        const auto into = [] (std::vector<std::pair<juce::String, juce::PopupMenu>>& list, const juce::String& key) -> juce::PopupMenu&
+        {
+            for (auto& [k, m] : list)
+                if (k == key)
+                    return m;
+            list.push_back ({ key, {} });
+            return list.back().second;
+        };
+        for (int i = 0; i < (int) every.size(); ++i)
+        {
+            const auto& c = every[(size_t) i];
+            const bool ticked = plays (c.state);
+            into (styles, c.style.toUpperCase()).addItem (pickAll + i, shortName (c), true, ticked);
+            into (sizes, CabPicker::wordOf (CabPicker::setupOf (c.state).first)).addItem (pickAll + i, c.style.toUpperCase() + dot + shortName (c), true, ticked);
+        }
+        juce::PopupMenu byStyle, bySize, all;
+        for (auto& [word, m] : styles)
+            byStyle.addSubMenu (word, m);
+        for (auto& [word, m] : sizes)
+            if (m.getNumItems() > 0)
+                bySize.addSubMenu (word, m);
+        all.addSubMenu ("BY STYLE", byStyle);
+        all.addSubMenu ("BY SIZE", bySize);
+        menu.addSubMenu ("ALL", all);
+    }
     menu.addSeparator();
     menu.addSectionHeader ("MY CABINETS");
     if (own.empty())
@@ -603,8 +643,11 @@ void CabinetBlock::showCabinetsMenu()
                            return;
                        auto& self = *safe;
                        const auto& dozen = device::BassCabinets::dozen();
+                       const auto& every = device::BassCabinets::all();
                        if (r >= pickDozen && r < pickDozen + (int) dozen.size())
                            self.amp.requestCabSynth (dozen[(size_t) (r - pickDozen)].state);
+                       else if (r >= pickAll && r < pickAll + (int) every.size())
+                           self.amp.requestCabSynth (every[(size_t) (r - pickAll)].state);
                        else if (r >= pickOwn && r < pickOwn + (int) own.size())
                            self.amp.requestCabSynth (own[(size_t) (r - pickOwn)].state);
                        else if (r == edit)

@@ -63,6 +63,31 @@ const std::vector<BassCabinets::Cabinet>& BassCabinets::dozen()
     return all;
 }
 
+const std::vector<BassCabinets::Cabinet>& BassCabinets::all()
+{
+    static const std::vector<Cabinet> every = []
+    {
+        std::vector<Cabinet> out;
+        for (const auto* stem : bassPresets)
+        {
+            const auto text = carried (stem);
+            if (const auto state = cabir::knownState (text.toStdString()))
+                out.push_back ({ nameIn (text), *state, {}, nameIn (text, "style") });
+        }
+        return out;
+    }();
+    return every;
+}
+
+int BassCabinets::allOf (const cabir::State& state)
+{
+    const auto& every = all();
+    for (size_t i = 0; i < every.size(); ++i)
+        if (every[i].state == state)
+            return (int) i;
+    return -1;
+}
+
 juce::File BassCabinets::folder()
 {
     auto dir = DeviceLibrary::familyRoot().getChildFile ("Bass Cabinets");
@@ -100,6 +125,8 @@ juce::String BassCabinets::nameOf (const cabir::State& state)
 {
     if (const int at = dozenOf (state); at >= 0)
         return dozen()[(size_t) at].name;
+    if (const int at = allOf (state); at >= 0)
+        return all()[(size_t) at].name;
     for (const auto& c : own())
         if (c.state == state)
             return c.name;

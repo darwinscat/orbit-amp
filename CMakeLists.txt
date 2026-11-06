@@ -1084,24 +1084,36 @@ set(ORBITAMP_BASS_CABINETS
     rock-03-8x10-stack rock-09-6x10-wall rock-08-4x10-crunch modern-02-4x10-sheen metal-14-2x12-torque
     punk-07-2x10-gutter rock-14-1x15-thump modern-18-1x15-extended punk-17-1x12-squat rock-17-1x12-club
     punk-19-4x6-box modern-13-4x6-neo)
-set(ORBITAMP_BASS_CABINET_FILES "")
 set(_orbitamp_bass_stems "")
 foreach(stem IN LISTS ORBITAMP_BASS_CABINETS)
     set(file "${cab_ir_generator_SOURCE_DIR}/data/presets/${stem}.toml")
     if(NOT EXISTS "${file}")
         message(FATAL_ERROR "The bass's dozen names ${stem}, which cab-ir-generator (${cab_ir_generator_SOURCE_DIR}) has no preset of")
     endif()
-    list(APPEND ORBITAMP_BASS_CABINET_FILES "${file}")
     string(APPEND _orbitamp_bass_stems "    \"${stem}\",\n")
 endforeach()
+# ...AND ALL OF THEM (the owner, 06.11): every factory preset of cab-ir-generator's and its typical cabinets — the IR
+# packs' 190 — OrbitBass's CABINETS › ALL, by style and by size. The dozen is among them; they ride in the binary instead.
+file(GLOB ORBITAMP_BASS_PRESET_FILES CONFIGURE_DEPENDS
+    "${cab_ir_generator_SOURCE_DIR}/data/presets/*.toml" "${cab_ir_generator_SOURCE_DIR}/data/typical/*.toml")
+list(SORT ORBITAMP_BASS_PRESET_FILES)   # the styles' by name and number, then the typical ones
+set(_orbitamp_bass_all_stems "")
+foreach(file IN LISTS ORBITAMP_BASS_PRESET_FILES)
+    get_filename_component(stem "${file}" NAME_WE)
+    string(APPEND _orbitamp_bass_all_stems "    \"${stem}\",\n")
+endforeach()
 file(CONFIGURE OUTPUT "${ORBITAMP_GENERATED_DIR}/BassDozen.h" @ONLY CONTENT
-"// Written by CMakeLists.txt (THE BASS'S DOZEN): cab-ir-generator's presets the bass plays, by their files' stems, in order.
+"// Written by CMakeLists.txt (THE BASS'S DOZEN): cab-ir-generator's presets the bass plays, by their files' stems, in order —
+// and all of them, the styles' and the typical ones.
 #pragma once
 namespace orbitamp
 {
 inline constexpr const char* bassCabinets[] =
 {
 @_orbitamp_bass_stems@};
+inline constexpr const char* bassPresets[] =
+{
+@_orbitamp_bass_all_stems@};
 }
 ")
 
@@ -1116,7 +1128,7 @@ juce_add_binary_data(OrbitAmpData
 
         # The bass's cabinets, as cab-ir-generator's synthesis renders them live with the mics where the player put them.
         "${CABIR_CABINETS}"
-        ${ORBITAMP_BASS_CABINET_FILES}      # ...and its dozen of them, set (THE BASS'S DOZEN)
+        ${ORBITAMP_BASS_PRESET_FILES}       # ...and all of them, its dozen among them (THE BASS'S DOZEN)
 )
 # ...and the table the cabinet shelf is played by: its IRs themselves lie in the factory folder.
 target_link_libraries(OrbitAmpData INTERFACE OrbitAmpCabinetCatalog)

@@ -23,10 +23,16 @@ struct BassCabinets
         juce::String name;      // as shown: "7: 1x15 THUMP", or the player's own name
         cabir::State state;
         juce::File file;        // a player's own: its file; the dozen's: none
+        juce::String style;     // all's: the preset's style, "Rock", "Typical"
     };
 
     /** The dozen, in the build's order. */
     static const std::vector<Cabinet>& dozen();
+
+    /** ALL OF THEM (the owner, 06.11): every factory preset of cab-ir-generator's and its typical cabinets, the IR packs'
+        190, by style and number, the typical ones last — each named as its preset is, "ROCK · 8x10 CLASSIC". */
+    static const std::vector<Cabinet>& all();
+    static int allOf (const cabir::State& state);
 
     /** The player's own, by name — read from the folder each time asked. */
     static std::vector<Cabinet> own();
@@ -37,7 +43,7 @@ struct BassCabinets
     /** The dozen's slot that `state` is, or -1. */
     static int dozenOf (const cabir::State& state);
 
-    /** The name of the cabinet `state` is, the dozen's or the player's own; empty for neither. */
+    /** The name of the cabinet `state` is — the dozen's, else one of all, else the player's own; empty for none. */
     static juce::String nameOf (const cabir::State& state);
 
     /** The playing cabinet kept as the player's own under `name` — a cabinet of that name already there is replaced.
