@@ -6,7 +6,10 @@
 #include "../AmpChannels.h"
 #include "../PluginProcessor.h"
 #include "../device/SwitchWords.h"
+#include "BassControls.h"
+#include "GuardRail.h"
 #include "FactoryMissing.h"
+#include "OnFirst.h"
 
 #include <felitronics/appkit/WebpImage.h>
 
@@ -14,6 +17,36 @@
 
 namespace orbitamp
 {
+
+struct CapturedBlockPanel::BassKnobs
+{
+    explicit BassKnobs (AmpProcessor& p)
+        : state (p.apvts), blend (*p.apvts.getParameter (params::ampBlend), 0.0f, 1.0f) {}
+
+    juce::AudioProcessorValueTreeState& state;
+    GuardRail   blend;
+
+    void addTo (BlockFrame& owner)
+    {
+        // BLEND, a fader as the bass's others are (the owner, 01.11): its name over it, its amount in percent under it,
+        // 13 px, typed on a click; its menu on a right click.
+        bass::asBassAmount (blend, "BLEND");
+        bass::hint (blend, "BLEND: 100% AMP, 0% CLEAN LOWS");
+        blend.onMenu = [this] (juce::Point<int>) { bass::showAmpMenu (state, &blend); };   // the AMP's menu, the block's
+        owner.addAndMakeVisible (blend);
+    }
+
+    /** BLEND's fader in the column beside the dial (COMP is a block of its own: ui/CompBlock.h). */
+    void layOut (juce::Rectangle<int> right)
+    {
+        blend.setBounds (right.withSizeKeepingCentre (blend.columnWidth, right.getHeight()));
+    }
+
+    void setVisible (bool v)
+    {
+        blend.setVisible (v);
+    }
+};
 
 namespace
 {
@@ -101,10 +134,20 @@ CapturedBlockPanel::CapturedBlockPanel (AmpProcessor& processor, Block& b,
     // its curve is the block's own output tap — the same one the TONE picture reads, because after
     // the chain rework they are the same point in the signal.
     eq.spectraShown = &prefs::spectraCache (processor.product());
+    // WHICH STANDARD EQ the AMP's console is, asked of the product once: on the bass the SGT-DI's — BASS, MIDDLE with
+    // its frequency under it, TREBLE — and its HPF and LPF the bass's one pair, working across the chain, so live with
+    // the AMP standing by. Before addTo: the row it builds is the one handed over.
+    eq.setStandard (processor.product().eqStandard(), *this);
     eq.addTo (*this);
 
     addAndMakeVisible (device);
     addAndMakeVisible (gain);
+
+    if (processor.product().chain == Chain::bass)
+    {
+        bassKnobs = std::make_unique<BassKnobs> (processor);
+        bassKnobs->addTo (*this);
+    }
 
     device.fontHeight = 16.0f;   // the device's NAME, set exactly like the block's own beside it
     device.tracking   = 0.15f;
@@ -184,20 +227,13 @@ CapturedBlockPanel::CapturedBlockPanel (AmpProcessor& processor, Block& b,
             resetToneSlotsToPackDefaults();
     };
 
-    eq.onModePicked = [this] (int i)
-    {
-        eqModeAttachment->setValueAsCompleteGesture ((float) i);
-
-        // ...and apply it here, because the attachment will NOT call back for its own write: it
-        // sets `ignoreCallbacks` while it writes, so the lambda above never runs from a pick. The
-        // parameter moved, the processor's pump read it and the SOUND changed — while the row went
-        // on showing the other set until something else happened to rebuild it. Which reads as a
-        // switch that misses the first click. The device combo two lines up already does exactly
-        // this, for exactly this reason.
-        applyEqMode();
-        resized();
-        repaint();
-    };
+    // THE CURVE IS A PAGE LIKE THE OTHERS: its right click opens the same view menu, EQ RIG / EQ and RESET in it, and
+    // a plain click on an empty spot of it walks the loop on (EqSection::onCurveClick) — it used to take every click,
+    // and the loop stuck there. OrbitBass's picture answers a right click with the AMP's own menu; its curve keeps
+    // what it had, RESET alone (EqSection::showResetMenu), with no tone of the rig's to choose.
+    if (bassKnobs == nullptr)
+        eq.onCurveMenu = [this] (juce::Point<int> at) { showVizMenu (at); };
+    eq.onCurveClick = [this] { setViz (nextViz (vizPick)); };
 
     attachPower (*amp.apvts.getParameter (params::blockOn (blk)));
 
@@ -528,11 +564,13 @@ void CapturedBlockPanel::deviceChanged()
         slot.measuredIndex = -1;
 
         // A swept tone knob is a band of the console (nativeBands), not a knob on the face. A tone
-        // SWITCH — SM7's Sharp/Smooth, a V4's bass cut — has no place on the face yet and stays at
-        // its default until the console's row learns to hold one.
+        // SWITCH — SM7's Sharp/Smooth, a V4's bass cut — has no place on a guitar's face yet and stays at
+        // its default until the console's row learns to hold one; on the bass it is a toggle in the row
+        // (buildToneSwitches).
     }
 
     buildSelectors();
+    buildToneSwitches();
     applyEqMode();
 
     resized();
@@ -575,6 +613,15 @@ std::vector<EqSection::Band> CapturedBlockPanel::nativeBands() const
                                       params::blockMeasured (blk, i),
                                       (int) m.positions.size(),
                                       false };
+
+        // A FREQUENCY knob (the bass's FREQ, moving MID's band) reads where it puts that band, in hertz.
+        if (namz::rig::isFrequencyKnob (m))
+            band.reading = [m] (double v)
+            {
+                double hz = 0.0, q = 0.0;
+                const auto at = std::to_string (juce::roundToInt (juce::jlimit (0.0, 1.0, v) * (double) m.sweep));
+                return felitronics::rigplayer::frequencyAt (m, at, hz, q) ? bass::hzWord ((float) hz) : juce::String();
+            };
 
         // The knob's point on the curve: where it acts hardest, from the manifest alone — the
         // extremes of its measured travel diffed on the shipped grid, or the strongest section's
@@ -622,6 +669,9 @@ std::vector<EqSection::Band> CapturedBlockPanel::nativeBands() const
 
 void CapturedBlockPanel::applyEqMode()
 {
+    // ON THE BASS, NO CHOICE (the owner, 02.11): a pack with a tone of its own wears it, its dials on the row, and one
+    // with none the bass's standard — as the processor plays it (core::CapturedBlock::hasWearableTone).
+    const bool bass   = eq.standard() == params::EqStandard::bass;
     const auto native = nativeBands();
     // The PARAMETER, not the apvts atomic. Called from an attachment callback — a host automating
     // this, a session restoring — the atomic has not been written yet at that moment, and reading
@@ -631,11 +681,11 @@ void CapturedBlockPanel::applyEqMode()
 
     // A device that measured nothing has no native set, so the choice collapses to ours on its own
     // rather than showing an empty row and asking the player to work out why.
-    const bool wearsNative = native.empty() ? false
-                                            : want == (int) params::EqMode::native;
+    const bool wearsNative = bass ? block.hasWearableTone()
+                                  : native.empty() ? false
+                                                   : want == (int) params::EqMode::native;
 
-    eq.setModes (params::eqModes, wearsNative ? (int) params::EqMode::native : (int) params::EqMode::ours,
-                 ! native.empty());
+    eq.setModes (wearsNative ? (int) params::EqMode::native : (int) params::EqMode::ours, ! native.empty() && ! bass);
 
     if (wearsNative)
     {
@@ -678,6 +728,9 @@ void CapturedBlockPanel::playPack (int index)
     plays a channel of the device it already shows, so the count cannot change under its hand. */
 void CapturedBlockPanel::showChannels (const juce::StringArray& names, int lit)
 {
+    if (names.size() < 2 && voiceIndex >= 0)
+        return;   // the lever throws the pack's voice (buildSelectors)
+
     if (names.size() < 2)
     {
         if (lever != nullptr)
@@ -772,7 +825,7 @@ void CapturedBlockPanel::showDeviceMenu()
     if (menu.getNumItems() == 0)
         return;
 
-    menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&device),
+    onfirst::show (menu, this, juce::PopupMenu::Options().withTargetComponent (&device),
                         [safe = juce::Component::SafePointer<CapturedBlockPanel> (this), picks] (int choice)
                         {
                             if (safe != nullptr && choice > 0 && choice <= (int) picks.size())
@@ -794,9 +847,26 @@ void CapturedBlockPanel::buildSelectors()
             break;
         }
 
+    // THE BASS'S VOICE ON THE LEVER (the owner, 02.11: the gear lever IS the SGT's SVT / B15): a pack of one channel
+    // throws its first switch of two to four positions with the lever, where a device of several channels throws its
+    // channels; the rest of its switches stand in the console's row.
+    voiceIndex = -1;
+    if (switchesInRow())
+    {
+        const auto* dev = shelf.deviceOf (AmpChannels (amp).playing());
+        if (dev == nullptr || dev->channels.size() < 2)
+            for (int i = 0; i < params::numSelectors && i < list.size(); ++i)
+                if (i != boostIndex && list.getReference (i).values.size() >= 2 && list.getReference (i).values.size() <= 4)
+                {
+                    voiceIndex = i;
+                    break;
+                }
+    }
+
     // ...and none: the key throws preamp_boost instead, on any pack that plays.
     boostAttachment.reset();
-    boostShown = boostIndex >= 0 || block.selectedName().isNotEmpty();
+    boostShown = (boostIndex >= 0 || block.selectedName().isNotEmpty())
+              && bassKnobs == nullptr;   // no BOOST on the bass (the owner, 31.10)
     if (boostIndex < 0 && boostShown)
     {
         boostKey.setTooltip (juce::String ("BOOST:   two captures up the GAIN dial, past its top 3 dB harder a step"));
@@ -812,6 +882,7 @@ void CapturedBlockPanel::buildSelectors()
 
         sel.attachment.reset();
         sel.steps.reset();
+        sel.toggle.reset();
         sel.row = {};
 
         if (i >= list.size())
@@ -840,33 +911,122 @@ void CapturedBlockPanel::buildSelectors()
             continue;
         }
 
-        sel.steps = std::make_unique<VSwitch>();
-        sel.steps->accent = theme::orange;
+        const auto moved = [this, i] (int v)
+        {
+            selectors[(size_t) i].attachment->setValueAsCompleteGesture ((float) v);
+        };
 
-        // Lying down in the dial's strip, one line high: the slot and its lever alone — the word
-        // beside it is written by the panel, and the whole list is the hint.
-        sel.steps->setHorizontal (true);
-        sel.steps->setNamesShown (false);
-        sel.steps->setItems (labels, 0);
-        sel.steps->setTooltip (hint);
-        addAndMakeVisible (*sel.steps);
+        if (i == voiceIndex)
+        {
+            if (lever != nullptr)
+                removeChildComponent (lever.get());
+            lever = std::make_unique<ChannelLever> (labels.size());
+            lever->onPick = moved;
+            lever->setChannels (labels, 0);
+            lever->setTooltip (hint);
+            addChildComponent (*lever);
+
+            sel.attachment = std::make_unique<juce::ParameterAttachment> (
+                *amp.apvts.getParameter (params::selectorId (blk, i)),
+                [this, labels] (float v)
+                {
+                    if (lever != nullptr)
+                        lever->setChannels (labels, juce::jlimit (0, labels.size() - 1, juce::roundToInt (v)));
+                });
+            sel.attachment->sendInitialUpdate();
+            continue;
+        }
+
+        if (switchesInRow())
+        {
+            // On the bass, a cell of the console's row, among the dials (switchesInRow): its marks and its name
+            // its own to write, the whole list the hint.
+            sel.toggle = std::make_unique<ToggleSwitch>();
+            sel.toggle->oneLine = true;   // a line of its own under the cut beside it (EqSection::layOutRow)
+            sel.toggle->walkerLook = true;   // ...drawn as the walker draws its switches (the owner, 03.11)
+            sel.toggle->setItems (sel.name, labels, 0);
+            sel.toggle->setTooltip (hint);
+            sel.toggle->onChange = moved;
+            addAndMakeVisible (*sel.toggle);
+        }
+        else
+        {
+            sel.steps = std::make_unique<VSwitch>();
+            sel.steps->accent = theme::orange;
+
+            // Lying down in the dial's strip, one line high: the slot and its lever alone — the word
+            // beside it is written by the panel, and the whole list is the hint.
+            sel.steps->setHorizontal (true);
+            sel.steps->setNamesShown (false);
+            sel.steps->setItems (labels, 0);
+            sel.steps->setTooltip (hint);
+            sel.steps->onChange = moved;
+            addAndMakeVisible (*sel.steps);
+        }
 
         sel.attachment = std::make_unique<juce::ParameterAttachment> (
             *amp.apvts.getParameter (params::selectorId (blk, i)),
             [this, i, n = labels.size()] (float v)
             {
+                const int at = juce::jlimit (0, n - 1, juce::roundToInt (v));
                 if (auto* s = selectors[(size_t) i].steps.get())
-                    s->setSelectedIndex (juce::jlimit (0, n - 1, juce::roundToInt (v)),
-                                         juce::dontSendNotification);
+                    s->setSelectedIndex (at, juce::dontSendNotification);
+                if (auto* t = selectors[(size_t) i].toggle.get())
+                    t->setSelectedIndex (at, juce::dontSendNotification);
                 repaint();   // the chosen position's name is the panel's to write
             });
 
-        sel.steps->onChange = [this, i] (int v)
-        {
-            selectors[(size_t) i].attachment->setValueAsCompleteGesture ((float) v);
-        };
-
         sel.attachment->sendInitialUpdate();
+    }
+}
+
+void CapturedBlockPanel::buildToneSwitches()
+{
+    for (auto& sw : toneSwitches)
+    {
+        sw.attachment.reset();
+        sw.toggle.reset();
+    }
+
+    if (! switchesInRow())
+        return;
+
+    const auto tones = block.tones();
+    size_t k = 0;
+
+    for (int i = 0; i < Block::numMeasured && i < (int) tones.size() && k < toneSwitches.size(); ++i)
+    {
+        const auto& m = tones[(size_t) i];
+        if (m.sweep > 0 || ! Block::switchCarriesBands (m))
+            continue;
+
+        juce::StringArray labels;
+        for (const auto& p : m.positions)
+            labels.add (juce::String (p.value).toUpperCase());
+        const auto name = juce::String (m.name).toUpperCase();
+        const int  n    = labels.size();
+        const auto which = k++;
+        auto& sw = toneSwitches[which];
+
+        sw.toggle = std::make_unique<ToggleSwitch>();
+        sw.toggle->oneLine = true;   // a line of its own under the cut beside it (EqSection::layOutRow)
+        sw.toggle->walkerLook = true;   // ...drawn as the walker draws its switches (the owner, 03.11)
+        sw.toggle->setItems (name, labels, 0);
+        sw.toggle->setTooltip (bass::toneSwitchHint (m.name, m));
+        sw.toggle->onChange = [this, which, n] (int at)
+        {
+            toneSwitches[which].attachment->setValueAsCompleteGesture (n > 1 ? (float) at / (float) (n - 1) : 0.0f);
+        };
+        addAndMakeVisible (*sw.toggle);
+
+        sw.attachment = std::make_unique<juce::ParameterAttachment> (
+            *amp.apvts.getParameter (params::blockMeasured (blk, i)),
+            [this, which, n] (float v)
+            {
+                if (auto* t = toneSwitches[which].toggle.get())
+                    t->setSelectedIndex (juce::jlimit (0, n - 1, juce::roundToInt (v * (float) (n - 1))), juce::dontSendNotification);
+            });
+        sw.attachment->sendInitialUpdate();
     }
 }
 
@@ -894,6 +1054,7 @@ void CapturedBlockPanel::layOutContent (juce::Rectangle<int> area)
         setControlsVisible (false);
         eq.setRowVisible (false);
         dividerX = { -1, -1 };
+        sectionAreas = {};
         layPicture (area);
         return;
     }
@@ -903,27 +1064,55 @@ void CapturedBlockPanel::layOutContent (juce::Rectangle<int> area)
 
     // ---- THREE SECTIONS, each a tier over a strip. The two narrow ones are a FIXED width and the
     //      well takes the rest, so the widest thing on the block is the picture. ----
-    auto s1 = area.removeFromLeft (section1W);
+    //      On the bass GAIN's column is only as wide as what it holds — the dial its height allows over SMOOTH and the
+    //      line kept under it, or SMOOTH — and BLEND stands right after it; its lever's section is the bass's.
+    const int dialByHeight = juce::jmin (maxGainSide, area.getHeight() - (2 * pickRowH + pickRowGap) - dialGap - Knob::valueRowH);
+    const int gainW = bassKnobs != nullptr ? juce::jmax (SmoothTag::idealWidth(), dialByHeight) : section1W;
+    auto s1 = area.removeFromLeft (gainW + (bassKnobs != nullptr ? bassSideW : 0));
     const auto column1 = s1;   // GAIN's whole column: its strip is its own, not the shared one
     area.removeFromLeft (sectionGap);
-    auto s2 = area.removeFromLeft (section2W);
+    // The bass's lever section: its 80, or as wide as the lever it holds needs for its names (SVT, B15).
+    const int bassS2 = juce::jmax (bassSection2W, lever != nullptr ? juce::roundToInt (std::ceil (ChannelLever::idealWidth (lever->channelNames()))) + 2 : 0);
+    auto s2 = area.removeFromLeft (bassKnobs != nullptr ? bassS2 : section2W);
     area.removeFromLeft (sectionGap);
     auto s3 = area;
 
     dividerX = { s1.getRight() + sectionGap / 2, s2.getRight() + sectionGap / 2 };
+    sectionAreas = { s1, s2, s3 };
 
     // One line across the block where the tiers end and the strips begin.
-    const auto strip = [] (juce::Rectangle<int>& s)
+    const auto strip = [] (juce::Rectangle<int>& s, int h)
     {
-        auto r = s.removeFromBottom (stripH);
+        auto r = s.removeFromBottom (h);
         s.removeFromBottom (tierGap);
         return r;
     };
 
-    auto strip2 = strip (s2), strip3 = strip (s3);
+    // The console's strip is its row's height: on the bass a lane taller, for MID FREQ under MIDDLE.
+    auto strip2 = strip (s2, stripH), strip3 = strip (s3, eq.rowHeight());
 
-    // ---- section 3: the picture well, the console's row under it. ----
-    eq.layOutRow (strip3);
+    // ---- section 3: the picture well, the console's row under it — on the bass with a pack's tone switches among its
+    //      cells, the first inside HPF and the second inside LPF (switchesInRow), each as wide as its words and never
+    //      narrower than a cut. ----
+    {
+        std::array<ToggleSwitch*, 2> inner {};
+        size_t k = 0;
+        for (size_t i = 0; i < selectors.size() && k < inner.size(); ++i)
+            if (selectors[i].toggle != nullptr)
+                inner[k++] = selectors[i].toggle.get();
+        for (size_t i = 0; i < toneSwitches.size() && k < inner.size(); ++i)     // ...then the pack's tone switches
+            if (toneSwitches[i].toggle != nullptr)
+                inner[k++] = toneSwitches[i].toggle.get();
+
+        const auto width = [] (const ToggleSwitch* t) { return t != nullptr ? t->idealWidth() : 0; };
+        eq.setInnerCells (width (inner[0]), width (inner[1]));
+        eq.setInnerToggles (inner[0], inner[1]);
+        eq.layOutRow (strip3);
+
+        for (size_t k = 0; k < inner.size(); ++k)
+            if (inner[k] != nullptr)
+                inner[k]->setBounds (eq.innerCell ((int) k));
+    }
     layPicture (s3);
 
     // ---- section 1: the GAIN dial, as BIG as the block lets it be. Its strip is not the shared one:
@@ -942,6 +1131,12 @@ void CapturedBlockPanel::layOutContent (juce::Rectangle<int> area)
         const int rows     = (int) widths.size();
         const int reserved = juce::jmax (2, rows);
         auto column = column1;
+
+        // The bass's BLEND stands beside the dial, after it, by the GAIN it blends with — down to the section's foot, as
+        // every rail on the bass's face (the owner, 01.11); the dial and its picks share what is left.
+        if (bassKnobs != nullptr)
+            bassKnobs->layOut (column.removeFromRight (bassSideW));
+
         auto strip1 = column.removeFromBottom (reserved * pickRowH + (reserved - 1) * pickRowGap);
         column.removeFromBottom (dialGap);
 
@@ -1001,6 +1196,8 @@ float CapturedBlockPanel::pickWordWidth (const PickSlot& sel)
 void CapturedBlockPanel::setControlsVisible (bool v)
 {
     gain.setVisible (v);
+    if (bassKnobs != nullptr)
+        bassKnobs->setVisible (v);
     smoothTag.setVisible (v);
     device.setEnabled (v);
 
@@ -1016,8 +1213,14 @@ void CapturedBlockPanel::setControlsVisible (bool v)
     }
 
     for (auto& sel : selectors)
-        if (sel.steps != nullptr)
-            sel.steps->setVisible (v);
+    {
+        if (sel.steps != nullptr)  sel.steps->setVisible (v);
+        if (sel.toggle != nullptr) sel.toggle->setVisible (v);
+    }
+
+    for (auto& sw : toneSwitches)
+        if (sw.toggle != nullptr)
+            sw.toggle->setVisible (v);
 }
 
 void CapturedBlockPanel::setPictureShown (bool shown)
@@ -1030,7 +1233,7 @@ void CapturedBlockPanel::setPictureShown (bool shown)
 
 /** One page of the well, filling what it is handed, wearing its corner glyphs: the page's name at the
     top left, the one way to throw it open at the top right — and on WAVE, its half-wave switch beside
-    that; on the EQ curve, whose tone it wears beside that. */
+    that. On the EQ curve the name itself says whose tone it wears, EQ RIG or EQ. */
 void CapturedBlockPanel::layPicture (juce::Rectangle<int> area)
 {
     widgetArea = area;
@@ -1051,7 +1254,7 @@ void CapturedBlockPanel::layPicture (juce::Rectangle<int> area)
     int right = expandTag.getX() - 4;
 
     if (vizPick == eqPage)
-        eq.layOutCurve (area, area.getRight() - right);
+        eq.layOutCurve (area);
 
     const bool isWave = vizPick == (int) DeviceScope::Mode::wave;
     halfTag.setVisible (isWave);
@@ -1063,7 +1266,7 @@ void CapturedBlockPanel::layPicture (juce::Rectangle<int> area)
 
     static const char* const names[numPages] = { "SHAPE", "ENVELOPE", "TRANSFER", "TONE", "WAVE",
                                                 "DEVICE", "PHOTO", "EQ" };
-    pageTag.text = names[vizPick];
+    pageTag.text = vizPick == eqPage ? eqPageName() : juce::String (names[vizPick]);   // the curve's: EQ RIG or EQ, what sounds
     pageTag.setBounds (area.getX() + inset, area.getY() + 4, pageTag.idealWidth(), 20);
     pageTag.setVisible (true);
     pageTag.toFront (false);
@@ -1090,7 +1293,9 @@ void CapturedBlockPanel::mouseDown (const juce::MouseEvent& e)
     // is a scope's.
     if (widgetArea.contains (e.getPosition()))
     {
-        if (e.mods.isPopupMenu())
+        if (e.mods.isPopupMenu() && bassKnobs != nullptr && onBlockMenu != nullptr)
+            onBlockMenu();   // OrbitBass: a right click on the AMP is its menu, the picture's too
+        else if (e.mods.isPopupMenu())
             showVizMenu (e.getScreenPosition());
         else
             setViz (nextViz (vizPick));   // round the loop, one click at a time
@@ -1171,7 +1376,10 @@ bool CapturedBlockPanel::pairsAsCard() const
     are — and a click that lands on a blank page is a click the player has to undo. And wherever the
     room seats the pair, DEVICE and PHOTO draw the SAME card, so a loop that visited both would stop
     twice on one picture and read as a stutter. DEVICE is the one that survives the pair: every pack
-    has paper, and only some have a photograph. */
+    has paper, and only some have a photograph.
+
+    The curve is ONE stop, whichever tone it wears — EQ RIG or EQ, the one that sounds. A click walks
+    pictures and never the mode: going round the loop must never change what is heard. */
 int CapturedBlockPanel::nextViz (int from) const
 {
     for (int i = 1; i <= numPages; ++i)
@@ -1185,6 +1393,19 @@ int CapturedBlockPanel::nextViz (int from) const
     }
 
     return from;
+}
+
+/** EQ RIG or EQ from the view menu: the mode first — the parameter, one undo step, nothing written where it
+    already stands — then the page. Applied here as well, because the attachment will NOT call back for its own
+    write: it sets `ignoreCallbacks` while it writes, so its callback never runs from a pick. The parameter
+    moved, the processor's pump read it and the SOUND changed — while the row went on showing the other set until
+    something else happened to rebuild it, which reads as a switch that misses the first click. The device combo
+    does exactly this, for exactly this reason. */
+void CapturedBlockPanel::showEq (params::EqMode mode)
+{
+    eqModeAttachment->setValueAsCompleteGesture ((float) (int) mode);
+    applyEqMode();
+    setViz (eqPage);   // resized and repainted there
 }
 
 /** Both ways of choosing land here, so the choice is remembered whichever was used. */
@@ -1220,7 +1441,7 @@ void CapturedBlockPanel::showBoostMenu()
         m.addItem (i + 1, (db > 0 ? "+" : "") + juce::String (db) + " dB", true, db == now);
     }
 
-    m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&boostKey),
+    onfirst::show (m, this, juce::PopupMenu::Options().withTargetComponent (&boostKey),
                      [safe = juce::Component::SafePointer<CapturedBlockPanel> (this)] (int r)
                      {
                          if (r <= 0 || safe == nullptr)
@@ -1261,7 +1482,21 @@ void CapturedBlockPanel::showVizMenu (juce::Point<int> screenPos)
     m.addSeparator();
 
     m.addSectionHeader ("PICTURE");
-    m.addItem (eqPage + 1, names[eqPage], true, vizPick == eqPage);
+
+    // THE CURVE, BY THE TONE ON IT — ONE DIMENSION OF NAVIGATION (the owner, 02.11). The page used to be EQ, and on
+    // it a second chooser, DEVICE TONE in the curve's corner: two ways round one picture. Where the pack brought a
+    // tone of its own the curve is offered twice now, EQ RIG (the device's own) and EQ (our standard), and picking
+    // either is the page AND the sound. A pack with none, and the bass always, has the one: EQ.
+    static constexpr int eqRigItem = numPages + 2, resetItem = numPages + 3;
+    const bool onEq    = vizPick == eqPage;
+    const bool offered = eq.offersNative();
+    if (offered)
+    {
+        m.addItem (eqRigItem, "EQ RIG", true, onEq && eq.wearsNative());
+        m.addItem (eqPage + 1, names[eqPage], true, onEq && ! eq.wearsNative());
+    }
+    else
+        m.addItem (eqPage + 1, names[eqPage], true, onEq);
 
     for (int i = 0; i < numViz; ++i)
     {
@@ -1274,9 +1509,17 @@ void CapturedBlockPanel::showVizMenu (juce::Point<int> screenPos)
         m.addItem (i + 1, names[i], i != photoIdx || hasPicture(), ticked);
     }
 
-    m.showMenuAsync (juce::PopupMenu::Options()
+    // The console's RESET, ruled off at the foot while the curve is the page — what the curve's own right click
+    // offered before it opened this menu.
+    if (onEq)
+    {
+        m.addSeparator();
+        m.addItem (resetItem, "RESET");
+    }
+
+    onfirst::show (m, this, juce::PopupMenu::Options()
                          .withTargetScreenArea ({ screenPos.x, screenPos.y, 1, 1 }),
-                     [safe = juce::Component::SafePointer<CapturedBlockPanel> (this)] (int r)
+                     [safe = juce::Component::SafePointer<CapturedBlockPanel> (this), offered] (int r)
                      {
                          if (r == 0 || safe == nullptr)
                              return;
@@ -1284,6 +1527,19 @@ void CapturedBlockPanel::showVizMenu (juce::Point<int> screenPos)
                          if (r == numPages + 1)
                          {
                              safe->openTheater();
+                             return;
+                         }
+
+                         if (r == resetItem)
+                         {
+                             safe->eq.reset();
+                             return;
+                         }
+
+                         // Two curve entries: the mode with the page. One: the page alone, the mode left as it stands.
+                         if (offered && (r == eqRigItem || r == eqPage + 1))
+                         {
+                             safe->showEq (r == eqRigItem ? params::EqMode::native : params::EqMode::ours);
                              return;
                          }
 
@@ -1319,8 +1575,13 @@ void CapturedBlockPanel::paintContent (juce::Graphics& g)
                                                            : "no loudness tag - plays raw");
         if (theme::trackedWidth (text, font, 0.09f) + 1.0f > room)
             text = tag.tagged ? juce::String (tag.db, 1) + " dB tagged" : juce::String ("no loudness tag - plays raw");
+        // Still too long for the run the device's name leaves (the owner, 01.11): the warning in one word, the whole of it
+        // in the block's hint.
+        if (! tag.tagged && theme::trackedWidth (text, font, 0.09f) + 1.0f > room)
+            text = "RAW";
         const float w = theme::trackedWidth (text, font, 0.09f) + 1.0f;
         const auto line = juce::Rectangle<float> (w, 18.0f).withCentre ({ run.getRight() - w * 0.5f, run.getCentreY() });
+        rawBox = text == "RAW" ? line : juce::Rectangle<float>();
         g.setColour (theme::capTop);
         g.fillRect (line.expanded (legendGap, 0.0f).withHeight (theme::blockBorder + 2.0f).withCentre (line.getCentre()));
         g.setColour (tag.tagged ? theme::txFaint.withAlpha (0.55f) : theme::orange);

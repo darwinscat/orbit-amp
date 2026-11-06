@@ -34,14 +34,16 @@ namespace orbitamp::redpaw
     stands over the horizon where the ice world's sky has it. Or Titan's: an amber haze for the sky, a flat methane sea for the ground — the
     terrain's highest sixteenth left as low islands and a far shore, the rest its level, keeping only a
     swell, shaded by its distance, dark and rough near and calm into the haze — a violet mist on the
-    horizon, and Saturn pale in the haze, its rings nearly edge-on.
+    horizon, and Saturn pale in the haze, its rings nearly edge-on. Or the walker's glowing forest: Mars's
+    plains and ranges in the twilight belt of a red dwarf's planet — a dark moss with the fungi's teal glow
+    on its rises, black-violet ranges, a violet sky going rust at the horizon.
 
     The discs in the sky are shaded spheres, their light and their limb in a few steps of the palette
     with a 4 x 4 ordered dither between them, as the period dithered what its palette could not hold. */
 class Mars1993 final
 {
 public:
-    enum class Look { mars, ice, titan };
+    enum class Look { mars, ice, titan, walker };
 
     /** Makes the sky and the terrain from a seed, as the program did at start — a 15-bit number it
         took from the clock. About a millisecond. The look is the palette. */
@@ -107,6 +109,7 @@ private:
     std::array<float, rangeSamples> rangeNear {}, rangeFar {};
 
     void makeMarsPalette();
+    void makeWalkerPalette();
     void makeRanges (uint32_t seed);
     void plainsRow (uint8_t* shade, int d) const noexcept;
     void drawRanges();

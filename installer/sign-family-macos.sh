@@ -19,12 +19,13 @@ OUT="${3:?missing output dir}"
 : "${INSTALLER_IDENTITY:?a Developer ID Installer identity}"
 : "${NOTARY_PROFILE:?a notarytool keychain profile}"
 HERE="$(cd "$(dirname "$0")" && pwd)"
-ini() { sed -n "s/^$1=//p" "$HERE/family.ini" | tr -d '\r'; }
+INI="${FAMILY_INI:-$HERE/family.ini}"   # the family to pack: FAMILY_INI where said (installer/bass.ini), else this one
+ini() { sed -n "s/^$1=//p" "$INI" | tr -d '\r'; }
 AMPS="$(ini amps)"
 BUNDLE="$(ini bundle)"
 TARGET="$(ini bundle_target)"
 if [ -z "$AMPS" ] || [ -z "$BUNDLE" ] || [ -z "$TARGET" ]; then
-  echo "sign-family-macos.sh: no amps, bundle or bundle_target in $HERE/family.ini" >&2; exit 1
+  echo "sign-family-macos.sh: no amps, bundle or bundle_target in $INI" >&2; exit 1
 fi
 mkdir -p "$OUT"
 
@@ -110,7 +111,7 @@ done
 
 # What ships: the package, universal — signed as productbuild makes it, then notarized and stapled itself.
 
-PKG="$OUT/darwinscat-amps-$VER-macos.pkg"
+PKG="$OUT/$(ini archive)-$VER-macos.pkg"
 INSTALLER_IDENTITY="$INSTALLER_IDENTITY" "$HERE/build-family-pkg.sh" "$VER" "$BUILD" "$OUT"
 notarize "$PKG"
 staple_retry "$PKG"

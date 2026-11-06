@@ -27,7 +27,7 @@ namespace
     };
 
     BlockDefaults blockDefaults (const juce::String& product, device::DeviceLibrary::Slot slot,
-                                 const juce::String& wantedName, const char* capture)
+                                 const juce::String& wantedName, const char* capture, bool packTones)
     {
         BlockDefaults d;
         const auto packs = device::DeviceLibrary::scan (product, slot);
@@ -50,8 +50,110 @@ namespace
 
         if (own >= 0)
             d.device = own;
+        if (packTones && d.device < packs.size())      // ...or the tones where the pack that plays starts them (Opening::packTones)
+            d.meas = device::PackOpening::of (packs.getReference (d.device)).meas;
         return d;
     }
+
+    /** COMP's parameters, the bass's and the guitar's alike but for the character it opens on: on in the strip, its
+        BLEND at half — or where the product's Opening says — its threshold at -24 dB and its ratio at 4:1 (the owner,
+        31.10). */
+    void addCompParameters (juce::AudioProcessorValueTreeState::ParameterLayout& layout, int character, float blend = 0.5f)
+    {
+        using Bool   = juce::AudioParameterBool;
+        using Choice = juce::AudioParameterChoice;
+        using Float  = juce::AudioParameterFloat;
+        layout.add (std::make_unique<Bool>   (juce::ParameterID { compOn, 1 },        "Comp", true),
+                    std::make_unique<Float>  (juce::ParameterID { compAmount, 1 },    "Comp Mix",
+                                              juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), blend),
+                    std::make_unique<Choice> (juce::ParameterID { compAttack, 1 },    "Comp Attack",    compAttacks, 1),
+                    std::make_unique<Choice> (juce::ParameterID { compRelease, 1 },   "Comp Release",   compReleases, 0),
+                    std::make_unique<Choice> (juce::ParameterID { compCharacter, 1 }, "Comp Character", compCharacters, character),
+                    std::make_unique<Float>  (juce::ParameterID { compThreshold, 1 }, "Comp Threshold",
+                                              juce::NormalisableRange<float> (compThresholdMin, compThresholdMax, 0.1f), compThresholdDefault),
+                    std::make_unique<Float>  (juce::ParameterID { compRatio, 1 },     "Comp Ratio",
+                                              juce::NormalisableRange<float> (compRatioMin, compRatioMax, 0.01f, 0.5f), 4.0f));
+    }
+}
+
+void addGuitarCompParameters (juce::AudioProcessorValueTreeState::ParameterLayout& layout)
+{
+    // Out of the strip until the player adds it; on OPTO (the owner, 02.11).
+    addCompParameters (layout, compCharacters.indexOf ("Opto"));
+    layout.add (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { compPresent, 1 }, "Comp In Strip", false));
+}
+
+void addBassParameters (juce::AudioProcessorValueTreeState::ParameterLayout& layout)
+{
+    addBassParameters (layout, Opening {});
+}
+
+void addBassParameters (juce::AudioProcessorValueTreeState::ParameterLayout& layout, const Opening& opening)
+{
+    using Bool   = juce::AudioParameterBool;
+    using Choice = juce::AudioParameterChoice;
+    using Float  = juce::AudioParameterFloat;
+    const auto hz = [] (float lo, float hi, float centre)
+    {
+        return juce::NormalisableRange<float> (lo, hi, 0.1f, std::log (0.5f) / std::log ((centre - lo) / (hi - lo)));
+    };
+
+    addCompParameters (layout, compCharacters.indexOf ("Opto"), opening.compAmount);   // on OPTO (the owner, 02.11)
+
+    // The three effects: in the strip, their sliders at 0 — present, and doing nothing until one is moved. The menus'
+    // defaults are the modules' own.
+    const juce::NormalisableRange<float> unit { 0.0f, 1.0f, 0.001f };
+    layout.add (std::make_unique<Bool>   (juce::ParameterID { octaveOn, 1 },       "Octave", true),
+                std::make_unique<Float>  (juce::ParameterID { octaveAmount, 1 },   "Octave Amount", unit, 0.0f),
+                std::make_unique<Float>  (juce::ParameterID { octaveToneHz, 1 },   "Octave Tone Hz", hz (30.0f, 2000.0f, 120.0f), 120.0f));
+    layout.add (std::make_unique<Bool>   (juce::ParameterID { filterOn, 1 },        "Envelope", true),
+                std::make_unique<Float>  (juce::ParameterID { filterAmount, 1 },    "Envelope Amount", unit, 0.0f),
+                std::make_unique<Choice> (juce::ParameterID { filterMode, 1 },      "Envelope Mode", filterModes, 0),
+                std::make_unique<Choice> (juce::ParameterID { filterDirection, 1 }, "Envelope Direction", filterDirections, 0),
+                std::make_unique<Float>  (juce::ParameterID { filterResonance, 1 }, "Envelope Resonance",
+                                          juce::NormalisableRange<float> (0.5f, 12.0f, 0.01f, 0.5f), 4.0f),
+                std::make_unique<Choice> (juce::ParameterID { filterRange, 1 },     "Envelope Range", filterRanges, 1),
+                std::make_unique<Bool>   (juce::ParameterID { filterKeepLows, 1 },  "Envelope Keep Lows", true),
+                std::make_unique<Float>  (juce::ParameterID { filterKeepHz, 1 },    "Envelope Keep Lows Hz",
+                                          juce::NormalisableRange<float> (80.0f, 300.0f, 1.0f), 150.0f),
+                std::make_unique<Float>  (juce::ParameterID { filterReleaseMs, 1 }, "Envelope Release ms",
+                                          juce::NormalisableRange<float> (5.0f, 2000.0f, 1.0f, 0.4f), 120.0f));
+    layout.add (std::make_unique<Bool>   (juce::ParameterID { chorusOn, 1 },          "Chorus", true),
+                std::make_unique<Float>  (juce::ParameterID { chorusAmount, 1 },      "Chorus Amount", unit, 0.0f),
+                std::make_unique<Float>  (juce::ParameterID { chorusRateHz, 1 },      "Chorus Rate Hz",
+                                          juce::NormalisableRange<float> (0.05f, 10.0f, 0.01f, 0.4f), 0.7f),
+                std::make_unique<Float>  (juce::ParameterID { chorusCrossoverHz, 1 }, "Chorus Crossover Hz",
+                                          hz (200.0f, 500.0f, 300.0f), 200.0f));
+
+    // IN THE STRIP OR NOT (Parameters.h): the three effects in, the echo and the room out — a player adds them through
+    // the strip's checklist.
+    layout.add (std::make_unique<Bool> (juce::ParameterID { octavePresent, 1 }, "Octave In Strip", true),
+                std::make_unique<Bool> (juce::ParameterID { filterPresent, 1 }, "Envelope In Strip", true),
+                std::make_unique<Bool> (juce::ParameterID { chorusPresent, 1 }, "Chorus In Strip", true),
+                std::make_unique<Bool> (juce::ParameterID { delayPresent, 1 },  "Delay In Strip", false),
+                std::make_unique<Bool> (juce::ParameterID { reverbPresent, 1 }, "Reverb In Strip", false));
+
+    layout.add (std::make_unique<Float> (juce::ParameterID { ampBlend, 1 },       "Amp Blend",
+                                         juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 1.0f),
+                std::make_unique<Float> (juce::ParameterID { ampBlendHz, 1 },     "Amp Blend Hz",
+                                         hz (ampBlendMinHz, ampBlendMaxHz, ampBlendDefaultHz), ampBlendDefaultHz),
+                std::make_unique<Bool>  (juce::ParameterID { ampBlendInvert, 1 }, "Amp Blend Invert", false));
+
+    layout.add (std::make_unique<Float> (juce::ParameterID { cabMix, 1 }, "Cab Mix",
+                                         juce::NormalisableRange<float> (0.0f, 100.0f, 0.1f), cabMixDefault));
+
+    layout.add (std::make_unique<Bool>   (juce::ParameterID { bassHpfOn, 1 },        "Bass HPF On", true),
+                std::make_unique<Choice> (juce::ParameterID { bassHpf, 1 },          "Bass HPF", bassHpfPositions, (int) BassHpf::five),
+                std::make_unique<Float>  (juce::ParameterID { bassHpfHz4, 1 },       "Bass HPF 4 Hz",
+                                          juce::NormalisableRange<float> (20.0f, 60.0f, 0.1f), bassHpfDefaultHz4),
+                std::make_unique<Float>  (juce::ParameterID { bassHpfHz5, 1 },       "Bass HPF 5 Hz",
+                                          juce::NormalisableRange<float> (15.0f, 45.0f, 0.1f), bassHpfDefaultHz5),
+                std::make_unique<Bool>   (juce::ParameterID { bassLpfOn, 1 },        "Bass LPF On", opening.bassLpfOn),
+                std::make_unique<Choice> (juce::ParameterID { bassLpf, 1 },          "Bass LPF", bassLpfPositions, (int) BassLpf::fingers),
+                std::make_unique<Float>  (juce::ParameterID { bassLpfHzFingers, 1 }, "Bass LPF Fingers Hz",
+                                          hz (2000.0f, 8000.0f, 4500.0f), bassLpfDefaultHzFingers),
+                std::make_unique<Float>  (juce::ParameterID { bassLpfHzSlap, 1 },    "Bass LPF Slap Hz",
+                                          hz (5000.0f, 16000.0f, 9500.0f), bassLpfDefaultHzSlap));
 }
 
 float engineDefault (const juce::RangedAudioParameter& p, int enginePlace)
@@ -77,7 +179,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout (const juce::St
     // these defaults (channels/Engine.cpp, setUpChain) and find them already so.
     //
     // The device a fresh instance opens on, and everything the engine's pack says about starting it.
-    const auto preampDef = blockDefaults (product, device::DeviceLibrary::ampSlot, enginePack, opening.capture);
+    const auto preampDef = blockDefaults (product, device::DeviceLibrary::ampSlot, enginePack, opening.capture, opening.packTones);
 
     using Bool   = juce::AudioParameterBool;
     using Choice = juce::AudioParameterChoice;
@@ -93,9 +195,10 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout (const juce::St
     // The tuner's mute ships OFF: a plugin that opens silent is a plugin reported as broken.
     layout.add (std::make_unique<Bool> (juce::ParameterID { tunerMute, 1 }, "Tuner Mute", false));
 
-    // Block power. Both are the sound, so both start on.
+    // Block power. Both are the sound, so both start on — the reverb where the product's chain holds one
+    // (Opening::reverbOn).
     layout.add (std::make_unique<Bool> (juce::ParameterID { preampOn, 1 }, preampName, true),
-                std::make_unique<Bool> (juce::ParameterID { reverbOn, 1 }, "Reverb", true));
+                std::make_unique<Bool> (juce::ParameterID { reverbOn, 1 }, "Reverb", opening.reverbOn));
 
     // The input trim, ahead of everything. Unity by default: it exists to fix a rig, not to be
     // part of a sound.
@@ -217,7 +320,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout (const juce::St
         // search→treat lands in.
         layout.add (std::make_unique<Float> (juce::ParameterID { eqBellDb (l, 0), 1 }, name + "B1",      tone, 0.0f),
                     std::make_unique<Float> (juce::ParameterID { eqBellHz (l, 0), 1 }, name + "B1 Freq",
-                                             hz (60.0f, 3000.0f, 400.0f), 400.0f),
+                                             hz (60.0f, 3000.0f, 400.0f), opening.midHz),
                     std::make_unique<Float> (juce::ParameterID { eqBellQ (l, 0),  1 }, name + "B1 Q", q, 1.0f),
                     std::make_unique<Float> (juce::ParameterID { eqBellDb (l, 1), 1 }, name + "B2",      tone, 0.0f),
                     std::make_unique<Float> (juce::ParameterID { eqBellHz (l, 1), 1 }, name + "B2 Freq",
@@ -271,7 +374,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout (const juce::St
     // Sync ships ON at a quarter note: the free milliseconds are the specialist's mode, the division is
     // the player's. The BPM field is the standalone's conductor; in a host the session's tempo conducts,
     // unless the player asks the delay to keep its own.
-    layout.add (std::make_unique<Bool>   (juce::ParameterID { delayOn, 1 }, "Delay", true),
+    layout.add (std::make_unique<Bool>   (juce::ParameterID { delayOn, 1 }, "Delay", opening.delayOn),
                 std::make_unique<Bool>   (juce::ParameterID { delaySync, 1 }, "Delay Sync", true),
                 std::make_unique<Bool>   (juce::ParameterID { delayHostTempo, 1 }, "Delay Follows Host", true),
                 std::make_unique<Choice> (juce::ParameterID { delayDiv, 1 }, "Delay Division",

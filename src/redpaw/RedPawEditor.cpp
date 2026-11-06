@@ -881,7 +881,7 @@ RedPawEditor::RedPawEditor (AmpProcessor& p)
         };
 
     // THE RINGS ROUND THE KNOBS say where each stands.
-    const auto ringFor = [this] (const ArtKnob& knob, const layout::Socket& s) { return std::make_unique<KnobRing> (skin, knob, s.centre, s.ring, s.ringWidth); };
+    const auto ringFor = [this] (const ArtKnob& knob, const layout::Socket& s) { return std::make_unique<KnobRing> (knob, skin.ringLight, s.centre, s.ring, s.ringWidth); };
     rings.push_back (ringFor (driveKnob(), skin.plan.drive));
     for (int t = 0; t < Channels::maxTones; ++t)        // as many as there are knobs: where they stand, the rows say (stripsLaid)
         rings.push_back (ringFor (toneKnob (t), skin.plan.tones[0]));

@@ -82,7 +82,7 @@ public:
     // the folder those rows sit in, the root for the top level.
     bool isInterestedInDragSource (const juce::DragAndDropTarget::SourceDetails& d) override
     {
-        return node.folder && acceptsMove (node.file, sourcesOf (d));
+        return node.folder && acceptsMove (view.root(), node.file, sourcesOf (d));
     }
 
     void itemDropped (const juce::DragAndDropTarget::SourceDetails& d, int) override
@@ -136,9 +136,9 @@ private:
     }
 
     /** A drop lands if anything in it would actually move — see IrLibrary::planMove. */
-    static bool acceptsMove (const juce::File& folder, const juce::Array<juce::File>& sources)
+    static bool acceptsMove (const juce::File& root, const juce::File& folder, const juce::Array<juce::File>& sources)
     {
-        return ! device::IrLibrary::planMove (device::IrLibrary::directory(), sources, folder).isEmpty();
+        return ! device::IrLibrary::planMove (root, sources, folder).isEmpty();
     }
 
     void moveInto (const juce::DragAndDropTarget::SourceDetails& d)
@@ -184,7 +184,7 @@ private:
             x.colour  = juce::Colour (0xffe06a6a);
             x.onClick = [this]
             {
-                if (device::IrLibrary::remove (device::IrLibrary::directory(), item.node.file))
+                if (device::IrLibrary::remove (item.view.root(), item.node.file))
                     item.view.changedLater();
             };
             addAndMakeVisible (x);
@@ -236,7 +236,7 @@ private:
 
         void labelTextChanged (juce::Label* l) override
         {
-            if (device::IrLibrary::rename (device::IrLibrary::directory(), item.node.file, l->getText()))
+            if (device::IrLibrary::rename (item.view.root(), item.node.file, l->getText()))
                 item.view.changedLater();
             else
                 l->setText (item.node.name(), juce::dontSendNotification);
@@ -284,7 +284,7 @@ private:
             // MOVE TO — the way out of a folder and into another without a drag: the top level, then
             // every folder the selection could go into. What it cannot go into is not offered.
             const auto sources = item.view.selectedFiles();
-            const auto root    = device::IrLibrary::directory();
+            const auto root    = item.view.root();
 
             juce::PopupMenu moveTo;
             const auto offer = [&] (const juce::String& label, const juce::File& into)
@@ -332,7 +332,7 @@ private:
         // ---- ...and rows dragged within the tree, the same way: ON the folder is INTO it ----
         bool isInterestedInDragSource (const SourceDetails& d) override
         {
-            return item.node.folder && acceptsMove (item.node.file, sourcesOf (d));
+            return item.node.folder && acceptsMove (item.view.root(), item.node.file, sourcesOf (d));
         }
 
         void itemDragEnter (const SourceDetails&) override { dragOver = true;  repaint(); }
@@ -356,7 +356,7 @@ private:
 };
 
 //==============================================================================
-IrTreeView::IrTreeView()
+IrTreeView::IrTreeView (juce::String folder) : irsFolder (std::move (folder))
 {
     tree.setRootItemVisible (false);
     tree.setMultiSelectEnabled (true);
@@ -373,9 +373,14 @@ IrTreeView::IrTreeView()
         addAndMakeVisible (*b);
     }
 
-    addButton.onClick    = [this] { addClicked (device::IrLibrary::directory()); };
-    folderButton.onClick = [this] { newFolderPrompt (device::IrLibrary::directory()); };
-    revealButton.onClick = [] { device::IrLibrary::directory().revealToUser(); };
+    addButton.onClick    = [this] { addClicked (root()); };
+    folderButton.onClick = [this] { newFolderPrompt (root()); };
+    revealButton.onClick = [this] { root().revealToUser(); };
+}
+
+juce::File IrTreeView::root() const
+{
+    return device::IrLibrary::directory (irsFolder);
 }
 
 IrTreeView::~IrTreeView()
@@ -389,7 +394,7 @@ void IrTreeView::rebuild()
     const auto openness = tree.getOpennessState (true);
 
     tree.setRootItem (nullptr);
-    rootItem = std::make_unique<Item> (*this, device::IrLibrary::scan());
+    rootItem = std::make_unique<Item> (*this, device::IrLibrary::scan (root()));
     tree.setRootItem (rootItem.get());
     rootItem->setOpen (true);
 
@@ -451,7 +456,7 @@ void IrTreeView::fileDragExit  (const juce::StringArray&)           { dragOver =
 void IrTreeView::filesDropped (const juce::StringArray& files, int, int)
 {
     dragOver = false;
-    importPaths (files, device::IrLibrary::directory());
+    importPaths (files, root());
     repaint();
 }
 
@@ -496,7 +501,7 @@ void IrTreeView::newFolderPrompt (const juce::File& parent)
     felitronics::appkit::textPrompt ("New folder", {}, [self, parent] (juce::String name)
     {
         if (self != nullptr
-            && device::IrLibrary::createFolder (device::IrLibrary::directory(), parent, name) != juce::File())
+            && device::IrLibrary::createFolder (self->root(), parent, name) != juce::File())
             self->changedLater();
     });
 }
@@ -534,11 +539,11 @@ juce::Array<juce::File> IrTreeView::allFolders() const
 
 void IrTreeView::moveFiles (const juce::Array<juce::File>& sources, const juce::File& into)
 {
-    const auto root = device::IrLibrary::directory();
+    const auto library = root();
     bool moved = false;
 
-    for (const auto& f : device::IrLibrary::planMove (root, sources, into))
-        moved = device::IrLibrary::move (root, f, into) != juce::File() || moved;
+    for (const auto& f : device::IrLibrary::planMove (library, sources, into))
+        moved = device::IrLibrary::move (library, f, into) != juce::File() || moved;
 
     if (moved)
         changedLater();

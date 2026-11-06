@@ -1,9 +1,8 @@
 # THE CABINET CATALOG: every cabinet IR a Darwin's Cat amp carries, each said ONCE, here. CMake reads it
-# (cmake/CabinetCatalog.cmake) to put the files into the binaries — Darwin's Cat's own into the data every
-# product links, the rest into the data OrbitAmp alone links — and to write the table the code plays them
-# by (<build>/generated/CabinetCatalog.h): the names and the default of the `cab_ir` parameter, the
-# shelf's folders the products lay them out in (src/device/FactoryShelf.h), and the cabinets the IR menu
-# shows them by (src/Parameters.h, cabShelves).
+# (cmake/CabinetCatalog.cmake) to lay the files out in the factory folder — each folder for the amps that
+# carry it — and to write the table the code plays them by (<build>/generated/CabinetCatalog.h): the names
+# and the default of the `cab_ir` parameter, the shelf's folders the products lay them out in
+# (src/device/FactoryShelf.h), and the cabinets the IR menu shows them by (src/Parameters.h, cabShelves).
 #
 # ADDING A CABINET IR IS ONE LINE: an `ir` line under its cabinet, with the next number nobody has had,
 # and its file in the tree. A new cabinet is a `cabinet` line with its IRs under it; a new maker's, a
@@ -13,9 +12,11 @@
 # Four kinds of line, their fields parted by `|` (the spaces around a field are not part of it):
 #
 #   folder  | <name> | <who carries it>
-#       A folder of the shelf, under Factory/IRs. `every product` is the folder the faces lay out and
-#       list too — one folder is — and `OrbitAmp` is one that OrbitAmp alone carries: in a face its
-#       places are held with nothing in them.
+#       A folder of the shelf, under Factory/IRs. A GUITAR AMP'S CABINETS AND A BASS AMP'S NEVER CROSS
+#       (src/Product.h, Chain): `guitar` is the folder every guitar amp carries, the one the faces lay
+#       out and list too — one folder is; `OrbitAmp` is one that OrbitAmp alone carries, and in a face
+#       its places are held with nothing in them; `bass` is one every bass amp carries, and no guitar
+#       amp. None is the bass's yet: until one is, a bass amp carries no factory cabinet at all.
 #
 #   cabinet | <folder> | <about>
 #       A cabinet, in the order the IR menu shows them: the folder its IRs lie in, and the line that
@@ -29,9 +30,11 @@
 #       file is under resources/, and its name is the one it is laid out under, so no two may share one.
 #
 #   default | <name>
-#       The cabinet a fresh instance opens on, and every face's channels too.
+#       The cabinet a fresh guitar amp opens on, and every face's channels too — one of the guitar's.
+#       A bass amp with no cabinet of the bass's here opens on the player's first IR of the bass's
+#       (AmpProcessor::takeBassCabinet).
 
-folder  | Orange PPC212V | every product
+folder  | Orange PPC212V | guitar
 folder  | Other          | OrbitAmp
 
 # Darwin's Cat's own, shot off the Orange (resources/set/IRs.md says what they are and how), in the

@@ -5,6 +5,9 @@
 
 #include "../Parameters.h"
 #include "BlockFrame.h"
+#include "CabWindow.h"
+#include "CabinetSlots.h"
+#include "GuardRail.h"
 #include "VoicingSelector.h"
 #include "ZoneSwitch.h"
 
@@ -14,6 +17,7 @@
 
 #include <array>
 #include <memory>
+#include <vector>
 
 namespace orbitamp
 {
@@ -50,10 +54,11 @@ private:
 
     /** The IR list: the shelf as one submenu per cabinet, each opening on a line that says what
         its IRs are; below them, when the library holds any of the player's own, the library as its
-        folder tree. */
-    void showIrMenu();
+        folder tree. Opened from the block's name — the bass's from its MY IRS under the picture (`from`). */
+    void showIrMenu (juce::Component* from = nullptr);
 
     juce::String shownIr;   // CabChoice::identity + "|" + name of what the face last showed
+    juce::String shownText; // ...and the name it showed for it (shownName)
 
     /** The picture wears what the parameters say — the cuts, the trim — so it draws the sound. */
     void pushToWave();
@@ -63,8 +68,96 @@ private:
 
     AmpProcessor& amp;
 
+    /** OrbitBass's own (ui/BassControls.h): DI/CAB's rail at the block's right edge — the cabinet's own HPF and LPF
+        left off, the bass's cuts being a stage after DI/CAB. On the bass's chain alone. */
+    struct BassRow;
+    std::unique_ptr<BassRow> bassRow;
+
+    /** OrbitBass's cabinets, drawn (ui/CabPicker.h), in a window over the face (ui/CabWindow.h) — the block is too narrow
+        for them beside a delay and a reverb — on the player's own alone (the owner, 06.11): EDIT… on one keeps every
+        change in its file; the dozen's, fixed, and one of no name are edited as a copy, NEW FROM… asking its name first. */
+    void editCabinet();
+    void newCabinet();
+    void editIn (const juce::File& own);
+
+    /** OrbitBass's row under the picture, where the guitar's trim stands (the owner, 06.11): the bass's dozen on a slider
+        (CabinetSlots), CABINETS — the dozen by name, the player's own, EDIT… and SAVE AS… — and MY IRS (the player's
+        own IRs, while the library holds any); the door whose cabinet plays in the block's orange. The name on the
+        border says what plays: the dozen's by its number, "7: 1x15 THUMP", a player's own by its name. */
+    struct Door final : public juce::Component
+    {
+        juce::String text;
+        bool lit = false;
+        std::function<void()> onOpen;
+        int idealWidth() const;
+        void paint (juce::Graphics&) override;
+        void mouseDown (const juce::MouseEvent&) override { if (onOpen) onOpen(); }
+    };
+    Door factoryIrs, myIrs;     // factoryIrs: CABINETS
+    CabinetSlots slots;
+    void showCabinetsMenu();
+    void saveCabinetAs();
+    void renameCabinet (const juce::File&, const juce::String& name);
+    int libraryLook = 0;   // timer ticks to the next look at whether the library holds any IRs
+    void lookAtLibrary();
+
+    /** OrbitBass: a click on the picture while one of its cabinets plays is EDIT… — the picture is that cabinet's. A drag or a right click is the picture's own. Declared before the picture, so it outlives it. */
+    struct PictureClick final : public juce::MouseListener
+    {
+        std::function<void()> onClick;
+        void mouseUp (const juce::MouseEvent& e) override
+        {
+            if (onClick != nullptr && e.mouseWasClicked() && ! e.mods.isPopupMenu())
+                onClick();
+        }
+    };
+    PictureClick pictureClick;
+
     VoicingSelector ir;
     felitronics::appkit::IrWaveView wave;
+
+    /** OrbitBass: the cabinet that plays and its mics, small, over the picture's right — where a bass cabinet's IR is only
+        its tail (CabPicker::paintSketch). Clicks go through it to the picture; none while an IR of the player's own plays. */
+    struct Sketch final : public juce::Component
+    {
+        int cab = -1;
+        CabPicker::Setup setup;
+        Sketch() { setInterceptsMouseClicks (false, false); setBufferedToImage (true); }
+        void paint (juce::Graphics& g) override
+        {
+            // Between the picture's time marks along its top and the IR's line along its bottom (IrWaveView's own).
+            CabPicker::paintSketch (g, cab, setup, getLocalBounds().toFloat().withTrimmedTop (14.0f).withTrimmedBottom (24.0f));
+        }
+    };
+    Sketch sketch;
+
+public:
+    juce::Component& waveView() noexcept { return wave; }
+
+    /** OrbitBass: a right click on the waveform opens the block's menu (setBlockMenu) INSTEAD of the trim menu — one door,
+        not two at once (a listener beside the picture's own handler opened both). The guitar's keeps its trim menu. */
+    void pictureMenuIsBlockMenu() { wave.onMenuRequested = [this] { if (onBlockMenu != nullptr) onBlockMenu(); }; }
+
+    /** The bass's cabinet's width that leaves `waveWidth` to its waveform: the frame's insets and DI/CAB's fader. */
+    static int bassWidthForWave (int waveWidth) noexcept { return waveWidth + fader::columnW + gap + 2 * contentInsetX(); }
+
+    /** OrbitBass's DI/CAB rail, or none on the guitar's (a gate reads it). */
+    GuardRail* diRail() noexcept;
+
+    /** What the border names as the cabinet that plays, as last shown — "1: 8x10 STACK", a player's own IR's name, NO IR
+        (a gate reads it). */
+    const juce::String& shownName() const noexcept { return shownText; }
+
+    /** THE IR MENU, as the block opens it (showIrMenu): the shelf the product plays, a submenu for each of its
+        folders, item `1 + number`; then the player's own IRs out of the product's folder of them, item
+        `firstFile + i` for the file `files[i]`. A product with neither offers a line that says so. A gate reads it. */
+    static juce::PopupMenu irMenu (const AmpProcessor&, std::vector<juce::File>& files);
+    static constexpr int firstFile = 1000;
+
+    /** What the border says where no cabinet plays: a bass amp with no IR of its own. */
+    static constexpr const char* noIr = "NO IR";
+
+private:
 
     struct Switch
     {

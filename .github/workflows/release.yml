@@ -2,6 +2,9 @@ name: release
 
 # THE FAMILY'S RELEASE — Darwin's Cat Amps: every amp installer/family.ini names, one version, one tag
 # (vX.Y.Z), one GitHub Release that carries them all — GitHub hosts the binaries, no own download server.
+# THE BASSES are a family of their own (the owner, 06.11), Darwin's Cat Bass: installer/bass.ini, its own
+# version, tagged bass-vX.Y.Z, released by this same workflow — the tag picks the family (the `version` job),
+# every job builds and packs the one its FAMILY_INI names, and the basses' release is never the Latest.
 # A manual run (workflow_dispatch) builds the SAME artifacts but does NOT create a release unless
 # dry_run=false, so you can download + test installers from the run page without publishing.
 #
@@ -29,9 +32,14 @@ name: release
 
 on:
   push:
-    tags: [ 'v*' ]
+    tags: [ 'v*', 'bass-v*' ]
   workflow_dispatch:
     inputs:
+      family:
+        description: "Which family: amps (installer/family.ini) or bass (installer/bass.ini)"
+        type: choice
+        options: [ amps, bass ]
+        default: amps
       version:
         description: "Version, e.g. 0.8.0 — empty takes the tree's (manual runs)"
         required: false
@@ -55,6 +63,13 @@ jobs:
     timeout-minutes: 5
     outputs:
       version: ${{ steps.v.outputs.version }}
+      ini: ${{ steps.v.outputs.ini }}
+      tag: ${{ steps.v.outputs.tag }}
+      name: ${{ steps.v.outputs.name }}
+      bundle: ${{ steps.v.outputs.bundle }}
+      bundle_target: ${{ steps.v.outputs.bundle_target }}
+      archive: ${{ steps.v.outputs.archive }}
+      latest: ${{ steps.v.outputs.latest }}
     steps:
       - uses: actions/checkout@v7
       - name: Version
@@ -63,8 +78,17 @@ jobs:
           EVENT: ${{ github.event_name }}
           TAG: ${{ github.ref_name }}
           INPUT: ${{ github.event.inputs.version }}
+          FAMILY: ${{ github.event.inputs.family }}
         run: |
           set -euo pipefail
+          # THE FAMILY: a bass-v tag, or a manual run that asks for it, releases the basses; anything else the amps.
+          if { [ "$EVENT" = push ] && [ "${TAG#bass-v}" != "$TAG" ]; } || { [ "$EVENT" != push ] && [ "$FAMILY" = bass ]; }; then
+            INI=installer/bass.ini; LATEST=false
+          else
+            INI=installer/family.ini; LATEST=true
+          fi
+          export FAMILY_INI="$INI"
+          ini() { sed -n "s/^$1=//p" "$INI" | tr -d '\r'; }
           if [ "$EVENT" = push ]; then
             VER="$(installer/version.sh "$TAG")"
           elif [ -n "$INPUT" ]; then
@@ -72,11 +96,21 @@ jobs:
           else
             VER="$(installer/version.sh)"
           fi
-          echo "version=$VER" >> "$GITHUB_OUTPUT"
+          {
+            echo "version=$VER"
+            echo "ini=$INI"
+            echo "tag=$(ini tag_prefix)$VER"
+            echo "name=$(ini name)"
+            echo "bundle=$(ini bundle)"
+            echo "bundle_target=$(ini bundle_target)"
+            echo "archive=$(ini archive)"
+            echo "latest=$LATEST"
+          } >> "$GITHUB_OUTPUT"
       - name: Release notes
         if: ${{ github.event_name == 'push' || github.event.inputs.dry_run == 'false' }}
         env:
           VER: ${{ steps.v.outputs.version }}
+          FAMILY_INI: ${{ steps.v.outputs.ini }}
         run: node tools/changelog-collect.mjs --notes "$VER" > /dev/null
 
   macos:
@@ -91,13 +125,15 @@ jobs:
     needs: version
     runs-on: [self-hosted, macOS, signing]
     timeout-minutes: 300
+    env:
+      FAMILY_INI: ${{ needs.version.outputs.ini }}   # the family to build and pack (the `version` job)
     steps:
       - uses: actions/checkout@v7
       - name: Build
         run: |
-          cmake -B build -DCMAKE_BUILD_TYPE=Release \
+          cmake -B build -DCMAKE_BUILD_TYPE=Release -DFAMILY_INI="$FAMILY_INI" \
             -DORBITAMP_JUCE_DIR= -DORBITAMP_FCORE_DIR= -DORBITAMP_GUITAR_DIR= -DORBITAMP_APPKIT_DIR= \
-            -DORBITAMP_NAM_CORE_SRC= -DORBITAMP_NAMZ_SRC= \
+            -DORBITAMP_NAM_CORE_SRC= -DORBITAMP_NAMZ_SRC= -DORBITAMP_CABIR_DIR= -DCABIR_TOML_DIR= \
             -DORBITAMP_COPY_PLUGIN=OFF \
             -DORBITAMP_DEV_FACTORY=OFF \
             -DORBITAMP_KEEP_SYMBOLS=ON \
@@ -154,11 +190,14 @@ jobs:
           - { runner: windows-11-arm, arch: arm64, plat: ARM64, installer: false }
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 240         # every amp and every gate — each face's gates compile the face again — from no cache
+    env:
+      FAMILY_INI: ${{ needs.version.outputs.ini }}
     steps:
       - uses: actions/checkout@v7
       - name: Build
+        shell: bash
         run: |
-          cmake -B build -A ${{ matrix.plat }} -DCMAKE_BUILD_TYPE=Release -DORBITAMP_DEV_FACTORY=OFF -DORBITAMP_KEEP_SYMBOLS=ON -DORBITAMP_LTO=ON
+          cmake -B build -A ${{ matrix.plat }} -DCMAKE_BUILD_TYPE=Release -DFAMILY_INI="$FAMILY_INI" -DORBITAMP_DEV_FACTORY=OFF -DORBITAMP_KEEP_SYMBOLS=ON -DORBITAMP_LTO=ON
           cmake --build build --config Release --parallel --target Family_All Family_Gates orbitamp_bundle_host
       - name: Gates
         shell: bash
@@ -172,8 +211,8 @@ jobs:
           mkdir -p "/c/ProgramData/Darwin's Cat"
           cp -R build/Shipped/Factory "/c/ProgramData/Darwin's Cat/Factory"
           build/orbitamp_bundle_host_artefacts/Release/orbitamp_bundle_host.exe \
-            "build/DarwinsCatAmps_artefacts/Release/VST3/Darwin's Cat Amps.vst3" \
-            "build/DarwinsCatAmps_artefacts/Release/CLAP/Darwin's Cat Amps.clap"
+            "build/${{ needs.version.outputs.bundle_target }}_artefacts/Release/VST3/${{ needs.version.outputs.bundle }}.vst3" \
+            "build/${{ needs.version.outputs.bundle_target }}_artefacts/Release/CLAP/${{ needs.version.outputs.bundle }}.clap"
       # pluginval validates every plug-in the bundle holds, one after another — on x64: its Windows build is one.
       - name: Validate (pluginval, VST3)
         if: ${{ matrix.arch == 'x64' }}
@@ -181,7 +220,7 @@ jobs:
         run: |
           curl -L -o pluginval.zip https://github.com/Tracktion/pluginval/releases/download/v1.0.3/pluginval_Windows.zip
           7z x -y pluginval.zip >/dev/null
-          ./pluginval.exe --strictness-level 10 --validate "build/DarwinsCatAmps_artefacts/Release/VST3/Darwin's Cat Amps.vst3"
+          ./pluginval.exe --strictness-level 10 --validate "build/${{ needs.version.outputs.bundle_target }}_artefacts/Release/VST3/${{ needs.version.outputs.bundle }}.vst3"
       # WHICH INNO SETUP. The family's script is proven with Inno Setup 6 (6.7.3) and 7 (7.1.0), and the
       # two install into folders of their own names — a path written out for "Inno Setup 6" misses a 7,
       # and the image, or Chocolatey's newest package, may bring either. So ISCC is looked for, not
@@ -208,7 +247,8 @@ jobs:
           }
           if (-not $iscc) { throw "no ISCC.exe on this runner, and Chocolatey did not bring one" }
           Write-Host "ISCC: $iscc"
-          & $iscc "/DAppVersion=$env:VER" installer\darwinscat-amps.iss
+          $ini = (Resolve-Path $env:FAMILY_INI).Path
+          & $iscc "/DAppVersion=$env:VER" "/DFamilyIni=$ini" installer\darwinscat-amps.iss
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           New-Item -ItemType Directory -Force -Path dist | Out-Null
           Copy-Item "installer\output\*.exe" dist\
@@ -240,6 +280,8 @@ jobs:
           - { runner: ubuntu-24.04-arm, arch: arm64  }
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 240         # every amp and every gate, from no cache
+    env:
+      FAMILY_INI: ${{ needs.version.outputs.ini }}
     steps:
       - uses: actions/checkout@v7
       - name: Install build deps
@@ -252,7 +294,7 @@ jobs:
             libglu1-mesa-dev mesa-common-dev
       - name: Build
         run: |
-          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DORBITAMP_DEV_FACTORY=OFF -DORBITAMP_KEEP_SYMBOLS=ON -DORBITAMP_LTO=ON
+          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DFAMILY_INI="$FAMILY_INI" -DORBITAMP_DEV_FACTORY=OFF -DORBITAMP_KEEP_SYMBOLS=ON -DORBITAMP_LTO=ON
           cmake --build build --target Family_All Family_Gates orbitamp_bundle_host
       - name: Gates
         run: tools/run-gates.sh build Release
@@ -264,8 +306,8 @@ jobs:
           mkdir -p ~/.local/share/darwinscat-amps
           cp -R build/Shipped/Factory ~/.local/share/darwinscat-amps/Factory
           build/orbitamp_bundle_host_artefacts/Release/orbitamp_bundle_host \
-            "build/DarwinsCatAmps_artefacts/Release/VST3/Darwin's Cat Amps.vst3" \
-            "build/DarwinsCatAmps_artefacts/Release/CLAP/Darwin's Cat Amps.clap"
+            "build/${{ needs.version.outputs.bundle_target }}_artefacts/Release/VST3/${{ needs.version.outputs.bundle }}.vst3" \
+            "build/${{ needs.version.outputs.bundle_target }}_artefacts/Release/CLAP/${{ needs.version.outputs.bundle }}.clap"
       - name: Package (.tar.xz)
         env:
           VER: ${{ needs.version.outputs.version }}
@@ -308,27 +350,33 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           VER: ${{ needs.version.outputs.version }}
+          TAG: ${{ needs.version.outputs.tag }}
+          NAME: ${{ needs.version.outputs.name }}
+          ARCHIVE: ${{ needs.version.outputs.archive }}
+          LATEST: ${{ needs.version.outputs.latest }}
+          FAMILY_INI: ${{ needs.version.outputs.ini }}
         run: |
           set -euo pipefail
           mkdir -p out
           find artifacts -type f -exec cp {} out/ \;
-          # Every file a release publishes is one of its packages, darwinscat-amps-*; anything else — a symbol
-          # file above all — stops it here, before anything is published.
-          stray="$(find out -type f ! -name 'darwinscat-amps-*')"
+          # Every file a release publishes is one of its packages, <archive>-* (darwinscat-amps-*, darwinscat-bass-*);
+          # anything else — a symbol file above all — stops it here, before anything is published.
+          stray="$(find out -type f ! -name "$ARCHIVE-*")"
           if [ -n "$stray" ]; then
             echo "refusing to publish what is not a package of the release:" >&2
             echo "$stray" >&2
             exit 1
           fi
-          ( cd out && sha256sum darwinscat-amps-* > SHA256SUMS )
+          ( cd out && sha256sum "$ARCHIVE"-* > SHA256SUMS )
           node tools/changelog-collect.mjs --notes "$VER" > notes.md
 
-          # --latest: every amp asks GitHub for this repository's LATEST release and reads a vX.Y.Z there.
+          # --latest: every amp asks GitHub for this repository's LATEST release and reads a vX.Y.Z there; the
+          # basses ask for the highest bass-v tag instead, and their release is never the Latest.
           # --target: a manual run may name a tag that does not exist yet; it is made on the commit built.
-          gh release create "v$VER" \
+          gh release create "$TAG" \
             --repo "${{ github.repository }}" \
-            --title "Darwin's Cat Amps v$VER" \
-            --latest \
+            --title "$NAME v$VER" \
+            --latest="$LATEST" \
             --target "$GITHUB_SHA" \
             --notes-file notes.md \
             out/*
@@ -352,14 +400,15 @@ jobs:
       - name: Archive the symbols
         env:
           VER: ${{ needs.version.outputs.version }}
+          TAG: ${{ needs.version.outputs.tag }}
           DEST: ${{ vars.SYMBOLS_SFTP }}
         run: |
           set -euo pipefail
           [ -n "$DEST" ] || { echo "the repository variable SYMBOLS_SFTP is not set" >&2; exit 1; }
           ls -d symbols/symbols-* > /dev/null
           {
-            echo "-mkdir releases/v$VER"
-            for d in symbols/symbols-*/; do echo "put -R ${d%/} releases/v$VER/"; done
-            echo "ls -l releases/v$VER"
+            echo "-mkdir releases/$TAG"
+            for d in symbols/symbols-*/; do echo "put -R ${d%/} releases/$TAG/"; done
+            echo "ls -l releases/$TAG"
           } > symbols-batch.txt
           sftp -b symbols-batch.txt -o BatchMode=yes "$DEST"

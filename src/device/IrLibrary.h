@@ -12,9 +12,12 @@
 namespace orbitamp::device
 {
 
-/** The user's cabinet IRs on disk: a folder tree under `Darwin's Cat/IRs`, beside `Factory` — ONE FOR
-    THE WHOLE FAMILY. Every product reads and writes the same folder, so an IR a player takes in with one
-    of them is there in all of them; a product's own `IRs` of before is only gathered from, once (gather).
+/** The user's cabinet IRs on disk: a folder tree under `Darwin's Cat`, beside `Factory` — ONE FOR EACH
+    CHAIN'S AMPS: `IRs` for every guitar amp, `Bass IRs` for every bass amp (Product::irsFolder). A guitar
+    amp's cabinets and a bass amp's never cross, and one plug-in bundle hosts every amp in one process, so
+    the folder is never the process's: every call is handed the root of the product it serves. An IR a
+    player takes in with one guitar amp is there in all of them, and in no bass amp; a product's own `IRs`
+    of before is only gathered from, once (gather).
 
     There is no pack format here — a vendor "pack" is just a folder of wavs, or the zip of one, so
     importing either makes a plain folder in the tree and the folder IS the pack. That also means
@@ -26,10 +29,11 @@ namespace orbitamp::device
 class IrLibrary
 {
 public:
-    /** Where the user's IRs live. Created on first look, so there is a folder to drop into. */
-    static juce::File directory()
+    /** Where the user's IRs live: `folder` in the family's (Product::irsFolder). Created on first look, so
+        there is a folder to drop into. */
+    static juce::File directory (const juce::String& folder)
     {
-        auto dir = DeviceLibrary::familyRoot().getChildFile ("IRs");
+        auto dir = DeviceLibrary::familyRoot().getChildFile (folder);
 
         if (! dir.isDirectory())
             dir.createDirectory();
@@ -122,7 +126,7 @@ public:
     };
 
     /** The tree as it stands. The returned node is the root itself; only its children show. */
-    static Node scan (const juce::File& root = directory())
+    static Node scan (const juce::File& root)
     {
         Node n;
         n.file   = root;
@@ -147,6 +151,15 @@ public:
         });
 
         return n;
+    }
+
+    /** Every IR under `root`, in the order the tree lists them — the SETUP tree and the cabinet's menu
+        alike: depth first, a folder's folders before its files, each group in natural order. */
+    static juce::Array<juce::File> listed (const juce::File& root)
+    {
+        juce::Array<juce::File> files;
+        collect (scan (root), files);
+        return files;
     }
 
     /** Imports whatever `src` is — an audio file, a folder, or a zip — into `into` (a folder in
@@ -269,6 +282,15 @@ public:
     }
 
 private:
+    static void collect (const Node& n, juce::Array<juce::File>& into)
+    {
+        for (const auto& c : n.children)
+            if (c.folder)
+                collect (c, into);
+            else
+                into.add (c.file);
+    }
+
     /** True only for something that actually sits inside the library — the one gate every
         destructive operation goes through. */
     static bool isManaged (const juce::File& root, const juce::File& item)

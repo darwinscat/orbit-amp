@@ -1,0 +1,17 @@
+RedGrooveBass MIDI commands
+
+It listens to every MIDI input that is switched on, on all 16 channels.
+
+Program Change
+1	B15
+2	SVT
+
+A controller that numbers its programs from 0 sends 0 to 1 for these.
+
+Control Change
+23	DRIVE
+24	BASS
+25	MIDDLE
+26	TREBLE
+
+0 to 127 is the knob's whole travel. On a tone knob 64 is the middle.

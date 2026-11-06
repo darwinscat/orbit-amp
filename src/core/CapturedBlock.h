@@ -314,6 +314,22 @@ public:
         the stated attenuations are somebody else's story. Atomic underneath; any thread. */
     void setInputTrims (bool on) { player.setInputTrims (on); }
 
+    /** THE CROSSOVER BLEND (RigPlayer's — a bass amp's clean low end): below `hz` the clean input, above
+        it the capture, phase-aligned; `amount` 0 is the player without it, bit for bit. Message thread;
+        only what moved reaches the player. */
+    void setCrossover (float amount, float hz, bool invert)
+    {
+        const auto moved = [] (float a, float b) { return a < b || a > b; };
+        if (moved (amount, crossoverSet[0])) { crossoverSet[0] = amount; (void) player.setCrossoverAmount ((double) amount); }
+        if (moved (hz, crossoverSet[1]))     { crossoverSet[1] = hz;     (void) player.setCrossoverHz ((double) hz); }
+        if (invert != crossoverInvertSet) { crossoverInvertSet = invert; player.setCrossoverInvert (invert); }
+    }
+
+    /** What the player was last told of its crossover: the amount, the frequency and the polarity. */
+    float crossoverAmountTold() const noexcept { return crossoverSet[0]; }
+    float crossoverHzTold() const noexcept     { return crossoverSet[1]; }
+    bool  crossoverInvertTold() const noexcept { return crossoverInvertSet; }
+
     /** THE PACK'S OWN TWO LEVELS, as it states them — `chain[].input_db` and `chain[].output_db`.
         The player applies both itself, always, with no switch anywhere (setInputTrims above gates
         the per-FILE alias trims and nothing else). They are readable here because both land where
@@ -866,6 +882,8 @@ public:
     }
 
     RigPlayer player;
+    float crossoverSet[2] { 0.0f, 150.0f };   // the amount and the frequency the player was last told: its own defaults
+    bool  crossoverInvertSet = false;
     ScopeTap scope;
     WaveRibbon ribbon;
     juce::Array<device::DeviceLibrary::Pack> packs;

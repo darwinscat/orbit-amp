@@ -56,11 +56,6 @@ namespace
         juce::Rectangle<float> slot;        // the slot cut down the room, its rim included — where the skin lays its fader
     };
 
-    /** A RING PAINTED ROUND A KNOB (`eraseRing`): the circle fitted to the middle of its light, `centre`
-        and `radius`; how far its middle wanders off that circle, at most (`reach`); and how far its light
-        reaches either side of its own middle, its glow on the groove's floor included (`half`). */
-    struct PaintedRing { juce::Point<float> centre; float radius, reach, half; };
-
     /** WHAT ONE ROVER'S PICTURE NEEDS. */
     struct Rover
     {
@@ -426,141 +421,145 @@ namespace
         return img;
     }
 
-    /** THE RINGS PAINTED ROUND THE KNOBS ARE TAKEN OUT, and the face draws each ring whole itself
-        (redpaw::KnobRing). A painted ring is no true circle — round RedPawAmp's DRIVE its middle wanders
-        up to a pixel and three quarters of the stage either way, half the ring's width — and the true
-        circle drawn over it left slivers of the painted one showing where it wandered out, and steps in
-        the lit band where it wandered in.
+} // namespace
 
-        Round the ring, each way from its middle: where the ring's middle is — the middle of its light,
-        each colour weighed by its `ringness` — smoothed along the ring, so that the dark gap between two
-        segments follows its neighbours; and across that, `half` either way, the picture becomes what lies
-        just beyond the band, inside it and outside, drawn straight across — the groove's floor, with no
-        ring in it. Only the band changes: the rust, the steel, the screws round it stay as they were
-        painted. `k` is the picture's pixels to its space's. */
-    juce::Image eraseRing (juce::Image img, const PaintedRing& ring, float k, float (*ringness) (juce::Colour))
-    {
-        if (! img.isValid() || ringness == nullptr || ring.radius <= 0.0f || k <= 0.0f)
-            return img;
+/** THE RINGS PAINTED ROUND THE KNOBS ARE TAKEN OUT, and the face draws each ring whole itself
+    (face::KnobRing). A painted ring is no true circle — round RedPawAmp's DRIVE its middle wanders
+    up to a pixel and three quarters of the stage either way, half the ring's width — and the true
+    circle drawn over it left slivers of the painted one showing where it wandered out, and steps in
+    the lit band where it wandered in.
 
-        const auto original = img.createCopy();
-        const juce::Image::BitmapData src (original, juce::Image::BitmapData::readOnly);
-        juce::Image::BitmapData dst (img, juce::Image::BitmapData::readWrite);
-        const auto c = ring.centre * k;
-        const float radius = ring.radius * k, reach = ring.reach * k, half = ring.half * k;
-        const float twoPi = juce::MathConstants<float>::twoPi;
-
-        // The picture between its pixels, premultiplied as it is held, a pixel's middle on its whole
-        // coordinates.
-        struct Premultiplied { float a, r, g, b; };
-        const auto mix = [] (Premultiplied p, Premultiplied q, float t) -> Premultiplied
-        {
-            return { p.a + (q.a - p.a) * t, p.r + (q.r - p.r) * t, p.g + (q.g - p.g) * t, p.b + (q.b - p.b) * t };
-        };
-        const auto pixel = [&src] (int x, int y) -> Premultiplied
-        {
-            const auto* p = reinterpret_cast<const juce::PixelARGB*> (src.getPixelPointer (juce::jlimit (0, src.width - 1, x),
-                                                                                          juce::jlimit (0, src.height - 1, y)));
-            return { (float) p->getAlpha(), (float) p->getRed(), (float) p->getGreen(), (float) p->getBlue() };
-        };
-        const auto at = [&] (juce::Point<float> p)
-        {
-            const int x = (int) std::floor (p.x), y = (int) std::floor (p.y);
-            const float fx = p.x - (float) x, fy = p.y - (float) y;
-            return mix (mix (pixel (x, y), pixel (x + 1, y), fx), mix (pixel (x, y + 1), pixel (x + 1, y + 1), fx), fy);
-        };
-        const auto colourOf = [] (Premultiplied p)
-        {
-            return p.a <= 0.0f ? juce::Colour() : juce::Colour::fromFloatRGBA (p.r / p.a, p.g / p.a, p.b / p.a, p.a / 255.0f);
-        };
-
-        // The ring's middle, in each direction a pixel apart round it: the middle of what is lit over
-        // half the brightest across it, its light weighing each point.
-        const int n = juce::jmax (64, juce::roundToInt (twoPi * radius));
-        std::vector<float> middle ((size_t) n), light ((size_t) n);
-        for (int i = 0; i < n; ++i)
-        {
-            const float t = twoPi * (float) i / (float) n;
-            const juce::Point<float> u { std::cos (t), std::sin (t) };
-            std::vector<std::pair<float, float>> across;
-            float peak = 0.0f;
-            for (float r = radius - reach - half; r <= radius + reach + half; r += 0.25f)
-            {
-                across.push_back ({ r, ringness (colourOf (at (c + u * r))) });
-                peak = juce::jmax (peak, across.back().second);
-            }
-            float sum = 0.0f, weight = 0.0f;
-            for (const auto& [r, v] : across)
-                if (v > 0.5f * peak)
-                    sum += r * v, weight += v;
-            middle[(size_t) i] = weight > 0.0f ? sum / weight : radius;
-            light[(size_t) i] = peak;
-        }
-
-        // ...smoothed along the ring, four pixels of the stage each way, each middle weighed by how far it
-        // is lit over half the ring's usual light: a gap between segments, dark, takes its neighbours'.
-        auto sorted = light;
-        std::nth_element (sorted.begin(), sorted.begin() + n / 2, sorted.end());
-        const float dim = 0.5f * sorted[(size_t) n / 2];
-        const int span = juce::jmax (1, juce::roundToInt (4.0f * k));
-        std::vector<float> smooth ((size_t) n);
-        for (int i = 0; i < n; ++i)
-        {
-            float sum = 0.0f, weight = 0.0f;
-            for (int j = i - span; j <= i + span; ++j)
-            {
-                const auto other = (size_t) ((j + n) % n);
-                const float w = juce::jmax (0.0f, light[other] - dim);
-                sum += middle[other] * w, weight += w;
-            }
-            smooth[(size_t) i] = juce::jlimit (radius - reach, radius + reach, weight > 0.0f ? sum / weight : radius);
-        }
-
-        // Across the band, from what lies just beyond it inside to what lies just beyond it outside — each
-        // the mean of the picture there over a pixel and a half outward and a pixel either way along the
-        // ring, so that no one grain of it is drawn across in a streak.
-        const auto beyond = [&] (juce::Point<float> u, float from, float way)
-        {
-            const juce::Point<float> along { -u.y, u.x };
-            Premultiplied sum { 0.0f, 0.0f, 0.0f, 0.0f };
-            int taken = 0;
-            for (int s = 0; s < 3; ++s)
-                for (int a = -1; a <= 1; ++a)
-                    sum = mix (sum, at (c + u * (from + way * 0.75f * (float) s) + along * (float) a), 1.0f / (float) ++taken);
-            return sum;
-        };
-        const float outer = radius + reach + half + 2.0f;
-        const auto box = juce::Rectangle<float> (2.0f * outer, 2.0f * outer).withCentre (c).getSmallestIntegerContainer()
-                             .getIntersection (img.getBounds());
-        for (int y = box.getY(); y < box.getBottom(); ++y)
-            for (int x = box.getX(); x < box.getRight(); ++x)
-            {
-                const auto d = juce::Point<float> ((float) x, (float) y) - c;
-                const float r = d.getDistanceFromOrigin();
-                if (r < radius - reach - half - 1.0f || r > radius + reach + half + 1.0f)
-                    continue;
-
-                float t = std::atan2 (d.y, d.x);
-                if (t < 0.0f)
-                    t += twoPi;
-                const float f = t / twoPi * (float) n;
-                const int i0 = juce::jlimit (0, n - 1, (int) f), i1 = (i0 + 1) % n;
-                const float m = smooth[(size_t) i0] + (smooth[(size_t) i1] - smooth[(size_t) i0]) * (f - (float) i0);
-                const float off = r - m;
-                const float amount = juce::jlimit (0.0f, 1.0f, half + 0.5f - std::abs (off));     // a pixel's soft edge
-                if (amount <= 0.0f)
-                    continue;
-
-                const auto u = d / r;
-                const auto groove = mix (beyond (u, m - half, -1.0f), beyond (u, m + half, 1.0f), juce::jlimit (0.0f, 1.0f, (off + half) / (2.0f * half)));
-                const auto now = mix (pixel (x, y), groove, amount);
-                reinterpret_cast<juce::PixelARGB*> (dst.getPixelPointer (x, y))
-                    ->setARGB ((juce::uint8) juce::roundToInt (now.a), (juce::uint8) juce::roundToInt (now.r),
-                               (juce::uint8) juce::roundToInt (now.g), (juce::uint8) juce::roundToInt (now.b));
-            }
+    Round the ring, each way from its middle: where the ring's middle is — the middle of its light,
+    each colour weighed by its `ringness` — smoothed along the ring, so that the dark gap between two
+    segments follows its neighbours; and across that, `half` either way, the picture becomes what lies
+    just beyond the band, inside it and outside, drawn straight across — the groove's floor, with no
+    ring in it. Only the band changes: the rust, the steel, the screws round it stay as they were
+    painted. `k` is the picture's pixels to its space's. */
+juce::Image eraseRing (juce::Image img, const PaintedRing& ring, float k, float (*ringness) (juce::Colour))
+{
+    if (! img.isValid() || ringness == nullptr || ring.radius <= 0.0f || k <= 0.0f)
         return img;
+
+    const auto original = img.createCopy();
+    const juce::Image::BitmapData src (original, juce::Image::BitmapData::readOnly);
+    juce::Image::BitmapData dst (img, juce::Image::BitmapData::readWrite);
+    const auto c = ring.centre * k;
+    const float radius = ring.radius * k, reach = ring.reach * k, half = ring.half * k;
+    const float twoPi = juce::MathConstants<float>::twoPi;
+
+    // The picture between its pixels, premultiplied as it is held, a pixel's middle on its whole
+    // coordinates.
+    struct Premultiplied { float a, r, g, b; };
+    const auto mix = [] (Premultiplied p, Premultiplied q, float t) -> Premultiplied
+    {
+        return { p.a + (q.a - p.a) * t, p.r + (q.r - p.r) * t, p.g + (q.g - p.g) * t, p.b + (q.b - p.b) * t };
+    };
+    const auto pixel = [&src] (int x, int y) -> Premultiplied
+    {
+        const auto* p = reinterpret_cast<const juce::PixelARGB*> (src.getPixelPointer (juce::jlimit (0, src.width - 1, x),
+                                                                                      juce::jlimit (0, src.height - 1, y)));
+        return { (float) p->getAlpha(), (float) p->getRed(), (float) p->getGreen(), (float) p->getBlue() };
+    };
+    const auto at = [&] (juce::Point<float> p)
+    {
+        const int x = (int) std::floor (p.x), y = (int) std::floor (p.y);
+        const float fx = p.x - (float) x, fy = p.y - (float) y;
+        return mix (mix (pixel (x, y), pixel (x + 1, y), fx), mix (pixel (x, y + 1), pixel (x + 1, y + 1), fx), fy);
+    };
+    const auto colourOf = [] (Premultiplied p)
+    {
+        return p.a <= 0.0f ? juce::Colour() : juce::Colour::fromFloatRGBA (p.r / p.a, p.g / p.a, p.b / p.a, p.a / 255.0f);
+    };
+
+    // The ring's middle, in each direction a pixel apart round it: the middle of what is lit over
+    // half the brightest across it, its light weighing each point.
+    const int n = juce::jmax (64, juce::roundToInt (twoPi * radius));
+    std::vector<float> middle ((size_t) n), light ((size_t) n);
+    for (int i = 0; i < n; ++i)
+    {
+        const float t = twoPi * (float) i / (float) n;
+        const juce::Point<float> u { std::cos (t), std::sin (t) };
+        std::vector<std::pair<float, float>> across;
+        float peak = 0.0f;
+        for (float r = radius - reach - half; r <= radius + reach + half; r += 0.25f)
+        {
+            across.push_back ({ r, ringness (colourOf (at (c + u * r))) });
+            peak = juce::jmax (peak, across.back().second);
+        }
+        float sum = 0.0f, weight = 0.0f;
+        for (const auto& [r, v] : across)
+            if (v > 0.5f * peak)
+                sum += r * v, weight += v;
+        middle[(size_t) i] = weight > 0.0f ? sum / weight : radius;
+        light[(size_t) i] = peak;
     }
 
+    // ...smoothed along the ring, four pixels of the stage each way, each middle weighed by how far it
+    // is lit over half the ring's usual light: a gap between segments, dark, takes its neighbours'.
+    auto sorted = light;
+    std::nth_element (sorted.begin(), sorted.begin() + n / 2, sorted.end());
+    const float dim = 0.5f * sorted[(size_t) n / 2];
+    const int span = juce::jmax (1, juce::roundToInt (4.0f * k));
+    std::vector<float> smooth ((size_t) n);
+    for (int i = 0; i < n; ++i)
+    {
+        float sum = 0.0f, weight = 0.0f;
+        for (int j = i - span; j <= i + span; ++j)
+        {
+            const auto other = (size_t) ((j + n) % n);
+            const float w = juce::jmax (0.0f, light[other] - dim);
+            sum += middle[other] * w, weight += w;
+        }
+        smooth[(size_t) i] = juce::jlimit (radius - reach, radius + reach, weight > 0.0f ? sum / weight : radius);
+    }
+
+    // Across the band, from what lies just beyond it inside to what lies just beyond it outside — each
+    // the mean of the picture there over a pixel and a half outward and a pixel either way along the
+    // ring, so that no one grain of it is drawn across in a streak.
+    const auto beyond = [&] (juce::Point<float> u, float from, float way)
+    {
+        const juce::Point<float> along { -u.y, u.x };
+        Premultiplied sum { 0.0f, 0.0f, 0.0f, 0.0f };
+        int taken = 0;
+        for (int s = 0; s < 3; ++s)
+            for (int a = -1; a <= 1; ++a)
+                sum = mix (sum, at (c + u * (from + way * 0.75f * (float) s) + along * (float) a), 1.0f / (float) ++taken);
+        return sum;
+    };
+    const float outer = radius + reach + half + 2.0f;
+    const auto box = juce::Rectangle<float> (2.0f * outer, 2.0f * outer).withCentre (c).getSmallestIntegerContainer()
+                         .getIntersection (img.getBounds());
+    for (int y = box.getY(); y < box.getBottom(); ++y)
+        for (int x = box.getX(); x < box.getRight(); ++x)
+        {
+            const auto d = juce::Point<float> ((float) x, (float) y) - c;
+            const float r = d.getDistanceFromOrigin();
+            if (r < radius - reach - half - 1.0f || r > radius + reach + half + 1.0f)
+                continue;
+
+            float t = std::atan2 (d.y, d.x);
+            if (t < 0.0f)
+                t += twoPi;
+            const float f = t / twoPi * (float) n;
+            const int i0 = juce::jlimit (0, n - 1, (int) f), i1 = (i0 + 1) % n;
+            const float m = smooth[(size_t) i0] + (smooth[(size_t) i1] - smooth[(size_t) i0]) * (f - (float) i0);
+            const float off = r - m;
+            const float amount = juce::jlimit (0.0f, 1.0f, half + 0.5f - std::abs (off));     // a pixel's soft edge
+            if (amount <= 0.0f)
+                continue;
+
+            const auto u = d / r;
+            const auto groove = mix (beyond (u, m - half, -1.0f), beyond (u, m + half, 1.0f), juce::jlimit (0.0f, 1.0f, (off + half) / (2.0f * half)));
+            const auto now = mix (pixel (x, y), groove, amount);
+            reinterpret_cast<juce::PixelARGB*> (dst.getPixelPointer (x, y))
+                ->setARGB ((juce::uint8) juce::roundToInt (now.a), (juce::uint8) juce::roundToInt (now.r),
+                           (juce::uint8) juce::roundToInt (now.g), (juce::uint8) juce::roundToInt (now.b));
+        }
+    return img;
+}
+
+namespace
+{
     /** A RENDER'S METAL LIFTED: each colour raised to `gamma` (under 1 lightens the darks most), its alpha
         as it was. */
     juce::Image lifted (const juce::Image& img, float gamma)

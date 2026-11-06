@@ -38,6 +38,21 @@ public:
     float wordmarkH  = 26.0f;
     float bylineH    = 16.0f;
 
+    /** ORBITBASS'S MARK (the owner, 02.11 — its icon, resources/icon/OrbitBass-*): the family's orbit with a second ring
+        inside its own, the chevrons pressing on it. Off, the orbit as appkit draws it. */
+    bool doubledOrbit = false;
+
+    /** The doubled orbit at (cx, cy), diameter d: appkit's brand::drawOrbit, and inside its lilac ring a second one —
+        the icon's proportions on drawOrbit's d = 40 grid. Written here to move to appkit's Brand.h beside drawOrbit. */
+    static void drawDoubledOrbit (juce::Graphics& g, float cx, float cy, float d, bool hover)
+    {
+        namespace brand = felitronics::appkit::brand;
+        brand::drawOrbit (g, cx, cy, d, hover);
+        const float s = d / 40.0f, r = 8.4f * s;
+        g.setColour (brand::lilac);
+        g.drawEllipse (cx - r, cy - r, 2.0f * r, 2.0f * r, 1.6f * s);
+    }
+
     /** The cat's square, at the left, two units in — the site's kit reads it from here. */
     juce::Rectangle<float> catArea() const
     {
@@ -87,7 +102,10 @@ public:
             logo->drawWithin (g, catArea(), juce::RectanglePlacement::centred, 1.0f);
 
         const float d = markD();
-        brand::drawOrbit (g, h + 6.0f + d * 0.5f, cy, d, hover);
+        if (doubledOrbit)
+            drawDoubledOrbit (g, h + 6.0f + d * 0.5f, cy, d, hover);
+        else
+            brand::drawOrbit (g, h + 6.0f + d * 0.5f, cy, d, hover);
 
         // The words on the first line, on one baseline, as BrandHeader sets them on its one.
         float x = marksRight();

@@ -4,6 +4,7 @@
 #pragma once
 
 #include "../Product.h"
+#include "../core/TunerPoly.h"
 
 #include <felitronics/appkit/SettingsStore.h>
 
@@ -138,7 +139,7 @@ inline const juce::Identifier viewLit { "view_lit_by_guitar" };
 inline std::atomic<bool>& litCache (const Product& p)
 {
     static PerProduct<std::atomic<bool>> cached;
-    return cached.of (p.name, [&p] { return getBool (p, viewLit, false); });
+    return cached.of (p.name, [&p] { return getBool (p, viewLit, p.viewLitByDefault); });
 }
 
 inline bool viewLitByGuitar (const Product& p)              { return litCache (p).load (std::memory_order_relaxed); }
@@ -202,6 +203,66 @@ inline std::atomic<int>& tunerReferenceCache (const Product& p)
 
 inline int  tunerReference (const Product& p)              { return tunerReferenceCache (p).load (std::memory_order_relaxed); }
 inline void setTunerReference (const Product& p, int hz)   { hz = snapTunerReference (hz); tunerReferenceCache (p).store (hz, std::memory_order_relaxed); store (p).set (tunerReferenceHz, hz); }
+
+/** HOW THE TUNER SHOWS A NOTE: its NEEDLE; a STROBE (core::TunerStrobe) — stripes that stand still when the
+    string is in tune and drift by the sound's own phase when it is not; POLY (core::TunerPoly) — strum the
+    open strings and read every one at once, a lane each; or AUTO — the needle for one string, the lanes for
+    a strum (TunerPoly::updateAuto). The player's way of reading, not a sound's, so it lives on the machine
+    with the reference and is read the same way, every tick. The needle unless the player chose another; a
+    stored value that is none of the four is the needle too. */
+enum class TunerDisplay { needle, strobe, poly, automatic };
+
+/** POLY IS NOT READY (the owner, 04.11): the tuner offers the needle and the strobe, and only them — no POLY, no AUTO,
+    no TUNING its lanes read — and a POLY or AUTO stored before reads as the needle. Its code stays; this one word
+    brings it back. */
+inline constexpr bool tunerPolyOffered = false;
+
+inline const juce::Identifier tunerDisplayKey { "tuner_display" };
+
+inline std::atomic<int>& tunerDisplayCache (const Product& p)
+{
+    static PerProduct<std::atomic<int>> cached;
+    return cached.of (p.name, [&p]
+    {
+        const int d = (int) store (p).get (tunerDisplayKey, (int) TunerDisplay::needle);
+        const auto last = tunerPolyOffered ? TunerDisplay::automatic : TunerDisplay::strobe;
+        return d >= (int) TunerDisplay::needle && d <= (int) last ? d : (int) TunerDisplay::needle;
+    });
+}
+
+inline TunerDisplay tunerDisplay (const Product& p)                { return (TunerDisplay) tunerDisplayCache (p).load (std::memory_order_relaxed); }
+inline void         setTunerDisplay (const Product& p, TunerDisplay d) { tunerDisplayCache (p).store ((int) d, std::memory_order_relaxed); store (p).set (tunerDisplayKey, (int) d); }
+
+/** WHETHER THE PRODUCT'S TUNER TUNES A BASS — whose tunings it offers (core::polyTunings): a bass amp's (its chain). */
+inline bool tunesBass (const Product& p) { return p.chain == Chain::bass; }
+
+/** THE STRINGS THE POLYPHONIC TUNER READS: one of the product's own tunings (core::polyTunings), kept by its
+    id. The standard one unless the player chose another; one the product does not offer is its standard too. */
+inline const juce::Identifier tunerTuningKey { "tuner_tuning" };
+
+inline int tuningIndex (const core::PolyTuner::Tuning& t) { return (int) (&t - core::PolyTuner::tunings.data()); }
+
+inline std::atomic<int>& tunerTuningCache (const Product& p)
+{
+    static PerProduct<std::atomic<int>> cached;
+    return cached.of (p.name, [&p]
+    {
+        const auto id = store (p).get (tunerTuningKey, juce::String()).toString();
+        return tuningIndex (core::polyTuning (id.toRawUTF8(), tunesBass (p)));
+    });
+}
+
+inline const core::PolyTuner::Tuning& tunerTuning (const Product& p)
+{
+    return core::PolyTuner::tunings[(size_t) tunerTuningCache (p).load (std::memory_order_relaxed)];
+}
+
+inline void setTunerTuning (const Product& p, const core::PolyTuner::Tuning& t)
+{
+    const auto& own = core::polyTuning (t.id, tunesBass (p));
+    tunerTuningCache (p).store (tuningIndex (own), std::memory_order_relaxed);
+    store (p).set (tunerTuningKey, juce::String (own.id));
+}
 
 /** THE HUM AT THE INPUT — which mains the hum on this machine's input is made of: none to take off,
     50 Hz, 60 Hz, or AUTO, which listens and decides. It is about the wall socket, the cable and the

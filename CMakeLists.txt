@@ -155,7 +155,11 @@ include(cmake/PatchedWrappers.cmake)
 #
 # v0.61.2 changes one thing here: the echo's and the room's `feed` — what the DELAY / REVERB switches stop — fades over 5 ms where it switched at one sample, which the repeats played back as ticks. Fed, both
 # render bit for bit as on v0.61.0 (v0.61.1 touches only a wasm build of FlushToZero.h).
-set(ORBITAMP_FCORE_TAG "v0.61.2" CACHE STRING "felitronics-core release tag (fetched when no local checkout)")
+#
+# v0.62.0 brings the bass amps' own: octave (Octaver), envfilter (EnvelopeFilter) and chorus (BassChorus) —
+# OrbitBass's and RedGrooveBass's OCTAVE, ENVELOPE and CHORUS (src/core/OctaveTap.h, FilterTap.h, ChorusTap.h),
+# which until then built from an unreleased branch of the core alone.
+set(ORBITAMP_FCORE_TAG "v0.62.0" CACHE STRING "felitronics-core release tag (fetched when no local checkout)")
 
 set(ORBITAMP_FCORE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../felitronics-core"
     CACHE PATH "Local felitronics-core checkout (used if present); else the pinned release is fetched")
@@ -201,7 +205,14 @@ set(FELITRONICS_WITH_PFFFT ON CACHE BOOL "orbit-amp's cabinet convolver uses the
 # turned while playing, every load landing mid-session: v0.1.1 and v0.7.0 differ in the eight blocks of
 # the first fade-in alone — v0.7.0 silent through four blocks where v0.1.1 had begun to rise, then its own
 # fade, four blocks later — and in nothing after them; v0.6.0 and v0.7.0 are the same bit for bit in all 48.
-set(ORBITAMP_GUITAR_TAG "v0.7.0" CACHE STRING "felitronics-guitar-core release tag (fetched when no local checkout)")
+#
+# v0.8.0 plays namz v5.0.0's packs, the `.orbitrig` schema 5 — a band's frequency taken from another knob
+# (`hz_by`: a MIDDLE with its own FREQ) and a capture's own lag and polarity — and every schema-4 pack as
+# before. It brings the crossover blend OrbitBass's BLEND rides (RigPlayer::setCrossover*): at amount 0 it is
+# the player without it, byte for byte, for one atomic load a block. Its one change to what plays: a slot's
+# alignment delay moves through a 10 ms crossfade while it is heard, where it used to wait for silence — the
+# set's twelve packs carry no alignment, so for them nothing moves. It needs namz v5.0.0, pinned with it below.
+set(ORBITAMP_GUITAR_TAG "v0.8.0" CACHE STRING "felitronics-guitar-core release tag (fetched when no local checkout)")
 set(ORBITAMP_GUITAR_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../felitronics-guitar-core"
     CACHE PATH "Local felitronics-guitar-core checkout (used if present); else the pinned release is fetched")
 
@@ -269,15 +280,15 @@ endif()
 #
 # THE TWO PINS MOVE TOGETHER. The tag here is FORCEd over the NAM module's own, so guitar-core's pin
 # never reaches this build — and since guitar-core v0.7.0 a fetched namz is held to FELITRONICS_NAMZ_COMMIT,
-# the commit of the tag the NAM module pins (v4.4.0's, 215d164, by default). This tag is guitar-core
-# v0.7.0's own, so the two agree and the commit is left at its default. A guitar-core bump moves this tag
+# the commit of the tag the NAM module pins (v5.0.0's, 717ca2d, by default). This tag is guitar-core
+# v0.8.0's own, so the two agree and the commit is left at its default. A guitar-core bump moves this tag
 # to that release's namz pin in the same commit: a tag left behind stops the configure, naming both
 # commits. A namz bump made HERE alone, ahead of guitar-core, FORCEs FELITRONICS_NAMZ_COMMIT to the new
 # tag's commit beside it — a tag moved without its commit stops the configure the same way. The local
 # checkout (ORBITAMP_NAMZ_SRC) is not held to either, and is taken whenever it exists: on a namz older
-# than v4.3.0 the NAM module stops compiling (no namz::decode), and one older than v4.4.0 refuses every
-# float16 capture — keep it on v4.4.0 or later, or empty the override.
-set(ORBITAMP_NAMZ_TAG "v4.4.0" CACHE STRING "namz release tag CI builds against (no local checkout)")
+# than v5.0.0 the pack player stops compiling (no `input_lag_samples`, no `hz_by`) — keep it on v5.0.0 or
+# later, or empty the override.
+set(ORBITAMP_NAMZ_TAG "v5.0.0" CACHE STRING "namz release tag CI builds against (no local checkout)")
 set(FELITRONICS_NAMZ_TAG "${ORBITAMP_NAMZ_TAG}" CACHE STRING "" FORCE)
 
 FetchContent_MakeAvailable(felitronics_core)
@@ -319,6 +330,26 @@ endif()
 set(FELITRONICS_APPKIT_WEBP ON CACHE BOOL "" FORCE)
 
 FetchContent_MakeAvailable(felitronics_appkit)
+
+# ----------------------------------------------------------------------------
+# cab-ir-generator — the bass's own cabinets: their synthesis (cabir::synth, JUCE-free), the panel and the
+# miniature the CAB block draws (cabir::panel, JUCE views in our theme — CabWindow::useOurLook), and the
+# table they read (CABIR_CABINETS). The same code is the cabinets' own app and web page.
+# ----------------------------------------------------------------------------
+set(ORBITAMP_CABIR_TAG "v0.1.5" CACHE STRING "cab-ir-generator release tag (fetched when no local checkout)")
+set(ORBITAMP_CABIR_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../cab-ir-generator"
+    CACHE PATH "Local cab-ir-generator checkout (used if present); else the ref is fetched")
+if(ORBITAMP_CABIR_DIR AND EXISTS "${ORBITAMP_CABIR_DIR}/CMakeLists.txt")
+    message(STATUS "cab-ir-generator: local checkout — ${ORBITAMP_CABIR_DIR}")
+    FetchContent_Declare(cab_ir_generator SOURCE_DIR "${ORBITAMP_CABIR_DIR}")
+else()
+    message(STATUS "cab-ir-generator: fetching ${ORBITAMP_CABIR_TAG} from GitHub")
+    FetchContent_Declare(cab_ir_generator
+        GIT_REPOSITORY https://github.com/darwinscat/cab-ir-generator.git
+        GIT_TAG        ${ORBITAMP_CABIR_TAG}
+        GIT_SHALLOW    TRUE)
+endif()
+FetchContent_MakeAvailable(cab_ir_generator)
 
 # ----------------------------------------------------------------------------
 # OrbitAmpVersion.h — git-describe build stamp, baked into the binary (end users have no repo).
@@ -572,7 +603,7 @@ endfunction()
 # Standalone, and a CLAP through clap-juce-extensions — over the same processor; what differs is its
 # face, its name, its number and what it carries.
 #
-#   add_amp(<Name>  CODE <code>  [BY_NAME]
+#   add_amp(<Name>  CODE <code>  [BY_NAME]  [ICON <Amp>]
 #           SOURCES <files...>  LIBRARIES <targets...>  [ART <files...>]  [SET <packs...>]  [WHOLE_SHELF])
 #
 #   <Name>      the target, the PRODUCT_NAME and the stem of every bundle it builds; in lower case, its
@@ -586,6 +617,7 @@ endfunction()
 #               manufacturer code is the family's, Dcat (Darwin's Cat — >=1 uppercase, AU rule; same as
 #               OrbitCab).
 #   BY_NAME     not part of the default build (see below).
+#   ICON        another amp's icon, worn until its own is drawn: resources/icon/<Amp>-* rather than <Name>'s.
 #   SOURCES     what it is compiled from; LIBRARIES what it links, ahead of JUCE's recommended flags.
 #   ART         its renders, in the factory folder's Faces/<Name>, each under its own file's name, where its
 #               face reads them (src/face/Renders.h).
@@ -593,6 +625,9 @@ endfunction()
 #               at the factory folder's top, zipped.
 #   WHOLE_SHELF the whole cabinet shelf, the folders the cabinet catalog gives OrbitAmp alone with Darwin's
 #               Cat's own; without it, Darwin's Cat's own alone.
+#   BASS        its chain is the bass's (src/Product.h, Product::chain — the two say one thing): it carries
+#               the catalog's bass folders and none of the guitar's — a guitar amp's cabinets and a bass
+#               amp's never cross (resources/cabinets.txt). Not with WHOLE_SHELF.
 #
 # Whatever it plays is in the family's factory folder and in its own list there (THE FACTORY FOLDER), never
 # in its binary.
@@ -700,21 +735,25 @@ function(export_entry_points_only)
 endfunction()
 
 function(add_amp name)
-    cmake_parse_arguments(PARSE_ARGV 1 AMP "BY_NAME;WHOLE_SHELF" "CODE" "SOURCES;LIBRARIES;ART;SET")
+    cmake_parse_arguments(PARSE_ARGV 1 AMP "BY_NAME;WHOLE_SHELF;BASS" "CODE;ICON" "SOURCES;LIBRARIES;ART;SET")
     string(TOLOWER "${name}" id)
+    set(iconOf "${name}")
+    if(AMP_ICON)
+        set(iconOf "${AMP_ICON}")
+    endif()
 
     # Its icon. macOS 26 sets any icon that is not its own rounded square on a grey plate — the family's
     # disc came out as a small disc on a light square — so the Mac wears the amp's mark on the rounded
     # square the system expects (824 of the 1024 canvas, margins and all), the violet round its edge, and
     # it is shown as drawn. Windows and Linux keep the disc, or the same square on the whole canvas.
     if(APPLE)
-        set(icon "${CMAKE_CURRENT_SOURCE_DIR}/resources/icon/${name}-macOS-1024.png")
+        set(icon "${CMAKE_CURRENT_SOURCE_DIR}/resources/icon/${iconOf}-macOS-1024.png")
     else()
-        set(icon "${CMAKE_CURRENT_SOURCE_DIR}/resources/icon/${name}-1024.png")
+        set(icon "${CMAKE_CURRENT_SOURCE_DIR}/resources/icon/${iconOf}-1024.png")
     endif()
 
     juce_add_plugin(${name}
-        VERSION                     "${PROJECT_VERSION}"
+        VERSION                     "${ORBITAMP_FAMILY_VERSION}"
         PRODUCT_NAME                "${name}"
         COMPANY_NAME                "Darwin's Cat"
         BUNDLE_ID                   "com.darwinscat.${id}"
@@ -767,7 +806,7 @@ function(add_amp name)
     # processor is made with (src/Product.h), and only the plug-in's own entry is compiled here, in the
     # amp's own file — a gate, or a binary of several amps, makes its processors itself.
     target_compile_definitions(${name} PUBLIC
-        ORBITAMP_VERSION="${PROJECT_VERSION}")
+        ORBITAMP_VERSION="${ORBITAMP_FAMILY_VERSION}")
     target_compile_definitions(${name} PRIVATE ORBITAMP_PLUGIN_ENTRY=1)
     target_compile_definitions(${name} PUBLIC
         JUCE_WEB_BROWSER=0
@@ -792,7 +831,8 @@ function(add_amp name)
     target_link_libraries(${name} PRIVATE ${libraries})
 
     # WHAT IT PLAYS, in the family's factory folder (THE FACTORY FOLDER): its pictures, its packs and
-    # Darwin's Cat's own cabinets — and the shelf's other folders, where it plays the whole shelf.
+    # its chain's cabinets — a guitar amp Darwin's Cat's own, and the shelf's other folders where it plays
+    # the whole shelf; a bass amp the bass's folders, and none of the guitar's.
     set(files "")
     set(at "")
     foreach(render IN LISTS AMP_ART)
@@ -807,11 +847,18 @@ function(add_amp name)
         list(APPEND files "${ORBITAMP_SET_ZIPPED}/${pack}.orbitrig.zip")
         list(APPEND at "${pack}.orbitrig.zip")
     endforeach()
-    list(APPEND files ${ORBITAMP_CABINETS_EVERY_PRODUCT})
-    list(APPEND at ${ORBITAMP_CABINETS_EVERY_PRODUCT_AT})
-    if(AMP_WHOLE_SHELF)
-        list(APPEND files ${ORBITAMP_CABINETS_ORBITAMP})
-        list(APPEND at ${ORBITAMP_CABINETS_ORBITAMP_AT})
+    if(AMP_BASS AND AMP_WHOLE_SHELF)
+        message(FATAL_ERROR "${name} is a bass amp, and the whole shelf is the guitar's")
+    elseif(AMP_BASS)
+        list(APPEND files ${ORBITAMP_CABINETS_BASS})
+        list(APPEND at ${ORBITAMP_CABINETS_BASS_AT})
+    else()
+        list(APPEND files ${ORBITAMP_CABINETS_GUITAR})
+        list(APPEND at ${ORBITAMP_CABINETS_GUITAR_AT})
+        if(AMP_WHOLE_SHELF)
+            list(APPEND files ${ORBITAMP_CABINETS_ORBITAMP})
+            list(APPEND at ${ORBITAMP_CABINETS_ORBITAMP_AT})
+        endif()
     endif()
     factory_carries(${name} FILES ${files} AT ${at})
     add_dependencies(${name} Family_Factory)
@@ -866,7 +913,7 @@ function(amp_console target product amp main)
     string(SUBSTRING "${amp}" 1 -1 rest)
     string(TOLOWER "${first}" first)
     target_compile_definitions(${target} PRIVATE
-        ORBITAMP_VERSION="${PROJECT_VERSION}"
+        ORBITAMP_VERSION="${ORBITAMP_FAMILY_VERSION}"
         ORBITAMP_PRODUCT_NAME="${amp}"
         ORBITAMP_GATE_PRODUCT=orbitamp::products::${first}${rest})
     if(GATE_CHANNELS)
@@ -953,11 +1000,18 @@ foreach(folder IN LISTS ORBITAMP_SET_FOLDERS)
 endforeach()
 add_custom_target(OrbitAmpSetPacks DEPENDS ${ORBITAMP_SET_PACKS})
 
-# WHAT ORBITAMP PLAYS: every pack in resources/set/Devices — every folder there, zipped — the X88-IR's,
-# the IR-X's, the ReVolt's and the V4's, each one file in the family's folder whichever amps play it. A
-# pack added there is OrbitAmp's from the next build on, with nobody to remember to list it; a pack the
-# tree keeps but OrbitAmp should not play has no place in resources/set/Devices.
+# THE BASS'S PACKS, which no guitar amp plays — a guitar amp's packs and a bass amp's never cross, as their
+# cabinets do not (resources/cabinets.txt). OrbitBass plays them and opens on the first; RedGrooveBass's two
+# channels, B15 and SVT, are the SGT-DI's two voices (src/redgroove/RedGrooveLineup.cpp).
+set(ORBITBASS_SET   "Ampeg SGT-DI")
+set(REDGROOVEBASS_SET "Ampeg SGT-DI")
+
+# WHAT ORBITAMP PLAYS: every pack in resources/set/Devices but the bass's — every folder there, zipped — the
+# X88-IR's, the IR-X's, the ReVolt's and the V4's, each one file in the family's folder whichever amps play it. A
+# guitar pack added there is OrbitAmp's from the next build on, with nobody to remember to list it; a pack the
+# tree keeps but OrbitAmp should not play has no place in resources/set/Devices, or is a bass amp's.
 set(ORBITAMP_PLAYS ${ORBITAMP_SET_NAMES})
+list(REMOVE_ITEM ORBITAMP_PLAYS ${ORBITBASS_SET} ${REDGROOVEBASS_SET})
 
 # WHAT EACH OTHER AMP PLAYS of the set, said once — its row in THE AMPS names it by these.
 set(CATPITAMP_SET   "Soldano X88-IR Normal" "Soldano X88-IR Altered" "Soldano X88-IR Crunch" "Soldano X88-IR Overdrive")
@@ -965,14 +1019,34 @@ set(REDPAWAMP_SET   "Friedman IR-X Ch1 PowerAmp" "Friedman IR-X Ch2 PowerAmp")
 set(FROSTPAWAMP_SET "Two Notes ReVolt Clean PowerAmp" "Two Notes ReVolt Crunch PowerAmp" "Two Notes ReVolt Lead PowerAmp")
 set(AMBERPAWAMP_SET "Victory V4 Copper (clean)" "Victory V4 Sheriff (crunch)" "Victory V4 Kraken (hi-gain)")
 
+# THE FAMILY A BUILD RELEASES: installer/family.ini, the amps, unless -DFAMILY_INI= names another —
+# installer/bass.ini, the basses (the owner, 06.11: a package of their own). Everything below that says
+# "family.ini" reads this one: the release's amps, its bundle, its factory folder.
+set(FAMILY_INI "${CMAKE_CURRENT_SOURCE_DIR}/installer/family.ini" CACHE FILEPATH
+    "The family this build releases: installer/family.ini (the amps) or installer/bass.ini (the basses)")
+get_filename_component(FAMILY_INI "${FAMILY_INI}" ABSOLUTE BASE_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
+if(NOT EXISTS "${FAMILY_INI}")
+    message(FATAL_ERROR "FAMILY_INI names ${FAMILY_INI}, which is no file")
+endif()
+# ...and its version: its own `version=` where it keeps one (the basses), else the tree's — every amp's, its bundle's
+# and the update check's number in this build (installer/version.sh reads the same).
+file(STRINGS "${FAMILY_INI}" ORBITAMP_FAMILY_VERSION REGEX "^version=")
+string(REGEX REPLACE "^version=" "" ORBITAMP_FAMILY_VERSION "${ORBITAMP_FAMILY_VERSION}")
+string(STRIP "${ORBITAMP_FAMILY_VERSION}" ORBITAMP_FAMILY_VERSION)
+if(NOT ORBITAMP_FAMILY_VERSION)
+    set(ORBITAMP_FAMILY_VERSION "${PROJECT_VERSION}")
+endif()
+
 # A RELEASE SHIPS NO PACK OF AN AMP IT LEAVES OUT. A release (ORBITAMP_DEV_FACTORY OFF) carries the amps
 # installer/family.ini names; the packs only an amp it leaves out plays — today AmberPawAmp's V4 — are not
 # OrbitAmp's there either, so they wait for their own amp. Built here, OrbitAmp
-# plays them all.
-file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/installer/family.ini" ORBITAMP_RELEASED REGEX "^amps=")
+# plays them all — and in a release that leaves OrbitAmp out too (the basses, installer/bass.ini): nothing of
+# OrbitAmp ships there (the release's folder holds its amps' lists alone), and the gates, which play every amp,
+# hear OrbitAmp as it is built here.
+file(STRINGS "${FAMILY_INI}" ORBITAMP_RELEASED REGEX "^amps=")
 string(REGEX REPLACE "^amps=" "" ORBITAMP_RELEASED "${ORBITAMP_RELEASED}")
 separate_arguments(ORBITAMP_RELEASED)
-if(NOT ORBITAMP_DEV_FACTORY)
+if(NOT ORBITAMP_DEV_FACTORY AND "OrbitAmp" IN_LIST ORBITAMP_RELEASED)
     set(kept "")
     set(left "")
     foreach(amp CatpitAmp RedPawAmp FrostPawAmp AmberPawAmp)
@@ -1014,7 +1088,8 @@ endforeach()
 # THE CABINET CATALOG (resources/cabinets.txt): every cabinet IR the family carries, each said once — its
 # number, its name, the folder of the shelf it lies in and its file. cmake/CabinetCatalog.cmake reads it
 # into the files the factory folder holds, in the order of their numbers — Darwin's Cat's own, which every
-# amp plays, and the folders OrbitAmp alone plays (add_amp: WHOLE_SHELF) — and into the table the code
+# guitar amp plays, the folders OrbitAmp alone plays (add_amp: WHOLE_SHELF), and the bass's, which every
+# bass amp plays and no guitar amp (add_amp: BASS; none yet) — and into the table the code
 # plays them by, generated/CabinetCatalog.h: the `cab_ir` parameter's names and default (src/Parameters.h)
 # and the shelf's folders (src/device/FactoryShelf.h). A cabinet joining the shelf is a line there, and its
 # file; nothing here or in the code lists one. What compiles Parameters.h links OrbitAmpCabinetCatalog for
@@ -1026,6 +1101,46 @@ orbitamp_cabinet_catalog("${CMAKE_CURRENT_SOURCE_DIR}/resources/cabinets.txt"
 add_library(OrbitAmpCabinetCatalog INTERFACE)
 target_include_directories(OrbitAmpCabinetCatalog INTERFACE "${ORBITAMP_GENERATED_DIR}")   # CabinetCatalog.h
 
+# THE BASS'S DOZEN: twelve of cab-ir-generator's factory presets, the most unlike of its punk, rock, metal and modern ones
+# (the owner, 06.11), the biggest box first — the cabinets RedGrooveBass plays, and OrbitBass's list. The presets' files
+# ride in the binary as cab-ir-generator writes them; BassDozen.h names them in this order (src/device/BassCabinets.h).
+set(ORBITAMP_BASS_CABINETS
+    rock-03-8x10-stack rock-09-6x10-wall rock-08-4x10-crunch modern-02-4x10-sheen metal-14-2x12-torque
+    punk-07-2x10-gutter rock-14-1x15-thump modern-18-1x15-extended punk-17-1x12-squat rock-17-1x12-club
+    punk-19-4x6-box modern-13-4x6-neo)
+set(_orbitamp_bass_stems "")
+foreach(stem IN LISTS ORBITAMP_BASS_CABINETS)
+    set(file "${cab_ir_generator_SOURCE_DIR}/data/presets/${stem}.toml")
+    if(NOT EXISTS "${file}")
+        message(FATAL_ERROR "The bass's dozen names ${stem}, which cab-ir-generator (${cab_ir_generator_SOURCE_DIR}) has no preset of")
+    endif()
+    string(APPEND _orbitamp_bass_stems "    \"${stem}\",\n")
+endforeach()
+# ...AND ALL OF THEM (the owner, 06.11): every factory preset of cab-ir-generator's and its typical cabinets — the IR
+# packs' 190 — OrbitBass's CABINETS › ALL, by style and by size. The dozen is among them; they ride in the binary instead.
+file(GLOB ORBITAMP_BASS_PRESET_FILES CONFIGURE_DEPENDS
+    "${cab_ir_generator_SOURCE_DIR}/data/presets/*.toml" "${cab_ir_generator_SOURCE_DIR}/data/typical/*.toml")
+list(SORT ORBITAMP_BASS_PRESET_FILES)   # the styles' by name and number, then the typical ones
+set(_orbitamp_bass_all_stems "")
+foreach(file IN LISTS ORBITAMP_BASS_PRESET_FILES)
+    get_filename_component(stem "${file}" NAME_WE)
+    string(APPEND _orbitamp_bass_all_stems "    \"${stem}\",\n")
+endforeach()
+file(CONFIGURE OUTPUT "${ORBITAMP_GENERATED_DIR}/BassDozen.h" @ONLY CONTENT
+"// Written by CMakeLists.txt (THE BASS'S DOZEN): cab-ir-generator's presets the bass plays, by their files' stems, in order —
+// and all of them, the styles' and the typical ones.
+#pragma once
+namespace orbitamp
+{
+inline constexpr const char* bassCabinets[] =
+{
+@_orbitamp_bass_stems@};
+inline constexpr const char* bassPresets[] =
+{
+@_orbitamp_bass_all_stems@};
+}
+")
+
 juce_add_binary_data(OrbitAmpData
     SOURCES
         "${felitronics_appkit_SOURCE_DIR}/assets/catlogo.svg"
@@ -1034,6 +1149,10 @@ juce_add_binary_data(OrbitAmpData
         # the README carries word for word, and a file can be diffed against that one.
         "${CMAKE_CURRENT_SOURCE_DIR}/resources/notice.txt"
         "${CMAKE_CURRENT_SOURCE_DIR}/resources/disclaimer.txt"   # ...and its long form, with the list
+
+        # The bass's cabinets, as cab-ir-generator's synthesis renders them live with the mics where the player put them.
+        "${CABIR_CABINETS}"
+        ${ORBITAMP_BASS_PRESET_FILES}       # ...and all of them, its dozen among them (THE BASS'S DOZEN)
 )
 # ...and the table the cabinet shelf is played by: its IRs themselves lie in the factory folder.
 target_link_libraries(OrbitAmpData INTERFACE OrbitAmpCabinetCatalog)
@@ -1082,6 +1201,7 @@ target_sources(orbitamp_bake_art PRIVATE
     tools/bake-art/BakeArt.cpp
     tools/bake-art/Rover.cpp
     tools/bake-art/Cockpit.cpp
+    tools/bake-art/Walker.cpp
     src/face/Renders.cpp)
 target_include_directories(orbitamp_bake_art PRIVATE src)
 target_compile_definitions(orbitamp_bake_art PRIVATE
@@ -1115,6 +1235,10 @@ set(AMP_ENGINE_LIBRARIES
     felitronics::nam                 # NAM inference — the captured devices actually play
     felitronics::rigplayer           # the pack player: captures, their crossfade, tone, alignment
     felitronics::limiter             # the safety at the door: a true-peak limiter with lookahead
+    felitronics::octave              # the bass's OCTAVE (Octaver) and its slider's law
+    felitronics::envfilter           # the bass's FILTER (EnvelopeFilter, keyed) and its slider's law
+    felitronics::chorus              # the bass's CHORUS (BassChorus) and its slider's law
+    cabir::panel                     # the bass's own cabinets: synthesis, panel, miniature (cab-ir-generator)
     juce::juce_audio_utils           # pulls audio_processors / audio_basics / gui_basics ...
     juce::juce_dsp                   # the chain stages will build on this
     juce::juce_data_structures)      # ValueTree behind the workspace / presets
@@ -1130,6 +1254,7 @@ set(ORBITAMP_SOURCES
     src/ui/FaceplateView.cpp
     src/ui/CapturedBlockPanel.cpp
     src/ui/CabinetBlock.cpp
+    src/ui/CabWindow.cpp
     src/ui/EqSection.cpp
     src/ui/DelayBlock.cpp
     src/ui/ReverbBlock.cpp
@@ -1138,9 +1263,16 @@ set(ORBITAMP_SOURCES
     src/ui/Footer.cpp
     src/ui/SetupPanel.cpp
     src/ui/WebFaceplate.cpp
+    src/device/BassCabinets.cpp
     src/ui/library/DeviceListView.cpp
     src/ui/library/IrTreeView.cpp
     src/face/Controls.cpp)           # the family's controls — the AMP's channel lever is a face::DetentLever
+
+# OrbitBass — the bass's workstation: OrbitAmp's processor and face, and OrbitBass itself — its Product, its
+# plug-in's entry (OrbitBassStart.cpp) — in place of OrbitAmp's.
+set(ORBITBASS_SOURCES ${ORBITAMP_SOURCES})
+list(REMOVE_ITEM ORBITBASS_SOURCES src/OrbitAmpStart.cpp)
+list(APPEND ORBITBASS_SOURCES src/OrbitBassStart.cpp)
 
 # A FACE is the family's console (src/face) over the family's channels (src/channels), on the same
 # processor: what the cockpit and every rover are compiled from before their own.
@@ -1151,6 +1283,7 @@ set(FACE_SOURCES
     src/core/ProcessMemory.cpp
     src/channels/Channels.cpp
     src/channels/Engine.cpp
+    src/device/BassCabinets.cpp
     src/channels/Presets.cpp
     src/channels/Set.cpp
     src/face/Cabs.cpp
@@ -1204,6 +1337,15 @@ set(FROSTPAW_VIEW_SOURCES
 set(AMBERPAW_VIEW_SOURCES
     src/amberpaw/view/TitanWorld.cpp
     src/amberpaw/view/TitanGl.cpp)
+# RedGrooveBass's: the walker's dome over the glowing forest (src/redgroove/view), the walk handed to it as a
+# WalkerDrive. Its world is matched to its prototype to the last bit, which a fused multiply-add would undo:
+# compiled without contraction (MSVC contracts nothing unless asked).
+set(REDGROOVE_VIEW_SOURCES
+    src/redgroove/view/WalkerWorld.cpp
+    src/redgroove/view/WalkerGl.cpp)
+if(NOT MSVC)
+    set_source_files_properties(src/redgroove/view/WalkerWorld.cpp PROPERTIES COMPILE_OPTIONS "-ffp-contract=off")
+endif()
 
 # A world's demo: a bare window with the windscreen in it over one world — the sea's in the canopy's
 # shape — for looking at it and measuring it. Built only when asked for by name. No audio.
@@ -1226,12 +1368,23 @@ view_demo(frostpaw_view_demo "FrostPawViewDemo" SOURCES ${REDPAW_VIEW_SOURCES} $
     DEFINITIONS ORBITAMP_VIEW_DEMO_ICE=1)
 view_demo(amberpaw_view_demo "AmberPawViewDemo" SOURCES ${REDPAW_VIEW_SOURCES} ${AMBERPAW_VIEW_SOURCES}
     DEFINITIONS ORBITAMP_VIEW_DEMO_TITAN=1)
+view_demo(walker_view_demo   "WalkerViewDemo"   SOURCES ${REDPAW_VIEW_SOURCES} ${REDGROOVE_VIEW_SOURCES}
+    DEFINITIONS ORBITAMP_VIEW_DEMO_WALKER=1)
 
 # The sea's CPU half against the prototype it was ported from: the start, five scripted flights, the
 # gears, Saturn, the wipers' panes. JUCE-free, links only the world.
 add_executable(titan_world_test tests/TitanWorldTests.cpp src/amberpaw/view/TitanWorld.cpp)
 target_include_directories(titan_world_test PRIVATE src)
 target_compile_features(titan_world_test PRIVATE cxx_std_20)
+
+# The walker's world against its prototype, walker-world.js, to the last bit: the noise, the meshes, the forest,
+# the walks at every gear free and on the beat, the bass, the steering, three dense clusters, the wrap — compared
+# with the prototype's own dump (tests/fixtures/walker). JUCE-free, links only the world.
+add_executable(walker_world_test tests/WalkerWorldTests.cpp src/redgroove/view/WalkerWorld.cpp)
+target_include_directories(walker_world_test PRIVATE src)
+target_compile_features(walker_world_test PRIVATE cxx_std_20)
+target_compile_definitions(walker_world_test PRIVATE
+    WALKER_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/walker/walker-world.txt")
 
 # THE ROVER'S FACE IS WORN BY MORE THAN ONE PRODUCT (src/redpaw/RedPawSkin.h): what every rover is made
 # of is said once here — the renders by the file names the face asks for, as bake-art made them, the
@@ -1290,6 +1443,32 @@ set(ROVER_LIBRARIES
     OrbitAmpShaders                  # the windscreens' shaders
     ${AMP_ENGINE_LIBRARIES}
     juce::juce_opengl)               # the windscreen, on the GPU
+
+# THE WALKER'S FACE (src/redgroove): the family's console on the walker's dashboard under its glass dome. Its
+# renders by the file names the face asks for, from resources/redgroove; a render it has not drawn yet is the
+# helicopter's, from resources/amberpaw, until its own is dropped in — the folder is looked at again on every
+# build. Its still is its own or none: never another face's world.
+set(REDGROOVEBASS_RENDERS "")
+file(GLOB redgroove_own CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/resources/redgroove/*")
+foreach(render IN ITEMS dashboard.webp mark.svg midi.txt knob-drive.webp knob-tone.webp fader-cap.webp)
+    if("${CMAKE_CURRENT_SOURCE_DIR}/resources/redgroove/${render}" IN_LIST redgroove_own)
+        list(APPEND REDGROOVEBASS_RENDERS "${CMAKE_CURRENT_SOURCE_DIR}/resources/redgroove/${render}")
+    else()
+        list(APPEND REDGROOVEBASS_RENDERS "${CMAKE_CURRENT_SOURCE_DIR}/resources/amberpaw/${render}")
+    endif()
+endforeach()
+if("${CMAKE_CURRENT_SOURCE_DIR}/resources/redgroove/still.jpg" IN_LIST redgroove_own)
+    list(APPEND REDGROOVEBASS_RENDERS "${CMAKE_CURRENT_SOURCE_DIR}/resources/redgroove/still.jpg")
+endif()
+set(REDGROOVEBASS_SOURCES
+    ${FACE_SOURCES}
+    src/redgroove/RedGrooveArt.cpp
+    src/redgroove/RedGrooveControls.cpp
+    src/redgroove/RedGrooveEditor.cpp
+    src/redgroove/RedGrooveLineup.cpp
+    src/ui/CabWindow.cpp             # the bass's cabinets, drawn — OrbitBass's window, Ampeg's pile
+    ${REDPAW_VIEW_SOURCES}           # the windscreen the rovers look through ...
+    ${REDGROOVE_VIEW_SOURCES})       # ... looking out on the walker's forest
 
 # ----------------------------------------------------------------------------
 # THE AMPS — the family's table, one row an amp (THE FAMILY says what a row says).
@@ -1359,6 +1538,32 @@ add_amp(AmberPawAmp   CODE Ambp    BY_NAME
     LIBRARIES ${ROVER_LIBRARIES}
     SET       ${AMBERPAWAMP_SET})
 
+# OrbitBass — the bass's workstation: OrbitAmp's frame and blocks over the bass's chain (src/Product.h,
+# Chain::bass) — mono, no delay, no reverb. It plays bass packs alone, ORBITBASS_SET's, and the bass's cabinets
+# alone (BASS), which the catalog has none of yet: no guitar cabinet, and the player's own out of `Bass IRs`
+# (device/IrLibrary.h). Not in the family's release (installer/family.ini), and asked for by name. Its icon its own
+# (the owner, 02.11): OrbitAmp's orbit doubled, a second ring inside it.
+add_amp(OrbitBass     CODE Obas    BY_NAME    BASS
+    SOURCES   ${ORBITBASS_SOURCES}
+    LIBRARIES
+        OrbitAmpData                 # the mark, the notice, the disclaimer — BinaryData::*
+        ${AMP_ENGINE_LIBRARIES}
+    SET       ${ORBITBASS_SET})
+
+# RedGrooveBass — the walker: a bass amp in a cabin, the walker's glass dome over a glowing mushroom forest
+# (src/redgroove) — the family's console over the bass's chain (Chain::bass), driven as channels: two, B15 and
+# SVT, its two gears, over REDGROOVEBASS_SET's packs; Darwin's Cat's own cabinets. Not in the family's release
+# (installer/family.ini), and asked for by name.
+add_amp(RedGrooveBass CODE Rgrv    BY_NAME    BASS
+    ART       ${REDGROOVEBASS_RENDERS}
+    SOURCES   ${REDGROOVEBASS_SOURCES}
+    LIBRARIES
+        OrbitAmpData                 # the family's mark, the notice, the disclaimer — BinaryData::*
+        OrbitAmpShaders              # the dome's shaders
+        ${AMP_ENGINE_LIBRARIES}
+        juce::juce_opengl            # the dome, on the GPU
+    SET       ${REDGROOVEBASS_SET})
+
 # ----------------------------------------------------------------------------
 # THE FACES' GATES — in the gates binary, with every other (THE GATES BINARY, below); amp_console builds an amp
 # again under a main() of its own, for what is not a gate.
@@ -1367,6 +1572,10 @@ add_amp(AmberPawAmp   CODE Ambp    BY_NAME
 # window built, and with it SHUT, which is the figure that matters in a host and the one the
 # standalone cannot give.
 amp_console(catpitamp_memory_probe  "CatpitAmpMemoryProbe"  CatpitAmp  tests/MemoryProbe.cpp)
+# The bass's click probe — not a gate either: a DI take through OrbitBass, left alone and then its switches flipped,
+# and every jump in the output and every block over its budget read out (tests/ClickProbe.cpp).
+amp_console(orbitbass_click_probe   "OrbitBassClickProbe"   OrbitBass  tests/ClickProbe.cpp)
+target_compile_definitions(orbitbass_click_probe PRIVATE JUCE_MODAL_LOOPS_PERMITTED=1)
 
 # THE FAMILY'S SOURCES: every amp's, each once, and their libraries — what a plug-in of several amps is made
 # of (THE FAMILY'S PLUG-INS), and the gates binary with it (below). An amp that defined something under a name
@@ -1479,6 +1688,17 @@ gate_in_binary(frostpaw-channel  tests/AmpChannelTests.cpp  PRODUCT FrostPawAmp 
 gate_in_binary(frostpaw-set      tests/AmpSetTests.cpp      PRODUCT FrostPawAmp  CHANNELS 6)
 gate_in_binary(amberpaw-channel  tests/AmpChannelTests.cpp  PRODUCT AmberPawAmp  CHANNELS 6)
 gate_in_binary(amberpaw-set      tests/AmpSetTests.cpp      PRODUCT AmberPawAmp  CHANNELS 6)
+gate_in_binary(redgroove-channel tests/AmpChannelTests.cpp  PRODUCT RedGrooveBass CHANNELS 2)
+gate_in_binary(redgroove-set     tests/AmpSetTests.cpp      PRODUCT RedGrooveBass CHANNELS 2)
+# ...and the walker's face, its window made and never shown: what its own controls turn, and the tone left alone.
+gate_in_binary(redgroove-face    tests/RedGrooveFaceTests.cpp PRODUCT RedGrooveBass)
+
+# ORBITBASS'S CHAIN, headless: where a fresh one stands (the gate off, the HPF on at 25 Hz, the LPF off, mono,
+# its one temporary pack), the strip's arrows in its order (GATE, AMP, CAB, LIMIT), the delay and the reverb
+# out of its sound whatever their switches say, one signal to both outputs, OrbitAmp's links in OrbitAmp's
+# order less those two, and its tuner down to 25 Hz while every guitar amp's stays at 40.
+gate_in_binary(orbitbass         tests/OrbitBassTests.cpp   PRODUCT OrbitBass
+               DEFINES "ORBITBASS_STEP2B=\"${CMAKE_CURRENT_SOURCE_DIR}/tests/golden/orbitbass-step2b.f32\"")
 
 # AN AMP WITH NO FACTORY FOLDER — copied off a zip without it, or the folder deleted: it plays, and says where
 # the folder belongs instead of opening an empty face (src/ui/FactoryMissing.h). OrbitAmp, the cockpit and the
@@ -1486,6 +1706,7 @@ gate_in_binary(amberpaw-set      tests/AmpSetTests.cpp      PRODUCT AmberPawAmp 
 gate_in_binary(nofactory         tests/NoFactoryTests.cpp   PRODUCT OrbitAmp     NO_FACTORY)
 gate_in_binary(catpit-nofactory  tests/NoFactoryTests.cpp   PRODUCT CatpitAmp    NO_FACTORY)
 gate_in_binary(redpaw-nofactory  tests/NoFactoryTests.cpp   PRODUCT RedPawAmp    NO_FACTORY)
+gate_in_binary(redgroove-nofactory tests/NoFactoryTests.cpp  PRODUCT RedGrooveBass NO_FACTORY)
 
 # ORBITAMP'S FACE AS THE SITE GETS IT (src/ui/WebFaceplate.h): a fresh OrbitAmp writes the kit, and the kit
 # builds the face back — its own format, every place on the stage, the hull the poster less its places.
@@ -1546,8 +1767,9 @@ target_sources(orbitamp_gates PRIVATE ${gates_sources})
 target_include_directories(orbitamp_gates PRIVATE src tests "${ORBITAMP_GENERATED_DIR}" "${ORBITAMP_GATES_SRC}")
 add_dependencies(orbitamp_gates OrbitAmpVersionGen Family_Factory)
 target_compile_definitions(orbitamp_gates PRIVATE
-    ORBITAMP_VERSION="${PROJECT_VERSION}"
+    ORBITAMP_VERSION="${ORBITAMP_FAMILY_VERSION}"
     ORBITAMP_GATES_BINARY=1
+    JUCE_MODAL_LOOPS_PERMITTED=1     # a gate may run the message loop until what lands there has (a drawn cabinet)
     JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 ${AMP_UNREAD_CODECS})
 set_source_files_properties(tests/Gates.cpp PROPERTIES COMPILE_DEFINITIONS
     "ORBITAMP_GATES_FACTORY=\"${ORBITAMP_FACTORY_DIR}\";ORBITAMP_GATES_NO_FACTORY=\"${CMAKE_CURRENT_BINARY_DIR}/no-factory/Factory\"")
@@ -1569,8 +1791,7 @@ set_target_properties(orbitamp_gates PROPERTIES EXCLUDE_FROM_ALL TRUE)
 # its `amps=`, `bundle=` and `bundle_target=` lines, and is looked at again when it changes; a name there
 # that is no amp here stops the configure, since an installer would go looking for what nothing builds.
 # ----------------------------------------------------------------------------
-set(FAMILY_INI "${CMAKE_CURRENT_SOURCE_DIR}/installer/family.ini")
-set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${FAMILY_INI}")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${FAMILY_INI}")   # FAMILY_INI: THE FAMILY A BUILD RELEASES
 
 # One `key=value` line of family.ini, its value as the installers read it.
 function(family_ini key out)
@@ -1584,13 +1805,15 @@ family_ini(amps FAMILY_AMPS)
 string(REGEX MATCHALL "[^ \t\r]+" FAMILY_AMPS "${FAMILY_AMPS}")
 family_ini(bundle FAMILY_BUNDLE)
 family_ini(bundle_target FAMILY_BUNDLE_TARGET)
-if(NOT FAMILY_AMPS OR NOT FAMILY_BUNDLE OR NOT FAMILY_BUNDLE_TARGET)
-    message(FATAL_ERROR "installer/family.ini names no amps, no bundle or no bundle_target")
+family_ini(bundle_code FAMILY_BUNDLE_CODE)   # the bundle's own code and id, which no plug-in a host is shown carries
+family_ini(bundle_id FAMILY_BUNDLE_ID)
+if(NOT FAMILY_AMPS OR NOT FAMILY_BUNDLE OR NOT FAMILY_BUNDLE_TARGET OR NOT FAMILY_BUNDLE_CODE OR NOT FAMILY_BUNDLE_ID)
+    message(FATAL_ERROR "${FAMILY_INI} names no amps, bundle, bundle_target, bundle_code or bundle_id")
 endif()
 add_custom_target(Family_All)
 foreach(amp IN LISTS FAMILY_AMPS)
     if(NOT amp IN_LIST AMPS)
-        message(FATAL_ERROR "installer/family.ini names ${amp}, which is no amp of this tree (${AMPS})")
+        message(FATAL_ERROR "${FAMILY_INI} names ${amp}, which is no amp of this tree (${AMPS})")
     endif()
     add_dependencies(Family_All ${amp}_Standalone)
 endforeach()
@@ -1603,8 +1826,9 @@ message(STATUS "The family's release (Family_All): ${FAMILY_BUNDLE} (${FAMILY_BU
 # and, on the Mac, one AU, each under the ids its own bundle has always had — its VST3 classes made of the
 # family's manufacturer code, Dcat, and its own CODE, its Audio Unit aufx/<CODE>/Dcat, and its CLAP id,
 # com.darwinscat.<name> — so a session saved with an amp's own bundle opens it from the family's unchanged.
-# The wrappers are patched to hold a list (cmake/PatchedWrappers.cmake). The binary's own code, Dcam, and
-# CLAP id, com.darwinscat.amps, name no plug-in a host is shown: the list names those.
+# The wrappers are patched to hold a list (cmake/PatchedWrappers.cmake). The binary's own code and CLAP id —
+# family.ini's bundle_code and bundle_id, Dcam and com.darwinscat.amps; the basses' Dcbs and com.darwinscat.bass —
+# name no plug-in a host is shown: the list names those.
 #
 # THE LIST IS WRITTEN HERE, at configure time, into <build>/generated/family: FamilyPluginList.h, what the
 # wrappers read (JUCE_PLUGIN_LIST_HEADER) — each amp's name, its CODE, its CLAP id, and the categories and
@@ -1712,12 +1936,12 @@ foreach(stem IN ITEMS ${FAMILY_BUNDLE_TARGET} ${family_first})
 endforeach()
 
 juce_add_plugin(${FAMILY_BUNDLE_TARGET}
-    VERSION                     "${PROJECT_VERSION}"
+    VERSION                     "${ORBITAMP_FAMILY_VERSION}"
     PRODUCT_NAME                "${FAMILY_BUNDLE}"
     COMPANY_NAME                "Darwin's Cat"
-    BUNDLE_ID                   "com.darwinscat.amps"
+    BUNDLE_ID                   "${FAMILY_BUNDLE_ID}"
     PLUGIN_MANUFACTURER_CODE    Dcat
-    PLUGIN_CODE                 Dcam
+    PLUGIN_CODE                 ${FAMILY_BUNDLE_CODE}
     FORMATS                     VST3 AU               # AU on the Mac alone, as an amp's own (add_amp)
     VST3_CATEGORIES             ${AMP_VST3_CATEGORIES}
     AU_MAIN_TYPE                "kAudioUnitType_Effect"
@@ -1737,7 +1961,7 @@ juce_add_plugin(${FAMILY_BUNDLE_TARGET}
 set_target_properties(${FAMILY_BUNDLE_TARGET} PROPERTIES OUTPUT_NAME "${FAMILY_BUNDLE_TARGET}_SharedCode")
 
 clap_juce_extensions_plugin(TARGET ${FAMILY_BUNDLE_TARGET}
-    CLAP_ID       "com.darwinscat.amps"
+    CLAP_ID       "${FAMILY_BUNDLE_ID}"
     CLAP_FEATURES ${AMP_CLAP_FEATURES})
 
 # The CLAP's icon, as an amp's own (add_amp): the wrapper's generic clap.icns overwritten with the bundle's.
@@ -1836,7 +2060,7 @@ target_include_directories(${FAMILY_BUNDLE_TARGET} PRIVATE src)
 add_dependencies(${FAMILY_BUNDLE_TARGET} OrbitAmpVersionGen)
 target_compile_definitions(${FAMILY_BUNDLE_TARGET} PUBLIC
     JUCE_PLUGIN_LIST_HEADER="FamilyPluginList.h"
-    ORBITAMP_VERSION="${PROJECT_VERSION}"
+    ORBITAMP_VERSION="${ORBITAMP_FAMILY_VERSION}"
     JUCE_WEB_BROWSER=0
     JUCE_USE_CURL=0
     JUCE_VST3_CAN_REPLACE_VST2=0
@@ -1877,8 +2101,9 @@ juce_add_console_app(orbitamp_bundle_host PRODUCT_NAME "OrbitAmpBundleHost" PLUG
 target_sources(orbitamp_bundle_host PRIVATE tests/BundleHost.cpp)
 target_include_directories(orbitamp_bundle_host PRIVATE "${clap-juce-extensions_SOURCE_DIR}/clap-libs/clap/include")
 target_compile_definitions(orbitamp_bundle_host PRIVATE
-    ORBITAMP_VERSION="${PROJECT_VERSION}"
+    ORBITAMP_VERSION="${ORBITAMP_FAMILY_VERSION}"
     ORBITAMP_FAMILY_AMPS="${family_amps_line}"
+    ORBITAMP_FAMILY_CODE="${FAMILY_BUNDLE_CODE}"   # the bundle's own code, which no entry of its list carries
     JUCE_PLUGINHOST_VST3=1
     JUCE_MODAL_LOOPS_PERMITTED=1
     JUCE_WEB_BROWSER=0
@@ -1929,10 +2154,33 @@ target_link_libraries(orbitamp_eqlink_test PRIVATE felitronics::eq)
 target_compile_features(orbitamp_eqlink_test PRIVATE cxx_std_20)
 
 # Same gate for the tuner's ear, and JUCE-free for the same reason: signals with a KNOWN pitch go
-# in, the cents error comes out. Links nothing at all — core::PitchTracker is plain C++.
+# in, the cents error comes out — and the strobe's stripes. Links nothing but threads — core::PitchTracker,
+# TunerEar and TunerStrobe are plain C++.
 add_executable(orbitamp_tuner_test tests/TunerTests.cpp)
 target_include_directories(orbitamp_tuner_test PRIVATE src)
 target_compile_features(orbitamp_tuner_test PRIVATE cxx_std_20)
+find_package(Threads REQUIRED)   # the strobe's tap is read while another thread laps it
+target_link_libraries(orbitamp_tuner_test PRIVATE Threads::Threads)
+
+# Same gate for the polyphonic tuner's analysis: synthetic strums with a KNOWN detune per string go
+# in — every tuning, three rates, a muted string, one far off, mains hum, a single pluck — and each
+# string's cents come out. core::PolyTuner is plain C++ too.
+add_executable(orbitamp_polytuner_test tests/PolyTunerTests.cpp)
+target_include_directories(orbitamp_polytuner_test PRIVATE src)
+target_compile_features(orbitamp_polytuner_test PRIVATE cxx_std_20)
+
+# ... and against strings that are NOT the analysis's model: partials off the formula, two planes of vibration,
+# two-stage decay, the pick, a slow settle, mains hum to the 12th — every reading of the timer judged.
+add_executable(orbitamp_polytuner_hard_test tests/PolyTunerHardTests.cpp)
+target_include_directories(orbitamp_polytuner_hard_test PRIVATE src)
+target_compile_features(orbitamp_polytuner_hard_test PRIVATE cxx_std_20)
+
+# The tuner on a BASS, the same way: every string a bassist tunes, through the processor's own path
+# (tap, 30 Hz ear, default floor and reference). A characterisation — it prints the tables and
+# passes whatever they say; it fails only if the harness stops hearing a guitar's A2.
+add_executable(orbitamp_bass_tuner_test tests/BassTunerTests.cpp)
+target_include_directories(orbitamp_bass_tuner_test PRIVATE src)
+target_compile_features(orbitamp_bass_tuner_test PRIVATE cxx_std_20)
 
 # Same gate for the gate's LEARN: known traces in, the threshold out — and the arithmetic held to
 # what OrbitAmp's GateConsole did before the faces came to share it. core::GateLearn is plain C++.
@@ -2006,7 +2254,8 @@ endif()
 # sources rather than a stage of it, because what this checks is the wiring between them.
 # ----------------------------------------------------------------------------
 juce_add_console_app(orbitamp_chain_test PRODUCT_NAME "OrbitAmpChainTest")
-target_sources(orbitamp_chain_test PRIVATE tests/ChainTests.cpp ${ORBITAMP_SOURCES})   # it plays OrbitAmp with no first start
+target_sources(orbitamp_chain_test PRIVATE tests/ChainTests.cpp ${ORBITAMP_SOURCES}   # it plays OrbitAmp with no first start
+    src/OrbitBassStart.cpp)          # ...and OrbitBass, for its allocations
 target_include_directories(orbitamp_chain_test PRIVATE src)
 target_include_directories(orbitamp_chain_test PRIVATE "${ORBITAMP_GENERATED_DIR}")   # the same faces, the same stamp
 add_dependencies(orbitamp_chain_test OrbitAmpVersionGen)
@@ -2111,6 +2360,13 @@ foreach(line IN LISTS _gate_lines)
         continue()
     endif()
     add_dependencies(Family_Gates ${target})
+    # A GATE'S STACK IS THE ONE IT HAS ON A MAC AND ON LINUX, 8 MB: Windows gives a program 1 MB, and the gates keep
+    # what they test on the stack — the tuner's strobe tests some 4 MB there (MSVC's /analyze) — so the tuner and
+    # the chain gates died on MSVC's runners of a stack overflow (0xC00000FD), the chain before its first line.
+    # The amps' own binaries keep Windows' default.
+    if(MSVC)
+        target_link_options(${target} PRIVATE /STACK:8388608)
+    endif()
     list(JOIN env " " env)
     string(APPEND _gate_manifest "${gate}\t$<TARGET_FILE:${target}>\t${env}\n")
 endforeach()

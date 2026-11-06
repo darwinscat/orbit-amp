@@ -2,6 +2,8 @@
 // Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of OrbitAmp — see LICENSE.
 
 #include "Controls.h"
+#include "../ui/PolyView.h"
+#include "../ui/StrobeView.h"
 
 #include <felitronics/appkit/BrandAssets.h>
 
@@ -174,21 +176,23 @@ namespace
 {
     /** The hand's rim round a cap drawn as drawCap draws it — in `colour`, or nothing while that is
         transparent. */
-    void rimCap (juce::Graphics& g, const juce::Image& img, juce::Point<float> centre, float length, float angle, juce::Colour colour)
+    void rimCap (juce::Graphics& g, const juce::Image& img, juce::Point<float> centre, float length, float angle, juce::Colour colour,
+                 float squash = 1.0f)
     {
         if (colour.isTransparent() || ! img.isValid())
             return;
         const auto src = opaqueBoundsOnce (img);
         const float k = length / src.getWidth();
-        const auto box = juce::Rectangle<float> (src.getWidth() * k, src.getHeight() * k).withCentre ({});
+        const auto box = juce::Rectangle<float> (src.getWidth() * k, src.getHeight() * k * squash).withCentre ({});
         juce::Path shape;
         shape.addRoundedRectangle (box.reduced (0.8f), juce::jmin (box.getWidth(), box.getHeight()) * 0.12f);
         shape.applyTransform (juce::AffineTransform::rotation (angle).translated (centre));
         drawHandRim (g, shape, colour);
     }
 
-    /** Draws a cap render centred on `centre`, its long axis `length` long, turned by `angle`. */
-    void drawCap (juce::Graphics& g, const juce::Image& img, juce::Point<float> centre, float length, float angle)
+    /** Draws a cap render centred on `centre`, its long axis `length` long, turned by `angle` — its short one `squash`
+        of the render's own. */
+    void drawCap (juce::Graphics& g, const juce::Image& img, juce::Point<float> centre, float length, float angle, float squash = 1.0f)
     {
         if (! img.isValid())
         {
@@ -200,7 +204,7 @@ namespace
         const float k = length / src.getWidth();
         g.setOpacity (1.0f);    // an image is drawn at the colour's opacity: a dim mark's, set before, let the well show through
         g.drawImageTransformed (img, juce::AffineTransform::translation (-src.getCentreX(), -src.getCentreY())
-                                         .scaled (k)
+                                         .scaled (k, k * squash)
                                          .rotated (angle)
                                          .translated (centre));
     }
@@ -1112,7 +1116,15 @@ ColumnFader::ColumnFader (const juce::Image& c) : cap (c)
 
 juce::Range<float> ColumnFader::travel() const
 {
-    const float end = 26.0f * scale;
+    // The cap's middle runs to 26 px short of either end, a column's full cap; a cap drawn shorter (capSquash) to half
+    // its own height and a little short of them — or it would stop where a full one does (the owner, 03.11).
+    float end = 26.0f * scale;
+    if (capSquash < 1.0f && cap.isValid())
+    {
+        const auto src = opaqueBoundsOnce (cap);
+        const float length = capLength > 0.0f ? capLength : crossWidth() - 8.0f;
+        end = 0.5f * src.getHeight() * length / juce::jmax (1.0f, (float) src.getWidth()) * capSquash + 3.0f * scale;
+    }
     return { end, runLength() - end };
 }
 
@@ -1159,9 +1171,9 @@ void ColumnFader::paint (juce::Graphics& g)
 
     const float y = t.getEnd() - t.getLength() * value;
     const float length = capLength > 0.0f ? capLength : crossWidth() - 8.0f;
-    drawCap (g, cap, { cx, y }, length, 0.0f);
+    drawCap (g, cap, { cx, y }, length, 0.0f, capSquash);
     if (isMouseOverOrDragging (true))
-        rimCap (g, cap, { cx, y }, length, 0.0f, handLight);
+        rimCap (g, cap, { cx, y }, length, 0.0f, handLight, capSquash);
 }
 
 void ColumnFader::mouseDown (const juce::MouseEvent& e)
@@ -1309,7 +1321,9 @@ void SegmentMeter::paint (juce::Graphics& g)
         return;
     }
 
-    const auto area = getLocalBounds().toFloat().reduced (12.0f, 14.0f);
+    // A narrow well (the walker's, 18 px) keeps its segments: the sides' 12 px would leave them no width at all.
+    const float side = (float) getWidth() >= 36.0f ? 12.0f : (float) getWidth() * 0.2f;
+    const auto area = getLocalBounds().toFloat().reduced (side, 14.0f);
     const float step = area.getHeight() / (float) segments;
     const float level = juce::jlimit (0.0f, 1.0f, (shown - floorDb) / (topDb - floorDb));
 
@@ -1325,7 +1339,8 @@ void SegmentMeter::paint (juce::Graphics& g)
 }
 
 //==============================================================================
-TunerFace::TunerFace (const core::TunerEar& e) : ear (e)
+TunerFace::TunerFace (const core::TunerEar& e, const core::TunerStrobe& s, const core::TunerPoly& pt)
+    : ear (e), strobe (s), poly (pt)
 {
     setInterceptsMouseClicks (false, false);
     startTimerHz (30);
@@ -1352,6 +1367,31 @@ void TunerFace::setDial (const Dial& d)
     repaint();
 }
 
+int TunerFace::hum() const
+{
+    return listening && ear.live() ? ear.humMains() : 0;
+}
+
+core::PitchTracker::Note TunerFace::shownNote() const
+{
+    if (strobe.on() && strobe.note() >= 0)
+        return { strobe.note(), strobe.cents (ear.hz()) };
+    return ear.nearestNote();
+}
+
+juce::Colour TunerFace::needleColour() const
+{
+    if (hum() != 0)
+        return home.interpolatedWith (orange, juce::jlimit (0.0f, 1.0f, std::abs (ear.needle()) / warmCents)).withMultipliedAlpha (humAlpha);
+    return ear.green() ? home
+                       : home.interpolatedWith (orange, juce::jlimit (0.0f, 1.0f, std::abs (ear.needle()) / warmCents));
+}
+
+juce::Colour TunerFace::strobeInk() const
+{
+    return hum() != 0 ? lilac.withAlpha (humAlpha) : needleColour();
+}
+
 void TunerFace::paintDial (juce::Graphics& g)
 {
     const auto origin = getPosition().toFloat();
@@ -1359,11 +1399,25 @@ void TunerFace::paintDial (juce::Graphics& g)
     const auto window = dial.window - origin;
     const float hub   = dial.reach * 0.07f;
     const bool live   = listening && ear.live();
-    const auto note   = ear.nearestNote();
+    const auto note   = shownNote();
     g.setFont (labelFont (stage::px13));
 
-    // The note in the window, a dash while nothing is heard.
-    if (live)
+    // STROBING: an old strobe tuner's disc turns where the needle swings, under everything else the dial writes.
+    if (strobe.on())
+        strobeview::paintDisc (g, pivot, dial.reach * discInner, dial.reach * discOuter, dial.sweep, strobe, live,
+                               strobeInk(), violet.withAlpha (0.16f), lilac.withAlpha (0.5f), discSegments);
+
+    // The note in the window — HUM and its mains when the reading is the mains' — a dash while nothing is heard.
+    if (hum() != 0)
+    {
+        // Wider than a note's name, and than the window: centred on it, past its edges if it must.
+        const auto label = "HUM " + juce::String (hum());
+        const float w    = juce::GlyphArrangement::getStringWidth (g.getCurrentFont(), label) + 4.0f;
+        g.setColour (heard);
+        g.drawText (label, window.withSizeKeepingCentre (juce::jmax (w, window.getWidth()), window.getHeight()),
+                    juce::Justification::centred, false);
+    }
+    else if (live)
     {
         g.setColour (ear.green() ? home : heard);
         g.drawText (juce::String (core::PitchTracker::noteName (note.midi)) + juce::String (core::PitchTracker::noteOctave (note.midi)),
@@ -1392,10 +1446,9 @@ void TunerFace::paintDial (juce::Graphics& g)
 
     // The needle, while a string is heard: green when it is home, warming to orange by 25 cents out,
     // tapering from the pivot to the ticks, with a short tail behind it.
-    if (live)
+    if (live && ! strobe.on())
     {
-        const auto colour = ear.green() ? home
-                                        : home.interpolatedWith (orange, juce::jlimit (0.0f, 1.0f, std::abs (ear.needle()) / warmCents));
+        const auto colour = needleColour();
         const float tail = dial.reach * 0.14f;
         juce::Path needle;
         needle.startNewSubPath (-1.6f, tail);
@@ -1423,14 +1476,22 @@ void TunerFace::paintStrip (juce::Graphics& g)
 {
     auto area = getLocalBounds().toFloat().reduced (10.0f, 1.0f);
     const bool live = listening && ear.live();
-    const auto note = ear.nearestNote();
+    const auto note = shownNote();
     g.setFont (labelFont (stage::px13));
 
     // Its state first — ON, OFF, or MUTE — then the note, a dash while nothing is heard.
     g.setColour (! listening ? violet : orange);
     g.drawText (! listening ? "OFF" : muting ? "MUTE" : "ON", area.removeFromLeft (64.0f), juce::Justification::centredLeft, false);
-    auto noteArea = area.removeFromLeft (54.0f);
-    if (live)
+    // HUM and its mains are wider than a note's name: while they show, the ruler gives them the room.
+    const auto humLabel = "HUM " + juce::String (hum());
+    auto noteArea = area.removeFromLeft (hum() != 0 ? juce::jmax (54.0f, juce::GlyphArrangement::getStringWidth (g.getCurrentFont(), humLabel) + 4.0f)
+                                                    : 54.0f);
+    if (hum() != 0)
+    {
+        g.setColour (heard);
+        g.drawText (humLabel, noteArea, juce::Justification::centredLeft, false);
+    }
+    else if (live)
     {
         g.setColour (ear.green() ? home : heard);
         g.drawText (juce::String (core::PitchTracker::noteName (note.midi)) + juce::String (core::PitchTracker::noteOctave (note.midi)),
@@ -1443,7 +1504,14 @@ void TunerFace::paintStrip (juce::Graphics& g)
     }
 
     // The ruler: a tick every five cents, the quarters taller, the centre orange; the needle over it.
+    // Strobing, the strobe's bands in its place.
     area.removeFromLeft (6.0f);
+    if (strobe.on())
+    {
+        strobeview::paintBands (g, area.reduced (0.0f, 2.0f), strobe, live, strobeInk(), violet.withAlpha (0.16f),
+                                lilac.withAlpha (0.5f), stripPeriod, 1.5f);
+        return;
+    }
     const auto ruler = area;
     const auto xOf = [&ruler] (float c) { return ruler.getX() + ruler.getWidth() * (juce::jlimit (-50.0f, 50.0f, c) + 50.0f) / 100.0f; };
     for (int c = -50; c <= 50; c += 5)
@@ -1455,8 +1523,7 @@ void TunerFace::paintStrip (juce::Graphics& g)
     }
     if (live)
     {
-        const auto colour = ear.green() ? home
-                                        : home.interpolatedWith (orange, juce::jlimit (0.0f, 1.0f, std::abs (ear.needle()) / warmCents));
+        const auto colour = needleColour();
         juce::Path needle;
         needle.addRoundedRectangle (juce::Rectangle<float> (3.0f, ruler.getHeight()).withCentre ({ xOf (ear.needle()), ruler.getCentreY() }), 1.5f);
         glow (g, needle, colour, 5.0f);
@@ -1465,8 +1532,90 @@ void TunerFace::paintStrip (juce::Graphics& g)
     }
 }
 
+void TunerFace::paintPoly (juce::Graphics& g)
+{
+    const auto lanes = poly.lanes (listening);   // off, nothing is heard
+    const polyview::Ink ink { labelFont (stage::px13), heard, lilac.withAlpha (idleAlpha), home, orange,
+                              violet.withAlpha (majorAlpha), orange.withAlpha (majorAlpha), warmCents, 4.0f };
+    const auto state = juce::String (! listening ? "OFF" : muting ? "MUTE" : "ON");
+    const int a4 = juce::roundToInt (poly.referenceHz());
+    const bool otherA = a4 != juce::roundToInt (core::PitchTracker::concertA);
+
+    if (dial.reach > 0.0f)
+    {
+        // A GAUGE: two columns of lanes over the pivot, low strings first, row by row; the state under the
+        // pivot, as ever, and the A — when it is not 440 — in the window the note had.
+        const auto origin = getPosition().toFloat();
+        const auto pivot  = dial.pivot - origin;
+        const auto window = dial.window - origin;
+        const float hub   = dial.reach * 0.07f;
+        const int rows    = (lanes.count + 1) / 2;
+        const float rowH  = stage::px13, gapY = stage::px13 * 0.07f;
+        const float gridW = dial.reach * (2.0f * gridCell + gridGap), gridH = (float) rows * rowH + (float) (rows - 1) * gapY;
+        polyview::paintGrid (g, juce::Rectangle<float> (gridW, gridH).withPosition (pivot.x - gridW * 0.5f, pivot.y + hub - gridH),
+                             lanes, ink, 2, dial.reach * gridGap, gapY);
+
+        g.setFont (ink.font);
+        g.setColour (! listening ? violet : orange);
+        g.drawText (state, juce::Rectangle<float> (window.getWidth() * 2.0f, window.getY() - pivot.y - hub)
+                               .withPosition (pivot.x - window.getWidth(), pivot.y + hub),
+                    juce::Justification::centred, false);
+        if (otherA)
+        {
+            g.setColour (lilac.withAlpha (quietAlpha));
+            g.drawText ("A " + juce::String (a4), window, juce::Justification::centred, false);
+        }
+
+        const auto boss = juce::Rectangle<float> (hub * 2.0f, hub * 2.0f).withCentre (pivot);
+        g.setGradientFill (juce::ColourGradient (juce::Colour (0xff4a4a52), boss.getCentreX(), boss.getY(),
+                                                 juce::Colour (0xff101013), boss.getCentreX(), boss.getBottom(), false));
+        g.fillEllipse (boss);
+        g.setColour (juce::Colours::black.withAlpha (0.6f));
+        g.drawEllipse (boss, 0.8f);
+        return;
+    }
+
+    if (strip)
+    {
+        // A STRIP: its state first, as ever, then the lanes in a row.
+        auto area = getLocalBounds().toFloat().reduced (10.0f, 1.0f);
+        g.setFont (ink.font);
+        g.setColour (! listening ? violet : orange);
+        g.drawText (state, area.removeFromLeft (64.0f), juce::Justification::centredLeft, false);
+        area.removeFromLeft (6.0f);
+        polyview::paintRow (g, area, lanes, ink, polyGap);
+        return;
+    }
+
+    // THE SCREEN: big lanes, and under them the state in its corner, the A opposite when it is not 440, and
+    // between them the words for the plectrum, while one shows: what works for a string the others' partials
+    // cover — damp them, then pluck it (plucked alone over a chord still ringing, it stays covered).
+    auto area = getLocalBounds().toFloat().reduced (18.0f, 10.0f);
+    auto foot = area.removeFromBottom (24.0f);
+    area.removeFromBottom (6.0f);
+    g.setFont (ink.font);
+    g.setColour (! listening ? violet : orange);
+    g.drawText (state, foot, juce::Justification::centredLeft, false);
+    if (otherA)
+    {
+        g.setColour (lilac.withAlpha (quietAlpha));
+        g.drawText ("A " + juce::String (a4), foot, juce::Justification::centredRight, false);
+    }
+    if (polyview::anyMasked (lanes))
+    {
+        g.setColour (orange);
+        g.drawText (juce::String::fromUTF8 ("DAMP \xc2\xb7 PLUCK ALONE"), foot, juce::Justification::centred, false);
+    }
+    polyview::paintColumns (g, area, lanes, ink, labelFont (stage::px16), polyGap * 2.0f);
+}
+
 void TunerFace::paint (juce::Graphics& g)
 {
+    if (poly.on())
+    {
+        paintPoly (g);
+        return;
+    }
     if (dial.reach > 0.0f)
     {
         paintDial (g);
@@ -1480,7 +1629,7 @@ void TunerFace::paint (juce::Graphics& g)
 
     auto area = getLocalBounds().toFloat().reduced (18.0f, 10.0f);
     const bool live = listening && ear.live();      // switched off, the ear keeps the last note it heard
-    const auto note = ear.nearestNote();
+    const auto note = shownNote();
 
     // The note: name big, octave small beside it; a dash while nothing is heard.
     auto noteArea = area.removeFromLeft (96.0f);
@@ -1498,7 +1647,18 @@ void TunerFace::paint (juce::Graphics& g)
     g.setFont (labelFont (stage::px13));
     g.drawText (! listening ? "OFF" : muting ? "MUTE" : "ON", noteArea.withTop (noteArea.getBottom() - 24.0f),
                 juce::Justification::centredLeft, false);
-    if (live)
+    if (hum() != 0)
+    {
+        // HUM and its mains as one label, where the note's name stands — the digits never on their own,
+        // where they would read as the ruler's caption.
+        const auto label = "HUM " + juce::String (hum());
+        const auto font  = labelFont (humPx);
+        const float w    = juce::GlyphArrangement::getStringWidth (font, label) + 2.0f;
+        g.setColour (heard);
+        g.setFont (font);
+        g.drawText (label, noteArea.withX (noteArea.getRight() - 4.0f - w).withWidth (w), juce::Justification::centredRight, false);
+    }
+    else if (live)
     {
         const auto name = juce::String (core::PitchTracker::noteName (note.midi));
         g.setColour (ear.green() ? home : heard);
@@ -1520,6 +1680,15 @@ void TunerFace::paint (juce::Graphics& g)
     // ruler stops short of the right edge so "+50" stays on the glass.
     area.removeFromLeft (8.0f);
     area.removeFromRight (18.0f);
+
+    // Strobing: the strobe, big, where the ruler and its numbers stood.
+    if (strobe.on())
+    {
+        strobeview::paintBands (g, area.reduced (0.0f, 4.0f), strobe, live, strobeInk(), violet.withAlpha (0.16f),
+                                lilac.withAlpha (0.5f), screenPeriod, 3.0f);
+        return;
+    }
+
     auto numbers = area.removeFromBottom (24.0f);
     const auto ruler = area;
     const auto xOf = [&ruler] (float c) { return ruler.getX() + ruler.getWidth() * (juce::jlimit (-50.0f, 50.0f, c) + 50.0f) / 100.0f; };
@@ -1541,8 +1710,7 @@ void TunerFace::paint (juce::Graphics& g)
     if (live)
     {
         const float x = xOf (ear.needle());
-        const auto colour = ear.green() ? home
-                                        : home.interpolatedWith (orange, juce::jlimit (0.0f, 1.0f, std::abs (ear.needle()) / warmCents));
+        const auto colour = needleColour();
         juce::Path needle;
         needle.addRoundedRectangle (juce::Rectangle<float> (4.0f, ruler.getHeight()).withCentre ({ x, ruler.getCentreY() }), 2.0f);
         glow (g, needle, colour, 8.0f);
@@ -1617,6 +1785,91 @@ void panel::WordKey::mouseUp (const juce::MouseEvent& e)
 {
     if (isEnabled() && getLocalBounds().contains (e.getPosition()) && onClick)
         onClick();
+}
+
+//==============================================================================
+namespace
+{
+    constexpr double breathHoldMs = 1000.0;
+}
+
+KnobRing::KnobRing (const ArtKnob& k, juce::Colour l, juce::Point<float> centre, float r, float w)
+    : light (l), knob (k), radius (r), width (w)
+{
+    setInterceptsMouseClicks (false, false);
+    breath.stiffness = 40.0f;       // soft: a lamp warming, not a spring
+    breath.damping   = 13.0f;
+    place (centre, r, w);
+    startTimerHz (30);
+}
+
+void KnobRing::place (juce::Point<float> centre, float r, float w)
+{
+    radius = r;
+    width = w;
+    setBounds (juce::Rectangle<float> ((radius + width + 8.0f) * 2.0f, (radius + width + 8.0f) * 2.0f)
+                   .withCentre (centre).getSmallestIntegerContainer());
+    repaint();
+}
+
+void KnobRing::timerCallback()
+{
+    // The hand on the knob, or a moment ago: the ring warms; a second after it has gone, it cools.
+    const bool now = knob.isMouseOverOrDragging();
+    const double ms = juce::Time::getMillisecondCounterHiRes();
+    if (touched && ! now)
+        leftAt = ms;
+    touched = now;
+    breath.target = now || ms - leftAt < breathHoldMs ? 1.0f : 0.0f;
+
+    // WHERE THE ARC ENDS IS TAKEN HERE, with the repaint of the whole ring, and never in paint. Paint also
+    // runs for a corner of the ring alone — the knob's own repaint, its square over the ring's diagonals,
+    // every time the hand turns it — and an arc that took the value there drew its new end in that corner
+    // while the rest of the ring kept the old one, and then counted itself drawn: the ring stood torn,
+    // in steps and pieces, until the glow eased away a second later and drew it all.
+    const bool easing = breath.step (1.0f / 30.0f);
+    const float value = knob.getValue();
+    if (easing || std::abs (value - shown) > 1.0e-4f)
+    {
+        shown = value;
+        repaint();
+    }
+}
+
+void KnobRing::paint (juce::Graphics& g)
+{
+    if (shown < 0.0f)               // before the first tick: where the knob stands
+        shown = knob.getValue();
+    const auto c = getLocalBounds().toFloat().getCentre();
+    const float b = juce::jlimit (0.0f, 1.0f, breath.value);
+
+    // Under the hand, an orange light round the knob's cap, inside its ring — the hand's colour, as on
+    // everything else that moves — warming and cooling with the ring.
+    if (b > 0.01f)
+    {
+        juce::Path rim;
+        const float r = (float) knob.getWidth() * rimOfKnob;
+        rim.addEllipse (juce::Rectangle<float> (r * 2.0f, r * 2.0f).withCentre (c));
+        drawHandRim (g, rim, orange.withAlpha (rimAlpha * b));
+    }
+
+    // The rest of the ring, dim: a band of the ring's width, all the way round, in its light taken down
+    // toward the dark — one closed band, so that no seam shows where a circle's ends would meet.
+    juce::Path whole;
+    whole.addEllipse (juce::Rectangle<float> (radius * 2.0f, radius * 2.0f).withCentre (c));
+    g.setColour (restOf (light));
+    g.strokePath (whole, juce::PathStrokeType (width));
+
+    // From the start of the travel to the pointer, lit: the arc made a band of the ring's own width
+    // first, so that the glow and the light are that band and nothing else — a shadow drawn for the
+    // bare arc would fill the chord it spans, over the knob.
+    const float to = juce::degreesToRadians (from + sweep * juce::jlimit (0.0f, 1.0f, shown));
+    juce::Path arc, band;
+    arc.addCentredArc (c.x, c.y, radius, radius, 0.0f, juce::degreesToRadians (from), to, true);
+    juce::PathStrokeType (width, juce::PathStrokeType::curved, juce::PathStrokeType::rounded).createStrokedPath (band, arc);
+    juce::DropShadow (light.withAlpha (glowAlpha + glowAlphaHand * b), juce::roundToInt (glowRadius + glowRadiusHand * b), {}).drawForPath (g, band);
+    g.setColour (light.withAlpha (litAlpha + litAlphaHand * b));
+    g.fillPath (band);
 }
 
 } // namespace orbitamp::face

@@ -21,16 +21,25 @@ namespace
     {
         return new AmpEditor (p);
     }
+
+    /** Its own parameters, after the engine's: COMP's (the owner, 02.11). */
+    void orbitAmpParameters (const Product&, juce::AudioProcessorValueTreeState::ParameterLayout& layout)
+    {
+        params::addGuitarCompParameters (layout);
+    }
 }
 
 /** ORBITAMP (Product.h): the player of the whole library, in its own face (PluginEditor.h) — and the
-    engine as it stands: no parameter of its own, no half of its own. Its tuner listens always. */
+    engine as it stands, with a COMP before the AMP (out of its strip until the player adds it); no half of its own. Its
+    tuner listens always. */
 const Product& products::orbitAmp()
 {
     static const Product orbitAmp = []
     {
         Product p { "OrbitAmp", makeEditor, firstStart };
-        p.tunerSwitch = false;
+        p.addParameters = orbitAmpParameters;
+        p.guitarComp    = true;
+        p.tunerSwitch   = false;
         return p;
     }();
     return orbitAmp;

@@ -60,7 +60,8 @@ public:
     bool go (int channel);
 
     /** THE FIXED CHAIN. A product with channels is a cut-down OrbitAmp: the links it has are always in
-        the rig and always on, the ones it has not are out, and its tone knobs are the pack's own.
+        the rig and always on, the ones it has not are out, its tone knobs are the pack's own — or, on the
+        bass's standard, the standard's, left as they stand — and what its lineup pins is where it pins it.
         `firstTime` also gives a state the product has never seen its starting choices. */
     void setUpChain (bool firstTime);
 

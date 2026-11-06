@@ -54,7 +54,8 @@ rm -rf dist
 installer/sign-family-macos.sh "$VER" "$BUILD" dist
 
 # 4. Checksums beside the artifacts.
-( cd dist && shasum -a 256 darwinscat-amps-* > SHA256SUMS )
+ARCHIVE="$(sed -n 's/^archive=//p' "${FAMILY_INI:-installer/family.ini}" | tr -d '\r')"
+( cd dist && shasum -a 256 "$ARCHIVE"-* > SHA256SUMS )
 
 # 5. The symbols, kept where the next release does not delete them: a folder of each run's own, so a release
 #    built twice keeps both — they are told apart by the UUIDs, never by a name.

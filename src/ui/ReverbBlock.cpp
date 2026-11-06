@@ -6,6 +6,7 @@
 #include "../Parameters.h"
 #include "Prefs.h"
 #include "../PluginProcessor.h"
+#include "OnFirst.h"
 
 #include <felitronics/analysis/PlotMap.h>
 
@@ -124,7 +125,7 @@ ReverbBlock::ReverbBlock (AmpProcessor& processor)
     {
         juce::PopupMenu m;
         m.addItem (1, "RESET TO DEFAULT");
-        m.showMenuAsync (juce::PopupMenu::Options().withMousePosition(),
+        onfirst::show (m, this, juce::PopupMenu::Options().withMousePosition(),
                          [safe = juce::Component::SafePointer<ReverbBlock> (this)] (int rr)
                          {
                              if (safe == nullptr || rr != 1)
@@ -233,30 +234,33 @@ ReverbBlock::ReverbBlock (AmpProcessor& processor)
         // The decay envelope over it all — the reverb's signature silhouette, an impulse's peak
         // level over time. Another axis on purpose: it is a STAMP, not a second plot — the one
         // shape that says how long this room breathes.
-        if (tailEnv.size() >= 2)
+        // Only where the room sounds: from its first bucket over the floor to its last — the predelay's silence and the
+        // died-away tail draw nothing, and a bucket of the noisy end that falls under the floor lies ON it, not thrown
+        // through it in a long end (Oleh, 03.11).
+        const auto up = [this] (size_t i) { return juce::jlimit (0.0f, 1.0f, (tailEnv[i] + 60.0f) / 60.0f); };
+        size_t from = 0, to = tailEnv.size();
+        while (from < to && up (from) <= 0.001f) ++from;
+        while (to > from && up (to - 1) <= 0.001f) --to;
+
+        if (to - from >= 2)
         {
             const auto inner = r.reduced (4.0f);
 
             // The stroke is the envelope's TOP alone — a closed path drew its own floor and read
             // as an axis nobody asked for. The fill still closes along the bottom, quietly.
             juce::Path line;
+            const auto xAt = [&] (size_t i) { return inner.getX() + inner.getWidth() * (float) i / (float) (tailEnv.size() - 1); };
 
-            for (size_t i = 0; i < tailEnv.size(); ++i)
+            for (size_t i = from; i < to; ++i)
             {
-                const float t  = (float) i / (float) (tailEnv.size() - 1);
-                const float up = juce::jlimit (0.0f, 1.0f, (tailEnv[i] + 60.0f) / 60.0f);
-                const float x  = inner.getX() + t * inner.getWidth();
-                // On the floor the silhouette sinks past the edge like the combs do — the
-                // predelay's silence and the died-away tail leave no crawling line.
-                const float y  = up <= 0.001f ? r.getBottom() + 4.0f
-                                              : inner.getBottom() - up * inner.getHeight();
-                if (i == 0) line.startNewSubPath (x, y);
-                else        line.lineTo (x, y);
+                const float y = inner.getBottom() - up (i) * inner.getHeight();
+                if (i == from) line.startNewSubPath (xAt (i), y);
+                else           line.lineTo (xAt (i), y);
             }
 
             juce::Path tp = line;
-            tp.lineTo (inner.getRight(), inner.getBottom());
-            tp.lineTo (inner.getX(),     inner.getBottom());
+            tp.lineTo (xAt (to - 1), inner.getBottom());
+            tp.lineTo (xAt (from),   inner.getBottom());
             tp.closeSubPath();
 
             g.setColour (theme::violet.withAlpha (0.10f));
@@ -348,6 +352,15 @@ void ReverbBlock::refreshTail()
             peak = juce::jmax (peak, std::abs (left[(size_t) i]));
 
         env[(size_t) b] = peak > 1.0e-5f ? juce::Decibels::gainToDecibels (peak) : -60.0f;
+    }
+
+    // ...and from its loudest bucket on, the decay's top: never rising again, so the tail's wiggles about the floor
+    // are not spikes thrown down to it (Oleh, 03.11).
+    if (! env.empty())
+    {
+        const auto loudest = (size_t) (std::max_element (env.begin(), env.end()) - env.begin());
+        for (auto i = env.size() - 1; i > loudest; --i)
+            env[i - 1] = std::max (env[i - 1], env[i]);
     }
 
     tailEnv = std::move (env);

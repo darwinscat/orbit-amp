@@ -8,6 +8,8 @@
 
 #include <juce_audio_processors/juce_audio_processors.h>
 
+#include <vector>
+
 #include <CabinetCatalog.h>   // written by CMake from resources/cabinets.txt
 
 namespace orbitamp::params
@@ -112,6 +114,16 @@ inline juce::String blockEqMode (const char* blk) { return juce::String (blk) + 
 inline const juce::StringArray eqModes { "Device Tone", "Universal EQ" };
 enum class EqMode { native, ours };
 
+/** WHICH STANDARD EQ THE AMP'S CONSOLE IS — "ours", the EqMode above, comes in two, and a console is one of them.
+
+    THE GUITAR'S: our four bands (LO, L MID, H MID, HI), the scalpel the curve summons, and the console's own HPF and
+    LPF with their slopes, cutting inside the AMP. THE BASS'S, the SGT-DI's: BASS, MIDDLE with its frequency under it
+    (bassMidMinHz) and TREBLE — no second bell, no scalpel — and its cuts are the bass's one pair, 5 STR / 4 STR and
+    FINGERS / SLAP (bassHpf, bassLpf), working across the whole chain rather than inside the AMP.
+
+    A product says which it plays (Product::eqStandard); the console's face and the processor's EQ both read it there. */
+enum class EqStandard { guitar, bass };
+
 /** A device's OTHER selecting controls — the ones that pick a file and are not the gain dial. Two
     slots, like the measured ones: a fixed set a host can see, filled by whatever the pack declares.
     Fur Coat needs one of them for its octave; most pedals need none. */
@@ -174,10 +186,11 @@ inline constexpr const char* preampDevice = "preamp_device";
 inline constexpr const char* preampGain   = "preamp_gain";
 
 /** The preamp's TONE controls — the ones a player computes rather than selects. How many a device
-    has varies (SM7 has three: EQ-Lo, EQ-Hi and a two-position Edge; a Victory V4 preamp five), but a
-    host needs a fixed set of parameters, so five slots are reserved and the loaded pack decides what
-    each one drives. A slot with nothing behind it is hidden rather than shown doing nothing. */
-inline constexpr int preampNumMeasured = 5;
+    has varies (SM7 has three: EQ-Lo, EQ-Hi and a two-position Edge; a Victory V4 preamp five; the SGT-DI six:
+    Bass, Mid, its Freq, Treble and the two Ultra switches), but a host needs a fixed set of parameters, so six
+    slots are reserved and the loaded pack decides what each one drives. A slot with nothing behind it is hidden
+    rather than shown doing nothing. */
+inline constexpr int preampNumMeasured = 6;
 inline juce::String preampMeasured (int i) { return "preamp_meas" + juce::String (i + 1); }
 
 /** The EQ, one per captured block and BELONGING to it — there is one captured block, the preamp,
@@ -305,31 +318,45 @@ inline const juce::StringArray stereoModes { "Mono", "Stereo", "Stereo Space" };
 enum class StereoMode { mono, stereo, stereoSpace };
 
 /** TEMPORARY — the audition loops, in the order the player offers them. Default is the first.
-    The site's demo loops, the same takes under the same names and in its order.
+    The site's demo loops, the same takes under the same names and in its order: a guitar amp's, and a bass amp's own —
+    the bass DI riffs Cab IR Generator plays, under its names (the owner, 06.11).
 
-    The audio is NOT shipped: it is read at run time from the dev machine's private folder, and
-    when that folder is absent the player and its menu entry are absent with it. The binary is the
-    same either way — presence of the folder is the whole switch. */
-inline const juce::StringArray demoLoops { "Eleven Light Years 1", "Eleven Light Years 2", "Eleven Light Years 3",
-                                           "Eleven Light Years 4", "Deep Space Is My Home 1",
-                                           "Deep Space Is My Home 2", "Cat's Hard Day", "I Am Projection",
-                                           "Fifth Dimension" };
-inline constexpr const char* demoLoopFiles[] = { "eleven-light-years-1.wav", "eleven-light-years-2.wav",
-                                                 "eleven-light-years-3.wav", "eleven-light-years-4.wav",
-                                                 "deep-space-is-my-home-1.wav", "deep-space-is-my-home-2.wav",
-                                                 "cats-hard-day.wav", "i-am-projection.wav",
-                                                 "fifth-dimension.wav" };
-
-inline juce::File demoLoopsDir()
+    The audio is NOT shipped: it is read at run time from the dev machine's private folder (the bass's in its bass/),
+    and when that folder is absent the player and its menu entry are absent with it. The binary is the same either way —
+    presence of the folder is the whole switch. */
+struct DemoLoops
 {
-    return juce::File::getSpecialLocation (juce::File::userHomeDirectory)
-        .getChildFile ("IdeaProjects/orbit-amp/.private/loops");
+    juce::StringArray names;
+    std::vector<const char*> files;
+    const char* folder;
+};
+
+inline const DemoLoops& demoLoopsOf (bool bass)
+{
+    static const DemoLoops guitar { { "Eleven Light Years 1", "Eleven Light Years 2", "Eleven Light Years 3",
+                                      "Eleven Light Years 4", "Deep Space Is My Home 1", "Deep Space Is My Home 2",
+                                      "Cat's Hard Day", "I Am Projection", "Fifth Dimension" },
+                                    { "eleven-light-years-1.wav", "eleven-light-years-2.wav", "eleven-light-years-3.wav",
+                                      "eleven-light-years-4.wav", "deep-space-is-my-home-1.wav", "deep-space-is-my-home-2.wav",
+                                      "cats-hard-day.wav", "i-am-projection.wav", "fifth-dimension.wav" },
+                                    "IdeaProjects/orbit-amp/.private/loops" };
+    static const DemoLoops bassLoops { { "Eleven Light Years", "Fifth Dimension 1", "Fifth Dimension 2",
+                                         "Deep Space is My Home 1", "Deep Space is My Home 2", "I am Projection" },
+                                       { "eleven-light-years.wav", "fifth-dimension-1.wav", "fifth-dimension-2.wav",
+                                         "deep-space-is-my-home-1.wav", "deep-space-is-my-home-2.wav", "i-am-projection.wav" },
+                                       "IdeaProjects/orbit-amp/.private/loops/bass" };
+    return bass ? bassLoops : guitar;
 }
 
-inline bool demoLoopsPresent()
+inline juce::File demoLoopsDir (bool bass)
 {
-    for (auto* name : demoLoopFiles)
-        if (demoLoopsDir().getChildFile (name).existsAsFile())
+    return juce::File::getSpecialLocation (juce::File::userHomeDirectory).getChildFile (demoLoopsOf (bass).folder);
+}
+
+inline bool demoLoopsPresent (bool bass)
+{
+    for (auto* name : demoLoopsOf (bass).files)
+        if (demoLoopsDir (bass).getChildFile (name).existsAsFile())
             return true;
 
     return false;
@@ -439,11 +466,148 @@ inline constexpr const char* tunerMute     = "tuner_mute";
 /** Which link a cost entry belongs to, or `numChainRows` for one that belongs to nobody (TOTAL,
     and any stage no link has claimed). Declared after the table below — see `rowForStage`. */
 
+/** ORBITBASS'S OWN PARAMETERS — added by its Product (OrbitBassStart.cpp, addParameters, through
+    addBassParameters below); no guitar amp has them, and a processor reads them only on the bass's chain.
+
+    COMP, after the gate: its STANDBY/ON (the strip's arrow) and ONE KNOB, 0..1 — 0 is no compressor at
+    all; up the knob the threshold falls -12 -> -36 dB and the ratio rises 2:1 -> 6:1 (core::BassComp). Its
+    menu: the attack, the release and the character. */
+inline constexpr const char* compOn        = "comp_on";
+inline constexpr const char* compAmount    = "comp";
+inline constexpr const char* compAttack    = "comp_attack";
+inline constexpr const char* compRelease   = "comp_release";
+inline constexpr const char* compCharacter = "comp_character";
+inline const juce::StringArray compAttacks    { "Slow", "Med", "Fast" };
+inline const juce::StringArray compReleases   { "Auto", "Fast", "Slow" };
+inline const juce::StringArray compCharacters { "Smooth", "Punchy", "Opto", "FET", "Squash" };
+
+/** COMP, EACH CONTROL ONE JOB (the owner, 31.10): `comp` is its BLEND — parallel compression, 0 none at all .. 1 all
+    of the signal compressed (the strip's arrow its STANDBY); its THRESHOLD in dB and its RATIO are their own (the
+    picture's line, the ratio's combo over the square); make-up automatic. Its menu: attack, release, character. */
+inline constexpr const char* compThreshold = "comp_threshold";
+inline constexpr const char* compRatio     = "comp_ratio";
+inline constexpr float compThresholdMin = -48.0f, compThresholdMax = 0.0f, compThresholdDefault = -24.0f;
+inline constexpr float compRatioMin = 1.5f, compRatioMax = 10.0f;
+
+/** ORBITAMP'S COMP (the owner, 02.11: «добавим компрессоры в гитару»): the bass's COMP, the same parameters, before the
+    AMP as a pedal stands — out of the strip until the player adds it (`compPresent`, its checklist), on OPTO. The bass
+    has no `compPresent`: its COMP stands for good. */
+inline constexpr const char* compPresent = "comp_present";
+void addGuitarCompParameters (juce::AudioProcessorValueTreeState::ParameterLayout&);
+
+/** THE GUITAR'S INPUT CUT (the owner, 02.11): a 2nd-order high-pass at the input of every guitar amp's chain, always,
+    under the lowest note (a low E loses half a decibel), so rumble, thumps and DC reach neither the gate, nor COMP, nor
+    the AMP. */
+inline constexpr double guitarInputCutHz = 50.0;
+
+/** THE BASS'S THREE EFFECTS (felitronics-core's octave, envfilter and chorus), each a block in the strip — its
+    STANDBY/ON — and ONE slider, its amount 0..1 through the module's own law (<Module>Law.h, paramsForAmount): 0 is
+    the dry bit for bit, nothing computed. Everything else is the block's menu — the menu's fields, never the law's.
+
+    OCTAVE, after COMP: the -1 octave under the note; the menu: the -2 at the slider's top, TONE (the sub's low
+    pass), SUB HP (its high pass, 10..80 Hz) and the tracking GATE. */
+inline constexpr const char* octaveOn      = "octave_on";
+inline constexpr const char* octaveAmount  = "octave";
+inline constexpr const char* octaveToneHz  = "octave_tone_hz";
+/** What OCTAVE no longer asks the player (the owner, 01.11): no -2; the sub's own high pass left to the chain's one HPF
+    (core's lowest); the tracking gate set by itself — the GATE's threshold while the GATE works, else core's default. */
+inline constexpr float octaveSubHpHz = 10.0f, octaveGateIdleDb = -50.0f;
+
+/** FILTER, after OCTAVE: the envelope filter, its detector keyed from the gated input BEFORE COMP — it follows the
+    string. The menu: LP/BP, up/down, RESONANCE, RANGE, KEEP LOWS and its corner, the follower's attack and release. */
+inline constexpr const char* filterOn        = "filter_on";
+inline constexpr const char* filterAmount    = "filter";
+inline constexpr const char* filterMode      = "filter_mode";
+inline constexpr const char* filterDirection = "filter_direction";
+inline constexpr const char* filterResonance = "filter_resonance";
+inline constexpr const char* filterRange     = "filter_range";
+inline constexpr const char* filterKeepLows  = "filter_keep_lows";
+inline constexpr const char* filterKeepHz    = "filter_keep_hz";
+/** ENVELOPE's follower attacks in a fixed 3 ms (the owner, 01.11 — no bass envelope pedal asks it); its CLEAN LOWS, one
+    list: off, or the corner under which the bass stays dry. */
+inline constexpr float filterAttackMs = 3.0f;
+inline constexpr float filterKeepItems[] { 80.0f, 120.0f, 150.0f, 200.0f, 300.0f };
+inline constexpr const char* filterReleaseMs = "filter_release_ms";
+inline const juce::StringArray filterModes      { "LP", "BP" };
+inline const juce::StringArray filterDirections { "Up", "Down" };
+inline const juce::StringArray filterRanges     { "Low", "Mid", "High" };
+inline constexpr float filterRangeHz[3][2] = { { 100.0f, 1500.0f }, { 150.0f, 3000.0f }, { 300.0f, 6000.0f } };
+
+/** CHORUS, after the AMP's tone and before the cabinet: where the bass's chain turns stereo, the lows centred. The
+    menu: RATE, CROSSOVER (below it the voice falls away), CENTRE (the delay its head swings about). */
+inline constexpr const char* chorusOn          = "chorus_on";
+
+/** OrbitBass's REMOVABLE LINKS, in its strip or out of it — the strip's own checklist writes these (the owner, 31.10:
+    "throwable out of the strip"). Out is GONE: no arrow, no block on the face, no sound (an effect let go through its
+    own door, the echo and the room faded out and then cleared). Their ON switches remember whether each played while
+    it sits out. OCTAVE, ENVELOPE and CHORUS in out of the box; DELAY and REVERB out. */
+inline constexpr const char* octavePresent = "octave_present";
+inline constexpr const char* filterPresent = "filter_present";
+inline constexpr const char* chorusPresent = "chorus_present";
+inline constexpr const char* delayPresent  = "delay_present";
+inline constexpr const char* reverbPresent = "reverb_present";
+
+/** The low cut on what the bass's DELAY and REVERB ADD — the repeats and the tail — so its lows stay dry and centred.
+    Fixed, the bass's own: a 12 dB/oct high-pass on the wet alone. */
+inline constexpr double bassWetCutHz = 300.0;
+inline constexpr const char* chorusAmount      = "chorus";
+inline constexpr const char* chorusRateHz      = "chorus_rate_hz";
+inline constexpr const char* chorusCrossoverHz = "chorus_crossover_hz";
+/** CHORUS's choices (the owner, 01.11): the head's centre fixed (8 ms), the RATE a rail, the MONO crossover a list —
+    nothing under 200 Hz: lower, the chorus smears the mix's lows. */
+inline constexpr float chorusCentreMs = 8.0f;
+inline constexpr float chorusCrossoverItems[] { 200.0f, 250.0f, 300.0f, 400.0f, 500.0f };
+
+/** BLEND, in the AMP: the capture's share against the clean input below a frequency (RigPlayer's crossover
+    blend, told 1 - this) — 1 is the capture alone, as every MIX on the bass is its block alone at the top (the owner,
+    03.11). A new id since it turned: a state saved the other way round falls to the default instead. The frequency
+    and the polarity in its menu. */
+inline constexpr const char* ampBlend       = "amp_blend_wet";
+inline constexpr const char* ampBlendHz     = "amp_blend_hz";
+inline constexpr const char* ampBlendInvert = "amp_blend_invert";
+inline constexpr float ampBlendMinHz = 80.0f, ampBlendMaxHz = 250.0f, ampBlendDefaultHz = 150.0f;
+
+/** MIX, in the CAB, after the cabinet: the cabinet's share against the DI — the signal the cabinet is handed — in
+    percent; 100 is the cabinet alone. */
+inline constexpr const char* cabMix = "cab_mix";
+inline constexpr float cabMixDefault = 70.0f;
+
+/** The bass's own cuts (the owner, 31.10: ONE pair, on the AMP's switches): the HPF by the strings — 5 STR (a low B
+    whole) or 4 STR — switched on and off apart from that choice, so it comes back where it was; ONE control across the
+    whole chain (PluginProcessor: the main cut at the END, gentle inner ones at the input and after COMP, OCTAVE and
+    the AMP). The LPF by the hand — FINGERS or SLAP — at the END only, its switch apart likewise. Each position's
+    frequency is its own, set from the choice's menu. */
+inline constexpr const char* bassHpfOn        = "bass_hpf_on";
+inline constexpr const char* bassLpfOn        = "bass_lpf_on";
+inline constexpr const char* bassHpf          = "bass_hpf";
+inline constexpr const char* bassHpfHz4       = "bass_hpf_hz_4";
+inline constexpr const char* bassHpfHz5       = "bass_hpf_hz_5";
+inline constexpr const char* bassLpf          = "bass_lpf";
+inline constexpr const char* bassLpfHzFingers = "bass_lpf_hz_fingers";
+inline constexpr const char* bassLpfHzSlap    = "bass_lpf_hz_slap";
+inline const juce::StringArray bassHpfPositions { "5 Str", "4 Str" };
+inline const juce::StringArray bassLpfPositions { "Fingers", "Slap" };
+enum class BassHpf { five, four };
+enum class BassLpf { fingers, slap };
+inline constexpr float bassHpfDefaultHz4 = 32.0f, bassHpfDefaultHz5 = 22.0f;
+/** The frequencies each choice's menu offers — every one the HPF can be set to from the face. */
+inline constexpr float bassHpfMenuHz5[] { 18.0f, 20.0f, 22.0f, 25.0f, 28.0f };
+inline constexpr float bassHpfMenuHz4[] { 28.0f, 30.0f, 32.0f, 35.0f, 40.0f };
+inline constexpr float bassLpfDefaultHzFingers = 4500.0f, bassLpfDefaultHzSlap = 9500.0f;
+
+/** The bass's AMP EQ is the SGT-DI's (the owner, 01.11): BASS (the low shelf), MIDDLE (bell 1) with its frequency swept
+    by a slider under it, TREBLE (the high shelf) — always ours, the bell 2 and the scalpel out of its sound. MIDDLE's
+    frequency is held to this span, in the sound and on the face alike. */
+inline constexpr float bassMidMinHz = 200.0f, bassMidMaxHz = 3000.0f;
+
+/** OrbitBass's own parameters, after the engine's. */
+void addBassParameters (juce::AudioProcessorValueTreeState::ParameterLayout&);
+
 /** The DSP cost entries, in the order the chain runs them: a captured block is followed by its own
     console. Here rather than in the processor so a link can name its stage and the footer can
     label one, without either of them having to know about the other. */
-enum Stage { stTotal, stTuner, stGate, stPreamp, stPreampEq, stDelay, stReverb,
-             stCab, stLimit, stOut, numStages };
+enum Stage { stTotal, stTuner, stGate, stComp, stOctave, stFilter, stPreamp, stPreampEq, stChorus, stDelay,
+             stReverb, stCab, stLimit, stOut, numStages };
 
 /** What the breakdown calls a stage. TWO spellings, both ASCII on purpose: the copied report runs
     through `formatted ("%-8s")`, where a multi-byte character breaks the encoding and the column
@@ -454,8 +618,12 @@ inline constexpr StageName stageNames[numStages] = {
     { "TOTAL",  "TOTAL"     },
     { "TUNER",  "TUNER"     },
     { "GATE",   "GATE"      },
+    { "COMP",   "COMP"      },
+    { "OCTAVE", "OCTAVE"    },
+    { "ENVELOPE", "ENVELOPE" },   // FILTER: the owner reads it as ENVELOPE (31.10)
     { "AMP",    "AMP"       },
     { "AMP EQ", "AMP EQ"    },
+    { "CHORUS", "CHORUS"    },
     { "DELAY",  "DELAY"     },
     { "REVERB", "REVERB"    },
     { "CAB",    "CAB"       },
@@ -466,8 +634,10 @@ inline constexpr StageName stageNames[numStages] = {
 /** A link's place in the chain — by NAME, not by arithmetic. The order is the chain's order and
     doubles as the index into `chainLinks`; naming the places is what lets one stand down without
     every row after it sliding under somebody's `i - first` sum. */
-enum ChainRow { rowIn, rowTuner, rowGate, rowPreamp, rowDelay, rowReverb, rowCab,
-                rowLimit, rowOut, numChainRows };
+/** The bass's CHORUS stands before the echo and the room (OrbitBass: CHORUS -> DELAY -> REVERB -> the cabinet); no
+    guitar amp has a CHORUS, so its strip and its chain read as they always did. */
+enum ChainRow { rowIn, rowTuner, rowGate, rowComp, rowOctave, rowFilter, rowPreamp, rowChorus, rowDelay, rowReverb,
+                rowCab, rowLimit, rowOut, numChainRows };
 
 /** One link of the chain. */
 struct ChainLink
@@ -478,19 +648,42 @@ struct ChainLink
     const char* onParam;      // STANDBY/ON — the switch its arrow writes; none for the two ends
     Stage       stage;        // the cost entry it owns
     Stage       eqStage;    // a captured block's console; `numStages` for everyone else
+    /** IN THE STRIP OR NOT (OrbitBass's effects): the switch its checklist writes — a link out of it has no arrow, no
+        block and no sound. None for a link that stands for good; a product with no such parameter (every guitar amp)
+        holds the link for good too. */
+    const char* presentParam = nullptr;
 };
 
 inline constexpr ChainLink chainLinks[numChainRows] = {
     /* IN     */ { "IN",     false, true,  nullptr,   numStages, numStages },
     /* TUNER  */ { "TUNER",  false, true,  tunerOn,   stTuner,  numStages },
     /* GATE   */ { "GATE",   false, false, gateOn,    stGate,   numStages },
+    /* COMP   */ { "COMP",   false, false, compOn,    stComp,   numStages, compPresent },
+    /* OCTAVE */ { "OCTAVE", false, false, octaveOn,  stOctave, numStages, octavePresent },
+    /* FILTER */ { "ENVELOPE", false, false, filterOn, stFilter, numStages, filterPresent },
     /* AMP    */ { "AMP",    true,  true,  preampOn,  stPreamp, stPreampEq },
-    /* DELAY  */ { "DELAY",  false, true,  delayOn,   stDelay,  numStages },
-    /* REVERB */ { "REVERB", false, true,  reverbOn,  stReverb, numStages },
+    /* CHORUS */ { "CHORUS", false, false, chorusOn,  stChorus, numStages, chorusPresent },
+    /* DELAY  */ { "DELAY",  false, true,  delayOn,   stDelay,  numStages, delayPresent },
+    /* REVERB */ { "REVERB", false, true,  reverbOn,  stReverb, numStages, reverbPresent },
     /* CAB IR */ { "CAB IR", true,  true,  cabOn,     stCab,    numStages },
     /* LIMIT  */ { "LIMIT",  false, false, limiterOn, stLimit,  numStages },
     /* OUT    */ { "OUT",    false, true,  nullptr,   stOut,    numStages },
 };
+
+/** THE BASS'S CHAIN (OrbitBass, Product's Chain::bass): every link there is — the guitar's, its COMP and its effects.
+    Five of them stand in it only while the player keeps them in the strip (`presentParam`): OCTAVE, ENVELOPE and CHORUS
+    in out of the box, DELAY and REVERB out (the owner, 31.10). */
+inline constexpr bool bassChainHolds (ChainRow) noexcept
+{
+    return true;
+}
+
+/** THE GUITAR'S CHAIN, every amp's but OrbitBass's: every link but the bass's own — OCTAVE, FILTER and CHORUS — which
+    no guitar amp has a parameter for, and COMP but where the amp has one (`comp`: OrbitAmp's, Product::guitarComp). */
+inline constexpr bool guitarChainHolds (ChainRow row, bool comp = false) noexcept
+{
+    return row != rowOctave && row != rowFilter && row != rowChorus && (row != rowComp || comp);
+}
 
 /** Whose cost a stage is. A captured block owns two — itself and its own console — and TOTAL
     belongs to nobody, so it is always shown. Walked rather than tabulated: nine links, ten
@@ -531,7 +724,34 @@ struct Opening
     float reverbMix     = 30.0f;        // its share, percent
     float delayMix      = 0.0f;         // the delay's, percent
     StereoMode stereoMode = StereoMode::mono;
+
+    // WHAT THE PRODUCT'S CHAIN IS, not where it opens: a link its chain has no place for stands off.
+    // Declared like the rest, and nothing puts them back elsewhere: engineDefault leaves them their declared
+    // defaults, so INIT never brings a bass's reverb back.
+    bool  delayOn  = true;
+    bool  reverbOn = true;
+
+    // THE BASS'S OWN, where a product opens them elsewhere than the engine: all of the signal through COMP, and the LPF
+    // on — the walker's held (channels::Lineup::pinned, which channels::Engine::opening reads into these), OrbitBass's LPF
+    // where its pack has switches of its tone (OrbitBassStart.cpp). Declared by addBassParameters, which the product hands
+    // this Opening; engineDefault leaves them their declared defaults.
+    float compAmount = 0.5f;
+    bool  bassLpfOn  = false;
+
+    // WHERE THE AMP'S MIDDLE OPENS: its console's first bell's frequency — 400 Hz on every amp but the one that says
+    // otherwise (RedGrooveBass's MID FREQ, at 1 kHz: the owner, 02.11). A default, not a hold: the player moves it, and
+    // INIT and a double click bring it back here (engineDefault leaves it its declared default).
+    float midHz = 400.0f;
+
+    // WHERE ITS PACK'S TONE OPENS: the tone slots where the pack it plays first starts them (device::PackOpening), not
+    // where the engine's pack does — a product whose list has no engine pack (the bass's) would have them all at their
+    // middle otherwise, a two-way switch thrown.
+    bool packTones = false;
 };
+
+/** The bass's own parameters (above), each declaring as its default where `opening` says a fresh instance of the
+    product stands. */
+void addBassParameters (juce::AudioProcessorValueTreeState::ParameterLayout&, const Opening&);
 
 /** The engine's parameters, for the product of that name: the devices a parameter offers are the ones
     it plays, and a fresh instance stands where `opening` says. */

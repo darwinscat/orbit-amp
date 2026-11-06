@@ -633,8 +633,21 @@ void checkAu (const juce::File& bundle, const juce::StringArray& amps, const std
         const auto* own = shippedOf (amp);
         const auto entry = (CFDictionaryRef) CFArrayGetValueAtIndex (components, i);
 
-        if (! check (own != nullptr && CFGetTypeID (entry) == CFDictionaryGetTypeID(), amp + ": an entry, and the id its own AU shipped with known here"))
+        if (! check (CFGetTypeID (entry) == CFDictionaryGetTypeID(), amp + ": an entry"))
             return;
+
+        // An amp that joined after 0.8.0 — FrostPawAmp, AmberPawAmp, the basses — had no AU of its own to keep the
+        // id of: it is an effect of ours under its name, and that is all there is to hold it to.
+        if (own == nullptr)
+        {
+            check (plistValue (entry, "type") == "aufx" && plistValue (entry, "manufacturer") == "Dcat"
+                       && plistValue (entry, "name") == "Darwin's Cat: " + amp && plistValue (entry, "description") == amp
+                       && plistValue (entry, "version") == juce::String (version),
+                   "entry " + juce::String (i + 1) + ", " + amp + ": aufx " + plistValue (entry, "subtype")
+                       + " Dcat, joined after 0.8.0, no AU of its own to keep the id of");
+            factories.addIfNotAlreadyThere (plistValue (entry, "factoryFunction"));
+            continue;
+        }
 
         std::vector<const void*> keys ((size_t) CFDictionaryGetCount (entry));
         CFDictionaryGetKeysAndValues (entry, keys.data(), nullptr);
@@ -689,13 +702,13 @@ void checkAu (const juce::File& bundle, const juce::StringArray& amps, const std
     // A component of the binary under a code its list does not hold makes nothing: the wrapper finds no
     // entry for it and the host is told so, rather than given an amp under another one's id.
     {
-        AudioComponentDescription stranger { kAudioUnitType_Effect, osTypeOf ("Dcam"), osTypeOf ("Dcat"), 0, 0 };
+        AudioComponentDescription stranger { kAudioUnitType_Effect, osTypeOf (ORBITAMP_FAMILY_CODE), osTypeOf ("Dcat"), 0, 0 };
         const auto component = AudioComponentRegister (&stranger, CFSTR ("Darwin's Cat: none"), (UInt32) version, factory);
         AudioComponentInstance instance = nullptr;
         const auto status = component != nullptr ? AudioComponentInstanceNew (component, &instance) : noErr;
 
         check (component != nullptr && status != noErr,
-               "a component of the binary under a code the list does not hold, aufx Dcam Dcat, makes nothing (" + juce::String ((int) status) + ")");
+               "a component of the binary under a code the list does not hold, aufx " ORBITAMP_FAMILY_CODE " Dcat, makes nothing (" + juce::String ((int) status) + ")");
 
         if (status == noErr && instance != nullptr)
             AudioComponentInstanceDispose (instance);

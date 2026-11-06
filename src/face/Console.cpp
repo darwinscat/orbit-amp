@@ -148,7 +148,7 @@ Console::Console (AmpProcessor& p, std::unique_ptr<Picture> pic, const Places& w
                     [this] { return -amp.limiterGrDb.load (std::memory_order_relaxed) / 3.0f; }, 300.0, 400.0),   // full at 3 dB squeezed
       gateDoor (stage::px13),
       limiterDoor (stage::px13),
-      tuner (p.tunerEar),
+      tuner (p.tunerEar, p.tunerStrobe, p.tunerPoly),
       emblem (where.emblemFace, where.emblemMark),
       version (stage::px13),
       about (p.updateChecker(), aboutTheProduct (p.product(), look.mark, p.wrapperType == juce::AudioProcessor::wrapperType_Standalone), p.pluginFormat()),
@@ -211,7 +211,7 @@ Console::Console (AmpProcessor& p, std::unique_ptr<Picture> pic, const Places& w
         buttons[i] = std::make_unique<PushButton> (filter ? switches[i].name : "");
         auto& b = *buttons[i];
         stage.addChildComponent (b);
-        if (filter)
+        if (filter && places.filterKeys)
         {
             b.setVisible (true);
             b.setBounds (around (places.keys[i], places.filterKeyWidth > 0.0f ? places.filterKeyWidth : places.keySize,
@@ -233,7 +233,8 @@ Console::Console (AmpProcessor& p, std::unique_ptr<Picture> pic, const Places& w
         auto& key = *overhead[i];
         key.latching = false;
         stage.addAndMakeVisible (key);
-        key.setBounds (around (places.holes[i], places.holeKeySize, places.holeKeySize));
+        key.setBounds (places.holeKeys[i].isEmpty() ? around (places.holes[i], places.holeKeySize, places.holeKeySize)
+                                                    : box (places.holeKeys[i]));
     }
     overhead[ovUndo]->onPress = [this] { endTapping(); amp.history.undo(); };
     overhead[ovRedo]->onPress = [this] { endTapping(); amp.history.redo(); };
@@ -248,7 +249,8 @@ Console::Console (AmpProcessor& p, std::unique_ptr<Picture> pic, const Places& w
         key.onPress  = [this, r] { endTapping(); amp.history.switchTo (r); };
         key.onMenu   = [this, r] { showRegisterMenu (r); };
         stage.addAndMakeVisible (key);
-        key.setBounds (around (places.holes[i], places.holeKeySize, places.holeKeySize));
+        key.setBounds (places.holeKeys[i].isEmpty() ? around (places.holes[i], places.holeKeySize, places.holeKeySize)
+                                                    : box (places.holeKeys[i]));
     }
     amp.history.onHistoryChanged = [this] { refreshHistory(); };
     refreshHistory();
@@ -267,7 +269,8 @@ Console::Console (AmpProcessor& p, std::unique_ptr<Picture> pic, const Places& w
         sliders[i]->capAngle  = places.sliderCapAngle;
         sliders[i]->capLength = places.sliderCapLength;
         sliders[i]->handLight = look.handLight;
-        stage.addAndMakeVisible (*sliders[i]);
+        stage.addChildComponent (*sliders[i]);         // ...on a face that has the plates (Places::plates)
+        sliders[i]->setVisible (places.plates);
         sliders[i]->setBounds (box (places.sliders[i]));
     }
 
@@ -286,7 +289,8 @@ Console::Console (AmpProcessor& p, std::unique_ptr<Picture> pic, const Places& w
 
     // REVERB's name carries the reverb's character, and a click on it opens the list — the same six
     // OrbitAmp's reverb block offers.
-    stage.addAndMakeVisible (reverbName);
+    stage.addChildComponent (reverbName);
+    reverbName.setVisible (places.plates);
     reverbName.setBounds (box (places.sliderNames[0]));
     reverbName.onClick = [this] { showReverbMenu(); };
     reverbType = follow (params::reverbType, [this] (float v)
@@ -300,7 +304,10 @@ Console::Console (AmpProcessor& p, std::unique_ptr<Picture> pic, const Places& w
     // delay's own when it stands alone, since with a host the host conducts — is dragged up or down,
     // or rolled under the wheel, like a knob.
     for (auto* legend : { &delayWord, &delayNote, &delayTempo })
-        stage.addAndMakeVisible (legend);
+    {
+        stage.addChildComponent (legend);
+        legend->setVisible (places.plates);
+    }
     delayWord.nameColour = ink.state;
     delayWord.onClick = [this] { tapTempo(); };
     // Nothing on the plate says the word is a key, so the pointer is told: what a tap on it does —
@@ -340,7 +347,8 @@ Console::Console (AmpProcessor& p, std::unique_ptr<Picture> pic, const Places& w
     // REVERB's reads its character. With fewer than two there is nothing to choose between, and it
     // stands dim.
     cabName.setInterceptsMouseClicks (false, false);      // a reading: the slider under it is the control
-    stage.addAndMakeVisible (cabName);
+    stage.addChildComponent (cabName);
+    cabName.setVisible (places.plates);
     cabName.setBounds (box (places.sliderNames[2]));
 
     sliders[2]->onMenu = [this] { showCabs(); };
@@ -352,6 +360,7 @@ Console::Console (AmpProcessor& p, std::unique_ptr<Picture> pic, const Places& w
     tuner.setStrip (places.tunerStrip);
     tuner.setDial (places.tunerDial);
     inFader.capLength = outFader.capLength = places.faderCapLength;
+    inFader.capSquash = outFader.capSquash = places.faderCapSquash;
     inFader.handLight = outFader.handLight = look.handLight;
     inFader.setBounds (box (places.inFader));
     outFader.setBounds (box (places.outFader));
@@ -378,8 +387,11 @@ Console::Console (AmpProcessor& p, std::unique_ptr<Picture> pic, const Places& w
     bind (drive, params::preampGain);
     drive.onMenu = [this] { showDriveMenu(); };
     drive.detent = [this] (float travel) { return driveSteps ? (float) amp.preamp.stepAt ((double) travel) : travel; };
-    bind (*sliders[0], params::reverbMix);
-    bind (*sliders[1], params::delayMix);
+    if (places.plates)
+    {
+        bind (*sliders[0], params::reverbMix);
+        bind (*sliders[1], params::delayMix);
+    }
     bind (outFader, params::outTrim);
 
     // INPUT's lever IS the trim, as OUTPUT's is: unity in its middle (Console.h).
@@ -408,8 +420,11 @@ Console::Console (AmpProcessor& p, std::unique_ptr<Picture> pic, const Places& w
     // HPF and LPF switch the cabinet's own cut filters in and out. The keys right of them are the playing
     // pack's switches a hand may throw, as many as it has (rightKeysOf), and the face's own after them;
     // a pack with none has none there. Which they are is showKeys' to say, on every channel.
-    bindButton (*buttons[btHpf], params::cabHpfOn);
-    bindButton (*buttons[btLpf], params::cabLpfOn);
+    if (places.filterKeys)
+    {
+        bindButton (*buttons[btHpf], params::cabHpfOn);
+        bindButton (*buttons[btLpf], params::cabLpfOn);
+    }
     for (int key = btFirstRight; key < numKeys; ++key)
         buttons[(size_t) key]->onChange = [this, key] (bool on) { keyThrown (key, on); };
 
@@ -473,6 +488,7 @@ Console::Console (AmpProcessor& p, std::unique_ptr<Picture> pic, const Places& w
     for (auto* door : { &gateDoor, &limiterDoor })
     {
         door->valueColour = ink.at (ink.words, 0.85f);
+        door->fit = places.doorsFit;
         stage.addAndMakeVisible (door);
     }
     gateDoor.set ({}, "GATE");
@@ -480,7 +496,7 @@ Console::Console (AmpProcessor& p, std::unique_ptr<Picture> pic, const Places& w
     gateDoor.setBounds (box (places.gateDoor));
     if (places.gateDoorAngle != 0.0f)
         gateDoor.setTransform (juce::AffineTransform::rotation (places.gateDoorAngle, places.gateDoor.getCentreX(), places.gateDoor.getCentreY()));
-    limiterDoor.set ({}, "LIMITER");
+    limiterDoor.set ({}, places.limiterWord);
     limiterDoor.onClick = [this] { showOutputMenu(); };
     limiterDoor.setBounds (box (places.limiterDoor));
     if (places.limiterDoorAngle != 0.0f)
@@ -759,6 +775,7 @@ void Console::exportForWeb (const juce::File& dir)
     o->setProperty ("sliderCapAngle", p.sliderCapAngle);
     o->setProperty ("sliderCapLength", p.sliderCapLength);
     o->setProperty ("faderCapLength", p.faderCapLength);
+    o->setProperty ("faderCapSquash", p.faderCapSquash);
     o->setProperty ("inMeter", rectVar (p.inMeter));
     o->setProperty ("inFader", rectVar (p.inFader));
     o->setProperty ("outMeter", rectVar (p.outMeter));
@@ -1166,15 +1183,21 @@ void Console::sayForAMoment (juce::Point<float> at, const juce::String& words)
 
 void Console::sayLever (ColumnFader& fader, const juce::String& name, std::function<float()> reading)
 {
-    const auto say = [this, &fader, name, reading]
+    sayLeverAs (fader, name, [reading]
     {
         float db = reading();
         if (std::abs (db) < 0.05f)
             db = 0.0f;      // never "-0.0"
+        return (db > 0.0f ? "+" : "") + juce::String (db, 1) + " dB";
+    });
+}
 
+void Console::sayLeverAs (ColumnFader& fader, const juce::String& name, std::function<juce::String()> words)
+{
+    const auto say = [this, &fader, name, words]
+    {
         const auto at = fader.getBoundsInParent().toFloat();    // as it stands on the stage, turned or not
-        nameTag.show ({ at.getCentreX(), at.getY() - 24.0f },
-                      name + "  " + (db > 0.0f ? "+" : "") + juce::String (db, 1) + " dB");
+        nameTag.show ({ at.getCentreX(), at.getY() - 24.0f }, name + "  " + words());
     };
 
     // Round what the lever already does: the value is the parameter's, and it has moved by the time this reads it.
@@ -1372,6 +1395,36 @@ void Console::showTunerMenu()
     for (const int hz : prefs::tunerReferences)
         addChoice (reference, juce::String (hz) + " Hz", hz == a4, [hz] (Console& c) { prefs::setTunerReference (c.amp.product(), hz); });
     menu.addSubMenu ("Reference  A = " + juce::String (a4) + " Hz", reference);
+
+    // How it shows the note — the needle, a strobe, or every string of a strum — the machine's too: it is
+    // about who reads it. And the strings the polyphonic one reads: the product's own tunings.
+    using Display = prefs::TunerDisplay;
+    const auto shown = prefs::tunerDisplay (amp.product());
+    juce::PopupMenu display;
+    for (const auto& choice : { std::pair { Display::needle, "Needle" }, std::pair { Display::strobe, "Strobe" },
+                                std::pair { Display::poly, "Poly" }, std::pair { Display::automatic, "Auto" } })
+    {
+        const auto d = choice.first;
+        if (! prefs::tunerPolyOffered && (d == Display::poly || d == Display::automatic))
+            continue;
+        addChoice (display, choice.second, shown == d, [d] (Console& c) { prefs::setTunerDisplay (c.amp.product(), d); });
+    }
+    menu.addSubMenu (juce::String ("Display  ") + (shown == Display::automatic ? "Auto" : shown == Display::poly ? "Poly"
+                                                   : shown == Display::strobe ? "Strobe" : "Needle"),
+                     display);
+
+    if (! prefs::tunerPolyOffered)
+    {
+        menu.showMenuAsync (juce::PopupMenu::Options().withMousePosition());
+        return;
+    }
+
+    const auto& tuned = prefs::tunerTuning (amp.product());
+    juce::PopupMenu tuning;
+    for (const auto& t : core::polyTunings (prefs::tunesBass (amp.product())))
+        addChoice (tuning, core::polyTuningName (t).menu, &t == &tuned,
+                   [tp = &t] (Console& c) { prefs::setTunerTuning (c.amp.product(), *tp); });
+    menu.addSubMenu (juce::String ("Tuning  ") + core::polyTuningName (tuned).menu, tuning);
 
     menu.showMenuAsync (juce::PopupMenu::Options().withMousePosition());
 }
@@ -1833,7 +1886,7 @@ Strips Console::stripsFor (int channel) const
                                             : juce::Rectangle<float> (p.keyNameRoom, 20.0f).withCentre ({ c.x, over ? p.keyNameOverY : p.keyNameUnderY });
         return Strips::Key { juce::Rectangle<float> (size, size).withCentre (c), label, name, live, p.keyNamesOnKeys };
     };
-    for (int f = btHpf; f < btFirstRight; ++f)      // the filters' names are on their keys, on every face
+    for (int f = btHpf; f < btFirstRight && p.filterKeys; ++f)     // the filters' names are on their keys, on every face that has them
     {
         const auto box = juce::Rectangle<float> (p.filterKeyWidth > 0.0f ? p.filterKeyWidth : p.keySize,
                                                  p.filterKeyHeight > 0.0f ? p.filterKeyHeight : p.keySize).withCentre (p.keys[(size_t) f]);
@@ -2052,9 +2105,22 @@ void Console::setFullScreen (bool on)
 
     fullScreen = on;
 
+    // THE WINDOW'S OWN BAR GOES WITH IT (the owner, 02.11): full screen is the face alone, not the face under the
+    // standalone's title bar and its Options button — the face's menu has the devices. Back in a window, both return.
+    const auto showBar = [window, this] (bool show)
+    {
+        if (! show)
+            windowedTitleBarH = window->getTitleBarHeight();
+        window->setTitleBarHeight (show ? windowedTitleBarH : 0);
+        for (auto* child : window->getChildren())
+            if (auto* b = dynamic_cast<juce::Button*> (child); b != nullptr && b->getButtonText() == "Options")
+                b->setVisible (show);
+    };
+
     auto& desktop = juce::Desktop::getInstance();
     if (on)
     {
+        showBar (false);
         windowedAt = window->getPosition();
         getConstrainer()->setFixedAspectRatio (0.0);
         getConstrainer()->setSizeLimits (stage::minWindowWidth, juce::roundToInt ((float) stage::minWindowWidth * stage::height / stage::width),
@@ -2067,6 +2133,7 @@ void Console::setFullScreen (bool on)
         getConstrainer()->setSizeLimits (stage::minWindowWidth, juce::roundToInt ((float) stage::minWindowWidth * stage::height / stage::width),
                                          stage::readingWidth * 2, juce::roundToInt ((float) stage::readingWidth * 2.0f * stage::height / stage::width));
         desktop.setKioskModeComponent (nullptr);
+        showBar (true);
         setBoundsConstrained (getBounds());
         standalone::rememberWindowPosition (windowedAt);
     }
@@ -2196,12 +2263,12 @@ void Console::showSettingsMenu()
     }
 
     // A loop through the amp in place of the guitar, where the loops are — see playDemo.
-    if (params::demoLoopsPresent())
+    if (params::demoLoopsPresent (amp.product().chain == Chain::bass))
     {
         menu.addSectionHeader ("DEMO");
         addChoice (menu, "Play", amp.demo.isPlaying(), [] (Console& e) { e.playDemo (-1); });
-        for (int i = 0; i < params::demoLoops.size(); ++i)
-            addChoice (menu, params::demoLoops[i], i == juce::jmax (0, amp.demoLoop()), [i] (Console& e) { e.playDemo (i); });
+        for (int i = 0; i < params::demoLoopsOf (amp.product().chain == Chain::bass).names.size(); ++i)
+            addChoice (menu, params::demoLoopsOf (amp.product().chain == Chain::bass).names[i], i == juce::jmax (0, amp.demoLoop()), [i] (Console& e) { e.playDemo (i); });
     }
 
     menu.showMenuAsync (juce::PopupMenu::Options().withMousePosition());
@@ -2357,6 +2424,8 @@ void Console::addCabinets (const juce::StringArray& paths)
 
 bool Console::isInterestedInFileDrag (const juce::StringArray& files)
 {
+    if (channels.lineup().drawnCabinets)
+        return false;       // its cabinets are drawn, and none of them a file (Lineup::drawnCabinets)
     for (const auto& path : files)
         if (device::IrLibrary::looksLikeImport (juce::File (path)))
             return true;
@@ -2463,7 +2532,7 @@ void Console::showDelayTime()
                                                             juce::roundToInt (getParam (params::delayDiv)))]);
 
     tempoIsOwn = ! (amp.runsInHost() && amp.hostTempoBpm() > 0.0f);
-    delayTempo.setVisible (tempoIsOwn);
+    delayTempo.setVisible (tempoIsOwn && places.plates);
     delayTempo.set ({}, juce::String (juce::roundToInt (getParam (params::delayBpm))) + " BPM");
 
     // Side by side, the row centred over the plate.
@@ -2619,7 +2688,17 @@ void Console::showPresetMenu()
                                 });
                             };
 
-                            if (picked >= firstPreset)                  safe->presets.load (names[picked - firstPreset]);
+                            if (picked >= firstPreset)
+                            {
+                                const auto& name = names[picked - firstPreset];
+                                if (! safe->presets.load (name))   // another amp's, or not a preset at all
+                                    juce::AlertWindow::showAsync (juce::MessageBoxOptions()
+                                                                      .withIconType (juce::MessageBoxIconType::WarningIcon)
+                                                                      .withTitle ("Not loaded")
+                                                                      .withMessage (name + "\n\nThis preset is another amp's, or no preset at all.")
+                                                                      .withButton ("OK"),
+                                                                  nullptr);
+                            }
                             else if (picked == itemSave && onDisk)      safe->presets.save (current);
                             else if (picked == itemSave
                                      || picked == itemSaveAs)           ask ("Save preset", current, &Presets::save);

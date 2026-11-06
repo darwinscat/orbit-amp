@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of OrbitAmp — see LICENSE.
 
-// Gate for EVERY AMP IN ONE BINARY (src/Product.h): the sources of all five amps linked into this one
+// Gate for EVERY AMP IN ONE BINARY (src/Product.h): the sources of all the amps linked into this one
 // executable — which they could not be while each amp's file defined its face, its first start, its
 // parameters, its engine and its skin under the same names as the others' — and played side by side, in
 // one process, headless, out of the build's factory folder (CMakeLists.txt: gate_reads_factory). What a
@@ -32,6 +32,7 @@
 #include "device/FactorySet.h"
 #include "device/FactoryShelf.h"
 #include "redpaw/RedPawSkin.h"
+#include "redgroove/RedGrooveLineup.h"
 #include "catpit/CatpitLayout.h"
 #include "face/Strip.h"
 #include "ProductPage.h"
@@ -41,6 +42,7 @@
 
 #include <cstdio>
 #include <memory>
+#include <cstring>
 #include <set>
 #include <vector>
 
@@ -72,6 +74,7 @@ namespace
             { products::redPawAmp(),   &redpaw::skinOf (products::redPawAmp()).lineup },
             { products::frostPawAmp(), &redpaw::skinOf (products::frostPawAmp()).lineup },
             { products::amberPawAmp(), &redpaw::skinOf (products::amberPawAmp()).lineup },
+            { products::redGrooveBass(), &redgroove::lineup() },
         };
     }
 
@@ -183,10 +186,12 @@ int ORBITAMP_GATE_MAIN()
         }
         check (ownPacks, "...each on the pack its lineup says");
 
+        // ...on the channel its lineup opens on (Lineup::opensAt): the first, but the walker's SVT.
         const auto* device = amp->apvts.getParameter (params::preampDevice);
-        check (channels.active() == 0 && device != nullptr
-                   && juce::roundToInt (device->convertFrom0to1 (device->getValue())) == channels.packFor (0),
-               "...and it opens on the first, playing");
+        const int opener = lineup->opensAt;
+        check (channels.active() == opener && device != nullptr
+                   && juce::roundToInt (device->convertFrom0to1 (device->getValue())) == channels.packFor (opener),
+               juce::String ("...and it opens on ") + (opener == 0 ? "the first" : lineup->channels[(size_t) opener].name) + ", playing");
     }
 
     // WHAT A HOST IS TOLD OF A FRESH AMP. The default each parameter declares is what the host shows,
@@ -272,6 +277,61 @@ int ORBITAMP_GATE_MAIN()
     check (AmpProcessor::cabIrBytes (products::orbitAmp(), 0).data != AmpProcessor::cabIrBytes (products::catpitAmp(), 0).data,
            "...and the cabinet each opens its shelf on is its own");
 
+    // A GUITAR AMP'S CABINETS AND A BASS AMP'S NEVER CROSS (Product::playsCabIr). Every guitar amp plays the shelf it
+    // played before: the catalog's names at their numbers, the places it holds — OrbitAmp every one, a face Darwin's
+    // Cat's own ten — every other place playing RED GIANT, its default, as a fresh one opens on it. The bass plays none
+    // of it, whatever the number: no place held, and no RED GIANT in a place it holds empty.
+    {
+        check (params::cabIrNames.joinIntoString (",")
+                   == "COOKIE MONSTER,DARTH GENOCIDER,KITTEN SLAYER,KAIJU TAMER,ICEBURN SUICIDE,VERTICAL LIP STABBER,MANSLAUGHTER JOE,"
+                      "BIG BUBBA,DEVILS CUNNILINGUS,OCTOBER 32TH,WUMBO,WORLD COLLIDER,CANNIBAL CHOIR,CATHODE RAY FLESHBURN,IMPALER JIM,"
+                      "NACHO GUACAMOLE,PICKLE PUNISHER,WASABI WARRIOR,PESTO PALADIN,DON SPINACIO,KILL DILL,DARK MATTER,ION CAVITY,"
+                      "EVENT HORIZON,CORONAL FLARE,BROWN DWARF,ACCRETION GAP,DUST CLOUD,BLUE SHIFT,RED GIANT,PULSAR BEAM"
+                   && params::cabIrDefault == 29 && params::cabIrNames[params::cabIrDefault] == "RED GIANT",
+               "the shelf's thirty-one names at the numbers sessions keep, RED GIANT the default at 29");
+
+        for (const auto& [product, lineup] : family())
+        {
+            if (product.chain == Chain::bass)
+                continue;       // a bass amp among the family's faces (the walker): held below, with OrbitBass
+            juce::StringArray held;
+            bool everyNumberPlays = true;
+            for (int i = 0; i < params::cabIrNames.size(); ++i)
+            {
+                if (device::shelf::irs (product.name)[(size_t) i].data != nullptr)
+                    held.add (juce::String (i));
+                everyNumberPlays = everyNumberPlays && product.playsCabIr (i) && AmpProcessor::cabIrBytes (product, i).data != nullptr;
+            }
+            // ...a face on RED GIANT's file, which its channels play as an IR of their own (channels::Channels::align).
+            const auto fresh = std::make_unique<AmpProcessor> (product);
+            const auto opens = fresh->cabChoice();
+            const auto redGiant = juce::String::fromUTF8 (catalog::irs[params::cabIrDefault].file).upToLastOccurrenceOf (".", false, false);
+            const bool onRedGiant = lineup == nullptr ? ! opens.isUser() && opens.factory == params::cabIrDefault
+                                                      : opens.isUser() && opens.name == redGiant;
+            const juce::String before = juce::String (product.name) == "OrbitAmp"
+                ? "0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30"
+                : "21,22,23,24,25,26,27,28,29,30";
+            check (product.chain == Chain::guitar && held.joinIntoString (",") == before && everyNumberPlays && onRedGiant
+                       && juce::String (product.irsFolder()) == "IRs",
+                   juce::String (product.name) + " plays the shelf it played before (places " + held.joinIntoString (",")
+                       + "), every number a cabinet, opens on RED GIANT (" + (opens.isUser() ? opens.name : params::cabIrNames[opens.factory])
+                       + "), and keeps the player's IRs in `IRs`");
+        }
+
+        // ...THE BASS AMPS, OrbitBass and the walker alike: none of the shelf, whatever the number; their player's IRs in
+        // `Bass IRs` — the walker's cabinets drawn besides (channels::Lineup::drawnCabinets), no file at all.
+        for (const auto* bass : { &products::orbitBass(), &products::redGrooveBass() })
+        {
+            bool none = cabinetsOn (*bass) == 0;
+            for (int i = 0; i < params::cabIrNames.size(); ++i)
+                none = none && ! bass->playsCabIr (i) && AmpProcessor::cabIrBytes (*bass, i).data == nullptr;
+            const bool drawn = bass != &products::redGrooveBass() || redgroove::lineup().drawnCabinets;
+            check (bass->chain == Chain::bass && none && drawn && juce::String (bass->irsFolder()) == "Bass IRs",
+                   juce::String (bass->name) + " plays no guitar cabinet: no place of the shelf held, no number a cabinet, RED GIANT none; "
+                   "the player's IRs in `Bass IRs`" + (bass == &products::redGrooveBass() ? ", its own cabinets drawn" : ""));
+        }
+    }
+
     // TWO AT ONCE — and every one of them at once, the cockpit twice.
     {
         const auto amps = family();
@@ -290,7 +350,7 @@ int ORBITAMP_GATE_MAIN()
             if (expected.lineup != nullptr)
                 ownChannels = ownChannels && &channels::Engine::of (*all[i]).channels.lineup() == expected.lineup;
         }
-        check (named, "all five side by side, and a second cockpit, each says its own name");
+        check (named, "all " + juce::String ((int) amps.size()) + " side by side, and a second cockpit, each says its own name");
         check (ownLists, "...each offers its own list's devices");
         check (ownChannels, "...each plays its own channels, the two cockpits the same");
         check (all[0]->getParameters().size() != all[1]->getParameters().size(),
@@ -309,9 +369,9 @@ int ORBITAMP_GATE_MAIN()
             caches.insert (&prefs::spectraCache (amp.product));
             std::printf ("      %s: %s\n", amp.product.name, prefs::store (amp.product).file().getFullPathName().toRawUTF8());
         }
-        check (settings.size() == 5, "each product keeps its settings in a file of its own");
-        check (updates.size() == 5, "...and its update badge in a file of its own");
-        check (caches.size() == 5, "...and the switches the faces cache are its own");
+        check (settings.size() == (int) family().size(), "each product keeps its settings in a file of its own");
+        check (updates.size() == (int) family().size(), "...and its update badge in a file of its own");
+        check (caches.size() == family().size(), "...and the switches the faces cache are its own");
 
         const auto a = prefs::UpdateStore::of (products::redPawAmp());
         const auto b = prefs::UpdateStore::of (products::redPawAmp());
@@ -323,6 +383,23 @@ int ORBITAMP_GATE_MAIN()
         prefs::setTunerFloor (products::redPawAmp(), -50);
         check (prefs::tunerFloor (products::catpitAmp()) == -80 && prefs::tunerFloor (products::redPawAmp()) == -50,
                "a switch thrown in the cockpit stays the cockpit's");
+
+        // The tuner's display and the strings POLY reads: the needle and a guitar's standard until the player
+        // chooses, each product's own, kept in its store; a tuning the product does not offer is its standard.
+        check (prefs::tunerDisplay (products::amberPawAmp()) == prefs::TunerDisplay::needle
+                   && std::strcmp (prefs::tunerTuning (products::amberPawAmp()).id, "guitar") == 0,
+               "the tuner shows a needle and reads a guitar's standard until the player chooses");
+        prefs::setTunerDisplay (products::catpitAmp(), prefs::TunerDisplay::poly);
+        prefs::setTunerTuning (products::catpitAmp(), core::PolyTuner::tunings[1]);
+        prefs::setTunerTuning (products::redPawAmp(), core::PolyTuner::tunings[5]);   // a bass's, on a guitar amp
+        check (prefs::tunerDisplay (products::catpitAmp()) == prefs::TunerDisplay::poly
+                   && prefs::tunerDisplay (products::redPawAmp()) == prefs::TunerDisplay::needle
+                   && (int) prefs::store (products::catpitAmp()).get (prefs::tunerDisplayKey, -1) == (int) prefs::TunerDisplay::poly,
+               "POLY chosen in the cockpit is the cockpit's, and kept");
+        check (std::strcmp (prefs::tunerTuning (products::catpitAmp()).id, "guitar-drop-d") == 0
+                   && prefs::store (products::catpitAmp()).get (prefs::tunerTuningKey, juce::String()).toString() == "guitar-drop-d"
+                   && std::strcmp (prefs::tunerTuning (products::redPawAmp()).id, "guitar") == 0,
+               "...and its tuning; a bass's tuning on a guitar amp is its standard");
     }
 
     // THE ROWS (face/Strip.h): every face's tone knobs, and the rovers' keys right of the filters, laid by

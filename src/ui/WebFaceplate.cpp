@@ -220,6 +220,9 @@ void WebFaceplate::playAndShoot (const juce::File& riffFile)
     for (size_t i = 0; i < pre.eq.bands.size() && i < std::size (tones); ++i)
         standParam (pre.eq.bands[i].param, tones[i]);
     standPlain (params::delayMix, 22.0f);
+    // ORBITAMP_LIVE_SHOT_COMP=1: OrbitAmp's COMP in the strip, as its checklist puts it there.
+    if (juce::SystemStats::getEnvironmentVariable ("ORBITAMP_LIVE_SHOT_COMP", {}) == "1" && amp.linkRemovable (params::rowComp))
+        standPlain (params::compPresent, 1.0f);
     pre.showsLoudnessTag = true;
     prefs::spectraCache (amp.product()).store (true);
     editor.applyStripChoice();
@@ -764,15 +767,8 @@ juce::var WebFaceplate::places()
             a->setProperty ("eqCurve", v);
             live.push_back (&pre.eq.curve);
         }
-        {
-            // Inert, but it stands INSIDE the curve's box, over it: the site lays it again after the curve.
-            auto v = rect (pre.eq.modeBtn);
-            auto over = object();
-            over->setProperty ("at", rect (pre.eq.modeBtn));
-            over->setProperty ("sprite", spriteOf ("over-eq-mode.png", pre.eq.modeBtn));
-            v.getDynamicObject()->setProperty ("over", juce::var (over.get()));
-            a->setProperty ("eqMode", v);
-        }
+        // No "eqMode": the curve wears no DEVICE TONE button any more — whose tone it plays is the page's name,
+        // EQ RIG or EQ, chosen in the view menu (CapturedBlockPanel::showVizMenu).
         {
             // Where the tag is written: the run of the border right of the device, right-aligned.
             const auto run = pre.borderSlotArea().toFloat();
@@ -782,7 +778,6 @@ juce::var WebFaceplate::places()
         out->setProperty ("amp", juce::var (a.get()));
 
         patch ("smooth", pre.smoothTag);
-        patch ("eqMode", pre.eq.modeBtn);
         patch ("eqHpf", pre.eq.hpfSw);
         patch ("eqLpf", pre.eq.lpfSw);
         patch ("eqHpfLabel", pre.eq.hpfLabel);

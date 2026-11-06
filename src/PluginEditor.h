@@ -42,9 +42,31 @@ public:
     /** The limiter's whole console. */
     void showLimiterMenu (juce::Point<int> screenPos);
     void showInputMenu (juce::Point<int> screenPos);
+    void showTunerMenu (juce::Point<int> screenPos);
+
+    /** THE GUARDS' MENUS as their blocks open them — ON first, ruled off (the owner, 01.11: every menu) — and what a
+        pick of an item does: the popup's answer, and a gate's without one. */
+    juce::PopupMenu gateMenu();
+    void pickGate (int item);
+    juce::PopupMenu limiterMenu() const;
+    void pickLimiter (int item);
 
     /** Re-read the window preferences (Setup's VIEW page) and lay the editor out to match. */
     void applyViewPrefs();
+
+    /** The chain strip's rows for this processor's product, one per chain row, in the chain's order —
+        an arrow for each link with a switch that its chain holds. */
+    static std::vector<LayoutStrip::Row> stripRows (const AmpProcessor&);
+
+    /** THE STRIP'S CHECKLIST (OrbitBass): a removable link into the strip or out of it — its presence parameter, ONE undo
+        step, the host told as one gesture. The strip, the face and the window's least width follow (applyPresence). */
+    void setLinkPresent (params::ChainRow row, bool present);
+
+    /** The checklist's rows, in the chain's order: each removable link's name and whether it stands in the strip. */
+    std::vector<std::pair<params::ChainRow, bool>> checklistRows() const;
+
+    /** The window's least width in design units, as its strip stands now. */
+    int leastDesignWidth() const noexcept { return minDesignWidth; }
 
 private:
     static constexpr int margin    = 2;    // the device fills its window: the columns touch the sides, the brand the corner
@@ -59,8 +81,37 @@ private:
     /** THE WIDTH IS THE WINDOW'S CHOICE. The height sets the zoom; what the corner gives beyond the
         design's own width is laid out across — the pictures and the air widen, every knob keeps its
         size. From the design's own width up to a window of `maxAspect`. */
-    static constexpr int    minDesignWidth = FaceplateView::designWidth;
-    static constexpr int    minBaseWidth   = minDesignWidth + margin * 2;
+    /** The design's own width for this product, as its strip stands: OrbitBass's three rows at their least are row one's
+        with OCTAVE's and ENVELOPE's pictures readable (02.11) — wider by what its DELAY and REVERB take when both are in
+        the strip. */
+    static int minDesignWidthFor (const AmpProcessor& p)
+    {
+        // A guitar amp's: the design's, wider by COMP where it stands in the strip (OrbitAmp's), the AMP kept whole.
+        if (p.product().chain != Chain::bass)
+            return FaceplateView::designWidth
+                 + (p.linkShown (params::rowComp) ? FaceplateView::compWidth + FaceplateView::colGap : 0);
+        const int sides = 2 * (VolumeColumn::designWidth + chromeGap);   // the in and out columns, as resized() stands them
+        return juce::jmax ((int) FaceplateView::designWidth,
+                           FaceplateView::bassLeastWidth (p.linkShown (params::rowOctave), p.linkShown (params::rowFilter),
+                                                          p.linkShown (params::rowChorus), p.linkShown (params::rowDelay),
+                                                          p.linkShown (params::rowReverb), 0) + sides);
+    }
+
+    int minDesignWidth;
+    int minBaseWidth = minDesignWidth + margin * 2;
+
+    /** A link came into the strip or left it: the strip's arrows, the face's blocks, the window's least width — and the
+        window itself, wider when it must be, at the zoom it has. */
+    void applyPresence();
+    void showChecklist (juce::Component& anchor);
+
+    /** The GATE's ON: the threshold a lift off its rail's end stop sets. */
+    float gateOnAt();
+
+    /** The limiter's menu item `item` picked — through its parameters, which outlive this window. */
+    static void applyLimiter (juce::RangedAudioParameter& on, juce::RangedAudioParameter& ceil, int item);
+    static constexpr int limiterOnItem = 20, limiterResetItem = 30;
+    std::vector<std::unique_ptr<juce::ParameterAttachment>> presenceAtts;
     static constexpr double maxAspect      = 2.2;
 
     int designW = minDesignWidth;   // the faceplate's width in design units, as the window stands it

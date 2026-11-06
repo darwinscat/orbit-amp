@@ -104,11 +104,24 @@ public:
         bool keyNamesAlternate = false, keyNamesOnKeys = false;
         std::array<juce::Point<float>, 6> holes;            // the roof keys' centres
         float holeKeySize = 40.0f;
+        /** A ROOF KEY'S OWN BOX, where a face's key is not the square `holeKeySize` across round its hole —
+            RedGrooveBass's, wider than tall, the history's wider than the registers'. Empty: the square. */
+        std::array<juce::Rectangle<float>, 6> holeKeys {};
+        /** WHAT OF THE CONSOLE'S OWN A FACE HAS NO PLACE FOR. Every face but RedGrooveBass has both:
+            - `plates`: REVERB, DELAY and CAB on their plates, with their words. Without them none is on the
+              stage and REVERB's and DELAY's levels are bound to nothing; CAB's slider is still kept unseen —
+              the console reads the cabinet that is playing off it — and its plate's box, sliderNames[2], is
+              still where a dropped IR's tag stands and where a right click opens the cabinets' window.
+            - `filterKeys`: HPF and LPF, the cabinet's cuts, under the tones. Without them neither key is on the
+              stage or in the rows (Strips), and neither is bound to the cuts. */
+        bool plates = true;
+        bool filterKeys = true;
         std::array<juce::Rectangle<float>, 3> sliders;      // REVERB, DELAY, CAB
         std::array<juce::Rectangle<float>, 3> sliderNames;  // the row each plate's words stand in
         float sliderCapAngle = juce::MathConstants<float>::halfPi;  // how the sliders' caps lie (PlateSlider)
         float sliderCapLength = 0.0f;
         float faderCapLength = 0.0f;                        // ...and the columns' (ColumnFader)
+        float faderCapSquash = 1.0f;                        // ...their height a share of the render's (ColumnFader::capSquash)
         juce::Rectangle<float> inMeter, inFader, outMeter, outFader;
         SegmentMeter::Dots meterDots {};                    // the meters as dots the picture paints, where there is a count
         float lampDot = 0.0f;                               // a lamp the picture does not paint lit, drawn by code this wide (Lamp::dot)
@@ -118,6 +131,8 @@ public:
         juce::Rectangle<float> emblemMark;                  // the box the mark is cut in
         juce::Rectangle<float> version, load, memory, preset, gateDoor, limiterDoor;
         float gateDoorAngle = 0.0f, limiterDoorAngle = 0.0f;    // GATE and LIMITER turned about their middles, radians
+        bool doorsFit = false;                              // ...set condensed into their boxes, as tall, where wider (Legend::fit)
+        const char* limiterWord = "LIMITER";                // what LIMITER's door says: RedGrooveBass's says LIMIT, as its plate has room for
         float readingPx = stage::px11;                      // what CPU and MEM are written at...
         bool readingsFit = false;                           // ...set condensed into their boxes, as tall, where wider (Legend::fit)
         bool tunerStrip = false;                            // the tuner in one low line (TunerFace::setStrip)...
@@ -198,6 +213,8 @@ protected:
     // While a lever is held, a tag over it says where it stands, in the lever's own decibels — which
     // for INPUT are the trim's own, so the middle of the travel reads 0.
     void sayLever (ColumnFader&, const juce::String& name, std::function<float()> reading);
+    // ...or in words of its own: a share, a frequency.
+    void sayLeverAs (ColumnFader&, const juce::String& name, std::function<juce::String()> words);
 
     // THE PRODUCT'S OWN. Each is asked from the console's own code once the face is built.
 
@@ -343,6 +360,7 @@ private:
     void playDemo (int loop);
 
     juce::Point<int> windowedAt;             // where the window stood before it took the screen
+    int windowedTitleBarH = 0;               // ...and its title bar's height, gone while it has the screen
     void showSettingsMenu();
 
     const juce::String midiCommands;
@@ -451,7 +469,6 @@ private:
     // cabinet that is playing handed out as the IR file it is, files taken in, and one of the player's
     // own renamed or removed.
     std::unique_ptr<juce::FileChooser> cabChooser;
-    void showCabs();
     void saveCab();
     void chooseCabsToAdd();
     void renameCab();
@@ -491,6 +508,9 @@ protected:
     LearnGlass learnGlass { learner, humLearner };
     void startGateLearn();
     void startHumLearn();
+
+    /** THE CABINETS' WINDOW (Cabs.h), as a right click on CAB opens it — for a face whose cabinet is chosen its own way. */
+    void showCabs();
 
     /** A KEY OF THE SIX THE FACE TAKES FOR ITSELF, under a name of its own: the console neither lights it
         nor answers it from then on — what it does and whether it is lit are the face's. */

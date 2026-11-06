@@ -11,7 +11,8 @@ namespace orbitamp
 {
 
 SetupPanel::SetupPanel (AmpProcessor& processor)
-    : amp (processor), preampDevices (processor.product().name, device::DeviceLibrary::ampSlot)
+    : amp (processor), preampDevices (processor.product().name, device::DeviceLibrary::ampSlot),
+      irs (processor.product().irsFolder())
 {
     setWantsKeyboardFocus (true);
 
@@ -105,7 +106,7 @@ void SetupPanel::buildViewPage()
                       [this] (bool on) { prefs::setSpectraShown (amp.product(), on); if (onViewChanged) onViewChanged(); },
                       {}, false, {}, {}, {} });
 
-    if (params::demoLoopsPresent())   // no loops on disk: no player, and no offer of one
+    if (params::demoLoopsPresent (amp.product().chain == Chain::bass))   // no loops on disk: no player, and no offer of one
         add ("SHOW DEMO PLAYER", "the audition strip under the footer", prefs::showDemo, false);
 
     add ("EQ HANDS OVER THE CURVE", "the console's row of knobs sits above its picture, not below",
@@ -137,6 +138,43 @@ void SetupPanel::buildTunerPage()
         };
         floor.choose = [this] (int k) { prefs::setTunerFloor (amp.product(), prefs::tunerFloors[k]); };
         rows.push_back (std::move (floor));
+    }
+
+    {
+        SettingsList::Row display;
+        display.name = "DISPLAY";
+        display.note = prefs::tunerPolyOffered ? "a needle; a strobe; poly - every string of a strum; auto - the needle, poly for a strum"
+                                               : "a needle, or a strobe";
+        display.choices.add ("NEEDLE");
+        display.choices.add ("STROBE");
+        if (prefs::tunerPolyOffered)
+        {
+            display.choices.add ("POLY");
+            display.choices.add ("AUTO");
+        }
+        display.chosen = [this] { return (int) prefs::tunerDisplay (amp.product()); };
+        display.choose = [this] (int k) { prefs::setTunerDisplay (amp.product(), (prefs::TunerDisplay) k); };
+        rows.push_back (std::move (display));
+    }
+
+    {
+        // The product's own tunings: a guitar amp's the guitar's, a bass amp's the bass's.
+        const auto own = core::polyTunings (prefs::tunesBass (amp.product()));
+        SettingsList::Row tuning;
+        tuning.name = "TUNING";
+        tuning.note = "the open strings poly reads";
+        for (const auto& t : own)
+            tuning.choices.add (core::polyTuningName (t).pill);
+        tuning.chosen = [this, own]
+        {
+            for (size_t k = 0; k < own.size(); ++k)
+                if (&own[k] == &prefs::tunerTuning (amp.product()))
+                    return (int) k;
+            return -1;
+        };
+        tuning.choose = [this, own] (int k) { prefs::setTunerTuning (amp.product(), own[(size_t) k]); };
+        if (prefs::tunerPolyOffered)
+            rows.push_back (std::move (tuning));
     }
 
     tunerPage.setRows (std::move (rows));

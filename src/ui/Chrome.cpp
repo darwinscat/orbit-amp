@@ -42,7 +42,8 @@ Chrome::Chrome (AmpProcessor& processor)
               .display    = felitronics::appkit::brand::textTypeface(),
               .tracking   = 0.06f },
       // The family's own kit: appkit carries the mark and the face, so nothing here embeds either.
-      brand ("OrbitAmp", productPageUrl ("OrbitAmp", processor.wrapperType == juce::AudioProcessor::wrapperType_Standalone)),     // ProductPage.h
+      brand (processor.product().name,
+             productPageUrl (processor.product().name, processor.wrapperType == juce::AudioProcessor::wrapperType_Standalone)),     // ProductPage.h
       preset (theme)
 {
     auto& history = amp.history;
@@ -52,6 +53,7 @@ Chrome::Chrome (AmpProcessor& processor)
     brand.firstLineH = firstLineH;
     brand.wordmarkH  = 26.0f;
     brand.bylineH    = 16.0f;
+    brand.doubledOrbit = processor.product().chain == Chain::bass;   // OrbitBass's own mark (TwoLineBrand)
 
     for (auto* b : { &undo, &redo, &gear })
     {
@@ -179,7 +181,7 @@ void Chrome::showPresetMenu()
 {
     juce::PopupMenu menu;
 
-    const auto names = PresetManager::names();
+    const auto names = PresetManager::names (amp.product());
 
     if (names.isEmpty())
         menu.addItem ("No presets yet", false, false, [] {});
@@ -187,12 +189,28 @@ void Chrome::showPresetMenu()
     for (const auto& n : names)
         menu.addItem (n, true, n == presetName, [this, n]
         {
-            auto tree = PresetManager::read (n);
+            auto tree = PresetManager::read (amp.product(), n);
             if (! tree.isValid())
                 return;
 
+            // Another chain's preset — a guitar amp's on the bass, the bass's on a guitar amp — is not loaded.
+            if (! amp.belongs (tree))
+            {
+                juce::AlertWindow::showAsync (juce::MessageBoxOptions()
+                                                  .withIconType (juce::MessageBoxIconType::WarningIcon)
+                                                  .withTitle ("Not loaded")
+                                                  .withMessage (n + "\n\nThis preset is another amp's: "
+                                                                + (amp.product().chain == Chain::bass ? juce::String ("a guitar amp's.")
+                                                                                                      : juce::String ("a bass amp's.")))
+                                                  .withButton ("OK"),
+                                              nullptr);
+                return;
+            }
+            AmpProcessor::unstamp (tree);
+
             amp.takeEmbeddedIrs (tree);   // a cabinet IR it carries goes to the store, not the history
             amp.takeFormerCabinet (tree); // one saved while every amp opened on DARK MATTER, on RED GIANT
+            amp.takeBassCabinet (tree);   // ...and a bass's on a guitar cabinet, on the bass's own
 
             // Through the history, so loading a preset is one undoable step rather than a silent
             // replacement of everything behind undo's back.
@@ -217,7 +235,7 @@ void Chrome::showPresetMenu()
     menu.addSeparator();
     menu.addItem ("Delete", names.contains (presetName), false, [this]
     {
-        PresetManager::remove (presetName);
+        PresetManager::remove (amp.product(), presetName);
         presetName = "Default";
         preset.setCurrentName (presetName);
     });
@@ -228,20 +246,8 @@ void Chrome::showPresetMenu()
     // the reset is one undoable step like any preset load.
     menu.addItem ("Reset to default", [this]
     {
-        // ...and back to a fresh instance's IDENTITY too. The device and switch names are not
-        // parameters, so setting every parameter to its default leaves them behind — and the aim
-        // would then put the outgoing device straight back over the default one.
-        auto tree = amp.stateForSaving (true);
-
-        for (auto* p : amp.getParameters())
-            if (auto* rp = dynamic_cast<juce::RangedAudioParameter*> (p))
-            {
-                auto child = tree.getChildWithProperty ("id", rp->paramID);
-                if (child.isValid())
-                    child.setProperty ("value", rp->convertFrom0to1 (amp.engineDefault (*rp)), nullptr);
-            }
-
-        amp.history.applyEdit (amp.history.active(), tree, "Reset to default");
+        // ...and back to a fresh instance's identity and cabinet too (AmpProcessor::resetToDefault).
+        amp.resetToDefault();
         presetName = "Default";
         preset.setCurrentName (presetName);
     });
@@ -253,7 +259,7 @@ void Chrome::savePreset (bool forceNewName)
 {
     auto store = [this] (const juce::String& name)
     {
-        if (! PresetManager::write (name, amp.presetForSaving()))
+        if (! PresetManager::write (amp.product(), name, amp.presetForSaving()))
             return;
 
         presetName = name;
@@ -261,7 +267,7 @@ void Chrome::savePreset (bool forceNewName)
         amp.history.markSaved();
     };
 
-    if (! forceNewName && PresetManager::names().contains (presetName))
+    if (! forceNewName && PresetManager::names (amp.product()).contains (presetName))
     {
         store (presetName);
         return;

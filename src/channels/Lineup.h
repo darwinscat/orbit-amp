@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <juce_core/juce_core.h>
+
 #include <optional>
 #include <vector>
 
@@ -32,11 +34,15 @@ struct Lineup
             const char* control = nullptr;
             const char* value   = nullptr;
         } held {};
+
+        /** ITS CABINET'S SLOT, where the product's cabinets are drawn (drawnCabinets): the one of `cabinets` the
+            channel stands at, never visited. */
+        int cabinet = 0;
     };
 
     const char* nodeType;       // the product's node in the state tree, where the channels' memory is kept
     const char* parameterId;    // CHANNEL, the host's handle on the selector
-    const char* openingCabinet; // the cabinet a channel opens on, by the stem of its file's name
+    const char* openingCabinet; // the cabinet a channel opens on, by the stem of its file's name (drawnCabinets: its slot)
 
     std::vector<Channel> channels;
 
@@ -45,6 +51,47 @@ struct Lineup
         cabinet, the reverb, the delay — the rover's gear and its TURBO, which is an option of the gear's
         as its tone is. What a pair opens on is the first's. */
     bool pairs = false;
+
+    /** WHAT A CHANNEL KEEPS BEYOND WHAT EVERY ONE DOES (Channels: DRIVE, TURBO, the tones, the pack's switches,
+        the cabinet's cuts, the room, the delay and the cabinet): the product's own parameters each of its
+        channels remembers apart — the walker's BLEND, MIDDLE's frequency, COMP's threshold, its three
+        effects and DI/CAB. A parameter neither list names is one for every channel. */
+    std::vector<juce::String> kept {};
+
+    /** WHAT THE PRODUCT HOLDS WHERE IT IS, whatever a record, a preset, an INIT or a host left it at: each of
+        these parameters set to its value every time the chain is set up (Engine::setUpChain) — the walker's
+        COMP on, all of the signal through it at 4:1 on OPTO, its effects in the strip and on, its cuts on,
+        no delay and no room. */
+    struct Pin
+    {
+        juce::String param;
+        float value = 0.0f;
+    };
+    std::vector<Pin> pinned {};
+
+    /** THE CHANNEL A FRESH INSTANCE OPENS ON (Channels::adopt, Engine::opening, CHANNEL's default) — the first unless
+        the product says another: the walker opens on SVT, its second (the owner, 03.11). */
+    int opensAt = 0;
+    const Channel& opener() const { return channels[(size_t) juce::jlimit (0, count() - 1, opensAt)]; }
+
+    /** CABINETS DRAWN, NOT FILES: the walker plays the bass's own rendered cabinets alone (ui/CabWindow.h, Ampeg's pile)
+        — no file of the build's, none of the player's. */
+    bool drawnCabinets = false;
+
+    /** ...IN SLOTS: so many cabinets, each a box and its mics as the player sets them in the window — one set for every
+        channel, kept in the state (Channels::slotFrom) — and each channel standing at one of them (Channel::cabinet).
+        What each slot holds until the player says otherwise: its box, the box's own mic at its cap, the horn on or off —
+        and a `second` mic where it is said, the room's: 30 cm out on the axis, ALIGN on, a third of the blend. */
+    struct Cabinet
+    {
+        const char* box = nullptr;
+        bool horn = true;
+        const char* second = nullptr;
+        /** ...or one of cab-ir-generator's factory presets, by its file's stem (THE BASS'S DOZEN, CMakeLists.txt): the
+            whole cabinet as the preset stands it — box, back, horn, both mics, BLEND — fixed, and named by the preset. */
+        const char* preset = nullptr;
+    };
+    std::vector<Cabinet> cabinets {};
 
     int count() const noexcept { return (int) channels.size(); }
 };

@@ -12,10 +12,17 @@
 #include "core/DemoPlayer.h"
 #include "core/ScopeTap.h"
 #include "core/TunerEar.h"
+#include "core/TunerPoly.h"
+#include "core/TunerStrobe.h"
 #include "core/TunerTap.h"
 #include "core/WaveRibbon.h"
 #include "core/EqLink.h"
 #include "core/HumLearnLink.h"
+#include "core/BassComp.h"
+#include "core/OctaveTap.h"
+#include "core/BassCuts.h"
+#include "core/FilterTap.h"
+#include "core/ChorusTap.h"
 #include "core/BypassFade.h"
 #include "core/BypassWire.h"
 #include "core/CabinetIr.h"
@@ -25,15 +32,22 @@
 #include "worlds/Ear.h"
 
 #include <felitronics/analysis/RollingSpectrumTap.h>
+#include <felitronics/chorus/BassChorus.h>
+#include <felitronics/envfilter/EnvelopeFilter.h>
+#include <felitronics/octave/Octaver.h>
 #include <felitronics/appkit/CompareHistory.h>
 #include <felitronics/appkit/UpdateChecker.h>
 #include <felitronics/dehum/HumRemover.h>
 #include <felitronics/delay/TapeDelay.h>
 #include <felitronics/dynamics/NoiseGate.h>
 #include <felitronics/reverb/AmpReverb.h>
+#include <synth/State.h>
+namespace cabir::synth { class PairRenderer; }                  // the bass's own cabinets, as cab-ir-generator says one
+#include "core/SpaceTap.h"
 #include <juce_audio_processors/juce_audio_processors.h>
 
 #include <array>
+#include <mutex>
 
 namespace orbitamp
 {
@@ -75,7 +89,7 @@ public:
         and declares it LAST, so it is the first member destroyed. Adding a clear here changes
         nothing at all. I wrote one anyway, on a reading of the wrong destructor, and the review
         caught it. */
-    ~AmpProcessor() override { apvts.state.removeListener (this); }
+    ~AmpProcessor() override;   // in the .cpp: it ends what only the .cpp sees whole (cabRenderer)
 
     /** The hum stage's type (removeHum): room for 128 harmonics, 6.4 kHz at 50 Hz. */
     using HumStage = felitronics::dehum::HumRemover<128>;
@@ -96,8 +110,9 @@ private:
     /** The largest block prepareToPlay was told to expect; 0 before the first prepare. */
     std::atomic<int> preparedBlock { 0 };
 
-    /** A parameter's audio-thread mirror, and its default — see sanitiseParameters. */
-    struct ParameterGuard { std::atomic<float>* value; float fallback; };
+    /** A parameter's audio-thread mirror, and its default — see sanitiseParameters. One that `holdsLast` (the bass's
+        effects' sliders) falls back to the last number it held instead: the audio thread's own copy. */
+    struct ParameterGuard { std::atomic<float>* value; float fallback; bool holdsLast; float last; };
     std::vector<ParameterGuard> parameterGuards;
 
     /** Puts a parameter that is not a number back on its default before the chain reads it. */
@@ -148,8 +163,16 @@ public:
     {
         double tail = 0.1;   // every ramp in here, and the models' handful of milliseconds
 
-        tail += (double) delay.tailSeconds();
-        tail += (double) reverb.tailSeconds();
+        // Every chain holds the echo and the room now; the bass's may have them out of its strip, and a host that
+        // asks once must not cut one added later — so their tails count either way.
+        const bool echoes = chainHolds (params::rowDelay) || chainHolds (params::rowReverb);
+
+        if (chainHolds (params::rowChorus))
+            tail += (double) felitronics::chorus::BassChorus::tailSeconds();
+        if (chainHolds (params::rowDelay))
+            tail += (double) delay.tailSeconds();
+        if (chainHolds (params::rowReverb))
+            tail += (double) reverb.tailSeconds();
         tail += (double) cab.tailSeconds();
 
         // A FLOOR, BECAUSE NOTHING CAN TELL A HOST THIS NUMBER MOVED. There is no such message in
@@ -165,7 +188,9 @@ public:
         // no longer cut at eight, and the one case that stays wrong in a caching host is one where
         // the old constant was exactly as wrong. Lifting the floor is a thing to do after watching
         // a real session in Cubase and Logic, not before.
-        tail = juce::jmax (tail, 8.0);
+        // A chain with neither would floor at the longest IR the cabinet takes (5 s), so a host that asks once never
+        // cuts one that is loaded later.
+        tail = juce::jmax (tail, echoes ? 8.0 : 5.0);
 
         return juce::jmin (tail, 30.0);
     }
@@ -288,8 +313,34 @@ public:
     {
         auto tree = stateForSaving();
         embedCabIrs (tree);
+        stamp (tree);
         return tree;
     }
+
+    /** WHOSE STATE IT IS. A session and a preset carry the product that wrote them and its chain; a guitar amp's
+        never fits the bass's chain, nor the bass's a guitar amp's, and one that does not fit is not loaded. A
+        state with no stamp was written before there was a bass — a guitar amp's: the guitar amps load it as
+        they always have, OrbitBass refuses it. */
+    void stamp (juce::ValueTree& tree) const
+    {
+        tree.setProperty (stampProduct, juce::String (ownProduct.name), nullptr);
+        tree.setProperty (stampChain, ownProduct.chain == Chain::bass ? "bass" : "guitar", nullptr);
+    }
+
+    bool belongs (const juce::ValueTree& tree) const
+    {
+        const bool bassState = tree.getProperty (stampChain).toString() == "bass";
+        return bassState == (ownProduct.chain == Chain::bass);
+    }
+
+    static void unstamp (juce::ValueTree& tree)
+    {
+        tree.removeProperty (stampProduct, nullptr);
+        tree.removeProperty (stampChain, nullptr);
+    }
+
+    static constexpr const char* stampProduct = "product";
+    static constexpr const char* stampChain   = "chain";
 
     /** The other half: a tree read from disk gives its embedded IRs to the store and comes back a
         plain state, before anything applies it. Message thread only. */
@@ -325,6 +376,32 @@ public:
         note says it was the player's pick. Any thread: it touches `tree`, and the IR store, which takes
         bytes from any. */
     void takeFormerCabinet (juce::ValueTree& tree);
+
+    /** A BASS STATE ON NO CABINET OF THE BASS'S, on the bass's own. A bass amp plays no guitar cabinet
+        (Product::playsCabIr), and the catalog holds no bass cabinet yet, so in every tree of the state's type
+        in `tree` — a fresh instance's, INIT's, a session or a preset saved while the bass opened on RED
+        GIANT, one whose IR of the player's did not survive — that plays neither an IR of the player's the
+        store holds nor a cabinet the bass plays, the cabinet is made THE FIRST IR OF THE PLAYER'S `Bass IRs`
+        that plays, in the order the tree lists them (device::IrLibrary::listed): its bytes into the store,
+        and its key, name and `from` on the state, as a pick of it leaves them — so a session keeps what it
+        played wherever it opens. With none there it is left as it is, on no cabinet: no bytes, and nothing
+        loads, as with the factory folder missing. A guitar amp's state is left as it is. Any thread: it
+        touches `tree`, the IR store, which takes bytes from any, and reads the player's folder.
+        ...WHERE THE PRODUCT OPENS ON A CABINET OF ITS OWN (Product::freshCabinet, OrbitBass's) a fresh one and INIT
+        open on that (takeFreshCabinet) and a session or a preset keeps what it saved: this is then a host's `cab_ir`
+        moved onto a number the bass does not play alone. */
+    void takeBassCabinet (juce::ValueTree& tree);
+
+    /** THE CABINET A FRESH ONE OPENS ON (Product::freshCabinet) — OrbitBass's the bass's dozen's first, 1: 8x10 STACK —
+        on `tree`, a fresh instance's or INIT's, in place of whatever it played: drawn, its bytes into the store at once
+        where this process has drawn it already, else drawn on the worker and kept only while the live state still waits
+        for it, so a session, a preset or a hand's pick that comes first keeps its own. Not undoable, not an edit. False,
+        changing nothing, for a product that opens on no cabinet of its own. Message thread. */
+    bool takeFreshCabinet (juce::ValueTree& tree);
+
+    /** RESET TO DEFAULT — INIT: every parameter back where a fresh instance stands, its identity and its cabinet with
+        them (takeFreshCabinet, else takeBassCabinet), as one step of the history. Message thread. */
+    void resetToDefault();
 
     /** The note (takeFormerCabinet): on every state, from the first moment of the processor's (its
         constructor) and of every state that lands. */
@@ -796,16 +873,46 @@ private:
     {
         // Nobody watching, or the tuner is not in the rig: an MPM pass thirty times a second
         // for a needle that is not there is the definition of waste.
+        const auto display = prefs::tunerDisplay (ownProduct);
+        tunerPoly.tune (prefs::tunerTuning (ownProduct), (float) prefs::tunerReference (ownProduct));   // its lanes, even off
+
         if (getActiveEditor() == nullptr || ! linkWorks (params::rowTuner))
+        {
+            tunerStrobe.stop (display == prefs::TunerDisplay::strobe);   // off, a strobe still shows as one
+            tunerPoly.stop (display == prefs::TunerDisplay::poly);       // ...and the lanes as lanes (AUTO: the needle)
             return;
+        }
 
         if (const double sr = getSampleRate();
             sr > 0.0 && ! juce::approximatelyEqual (sr, tunerEar.preparedRate()))
+        {
             tunerEar.prepare (sr);
+            tunerStrobe.prepare (sr);
+        }
 
+        tunerEar.setLowestHz (ownProduct.tunerLowestHz);
         tunerEar.setLevelFloorDb ((double) prefs::tunerFloor (ownProduct));
         tunerEar.setReferenceHz ((float) prefs::tunerReference (ownProduct));
         tunerEar.update (tunerTap, juce::Time::getMillisecondCounter());
+
+        // The strobe, when the player reads by it: after the ear, whose note it holds to. Off, it is not
+        // run at all, and the ear and its needle are exactly what they were without it.
+        if (display == prefs::TunerDisplay::strobe)
+        {
+            tunerStrobe.setLevelFloorDb ((double) prefs::tunerFloor (ownProduct));   // what the ear takes for noise
+            tunerStrobe.update (tunerTap, tunerEar);
+        }
+        else
+            tunerStrobe.stop();
+
+        // POLY: every string of a strum at once, off the same tap — run only while the player reads by it, or by
+        // AUTO, which shows its lanes for a strum and the needle for one string.
+        if (display == prefs::TunerDisplay::poly)
+            tunerPoly.update (tunerTap, getSampleRate(), (double) prefs::tunerFloor (ownProduct));
+        else if (display == prefs::TunerDisplay::automatic)
+            tunerPoly.updateAuto (tunerTap, getSampleRate(), (double) prefs::tunerFloor (ownProduct));
+        else
+            tunerPoly.stop();
     }
 
     /** IS THIS LINK WORKING — the one question the chain asks, and the only shape of it. Every
@@ -814,8 +921,126 @@ private:
     bool linkWorks (params::ChainRow row) const noexcept
     {
         const auto* on = rowOn[(size_t) row];
-        return on == nullptr || on->load() > 0.5f;
+        return chainHolds (row) && linkInRig (row) && (on == nullptr || on->load() > 0.5f);
     }
+
+public:
+    /** WHETHER THE LINK STANDS IN THE CHAIN NOW (any thread): its chain holds it and, where the player may take it out of
+        the strip (ChainLink::presentParam — OrbitBass's effects), it is in. Out, it never works, whatever its switch. */
+    bool linkInRig (params::ChainRow row) const noexcept
+    {
+        const auto* in = rowPresent[(size_t) row];
+        return chainHolds (row) && (in == nullptr || in->load() > 0.5f);
+    }
+
+    /** The same, as the FACE reads it (message thread): from the parameter itself, which a callback of its own already
+        holds — the raw value behind the audio thread's read may still be a step behind. */
+    bool linkShown (params::ChainRow row) const noexcept
+    {
+        if (! chainHolds (row))
+            return false;
+        const char* id = params::chainLinks[(size_t) row].presentParam;
+        auto* p = id != nullptr ? apvts.getParameter (id) : nullptr;
+        return p == nullptr || p->getValue() > 0.5f;
+    }
+
+    /** Whether the link may be taken out of the strip here (its checklist offers it). */
+    bool linkRemovable (params::ChainRow row) const noexcept
+    {
+        const char* id = params::chainLinks[(size_t) row].presentParam;
+        return chainHolds (row) && id != nullptr && apvts.getParameter (id) != nullptr;
+    }
+
+    /** THE BASS'S DELAY'S AND REVERB'S PICTURES (ui/SpaceBlocks.h): the loudest of what each ADDS, a column every 10 ms
+        — written by the audio thread only while `delayWatched` / `reverbWatched`, which the pictures set while they are
+        on screen; read on the pictures' own timers. */
+    core::SpaceTap delayTap, reverbTap;
+    std::atomic<bool> delayWatched { false }, reverbWatched { false };
+
+    /** The reverb's tail as its stage computes it now, seconds (any thread) — the REVERB picture's law. */
+    float reverbTailSeconds() const noexcept { return reverb.tailSeconds(); }
+
+    /** Whether the bass's DELAY / REVERB ran its stage in the last block (the audio thread's; a gate reads it between
+        blocks): out of the strip, and once its fade is done, it is not run at all. */
+    bool spaceRan (bool reverbStage) const noexcept { return spaceRunning[reverbStage ? 1 : 0]; }
+
+private:
+
+public:
+    /** The bass's FILTER: where its sweep stands now, Hz — the module's own read-out (any thread). */
+    float filterShownCutoffHz() const noexcept { return envFilter.shownCutoffHz(); }
+
+    /** COMP'S PICTURE (ui/CompBlock.h): the columns of its in, its out and its squeeze — written by the audio thread
+        only while `compWatched`, which the picture sets while it is on screen; read on the picture's own timer. */
+    core::CompTap compTap;
+    std::atomic<bool> compWatched { false };
+
+    /** OCTAVE'S PICTURE (ui/OctaveScope.h): the stage's input and its sub, sample by sample — written by the audio thread
+        only while `octaveWatched`, which the picture sets while it is on screen; read on the picture's own timer. On the
+        heap, made with the processor: a third of a second of two signals is no object for a stack. */
+    const std::unique_ptr<core::OctaveTap> octaveTap { std::make_unique<core::OctaveTap>() };
+    std::atomic<bool> octaveWatched { false };
+
+    /** THE ENVELOPE'S PICTURE (ui/FilterBlock.h): where FILTER's sweep stood, a column every 5 ms — written by the audio
+        thread only while `filterWatched`, which the picture sets while it is on screen; read on the picture's own timer. */
+    core::FilterTap filterTap;
+    std::atomic<bool> filterWatched { false };
+
+    /** FILTER's knobs as its stage is told them now: the menu's fields from their parameters, through the module's law
+        at its slider — at 0 while its link stands by. The stage is told exactly this (tellFilter) and its picture draws
+        it (any thread: relaxed reads of the parameters). `base` gives the fields no parameter holds — none today. */
+    felitronics::envfilter::EnvelopeFilterParams filterKnobsNow (felitronics::envfilter::EnvelopeFilterParams base = {}) const noexcept;
+
+    /** CHORUS'S PICTURE (ui/ChorusBlock.h): its LFO's phase, derived on every call of the stage and written into the
+        ring only while `chorusWatched`, which the picture sets while it is on screen; read on the picture's own timer. */
+    core::ChorusTap chorusTap;
+    std::atomic<bool> chorusWatched { false };
+    /** FOR A GATE — what the inner cuts do: `innerCutsOut` plays the bass's HPF at the END alone; with `probing` on, the
+        audio thread keeps the loudest sample going INTO the AMP and the sum of what comes OUT of it (after its cut), so a
+        gate reads a thump and an offset at those points. Off, nothing is written. */
+    std::atomic<bool> innerCutsOut { false }, probing { false };
+    float probeAmpInPeak = 0.0f;
+    double probeAmpOutSum = 0.0;
+    long long probeAmpOutCount = 0;
+
+    /** The ratio COMP works at now — the law's, or the hand's (the audio thread's; a gate reads it between blocks). */
+    double compRatioNow() const noexcept { return bassComp.ratioNow(); }
+
+    /** The three effects for a gate — 0 OCTAVE, 1 FILTER, 2 CHORUS: how many times each has been told its knobs, and
+        whether it stands idle (the audio thread's; a gate reads them between blocks). */
+    int  effectTells (int which) const noexcept { return effectTold[(size_t) juce::jlimit (0, 2, which)]; }
+    bool effectIdle (int which) const noexcept
+    {
+        return which == 0 ? octaver.isIdle() : which == 1 ? envFilter.isIdle() : chorus.isIdle();
+    }
+
+    /** What an effect's lamp shows, 0..1 (any thread): OCTAVE lights while its sub plays (locked), FILTER and CHORUS
+        while they are not idle — a lamp that could never light was noise. */
+    float effectLampDepth (int which) const noexcept
+    {
+        const bool lit = which == 0 ? octaver.isLocked() : effectWorking[(size_t) juce::jlimit (1, 2, which)].load (std::memory_order_relaxed);
+        return lit ? 1.0f : 0.0f;
+    }
+
+    /** Whether OCTAVE is at work — in the chain, switched on, its slider up — as the audio thread last told it (any
+        thread): its picture's frame stands whole while it is not. */
+    bool octaveAtWork() const noexcept { return octaveWorks.load (std::memory_order_relaxed); }
+
+    /** How many planes the bass's back half runs — from CHORUS on: the prepared bus's, 1 or 2 — or 0 on a guitar amp's
+        chain. Any thread. */
+    int bassBackPlanes() const noexcept { return bassWide.load (std::memory_order_relaxed); }
+
+    /** WHETHER THIS PRODUCT'S CHAIN HAS THE LINK AT ALL (Product::chain) — the bass's holds every one (its DELAY and
+        REVERB out of its strip until the player adds them: linkInRig); a guitar amp's none of the bass's own, OCTAVE,
+        ENVELOPE and CHORUS, and COMP only where the amp has one (Product::guitarComp: OrbitAmp's). A link it does not
+        hold never works, whatever its switch says (a state of another amp's, a host's automation), and has no arrow on
+        the strip and no block on the panel. */
+    bool chainHolds (params::ChainRow row) const noexcept
+    {
+        return ownProduct.chain == Chain::bass ? params::bassChainHolds (row) : params::guitarChainHolds (row, ownProduct.guitarComp);
+    }
+
+private:
 
 
     /** The chain's round-trip to the host: whatever the three players' models need for
@@ -829,6 +1054,14 @@ private:
         two blocks asking at once still finish inside a frame; a second thread would only let two
         WaveNets fight over the same cores the audio thread wants. */
     juce::ThreadPool modelPool { 1 };
+
+    // requestCabSynth's: which request is the latest, whether the processor still stands, and the worker — declared
+    // last of the three, so it is gone (its job finished) before what the job reads.
+    std::atomic<int> cabSynthLatest { 0 };
+    int cabSynthHeard = 0;   // the latest request whose render was loaded — the message thread's alone
+    std::shared_ptr<int> cabSynthAlive = std::make_shared<int> (0);
+    std::unique_ptr<cabir::synth::PairRenderer> cabRenderer;   // the worker's alone: each mic's last IR kept (before the pool: gone after it)
+    juce::ThreadPool cabSynthPool { 1 };
 
 public:
     /** Everything a moved control needs done OFF the audio thread, for both captured blocks: landing
@@ -879,6 +1112,15 @@ private:
     /** Reads each EQ link's parameters into its stack. Called per block from the audio thread;
         a stack only redesigns when something actually moved. */
     void updateEqSettings() noexcept;
+
+    /** WHETHER THE AMP'S CONSOLE IS THE BASS'S STANDARD EQ (Product::eqStandard, params::EqStandard) — the one reading
+        every EQ decision here goes by: its tone always ours, its MIDDLE in its span, its second bell and scalpel out,
+        the console's own cuts out of the sound because the bass's are its own stage. */
+    bool bassEq() const noexcept { return ownProduct.eqStandard() == params::EqStandard::bass; }
+
+    /** The bass's own cuts as its parameters stand (params::bassHpf, bassLpf) — what its stage glides and fades
+        to (core::BassCuts). Audio thread, per block. */
+    core::BassCuts::Settings bassCutSettings() const noexcept;
 
     /** Same, for the reverb: character and mix, applied only when they move. */
     void updateReverbSettings() noexcept;
@@ -984,7 +1226,8 @@ public:
 
     /** The cabinet shelf — the family's (device/FactoryShelf.h), in params::cabIrNames order, and the
         folder of it each IR lies in. The face draws the same bytes the engine convolves. A number the
-        build does not carry (a face, and the shelf's `Other`) is RED GIANT's, the default's. */
+        build does not carry (a face, and the shelf's `Other`) is RED GIANT's, the default's. A number of
+        the other chain's (Product::playsCabIr) is no bytes and no folder, whatever the factory folder holds. */
     struct IrBytes { const char* data; int size; const char* folder; };
     static const IrBytes& cabIrBytes (const Product&, int index);
 
@@ -1007,13 +1250,44 @@ public:
     CabChoice cabChoice() const;
 
     /** A factory IR from the shelf: the player's own is let go, and the parameter takes the pick
-        as one gesture. Message thread only. */
+        as one gesture. One the product does not play (Product::playsCabIr) changes nothing. Message
+        thread only. */
     void chooseCabFactory (int index);
 
     /** An IR out of the library: its bytes are read once, here, and from then on the state names
         them by key — the file can go anywhere afterwards. False, changing nothing, for a file that
         is too big to be an IR or that does not decode as audio. Message thread only. */
     bool chooseCabFile (const juce::File& file);
+
+    /** A CABINET OF THE BASS'S OWN — the box, its back and horn, its mics where the player put them (cabir::State,
+        cab-ir-generator) — rendered on a worker, a tenth of a second or so for one mic, then played as an IR of the
+        player's own is: its bytes kept by key, so a session or a preset carries it, named by the box, its `from` the
+        state as TOML (cabSynthOf reads it back). A later request supersedes one still rendering; the cabinet's own 50 ms
+        crossfade carries the swap. Message thread.
+
+        `live`: a hand still moving a mic. The cabinet is only HEARD — loaded straight into the convolution, nothing kept,
+        no key, no host told: a drag renders as often as the worker keeps up, and every position kept would stay in the
+        store for the plugin's life. The hand letting go asks once more without it, and that one is kept. */
+    void requestCabSynth (const cabir::State& state, bool live = false);
+
+    /** THE IR LAST LOADED INTO THE CABINET, for a picture of what plays: a rendered one live under a moving hand, or what
+        the state keeps (`kept`) — a rendered cabinet, the player's own, the factory's. `serial` grows with each; the
+        same one loaded again (a prepare) is no new one. Message thread. */
+    struct CabParts { std::vector<float> a, b; };   // a rendered pair's two mics, each at the mix's level, 48 kHz
+    struct CabHeard
+    {
+        std::shared_ptr<const juce::MemoryBlock> bytes;
+        int serial = 0;
+        bool kept = false;
+        std::shared_ptr<const CabParts> parts;   // ...with both mics heard; none otherwise
+    };
+    CabHeard cabHeard() const { return cabHeardNow; }
+
+    /** The rendered cabinet a choice plays — or `valid` false for any other IR. */
+    struct CabSynthChoice { cabir::State state; bool valid = false; };
+    static CabSynthChoice cabSynthOf (const CabChoice&);
+    static CabSynthChoice cabSynthOf (const juce::String& from);   // ...as its `from` says it, wherever that is kept
+    static juce::String cabSynthFrom (const cabir::State&);        // ...and the `from` a kept one is given: its TOML
 
     /** TEMPORARY — the audition loop player. Goes with the demo strip it belongs to. */
     core::DemoPlayer demo;
@@ -1025,11 +1299,16 @@ public:
         zoomed tuner — reads the one ear, so they can never disagree. */
     core::TunerTap tunerTap;
     core::TunerEar tunerEar;
+    core::TunerStrobe tunerStrobe;   // the same pump, after the ear — only while the player reads by it
+    core::TunerPoly   tunerPoly;     // ...and the polyphonic tuner, off the same tap, only while the player reads by it
 
     /** The gate's effective gain at the last block end, in dB — what a pressure meter shows.
         Written by the audio thread, read by the strip's thumb and the zoomed gate on their
         repaint clocks. */
     std::atomic<float> gateMeterDb { 0.0f };
+
+    /** COMP squeezing now, in dB (0 or below) — the indicator beside its knob. 0 on every amp that has no COMP. */
+    std::atomic<float> compGrDb { 0.0f };
 
     /** THE HUM AT THE INPUT, as the stage last heard it — written by the audio thread at the end of
         every block, read by the windows on their own clocks. `humInForce` is the mode the stage is
@@ -1174,7 +1453,7 @@ public:
 
 private:
     const std::atomic<bool>* litWanted = nullptr;                   // prefs::litCache, taken where the hum's are
-    int demoLoopIndex = -1;     // which of params::demoLoops the audition player holds
+    int demoLoopIndex = -1;     // which of params::demoLoopsOf the audition player holds
     std::atomic<float> playPeak { -1.0f }, playPick { -1.0f };     // takePlay's: -1 is nothing since it was last taken
     worlds::Ear ear;                                                // the audio thread's: the pick, on channel 0
 
@@ -1192,6 +1471,7 @@ private:
         std::atomic<float>* lpfOn    = nullptr;
         std::atomic<float>* lpfHz    = nullptr;
         std::atomic<float>* lpfSlope = nullptr;
+        std::atomic<float>* eqMode   = nullptr;   // the block's DEVICE TONE / UNIVERSAL EQ, looked up once, not per block
         std::atomic<float>* b3On     = nullptr;
         std::atomic<float>* bellDb[3] {};
         std::atomic<float>* bellHz[3] {};
@@ -1233,6 +1513,126 @@ private:
     float limiterCeilingSet = 1.0e9f;      // the ceiling last handed to it, dB
 
     core::CabinetIr cab;
+
+    /** THE BASS'S OWN LINKS (Chain::bass) — prepared and run on its chain alone: its COMP after the gate, the
+        DI's copy beside the cabinet, its own cuts after DI/CAB. OrbitAmp's COMP is the same (Product::guitarComp), and
+        in STEREO, where its chain works two signals, a second one squeezes the right (`compRight`, unwatched). */
+    core::BassComp bassComp, compRight;
+    bool compRightRan = false;   // the audio thread's: the twin worked the last block
+    core::BassCuts bassCuts;
+
+    /** THE GUITAR'S INPUT CUT (params::guitarInputCutHz) — every guitar amp's, always on. */
+    core::BassCuts guitarInputCut;
+
+    /** THE BASS'S HPF ACROSS THE CHAIN (the owner, 31.10): besides the main cut at the END (bassCuts), gentle ones —
+        2nd order, an octave under the chosen frequency — at the input (before the gate and the keys), after COMP, after
+        OCTAVE and after the AMP (after BLEND's sum: both legs the same phase). They clear DC, sub thumps and the subs a
+        nonlinear stage makes before the next one hears them, and cost the lowest string a fraction of a decibel. The
+        one switch and the one choice drive them all, each gliding and fading as the main cut does. Mono, as the front
+        half is. */
+    std::array<core::BassCuts, 4> innerCuts;
+    core::BassCuts::Settings innerCutSettings() const noexcept;
+    juce::AudioBuffer<float> diDry;
+    float diNow  = 0.3f;     // DI/CAB's share as the audio thread has glided it — see processChunk
+    float diStep = 0.001f;   // ...and its glide per sample, 20 ms for the whole travel at the prepared rate
+
+    /** OrbitBass's own parameters (params::addBassParameters), read where it has them; null on every guitar
+        amp, which has none — but OrbitAmp's COMP's (`comp*`, params::addGuitarCompParameters). */
+    struct BassParams
+    {
+        std::atomic<float>* compAmount = nullptr;
+        std::atomic<float>* compAttack = nullptr;
+        std::atomic<float>* compRelease = nullptr;
+        std::atomic<float>* compCharacter = nullptr;
+        std::atomic<float>* blend = nullptr;
+        std::atomic<float>* blendHz = nullptr;
+        std::atomic<float>* blendInvert = nullptr;
+        std::atomic<float>* cabMix = nullptr;
+        std::atomic<float>* hpf = nullptr;
+        std::atomic<float>* hpfHz4 = nullptr;
+        std::atomic<float>* hpfHz5 = nullptr;
+        std::atomic<float>* lpf = nullptr;
+        std::atomic<float>* lpfHzFingers = nullptr;
+        std::atomic<float>* lpfHzSlap = nullptr;
+        std::atomic<float>* octave = nullptr;
+        std::atomic<float>* octaveToneHz = nullptr;
+        std::atomic<float>* filter = nullptr;
+        std::atomic<float>* filterMode = nullptr;
+        std::atomic<float>* filterDirection = nullptr;
+        std::atomic<float>* filterResonance = nullptr;
+        std::atomic<float>* filterRange = nullptr;
+        std::atomic<float>* filterKeepLows = nullptr;
+        std::atomic<float>* filterKeepHz = nullptr;
+        std::atomic<float>* filterReleaseMs = nullptr;
+        std::atomic<float>* chorus = nullptr;
+        std::atomic<float>* chorusRateHz = nullptr;
+        std::atomic<float>* chorusCrossoverHz = nullptr;
+        std::atomic<float>* compRatio = nullptr;
+        std::atomic<float>* compThreshold = nullptr;
+        std::atomic<float>* hpfOn = nullptr;
+        std::atomic<float>* lpfOn = nullptr;
+    } bass;
+
+    /** THE BASS'S THREE EFFECTS (felitronics-core's octave, envfilter, chorus), on its chain alone: each fed its slider
+        through the module's own law (paramsForAmount) over the menu's fields, and told only when the result moved.
+        A link standing by is a slider at 0 — the module's own counted ramp takes it to idle, and a wake is its own
+        10 ms door. All three are zero-latency. Audio thread. */
+    felitronics::octave::Octaver          octaver;
+    felitronics::envfilter::EnvelopeFilter envFilter;
+    felitronics::chorus::BassChorus       chorus;
+    bool octaverReady = false, envFilterReady = false, chorusReady = false;
+    /** OCTAVE's input kept while its picture watches: the stage adds its sub in place (runOctave). */
+    std::array<float, 256> octaveDry {};
+    felitronics::octave::OctaverParams           octaveTold {};
+    felitronics::envfilter::EnvelopeFilterParams filterTold {};
+    felitronics::chorus::BassChorusParams        chorusTold {};
+    bool octaveToldValid = false, filterToldValid = false, chorusToldValid = false;
+    bool filterTapLive = false;   // the audio thread's: whether it wrote FILTER's tap last block (a fresh look wakes it)
+    std::atomic<bool> octaveWorks { false };   // octaveLive, for the picture (octaveAtWork)
+    bool octaveLive = false, filterLive = false, chorusLive = false;   // the audio thread's: each at work — in the chain,
+                                                                       // switched on, its slider up — its picture written only then
+    std::array<int, 3> effectTold {};     // setParams calls, per effect — for a gate (effectTells)
+    std::atomic<bool> effectWorking[3] {};  // FILTER's and CHORUS's "not idle", for their lamps (OCTAVE's is the module's)
+
+    /** The bass's back half's width — the prepared bus's, 1 or 2 — and the scratch bus a narrower call is played on
+        (processBlock); 0 on a guitar amp's chain. */
+    std::atomic<int> bassWide { 0 };
+    juce::AudioBuffer<float> narrowBus;
+    juce::AudioBuffer<float> filterKey;   // FILTER's key: the gated input before COMP, the string itself
+
+    /** BLEND's three to the player (CapturedBlock::setCrossover), under `blendControl`: the two control-side callers —
+        the message thread's pump and a prepare on a host's thread — never write it at once. Never the audio thread. */
+    void tellBlend();
+    std::mutex blendControl;
+
+    /** Each effect told its knobs — the module's law over the menu, the menu being what the stage was last told with the
+        menu's fields from their parameters — when they moved, and only then. */
+    void tellOctave() noexcept;
+    void tellFilter() noexcept;
+    void tellChorus() noexcept;
+    void runOctave (float* const* channels, int numChannels, int numSamples) noexcept;
+    void runFilter (float* const* channels, int numChannels, int numSamples) noexcept;
+    void runChorus (float* const* channels, int numChannels, int numSamples) noexcept;
+
+    /** THE BASS'S DELAY OR REVERB (Chain::bass), after its CHORUS, on the back half's planes: the stage run on a copy
+        of what it is handed, what it ADDED cut below params::bassWetCutHz and put back over the dry — the repeats and
+        the tail lose their lows, the bass keeps them. Out of the strip, a stage's whole contribution fades out over the
+        bypass fade, and then — in the call the fade ends in — the stage is cleared and not run at all. Its picture is
+        written while `watched` and at work (switched on, `adds`: its MIX up). No channel (null, 0) is a gap: the stage
+        takes it as its own (law 11c). */
+    template <typename SpaceStage>   // not "Stage": the class's own Stage (params::Stage) would hide it, and gcc says so
+    void runSpaceStage (SpaceStage&, bool ready, params::ChainRow, int which, core::SpaceTap&, const std::atomic<bool>& watched,
+                        bool adds, float* const* channels, int numChannels, int numSamples) noexcept;
+    bool delayAdds() const noexcept  { return delayMixParam != nullptr && delayMixParam->load() > 0.0f; }
+    bool reverbAdds() const noexcept { return reverbMixParam != nullptr && reverbMixParam->load() > 0.0f; }
+    juce::AudioBuffer<float> spaceDry;                        // a stage's input, for what it added
+    std::array<std::array<core::CutBiquad, 2>, 2> wetCuts {};  // [delay, reverb][plane]: the low cut on the wet
+    std::array<bool, 2> spaceRunning {};                      // [delay, reverb]: ran last block
+    std::array<bool, 2> spaceFresh { true, true };            // [delay, reverb]: cleared, its next call its first
+
+    /** A call of positive length with no channel (law 11c), to the three effects — their shared clocks run as through
+        silence — and to DELAY and REVERB, present and running. */
+    void passGap (int numSamples) noexcept;
     std::atomic<float>* cabHpfOnParam = nullptr;
     std::atomic<float>* cabHpfHzParam = nullptr;
     std::atomic<float>* cabHpfSlopeParam = nullptr;
@@ -1259,6 +1659,27 @@ private:
 
     /** The player's own IRs a state refers to — see `device::EmbeddedIrs`. */
     device::EmbeddedIrs cabIrEmbeds;
+    CabHeard cabHeardNow;          // cabHeard's
+    juce::String cabHeardIdentity; // ...and which IR it is, so one loaded again is not heard anew
+    void heardCab (std::shared_ptr<const juce::MemoryBlock>, const juce::String& identity, bool kept,
+                   std::shared_ptr<const CabParts> parts = {});
+    juce::String cabKeptPartsKey;                      // the kept render's key, and its parts — for the pump to hand on
+    std::shared_ptr<const CabParts> cabKeptParts;      // with the IR when it loads it
+
+    /** A drawn cabinet rendered: its IR as a WAV, and its two mics' parts where both are heard. */
+    struct DrawnCab
+    {
+        std::shared_ptr<juce::MemoryBlock> bytes;
+        std::shared_ptr<const CabParts> parts;
+    };
+    DrawnCab renderDrawn (const cabir::State&, bool live);   // the worker's alone (cabRenderer)
+    /** A drawn cabinet as this process has drawn it, by its `from` — or, given one, kept so for every processor after. */
+    static DrawnCab drawnOnce (const juce::String& from, const DrawnCab* keep = nullptr);
+    /** A render kept on `tree`, as a pick keeps it: its bytes into the store, its key, name and `from` on the tree. */
+    void keepDrawn (juce::ValueTree& tree, const cabir::State&, const juce::MemoryBlock& bytes, std::shared_ptr<const CabParts> parts);
+    /** The cabinet `from` says drawn on the worker — or taken as this process drew it — and kept on the live state only
+        if it still waits for it: still says `from`, with no bytes of its own. */
+    void requestDrawnOnce (const cabir::State&, const juce::String& from);
 
     /** Adds to a tree bound for disk every player's-own IR any state inside it names — the live
         one, and each register's. */
@@ -1271,6 +1692,7 @@ private:
     /** Every link's switch, straight off `params::chainLinks`; null for a link that has none.
         Filled once in prepare; read on the audio thread like every other parameter. */
     std::atomic<float>* rowOn[params::numChainRows] { };
+    std::atomic<float>* rowPresent[params::numChainRows] { };   // ChainLink::presentParam, where the product has it
 
     std::atomic<float>* gateThresholdParam = nullptr;
     std::atomic<float>* gatePosParam       = nullptr;
@@ -1401,7 +1823,8 @@ private:
 };
 
 /** THE PLAYER'S IRS OF BEFORE, gathered into the family's folder: what the product kept in its own `IRs`
-    is copied into `Darwin's Cat/IRs` (device::IrLibrary::gather) — once in a process for each product,
+    is copied into the family's folder of its chain, `Darwin's Cat/IRs` for a guitar amp (Product::irsFolder,
+    device::IrLibrary::gather) — once in a process for each product,
     and once on this machine (prefs::irsGathered), tried again on the next start only where a file could
     not be copied. Every product's first start calls it (Product::firstStart), so a gate that plays a
     product with none never reaches the machine's real folders. */

@@ -31,6 +31,9 @@ hum                orbitamp_hum_test
 hum-off            orbitamp_gates
 eqlink             orbitamp_eqlink_test
 tuner              orbitamp_tuner_test
+bass-tuner         orbitamp_bass_tuner_test
+tuner-poly         orbitamp_polytuner_test
+tuner-poly-hard    orbitamp_polytuner_hard_test
 gatelearn          orbitamp_gatelearn_test
 nofactory          orbitamp_gates
 # The site's kit of OrbitAmp's face is written on a Mac (ORBITAMP_WEB_EXPORT, through CoreGraphics); on
@@ -43,6 +46,9 @@ webface            orbitamp_gates  skip=macos,windows
 
 # The sea's CPU half (AmberPawAmp's windscreen), against the prototype it was ported from.
 titan-world        titan_world_test
+
+# The walker's world (RedGrooveBass's dome), against the prototype it was ported from, to the last bit.
+walker-world       walker_world_test
 
 # The GPU's refusals, written down: the line a world sent to the CPU leaves in the family's log, and its cap.
 gpu-log            orbitamp_gates
@@ -66,8 +72,18 @@ frostpaw-channel   orbitamp_gates  ROVER_GATE_OWNS_HOME=1
 amberpaw-set       orbitamp_gates
 amberpaw-channel   orbitamp_gates  ROVER_GATE_OWNS_HOME=1
 
-# Every amp in one binary: all five side by side in one process, each its own product (src/Product.h).
+# ...and the walker's, over its two gears on the bass's chain.
+redgroove-set      orbitamp_gates
+redgroove-channel  orbitamp_gates  REDGROOVE_GATE_OWNS_HOME=1
+redgroove-face     orbitamp_gates
+redgroove-nofactory orbitamp_gates
+
+# Every amp in one binary: all of them side by side in one process, each its own product (src/Product.h).
 family             orbitamp_gates
+
+# The bass's chain. It takes IRs into the player's `Bass IRs` and `IRs` only when told the home is its own —
+# and here it always is: every cabinet it hears is the one it puts there.
+orbitbass          orbitamp_gates  ORBITBASS_GATE_OWNS_HOME=1
 
 # The input's level: unity at every amp's input, the pack's own level feeding the model, 0.8.0's states as they played.
 input-level        orbitamp_gates

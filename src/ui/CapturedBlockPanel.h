@@ -10,6 +10,7 @@
 #include "scope/DeviceScope.h"
 #include "Knob.h"
 #include "VSwitch.h"
+#include "ToggleSwitch.h"
 #include "ChannelLever.h"
 #include "LatchKey.h"
 #include "VoicingSelector.h"
@@ -38,7 +39,8 @@ class AmpProcessor;
     The dial is what the amp is set to, the lever which of its channels plays, the well what it does —
     the EQ curve among the pictures it can show, so the console's row of hands is the third strip and
     no longer a second storey of the block. The two narrow meters stand at the well's edges: what goes
-    in at its left, what comes out at its right.
+    in at its left, what comes out at its right. On the bass a pack's tone switches stand in the third
+    strip, among the dials (switchesInRow), not under SMOOTH.
 
     The pack says what this device HAS: how many positions its gain was captured at, which of its
     knobs were measured instead, whether one of them is a two-position switch, and what the circuit
@@ -47,9 +49,32 @@ class AmpProcessor;
 
     A control slot with nothing behind it is hidden. A knob doing nothing is worse than a gap. */
 class CapturedBlockPanel final : public BlockFrame,
+                                 public juce::TooltipClient,
                                  private juce::Timer
 {
 public:
+    /** Over a loudness warning cut to "RAW" on the border, the whole of it (the owner, 01.11). */
+    juce::String getTooltip() override
+    {
+        return rawBox.contains (getMouseXYRelative().toFloat()) ? juce::String ("No loudness tag: plays raw") : juce::String();
+    }
+
+    /** OrbitBass's knob beside the GAIN dial, BLEND, takes a column this wide — the AMP block, and the whole face,
+        that much wider within the AMP's row: the picture well keeps the room its row of hands needs. */
+    static constexpr int bassSideW = 66;
+
+private:
+    mutable juce::Rectangle<float> rawBox;   // where "RAW" stands on the border, or empty
+
+public:
+
+    /** Its console — a gate asks whose cuts its switches are (EqSection::cutsAreBass). */
+    const EqSection& console() const noexcept { return eq; }
+
+    /** Its three sections as the last layout left them, left to right, tier and strip together — a gate reads the
+        bass's narrower GAIN and lever sections, and the guitar's widths kept. Empty while a picture is thrown open. */
+    const std::array<juce::Rectangle<int>, 3>& sections() const noexcept { return sectionAreas; }
+
     using Block = core::CapturedBlock;
 
     /** `eqLink` is which EQ console is this block's — they belong to the blocks now, and the index
@@ -78,6 +103,7 @@ private:
 
     /** Builds a switch for each selecting control the device has beyond its gain dial. */
     void buildSelectors();
+    void buildToneSwitches();
 
     /** A HAND'S PICK — a device out of the menu, a place of the channel lever: the channel the amp
         leaves keeps what it was set to, and the one it plays comes back as it was left
@@ -114,6 +140,11 @@ private:
         the lever, BRIGHT 2 beside its switch. */
     static constexpr int section1W  = 160;   // GAIN, and SMOOTH with the picks under it — the dial's notches clear of the edges
     static constexpr int section2W  = 150;   // the channel lever, and BOOST under it
+
+    /** ...and the bass's, narrower: no BOOST and no pick there, so its GAIN column is only as wide as the dial its height
+        allows or SMOOTH under it, BLEND right after it (layOutContent), and its lever's names are short — SVT, B15 at
+        13 px and the lever (the owner, 02.11). What they give up goes to the picture well and its row of hands. */
+    static constexpr int bassSection2W = 80;
     static constexpr int sectionGap = 16;    // a hairline down its middle
     static constexpr int tierGap    = 2;     // between a section's tier and its strip — 6 -> 2, the EQ's names closer under the curve
     static constexpr int leverGap   = 12;    // between the channel lever's foot and BOOST
@@ -154,6 +185,7 @@ private:
         empty, rather than closing the gap. */
     LatchKey boostKey { "BOOST" };
     int boostIndex = -1;   // which of the selectors it is, or -1
+    int voiceIndex = -1;   // the bass pack's switch the lever throws (buildSelectors), or -1
 
     /** ...and on a pack with no Boost switch — the X88-IR's — the key is still BOOST, thrown on
         params::preampBoost: the capture played two positions up the dial, the knob where it stands.
@@ -177,6 +209,11 @@ private:
     /** No label: the dial is the block's one big control and needs no caption to be found; its
         name rides the hint. The row a label took is diameter now. */
     Knob gain { "", theme::orange, 0 };
+
+    /** OrbitBass's COMP before the GAIN dial and BLEND after it, in the signal's order, COMP's squeeze
+        beside its knob (ui/BassControls.h) — on the bass's chain alone; none on a guitar amp's. */
+    struct BassKnobs;
+    std::unique_ptr<BassKnobs> bassKnobs;
 
     /** SMOOTH or STEP — how the dial moves between the captured positions. The first line of the
         dial's strip: a little lever and the word, at reading size now that it has a line of its own
@@ -249,6 +286,7 @@ private:
     struct PickSlot
     {
         std::unique_ptr<VSwitch> steps;
+        std::unique_ptr<ToggleSwitch> toggle;   // ...or, on the bass, a toggle in the row under the tone's dials
         std::unique_ptr<juce::ParameterAttachment> attachment;
         juce::String         name;     // the control — written beside the switch when it is an off/on
         juce::StringArray    values;   // its positions — the chosen one written beside the switch, all of them in the hint
@@ -273,6 +311,24 @@ private:
 
     std::array<PickSlot, (size_t) params::numSelectors> selectors;
 
+    /** ON THE BASS, A PACK'S TONE SWITCHES ARE CELLS OF THE CONSOLE'S ROW — ULTRA LO and ULTRA HI, the SGT-DI's (the
+        owner, 02.11): they are the tone's, not the GAIN's, so not under SMOOTH. The first stands between HPF and BASS,
+        the second between TREBLE and LPF, each a cell as wide as its words and never narrower than a cut's, looking as
+        the cuts' switches do (ToggleSwitch); the dials share what is left. The picture well keeps its height. A pack
+        with no switch has the row as it was, five cells. A guitar amp's stay the dial's picks. */
+    bool switchesInRow() const noexcept { return bassKnobs != nullptr; }
+
+    /** ...AND ITS TONE SWITCHES — the SGT-DI's Ultra Lo and Ultra Hi, tones of positions and no sweep (the owner,
+        02.11): each a toggle there too, after the pack's own selectors, on its tone slot (params::blockMeasured) as a
+        dial is on its own, so the state, undo, presets and automation hold it. The slot's 0..1 is the position's
+        place in the pack's list, as the block plays it (core::CapturedBlock::updateToneIfMoved). */
+    struct ToneSwitch
+    {
+        std::unique_ptr<ToggleSwitch> toggle;
+        std::unique_ptr<juce::ParameterAttachment> attachment;
+    };
+    std::array<ToneSwitch, 2> toneSwitches;
+
     /** The visualizations: one scope per way of looking, and exactly ONE page of the well on screen —
         a scope, or the EQ curve, which is a page like the others now rather than a storey of its own.
         Several ways to look at a device is a thing you CHOOSE between rather than a thing you watch
@@ -286,6 +342,14 @@ private:
     void showVizMenu (juce::Point<int> screenPos);
     void setViz (int which);
 
+    /** THE CURVE PAGE, WEARING `mode` — EQ RIG (the device's own tone) or EQ (our standard), as the view menu
+        offers them where the pack brought a tone of its own. The mode is the sound's, one undo step; the page is
+        only which picture is up. */
+    void showEq (params::EqMode mode);
+
+    /** The curve page's name: EQ RIG while the device's own tone sounds, EQ while ours does. */
+    juce::String eqPageName() const { return eq.wearsNative() ? "EQ RIG" : "EQ"; }
+
     /** The scope that stands for the page on the whole monitor: the EQ curve's is TONE, the same
         curve over the same spectrum, read rather than handled. */
     DeviceScope::Mode modeOfPage (int page) const
@@ -295,6 +359,7 @@ private:
 
     /** Where the hairlines between the sections stand, for paintContent. */
     std::array<int, 2> dividerX { -1, -1 };
+    std::array<juce::Rectangle<int>, 3> sectionAreas;   // sections()
 
     /** Whether the loaded pack ships a photograph of its box. Most do not — the field is newer than
         the packs — and a page with nothing behind it is the gap this face already refuses to have

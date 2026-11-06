@@ -81,6 +81,9 @@ public:
     void setHearing (std::function<worlds::Ear::Heard()> heardSinceAsked) { hearing = std::move (heardSinceAsked); }
     /** ...and whether it is lit by the guitar at all (Drive::setLit), asked as often. None is never. */
     void setLit (std::function<bool()> litNow) { lit = std::move (litNow); }
+    /** The host's tempo, beats a minute, 0 for none, asked every frame (Drive::setTempo): a world that walks to it
+        puts its footfalls on the beat. None is its own pace. */
+    void setTempo (std::function<double()> bpmNow) { tempo = std::move (bpmNow); }
 
     /** THE ROVER'S SPEED, km/h, as the view is driving it: eased toward what the gear and TURBO ask for.
         In the 1993 landscape its own drive, counted in the Plains' measure; in
@@ -209,6 +212,7 @@ private:
     std::atomic<int> wipersWanted { 1 }, lightsWanted { 0 };
     std::function<worlds::Ear::Heard()> hearing;
     std::function<bool()> lit;
+    std::function<double()> tempo;
     face::Steering steering;        // the drag, the keys, and steer() from outside, as one value
     std::atomic<float> scaleInUse { 1.0f };
     float scaleWanted = 1.0f;

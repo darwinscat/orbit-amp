@@ -44,24 +44,29 @@
   #define BuildDir "..\build"
 #endif
 
-#define FamilyIni    AddBackslash(SourcePath) + "family.ini"
+; The family to pack: /DFamilyIni=<file> where said (installer\bass.ini), else family.ini beside this script.
+#ifndef FamilyIni
+  #define FamilyIni  AddBackslash(SourcePath) + "family.ini"
+#endif
 #define AppName      ReadIni(FamilyIni, "family", "name", "")
 #define Amps         ReadIni(FamilyIni, "family", "amps", "")
 #define Bundle       ReadIni(FamilyIni, "family", "bundle", "")
 #define BundleTarget ReadIni(FamilyIni, "family", "bundle_target", "")
 #define OldBundles   ReadIni(FamilyIni, "family", "old_bundles", "")
+#define AppGuid      ReadIni(FamilyIni, "family", "app_id", "")
+#define Archive      ReadIni(FamilyIni, "family", "archive", "")
 #define Plugs        BuildDir + "\" + BundleTarget + "_artefacts\Release"
 #define AppPublisher "Darwin's Cat"
 #define AppURL       "https://darwinscat.com"
-#if AppName == "" || Amps == "" || Bundle == "" || BundleTarget == ""
-  #error installer\family.ini names no family, amps, bundle or bundle_target
+#if AppName == "" || Amps == "" || Bundle == "" || BundleTarget == "" || AppGuid == "" || Archive == ""
+  #error the family's ini names no family, amps, bundle, bundle_target, app_id or archive
 #endif
 
 [Setup]
-; OrbitAmp's AppId (its own installer's, up to 0.7.0), kept on purpose: OrbitAmp's installer came first, so an
-; OrbitAmp already installed is upgraded by this Setup in place — one entry under Installed apps, now
-; the family's — rather than left beside it. Do NOT change it.
-AppId={{62EA38AA-F6FB-446B-B92A-7F097A8ED667}
+; The family's AppId, its ini's app_id: for the amps OrbitAmp's own (its installer's, up to 0.7.0), kept on purpose,
+; so an OrbitAmp already installed is upgraded by this Setup in place — one entry under Installed apps — rather than
+; left beside it. A family's AppId never changes once released. "{{" is Inno's literal brace.
+AppId={{{#AppGuid}}
 AppName={#AppName}
 AppVersion={#AppVersion}
 AppPublisher={#AppPublisher}
@@ -75,7 +80,7 @@ UsePreviousSetupType=no
 DisableProgramGroupPage=yes
 DisableDirPage=yes
 OutputDir=output
-OutputBaseFilename=darwinscat-amps-{#AppVersion}-windows-x64-setup
+OutputBaseFilename={#Archive}-{#AppVersion}-windows-x64-setup
 ; The strongest LZMA2 Inno has, in a process of its own, so the compressor has the memory it asks for.
 Compression=lzma2/ultra64
 LZMAUseSeparateProcess=yes
@@ -92,14 +97,17 @@ UsedUserAreasWarning=no
 Name: "full";   Description: "Every plug-in format, every app"
 Name: "custom"; Description: "Custom"; Flags: iscustom
 
+#if Pos("OrbitAmp", Amps) > 0
 [InstallDelete]
 ; OrbitAmp's own installer kept its app and its uninstaller in {autopf}\OrbitAmp. The uninstaller
 ; goes whatever is ticked: the AppId is this Setup's now, and the old one would remove plug-ins that
 ; are this Setup's. The app goes when OrbitAmp's standalone is ticked, which places it again in the
-; family's folder; unticked, it stays as it was.
+; family's folder; unticked, it stays as it was. The amps' family alone: the basses' (installer\bass.ini)
+; carries no OrbitAmp and has nothing of it to take away.
 Type: files;      Name: "{autopf}\OrbitAmp\unins*.*"
 Type: files;      Name: "{autopf}\OrbitAmp\OrbitAmp.exe"; Components: standalone\orbitamp
 Type: dirifempty; Name: "{autopf}\OrbitAmp"
+#endif
 
 [Components]
 Name: "factory";    Description: "The amps' data: packs, cabinets, pictures (always installed)"; Types: full custom; Flags: fixed

@@ -3,7 +3,9 @@
 
 #pragma once
 
+#include "Parameters.h"
 #include "PerProduct.h"
+#include "core/PitchTracker.h"
 
 #include <juce_audio_processors/juce_audio_processors.h>
 
@@ -20,14 +22,16 @@
     face. There is no "current product" anywhere in a process: a host may run OrbitAmp and CatpitAmp side
     by side, out of one binary, and each processor is what it was made as.
 
-    Each amp says what it is in a file of its own — OrbitAmp in OrbitAmpStart.cpp, the cockpit in
-    catpit/CatpitLineup.cpp, each rover in its skin's file — and no two of them define anything under the
-    same name, so every amp's sources link into one binary. Each amp's plug-in makes a processor of its
+    Each amp says what it is in a file of its own — OrbitAmp in OrbitAmpStart.cpp, OrbitBass in
+    OrbitBassStart.cpp, the cockpit in catpit/CatpitLineup.cpp, each rover in its skin's file, the walker in
+    redgroove/RedGrooveLineup.cpp — and no two
+    of them define anything under the same name, so every amp's sources link into one binary. Each amp's plug-in makes a processor of its
     own product (createPluginFilter, beside its Product, compiled into that plug-in alone); a gate makes
     whichever it plays.
 
     Every amp asks for the repository's LATEST release — the family's vX.Y.Z — as OrbitAmp always has:
-    no tag prefix, since every release of the repository is every amp's. */
+    no tag prefix. A bass (Chain::bass) is of the basses' family, released apart (installer/bass.ini) and
+    tagged bass-vX.Y.Z: it asks for the highest of those, by the tag prefix "bass-". */
 namespace orbitamp
 {
 
@@ -36,6 +40,12 @@ struct ProductEngine;
 
 namespace redpaw { struct Skin; }
 namespace params { struct Opening; }
+
+/** WHAT A PRODUCT'S CHAIN IS. The guitar's — gate, amp, delay, reverb, cabinet, limiter — is every amp's but
+    OrbitBass's. The bass's is one signal from the input to the output and holds neither the delay nor the
+    reverb (params::bassChainHolds); its blocks still to come — COMP, OCTAVE, FILTER, CHORUS, the DI beside
+    the cabinet — have their places named in the chain (AmpProcessor::processChunk). */
+enum class Chain { guitar, bass };
 
 struct Product
 {
@@ -79,6 +89,54 @@ struct Product
         their menus. OrbitAmp's listens always: its face has no switch for it, and a tuner left off in
         an old session would be off with nothing anywhere to turn it back on. */
     bool tunerSwitch = true;
+
+    /** ITS CHAIN (Chain, above): the guitar's unless it says otherwise. */
+    Chain chain = Chain::guitar;
+
+    /** A GUITAR CHAIN'S COMP, before the AMP (params::addGuitarCompParameters, which its `addParameters` adds): OrbitAmp's;
+        the cockpit's and the rovers' faces have none. */
+    bool guitarComp = false;
+
+    /** THE LOWEST PITCH ITS TUNER LOOKS FOR, in Hz (core::PitchTracker::setLowestHz). Every guitar amp
+        stays at the guitar's, which reaches a bass's low E and costs a guitar nothing more; OrbitBass
+        reaches its low B and a drop-A's A0. */
+    double tunerLowestHz = core::PitchTracker::guitarLowestHz;
+
+    /** WHETHER ITS VIEW ANSWERS THE PLAYING UNTIL THE PLAYER SAYS OTHERWISE (prefs::viewLit): the family's views do
+        not; RedGrooveBass's walker does (the owner, 02.11: the forest breathes with the bass from the first note). */
+    bool viewLitByDefault = false;
+
+    /** THE CABINET A FRESH INSTANCE AND INIT OPEN ON, where the product opens on a drawn one of its own — its `from`, as
+        AmpProcessor::cabSynthFrom writes a cab-ir-generator state — or none: every other amp opens on its catalog's
+        number (params::cabIrDefault), and the walker on its gears' own slots (channels::Lineup). OrbitBass: the bass's
+        dozen's first, 1: 8x10 STACK (the owner, 06.11). A session or a preset keeps the cabinet it saved, or none. */
+    juce::String (*freshCabinet) () = nullptr;
+
+    /** WHICH STANDARD EQ ITS AMP'S CONSOLE IS (params::EqStandard): the bass's on the bass's chain, the guitar's on
+        every other. Read from the chain for now, and asked HERE and nowhere else — the console's face
+        (EqSection::setStandard) and the processor's EQ (AmpProcessor::bassEq) both come to this one question — so the
+        later step that lets a rig say its own standard (a word in its pack) replaces this one body and nothing else. */
+    params::EqStandard eqStandard() const noexcept
+    {
+        return chain == Chain::bass ? params::EqStandard::bass : params::EqStandard::guitar;
+    }
+
+    /** A GUITAR AMP'S CABINETS AND A BASS AMP'S NEVER CROSS (the owner, 02.11): not the IRs the build carries,
+        and not the player's own. Both are asked of the chain here, and nowhere else.
+
+        Whether it plays the catalog's IR `number` (resources/cabinets.txt): a bass amp the bass's alone, a
+        guitar amp every other — which of those its own list lays out is the list's to say (device/FactoryShelf.h). */
+    bool playsCabIr (int number) const noexcept
+    {
+        return number >= 0 && number < (int) std::size (catalog::irs) && catalog::irs[number].bass == (chain == Chain::bass);
+    }
+
+    /** ...and the folder the player's own IRs lie in, under the family's (device/IrLibrary.h): `IRs` for every
+        guitar amp, `Bass IRs` for every bass amp. */
+    const char* irsFolder() const noexcept
+    {
+        return chain == Chain::bass ? "Bass IRs" : "IRs";
+    }
 };
 
 /** EVERY AMP OF THE FAMILY, each defined in its own file (above). A binary links the ones it plays. */
@@ -89,6 +147,8 @@ const Product& catpitAmp();
 const Product& redPawAmp();
 const Product& frostPawAmp();
 const Product& amberPawAmp();
+const Product& orbitBass();
+const Product& redGrooveBass();
 } // namespace products
 
 } // namespace orbitamp

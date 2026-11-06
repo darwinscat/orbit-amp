@@ -3,10 +3,13 @@
 
 #pragma once
 
+#include "BlockFrame.h"
+
 #include "../Parameters.h"
 #include "../core/EqLink.h"
 #include "EqCurve.h"
 #include "Knob.h"
+#include "ToggleSwitch.h"
 #include "ZoneSwitch.h"
 
 #include <felitronics/analysis/RollingSpectrumTap.h>
@@ -46,14 +49,13 @@ public:
 
     /** THE CONSOLE IS TWO PIECES NOW, placed apart. The row of hands is a strip of the block's own —
         under the picture well, where the block's other controls have their strips — and the curve is
-        one of the pictures that well can show, with the button that says whose tone it wears in its
-        corner. So the block places each where its own layout puts it, rather than handing the console
-        one rectangle to split.
+        one of the pictures that well can show. So the block places each where its own layout puts it,
+        rather than handing the console one rectangle to split.
 
-        `cornerReserve` is the width the block keeps free at the curve's top-right for its own glyph
-        (the one that throws the picture open): the mode button stands left of it. */
+        The curve wears nothing in its corner any more: whose tone it plays is the PAGE's name, EQ RIG
+        or EQ, and is chosen where every page is (CapturedBlockPanel::showVizMenu). */
     void layOutRow (juce::Rectangle<int> row);
-    void layOutCurve (juce::Rectangle<int> area, int cornerReserve);
+    void layOutCurve (juce::Rectangle<int> area);
 
     /** Which side of the curve the row of hands sits on — a preference of the old layout, where the
         row and the curve shared one box. In the strip they no longer share one, so it is kept only
@@ -113,6 +115,9 @@ public:
             MARKER — it says where the knob works, and the knob says how much. 0 = no dot (ours
             place their own handles). */
         double anchorHz = 0.0;
+        /** ...and a device's knob that reads in a unit of its own: the bass's FREQ, in hertz, the place its band
+            stands at. None: the reading above. */
+        std::function<juce::String (double)> reading {};
     };
 
 
@@ -152,21 +157,6 @@ private:
 
     EqCurve curve { [this] (double hz) { return drawnDb (hz); } };
 
-    /** The overlay in the curve's corner: WHOSE tone controls the console wears, written on the
-        button itself so the answer is read without opening anything, and the menu under it —
-        the two sets, and RESET. The stamps that used to live here went with the PRESETS name:
-        a console that can be the device's own or ours has one question, not a drawer. */
-    struct ModeButton final : public juce::Component
-    {
-        juce::String text;
-        std::function<void (juce::Point<int>)> onClick;
-        void paint (juce::Graphics&) override;
-        void mouseDown (const juce::MouseEvent& e) override
-        {
-            if (onClick) onClick (e.getScreenPosition());
-        }
-    };
-
     void resetLink();
     juce::StringArray linkParamIds() const;
     void setParam (const juce::String& id, float plainValue);
@@ -177,6 +167,8 @@ private:
     {
         std::function<int()> getIndex;
         std::function<void (int)> setIndex;
+        std::function<juce::String()> getText;   // a combo that says its own word (the bass's cuts)...
+        std::function<void()> openMenu;          // ...and opens its own menu
         void paint (juce::Graphics&) override;
         void mouseDown (const juce::MouseEvent&) override;
     };
@@ -186,6 +178,49 @@ private:
     std::vector<Band> ourBands() const;
 
 public:
+    /** WHICH STANDARD EQ THIS CONSOLE IS (params::EqStandard) — its ONE switch, asked of the product
+        (Product::eqStandard) by the block that wears it, once, before addTo.
+
+        THE GUITAR'S is what the console is when nothing is said: four bands, the scalpel, its own cuts with their
+        slopes. THE BASS'S, the SGT-DI's (the owner, 01.11): BASS (the low shelf), MIDDLE (bell 1) and TREBLE (the high
+        shelf), always ours; under MIDDLE a rail lying down sets its frequency (params::bassMidMinHz), the same hand as
+        the bell's on the curve, and the second bell and the scalpel are off the face and out of the sound
+        (PluginProcessor::updateEqSettings). Its HPF and LPF switches become the bass's own cuts (params::bassHpfOn,
+        bassLpfOn) and the combos under them their choices, 5 STR / 4 STR and FINGERS / SLAP, the frequencies in their
+        menus — the console's own guitar cuts out of the bass's sound and off its curve. And those cuts work across the
+        whole chain, not the AMP's alone: their switches, words and choices stay live while `owner`, the block they
+        stand on, stands by. */
+    void setStandard (params::EqStandard, BlockFrame& owner);
+    params::EqStandard standard() const noexcept { return eqStandard; }
+
+    /** Whether its HPF and LPF switches are the bass's cuts (the bass's standard, setStandard) — a gate reads it. */
+    bool cutsAreBass() const noexcept { return eqStandard == params::EqStandard::bass; }
+
+    /** Whether the cuts' switches, words and choices stand undimmed — a gate reads it with the AMP standing by. */
+    bool cutsLive() const noexcept
+    {
+        for (const juce::Component* c : { (const juce::Component*) &hpfSw, (const juce::Component*) &lpfSw, (const juce::Component*) &hpfSlopeBox,
+                                          (const juce::Component*) &lpfSlopeBox, (const juce::Component*) &hpfLabel, (const juce::Component*) &lpfLabel })
+            if (c->getAlpha() < 1.0f)
+                return false;
+        return true;
+    }
+
+    /** The row's height: the dials'. */
+    int rowHeight() const noexcept { return rowH; }
+
+    /** ROOM IN THE ROW FOR A SWITCH OF THE BLOCK'S OWN inside each cut — between HPF and the first dial (0), between the
+        last dial and LPF (1): a pack's tone switches on the bass (CapturedBlockPanel::switchesInRow). 0 wide, none; the
+        dials share whatever the cuts and these leave. */
+    void setInnerCells (int firstW, int secondW) { innerW = { firstW, secondW }; }
+
+    /** ...and the switches themselves, so a side's slots stand in one column with the cut's line over them. */
+    void setInnerToggles (ToggleSwitch* first, ToggleSwitch* second) { innerToggles = { first, second }; }
+
+    /** Where layOutRow left that room: from the row's top, where the names stand, down to the cuts' switches' foot — a
+        switch put there has its name on the names' line and its oval on the cuts'. Empty where none was asked. */
+    juce::Rectangle<int> innerCell (int which) const { return innerCells[(size_t) which]; }
+
     /** Put a set of bands on the row. Ours by default; a captured block hands it the device's own.
 
         The two are alternatives and the console shows one at a time, because a device wearing its
@@ -216,17 +251,33 @@ public:
                                    : display.magnitudeDb (hz);
     }
 
-    /** The one question the console asks about ITSELF: whose bands it is wearing. `names` is the
-        whole pair, in the parameter's order; `nativeAvailable` false greys the device's side, for
-        a device that measured nothing. The button in the curve's corner wears the answer, and its
-        menu — also the curve's right-click — offers the other side and RESET. */
-    void setModes (const juce::StringArray& names, int selected, bool nativeAvailable);
+    /** The one question the console asks about ITSELF: whose bands it is wearing — `selected` in the
+        parameter's order (params::EqMode), `nativeAvailable` false for a device that measured nothing
+        and so has no tone of its own to offer. It is ANSWERED where every page of the well is chosen:
+        the block's view menu offers EQ RIG and EQ when there are two to wear, and the page's name
+        says which one sounds (CapturedBlockPanel::showVizMenu). */
+    void setModes (int selected, bool nativeAvailable);
     bool wearsNative() const noexcept { return modeIndex == 0; }
-    std::function<void (int)> onModePicked;
+    bool offersNative() const noexcept { return nativeOffered; }
 
     /** RESET, after the console's own parameters went back to default: the block puts whatever
         else it has on show — the device's tone slots — back where the pack starts them. */
     std::function<void()> onReset;
+
+    /** RESET as its menus call it: the console's own knobs back to flat, then onReset. */
+    void reset();
+
+    /** A menu of RESET alone, at the mouse — the curve's right click where its block gives it no menu of its own
+        (onCurveMenu, below). */
+    void showResetMenu (juce::Point<int> screenPos);
+
+    /** THE CURVE'S TWO CLICKS THAT ARE NOT ITS HANDS', handed to the block that wears it, because both are the
+        well's questions and not the console's. A right click opens the block's menu of pages (none set: RESET
+        alone, showResetMenu). A plain click on an empty spot — no handle under it, no drag, no second click
+        within the double-click interval (EqCurve::onEmptyClick) — moves on to the next page, as a click on any
+        other page of the well does; before that the curve took every click, and the loop stuck on it. */
+    std::function<void (juce::Point<int>)> onCurveMenu;
+    std::function<void()> onCurveClick;
 
     /** The product's switch for its analysers (prefs::spectraCache), read where the spectra are about to
         be drawn. None: shown. */
@@ -242,15 +293,37 @@ private:
     std::vector<Band> bands;
     std::vector<std::unique_ptr<Knob>> bandKnobs;
 
+    // A FREQ BESIDE ITS DIAL (the owner, 03.11): a band that reads in a unit of its own (Band::reading) — the bass's
+    // FREQ — is an upright fader close beside the dial before it, the band it moves; the two one control under one
+    // name, "MID 1.0 kHz", the frequency where it stands, and only the dial's number under them.
+    bool pairedFader (size_t i) const { return i > 0 && i < bands.size() && bands[i].reading != nullptr; }
+    struct PairName final : public juce::Component
+    {
+        juce::String text;
+        void paint (juce::Graphics&) override;
+    };
+    PairName pairName;
+    void namePair();
+    void layBands (juce::Rectangle<int> row);
+
+    std::array<int, 2> innerW { 0, 0 };                    // setInnerCells
+    std::array<juce::Rectangle<int>, 2> innerCells;        // ...and where layOutRow left them
+    std::array<ToggleSwitch*, 2> innerToggles {};          // setInnerToggles
+
+    // THE BASS'S CUTS AS THE WALKER HAS THEM (the owner, 03.11), on a row with a pack's switches: STR 4 / 5 and
+    // FING / SLAP, one line each, both cuts always in — the switch chooses between their places.
+    ToggleSwitch strLine, fingLine;
+    std::unique_ptr<juce::ParameterAttachment> strAtt, fingAtt;
+    bool walkerLines = false;
+    void holdOn (const char* paramId);
+
     std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>> bandAtts;
 
-    ModeButton modeBtn;
-    static constexpr int modeBtnW = 150;   // DEVICE TONE and its chevron at 13 px
-
-    void showModeMenu (juce::Point<int> screenPos);
-    juce::StringArray modeNames;
     int               modeIndex = 0;
     bool              nativeOffered = false;
+
+    params::EqStandard eqStandard = params::EqStandard::guitar;   // setStandard
+    bool bassStandard() const noexcept { return eqStandard == params::EqStandard::bass; }
 
     ZoneSwitch  hpfSw, lpfSw;
     juce::Label hpfLabel { {}, "HPF" }, lpfLabel { {}, "LPF" };

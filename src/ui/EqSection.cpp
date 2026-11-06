@@ -2,12 +2,14 @@
 // Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of OrbitAmp — see LICENSE.
 
 #include "EqSection.h"
+#include "BassControls.h"
 
 #include "EqDisplay.h"
 
 #include "Prefs.h"
 
 #include "Theme.h"
+#include "OnFirst.h"
 
 namespace orbitamp
 {
@@ -112,9 +114,20 @@ EqSection::EqSection (juce::AudioProcessorValueTreeState& s, int eqLink,
     hpfSlopeBox.setIndex = [this] (int i) { hpfSlopeAtt->setValueAsCompleteGesture ((float) i); };
     lpfSlopeBox.setIndex = [this] (int i) { lpfSlopeAtt->setValueAsCompleteGesture ((float) i); };
 
-    modeBtn.onClick = [this] (juce::Point<int> screenPos) { showModeMenu (screenPos); };
-
-    curve.onContextMenu = [this] (juce::Point<int> at) { showModeMenu (at); };
+    // The curve's right click and its empty click are the well's (onCurveMenu, onCurveClick); asked when they happen,
+    // so the block may hand them over after it built the console.
+    curve.onContextMenu = [this] (juce::Point<int> at)
+    {
+        if (onCurveMenu != nullptr)
+            onCurveMenu (at);
+        else
+            showResetMenu (at);
+    };
+    curve.onEmptyClick = [this]
+    {
+        if (onCurveClick != nullptr)
+            onCurveClick();
+    };
 
     curve.onHandleDrag       = [this] (int i, double hz, double db) { handleDragged (i, hz, db); };
     curve.onDragActive       = [this] (int i, bool a) { handleDragActive (i, a); };
@@ -133,6 +146,12 @@ EqSection::~EqSection() = default;
     name had to give up — the knob wears the same one as its point on the curve. */
 std::vector<EqSection::Band> EqSection::ourBands() const
 {
+    // The bass's three, the SGT-DI's: TREBLE wears HI's colour, the same hand as its point on the curve.
+    if (bassStandard())
+        return { { "BASS",   theme::eqNode[0], params::eqLoDb (link) },
+                 { "MIDDLE", theme::eqNode[1], params::eqBellDb (link, 0) },
+                 { "TREBLE", theme::eqNode[3], params::eqHiDb (link) } };
+
     return { { "LO",    theme::eqNode[0], params::eqLoDb (link) },
              { "L MID", theme::eqNode[1], params::eqBellDb (link, 0) },
              { "H MID", theme::eqNode[2], params::eqBellDb (link, 1) },
@@ -154,14 +173,22 @@ void EqSection::buildBands (std::vector<Band> newBands)
 
     bands = std::move (newBands);
 
-    for (const auto& b : bands)
+    pairName.setVisible (false);
+    for (size_t i = 0; i < bands.size(); ++i)
     {
-        auto k = std::make_unique<Knob> (b.label, b.colour, b.notches);
+        const auto& b = bands[i];
+        const bool pairs = i + 1 < bands.size() && pairedFader (i + 1), paired = pairedFader (i);
+        auto k = std::make_unique<Knob> (pairs || paired ? juce::String() : b.label, b.colour, b.notches);
 
         // Every band's number under its dial, typed there too (Oleh, 24.10): ours in decibels, a
         // device's on the amp-panel's 0-10, the scale its GAIN reads in — its parameter is a
         // normalised place on the device's dial.
-        if (b.showsDb)
+        if (b.reading != nullptr)
+        {
+            k->textForValue = b.reading;
+            k->setHint (b.label + ":   where the band it moves stands, in Hz");
+        }
+        else if (b.showsDb)
         {
             k->textForValue = [] (double v) { return (v > 0.0 ? "+" : "") + juce::String (v, 1); };
             k->setHint (b.label + ":   the band's gain, in dB");
@@ -174,9 +201,12 @@ void EqSection::buildBands (std::vector<Band> newBands)
         }
 
         k->valueInDial = false;
-        k->setValueRowShown (true);
+        k->setValueRowShown (! paired);
+        k->setFader (paired);
+        if (pairs || paired)
+            pairName.setVisible (host != nullptr);
 
-        k->onValueChange   = [this] { refreshCurve(); };
+        k->onValueChange   = [this, paired] { refreshCurve(); if (paired) namePair(); };
         k->labelFontHeight = 13.0f;   // the face's floor for anything read
         k->labelRowHeight  = labelRowH;
 
@@ -188,64 +218,96 @@ void EqSection::buildBands (std::vector<Band> newBands)
 
         bandKnobs.push_back (std::move (k));
     }
+    namePair();
 
     if (host != nullptr)
         host->resized();
 }
 
-void EqSection::setModes (const juce::StringArray& names, int selected, bool nativeAvailable)
+/** The pair's one name: the dial's band's, and the frequency the fader puts it at. */
+void EqSection::namePair()
 {
-    modeNames     = names;
-    modeIndex     = juce::jlimit (0, juce::jmax (0, names.size() - 1), selected);
-    nativeOffered = nativeAvailable;
-    modeBtn.text  = modeNames[modeIndex].toUpperCase();
-
-    // NO CHOICE, NO CHOOSER. A pack that measured no tone leaves the console only ours to wear, and
-    // a button that can be pressed to reach one option is furniture — on the curve's best corner at
-    // that. It used to stay and grey the device's side «so the row still says what it could have
-    // been»; what it actually said was that something here is unavailable, on every device that
-    // never had it, forever.
-    modeBtn.setVisible (nativeOffered && curve.isVisible());
-    modeBtn.repaint();
+    for (size_t i = 1; i < bands.size(); ++i)
+        if (pairedFader (i) && i < bandKnobs.size())
+        {
+            pairName.text = bands[i - 1].label.toUpperCase() + " " + bands[i].reading (bandKnobs[i]->getValue());   // kHz as it is written
+            pairName.repaint();
+            return;
+        }
 }
 
-/** Whose bands the console wears — from the button in the curve's corner, or by right-clicking
-    the curve: the same menu either way, so there is one place the answer changes.
+void EqSection::PairName::paint (juce::Graphics& g)
+{
+    // As a knob writes its name over its dial (Knob::paint), across the two.
+    g.setColour (theme::txDim);
+    theme::drawTracked (g, text, getLocalBounds().toFloat(), theme::displayFont (13.0f), 0.15f, juce::Justification::centred);
+}
 
-    A pack that brought no tone knobs offers no choice at all: the button goes, and this menu is
-    RESET alone. RESET closes the list either way — the console's own knobs back to flat, and,
-    through the block, the device's slots back to where the pack starts them. */
-void EqSection::showModeMenu (juce::Point<int> screenPos)
+/** THE DIALS ACROSS `row`, an even share each — a FREQ fader and its dial in one share between them, close together and
+    centred in it, so they never drift apart however wide the row is. */
+void EqSection::layBands (juce::Rectangle<int> row)
+{
+    int shares = 0;
+    for (size_t i = 0; i < bandKnobs.size(); ++i)
+        shares += pairedFader (i) ? 0 : 1;
+    const int shareW = row.getWidth() / juce::jmax (1, shares);
+
+    for (size_t i = 0; i < bandKnobs.size(); ++i)
+    {
+        if (pairedFader (i))
+            continue;
+        const auto cell = row.removeFromLeft (shareW);
+        if (i + 1 >= bandKnobs.size() || ! pairedFader (i + 1))
+        {
+            bandKnobs[i]->setBounds (cell);
+            continue;
+        }
+        auto& dial = *bandKnobs[i];
+        auto& fader = *bandKnobs[i + 1];
+        constexpr int gap = 4;
+        const int under = Knob::valueRowH - dial.valueLift;
+        const int dialW = juce::jlimit (1, juce::jmax (1, cell.getWidth() - gap - Knob::faderW), cell.getHeight() - dial.labelRowHeight - under);
+        auto pair = cell.withSizeKeepingCentre (dialW + gap + Knob::faderW, cell.getHeight());
+        pairName.setBounds (pair.withHeight (dial.labelRowHeight).expanded (40, 0));
+        dial.setBounds (pair.removeFromLeft (dialW));
+        pair.removeFromLeft (gap);
+        fader.labelRowHeight = dial.labelRowHeight;
+        fader.setBounds (pair);     // the whole height under the name (the owner, 03.11)
+    }
+}
+
+void EqSection::setModes (int selected, bool nativeAvailable)
+{
+    // NO CHOICE, NO CHOOSER — and since the choice moved to the well's menu, no chooser on the curve
+    // at all. The button that stood in the curve's corner and wore DEVICE TONE was a second way of
+    // getting round the same pictures, and the owner wanted one: the page's own name says whose tone
+    // sounds, EQ RIG or EQ, and the view menu is where it is changed.
+    modeIndex     = juce::jlimit (0, params::eqModes.size() - 1, selected);
+    nativeOffered = nativeAvailable;
+}
+
+/** RESET closes every list it stands in — the console's own knobs back to flat, and, through the
+    block, the device's slots back to where the pack starts them. */
+void EqSection::reset()
+{
+    resetLink();
+    if (onReset != nullptr)
+        onReset();
+}
+
+/** Where the block keeps no menu of pages for the curve, its right click is still worth something:
+    RESET alone, as it always was there. */
+void EqSection::showResetMenu (juce::Point<int> screenPos)
 {
     juce::PopupMenu m;
-
-    // The same rule as the button: with one set to wear there is nothing to pick, and the menu is
-    // RESET alone — which is still worth a right-click.
-    if (nativeOffered)
-    {
-        for (int i = 0; i < modeNames.size(); ++i)
-            m.addItem (i + 1, modeNames[i].toUpperCase(), true, i == modeIndex);
-
-        m.addSeparator();
-    }
-
     m.addItem (100, "RESET");
 
-    m.showMenuAsync (juce::PopupMenu::Options()
+    onfirst::show (m, &curve, juce::PopupMenu::Options()
                          .withTargetScreenArea ({ screenPos.x, screenPos.y, 1, 1 }),
                      [safe = juce::Component::SafePointer<juce::Component> (&curve), this] (int r)
                      {
-                         if (safe == nullptr)
-                             return;
-
-                         if (r == 100)
-                         {
-                             resetLink();
-                             if (onReset != nullptr)
-                                 onReset();
-                         }
-                         else if (r > 0 && onModePicked != nullptr)
-                             onModePicked (r - 1);
+                         if (safe != nullptr && r == 100)
+                             reset();
                      });
 }
 
@@ -305,25 +367,6 @@ std::unique_ptr<juce::ParameterAttachment> EqSection::attach (const juce::String
                                                         [this] (float) { refreshCurve(); });
 }
 
-void EqSection::ModeButton::paint (juce::Graphics& g)
-{
-    auto r = getLocalBounds().toFloat().reduced (0.5f);
-    g.setColour (theme::panel.withAlpha (0.85f));
-    g.fillRoundedRectangle (r, r.getHeight() * 0.5f);
-    g.setColour (theme::hair2);
-    g.drawRoundedRectangle (r, r.getHeight() * 0.5f, 1.0f);
-    g.setColour (theme::txDim);
-    theme::drawTracked (g, text, r.withTrimmedRight (14.0f), theme::displayFont (13.0f), 0.14f,
-                        juce::Justification::centred);
-
-    juce::Path v;
-    const float cx = r.getRight() - 13.0f, cy = r.getCentreY() - 1.0f;
-    v.startNewSubPath (cx - 3.0f, cy);
-    v.lineTo (cx, cy + 3.0f);
-    v.lineTo (cx + 3.0f, cy);
-    g.strokePath (v, juce::PathStrokeType (1.2f));
-}
-
 juce::StringArray EqSection::linkParamIds() const
 {
     // Everything the link owns — except the power: that is the frame's.
@@ -357,7 +400,6 @@ void EqSection::resetLink()
 void EqSection::addTo (juce::Component& parent)
 {
     parent.addAndMakeVisible (curve);
-    parent.addAndMakeVisible (modeBtn);
     host = &parent;
 
     for (auto& k : bandKnobs)
@@ -368,6 +410,13 @@ void EqSection::addTo (juce::Component& parent)
     parent.addAndMakeVisible (lpfLabel);
     parent.addAndMakeVisible (hpfSlopeBox);
     parent.addAndMakeVisible (lpfSlopeBox);
+    parent.addChildComponent (strLine);
+    parent.addChildComponent (fingLine);
+    parent.addChildComponent (pairName);
+    pairName.setInterceptsMouseClicks (false, false);
+    for (size_t i = 1; i < bands.size(); ++i)
+        if (pairedFader (i))
+            pairName.setVisible (true);
 
     for (auto& k : bandKnobs)
         parent.addAndMakeVisible (*k);
@@ -386,7 +435,6 @@ void EqSection::setCurveVisible (bool v)
     setSpectrumRunning (v);
 
     curve.setVisible (v);
-    modeBtn.setVisible (v && nativeOffered);   // ...and only when there is a choice to make
 }
 
 void EqSection::setRowVisible (bool v)
@@ -400,11 +448,34 @@ void EqSection::setRowVisible (bool v)
 
     for (auto& k : bandKnobs)
         k->setVisible (v);
+    bool paired = false;
+    for (size_t i = 1; i < bands.size(); ++i)
+        paired = paired || pairedFader (i);
+    pairName.setVisible (v && paired);
 }
 
 void EqSection::refreshCurve()
 {
-    const auto s = eqSettingsFor (state, link);   // the one reading every face shares
+    auto s = eqSettingsFor (state, link);   // the one reading every face shares
+    if (bassStandard())
+    {
+        // THE BASS'S CUTS on its curve (the owner, 01.11): not the guitar's — its own one HPF's main cut and its LPF at
+        // the frequencies their positions choose, 12 dB/oct as core::BassCuts runs them.
+        const bool four = juce::roundToInt (raw (params::bassHpf)) == (int) params::BassHpf::four;
+        const bool slap = juce::roundToInt (raw (params::bassLpf)) == (int) params::BassLpf::slap;
+        s.hpfOn    = raw (params::bassHpfOn) > 0.5f;
+        s.hpfHz    = (double) raw (four ? params::bassHpfHz4 : params::bassHpfHz5);
+        s.hpfSlope = 12;
+        s.lpfOn    = raw (params::bassLpfOn) > 0.5f;
+        s.lpfHz    = (double) raw (slap ? params::bassLpfHzSlap : params::bassLpfHzFingers);
+        s.lpfSlope = 12;
+
+        // ...and its tone the SGT-DI's, as the processor plays it: MIDDLE in its span, the second bell and the scalpel out.
+        s.b1Hz = juce::jlimit ((double) params::bassMidMinHz, (double) params::bassMidMaxHz, s.b1Hz);
+        s.b2Db = 0.0;
+        s.b3On = false;
+        s.b3Db = 0.0;
+    }
 
     display.setSettings (s);
     refreshHandles();
@@ -414,9 +485,74 @@ void EqSection::refreshCurve()
     curve.repaint();
 }
 
+void EqSection::setStandard (params::EqStandard standard, BlockFrame& owner)
+{
+    eqStandard = standard;
+    if (! bassStandard())
+        return;   // the guitar's is what the console was built as
+
+    // THE TONE: the SGT-DI's three on the row (ourBands asks the standard).
+    buildBands (ourBands());
+
+    // THE CUTS: the switches become the bass's one pair, the combos under them its choices.
+    hpfSw.attach (*state.getParameter (params::bassHpfOn));
+    lpfSw.attach (*state.getParameter (params::bassLpfOn));
+    for (const char* id : { params::bassHpf, params::bassLpf, params::bassHpfOn, params::bassLpfOn, params::bassHpfHz4,
+                            params::bassHpfHz5, params::bassLpfHzFingers, params::bassLpfHzSlap })
+        refreshAtts.push_back (attach (id));
+    hpfSlopeBox.getText  = [this] { return bass::hpfWord (juce::roundToInt (raw (params::bassHpf))); };
+    lpfSlopeBox.getText  = [this] { return bass::lpfWord (juce::roundToInt (raw (params::bassLpf))); };
+    hpfSlopeBox.openMenu = [this] { bass::showHpfMenu (state, &hpfSlopeBox); };
+    // FINGERS is a wider word than a slope's "12 DB": the choices write it up to their chevron and may run left of their
+    // cell, into the room the console leaves there.
+    hpfSlopeBox.setPaintingIsUnclipped (true);
+    lpfSlopeBox.setPaintingIsUnclipped (true);
+    lpfSlopeBox.openMenu = [this] { bass::showLpfMenu (state, &lpfSlopeBox); };
+
+    // ...and as the walker has them, for a row that holds a pack's switches too: one line each, the cut always in.
+    for (auto* line : { &strLine, &fingLine })
+    {
+        line->oneLine    = true;
+        line->walkerLook = true;
+    }
+    strLine.setItems ("STR", { "4", "5" }, 1);
+    fingLine.setItems ("STYL", { "F", "S" }, 0);
+    strLine.setTooltip (bass::strHint);
+    fingLine.setTooltip (bass::stylHint);
+    strLine.onMenu  = [this] { bass::showHpfMenu (state, &strLine); };     // the frequencies each position stands for
+    fingLine.onMenu = [this] { bass::showLpfMenu (state, &fingLine); };
+    strAtt = std::make_unique<juce::ParameterAttachment> (*state.getParameter (params::bassHpf), [this] (float v)
+    {
+        strLine.setSelectedIndex (juce::roundToInt (v) == (int) params::BassHpf::four ? 0 : 1, juce::dontSendNotification);
+    });
+    fingAtt = std::make_unique<juce::ParameterAttachment> (*state.getParameter (params::bassLpf), [this] (float v)
+    {
+        fingLine.setSelectedIndex (juce::roundToInt (v), juce::dontSendNotification);
+    });
+    strLine.onChange = [this] (int i)
+    {
+        holdOn (params::bassHpfOn);
+        strAtt->setValueAsCompleteGesture ((float) (i == 0 ? (int) params::BassHpf::four : (int) params::BassHpf::five));
+    };
+    fingLine.onChange = [this] (int i)
+    {
+        holdOn (params::bassLpfOn);
+        fingAtt->setValueAsCompleteGesture ((float) i);
+    };
+    strAtt->sendInitialUpdate();
+    fingAtt->sendInitialUpdate();
+
+    // ...and they work across the chain, so they stay live with the block they stand on standing by.
+    for (auto* c : { (juce::Component*) &hpfSw, (juce::Component*) &lpfSw, (juce::Component*) &hpfLabel, (juce::Component*) &lpfLabel,
+                     (juce::Component*) &hpfSlopeBox, (juce::Component*) &lpfSlopeBox })
+        owner.keepOutsideStandby (*c);
+
+    refreshCurve();
+}
+
 void EqSection::SlopeCombo::paint (juce::Graphics& g)
 {
-    if (getIndex == nullptr)
+    if (getIndex == nullptr && getText == nullptr)
         return;
 
     const auto r = getLocalBounds().toFloat();
@@ -425,12 +561,22 @@ void EqSection::SlopeCombo::paint (juce::Graphics& g)
     // wide, and the per-octave part was clipping its own first digit off — a slope that reads "2"
     // when it is twelve is worse than one that does not say the unit. Everyone reading a filter
     // slope knows what it is per.
-    const auto text = params::eqSlopes[juce::jlimit (0, params::eqSlopes.size() - 1, getIndex())]
-                          + juce::String (" DB");
+    const auto text = getText != nullptr ? getText()
+                                         : params::eqSlopes[juce::jlimit (0, params::eqSlopes.size() - 1, getIndex())]
+                                               + juce::String (" DB");
 
     g.setColour (theme::txDim);
-    theme::drawTracked (g, text, r.withTrimmedRight (11.0f), theme::displayFont (13.0f), 0.04f,
-                        juce::Justification::centred);
+    if (getText != nullptr)
+    {
+        const auto font = theme::displayFont (13.0f);
+        const float w   = theme::trackedWidth (text, font, 0.04f) + 2.0f;
+        const auto  box = juce::Rectangle<float> (w, r.getHeight()).withRightX (r.getRight() - 12.0f).withY (r.getY());
+        theme::drawTracked (g, text, box.getWidth() < r.getWidth() - 12.0f ? r.withTrimmedRight (11.0f) : box, font, 0.04f,
+                            juce::Justification::centred);
+    }
+    else
+        theme::drawTracked (g, text, r.withTrimmedRight (11.0f), theme::displayFont (13.0f), 0.04f,
+                            juce::Justification::centred);
 
     // The chevron that says "this opens".
     juce::Path v;
@@ -443,6 +589,11 @@ void EqSection::SlopeCombo::paint (juce::Graphics& g)
 
 void EqSection::SlopeCombo::mouseDown (const juce::MouseEvent& e)
 {
+    if (openMenu != nullptr)
+    {
+        openMenu();
+        return;
+    }
     if (getIndex == nullptr || setIndex == nullptr)
         return;
 
@@ -450,7 +601,7 @@ void EqSection::SlopeCombo::mouseDown (const juce::MouseEvent& e)
     for (int i = 0; i < params::eqSlopes.size(); ++i)
         m.addItem (i + 1, params::eqSlopes[i] + " dB/oct", true, i == getIndex());
 
-    m.showMenuAsync (juce::PopupMenu::Options()
+    onfirst::show (m, this, juce::PopupMenu::Options()
                          .withTargetScreenArea ({ e.getScreenPosition().x,
                                                   e.getScreenPosition().y, 1, 1 }),
                      [safe = juce::Component::SafePointer<SlopeCombo> (this)] (int r)
@@ -484,6 +635,15 @@ void EqSection::refreshHandles()
         h.getReference (hB2) = { s.b2Hz, s.b2Db, H::Freedom::both, true,   theme::eqNode[2] };
         h.getReference (hB3) = { s.b3Hz, s.b3Db, H::Freedom::both, s.b3On, theme::eqNode[4] };
         h.getReference (hHi) = { s.hiHz, s.hiDb, H::Freedom::both, true,   theme::eqNode[3] };
+
+        // The bass has BASS, MIDDLE and TREBLE only: no second bell, no scalpel to summon. MIDDLE's point moves sideways
+        // — its frequency, 200 Hz … 3 kHz, the SGT-DI's swept mid (the owner, 01.11: the point is the control, no rail);
+        // BASS and TREBLE stand at their frequencies, up and down only.
+        if (bassStandard())
+        {
+            h.getReference (hB2).visible = h.getReference (hB3).visible = false;
+            h.getReference (hLo).freedom = h.getReference (hHi).freedom = H::Freedom::gain;
+        }
     }
     else
     {
@@ -512,6 +672,9 @@ void EqSection::refreshHandles()
     // chain would be a control over nothing. Orange HPF, violet LPF, same as their switches.
     h.getReference (hHpf) = { s.hpfHz, 0.0, H::Freedom::freq, s.hpfOn, theme::orange };
     h.getReference (hLpf) = { s.lpfHz, 0.0, H::Freedom::freq, s.lpfOn, theme::violet };
+    // The bass's cuts are drawn, not dragged here: their frequencies are their switches' menus' steps.
+    if (bassStandard())
+        h.getReference (hHpf).visible = h.getReference (hLpf).visible = false;
 
     curve.setHandles (std::move (h));
 }
@@ -527,10 +690,13 @@ void EqSection::handleDragged (int index, double hz, double db)
         case hLo: setBandDb (0, db); break;
         case hB1: setBandDb (1, db); break;
         case hB2: setBandDb (2, db); break;
-        case hHi: setBandDb (3, db); break;
+        case hHi: setBandDb (bassStandard() ? 2 : 3, db); break;   // the bass's TREBLE is its third
         case hB3: b3DbAtt->setValueAsPartOfGesture ((float) clampDb (db)); break;
         default: break;
     }
+
+    if (bassStandard() && index == hB1)
+        hz = juce::jlimit ((double) params::bassMidMinHz, (double) params::bassMidMaxHz, hz);   // MID FREQ's span
 
     freqAtt[index]->setValueAsPartOfGesture ((float) hz);
     refreshCurve();
@@ -585,7 +751,7 @@ void EqSection::curveDoubleClicked (double hz)
     // summoning the scalpel there was a gesture with no consequence — and now that the device's
     // dots are markers, a double-click ON one of them reads as a double-click on empty curve,
     // which would have made that silent gesture easy to trip over by accident.
-    if (nativeDb != nullptr)
+    if (nativeDb != nullptr || bassStandard())   // the bass has no scalpel
         return;
 
     // The surgical bell lands where you asked for it, switched on, flat — pull it down.
@@ -621,26 +787,78 @@ void EqSection::layOutRow (juce::Rectangle<int> row)
     // The cut cells are a fixed width and the bands share what is left, however many there are: a
     // device that measured one Tone control gets one big centred dial rather than one dial and
     // three holes where our other three used to be.
+    // A block's own switches stand inside the cuts, where it asked for room (setInnerCells): HPF, the first, the dials,
+    // the second, LPF.
     const int n     = juce::jmax (1, (int) bandKnobs.size());
-    const int knobW = (row.getWidth() - 2 * cutW) / n;
 
-    const auto hpfCell = row.removeFromLeft (cutW);
-
-    juce::Rectangle<int> firstCell = row;
-
-    for (size_t i = 0; i < bandKnobs.size(); ++i)
+    // ON THE BASS WITH A PACK'S SWITCHES, every switch on ONE LINE as the walker has them, two a side of the dials (the
+    // owner, 02.11 and 03.11): STR 4 / 5 over the pack's first left of them, FING / SLAP over its second right of them,
+    // each side's slots in one column. The cuts are always in there, as on the walker — opened so by the processor where
+    // its pack has switches (OrbitBassStart.cpp), never written by a layout: a window coming up moves no parameter.
+    if (bassStandard() && (innerW[0] > 0 || innerW[1] > 0))
     {
-        const auto cell = row.removeFromLeft (knobW);
-        if (i == 0)
-            firstCell = cell;
+        walkerLines = true;
+        for (juce::Component* c : { (juce::Component*) &hpfSw, (juce::Component*) &lpfSw, (juce::Component*) &hpfLabel,
+                                    (juce::Component*) &lpfLabel, (juce::Component*) &hpfSlopeBox, (juce::Component*) &lpfSlopeBox })
+            c->setVisible (false);
+        strLine.setVisible (true);
+        fingLine.setVisible (true);
 
-        // The whole cell, not a square of it: the name over the dial is 13 px now, and MIDDLE at that
-        // size is wider than the dial under it. The knob draws its dial at the smaller of the two
-        // sides that are left, centred, so the dial is the size it was.
-        bandKnobs[i]->setBounds (cell);
+        constexpr int lineH = ToggleSwitch::slotH + 4;
+        const auto sideOf = [] (const ToggleSwitch& top, const ToggleSwitch* under)
+        {
+            float left = top.leftPart(), right = top.rightPart();
+            if (under != nullptr)
+            {
+                left  = juce::jmax (left, under->leftPart());
+                right = juce::jmax (right, under->rightPart());
+            }
+            return std::pair { left, right };
+        };
+        const auto [l0, r0] = sideOf (strLine, innerToggles[0]);
+        const auto [l1, r1] = sideOf (fingLine, innerToggles[1]);
+        const int leftW  = juce::roundToInt (std::ceil (l0 + (float) ToggleSwitch::slotW + r0)) + 2;
+        const int rightW = juce::roundToInt (std::ceil (l1 + (float) ToggleSwitch::slotW + r1)) + 2;
+        const auto left  = row.removeFromLeft (leftW);
+        const auto right = row.removeFromRight (rightW);
+        layBands (row);
+
+        const auto lineOf = [] (juce::Rectangle<int> side, int which)
+        {
+            const int centre = side.getY() + (which == 0 ? side.getHeight() / 3 : 2 * side.getHeight() / 3);
+            return juce::Rectangle<int> (side.getX(), centre - lineH / 2, side.getWidth(), lineH);
+        };
+        strLine.slotAt  = l0;
+        fingLine.slotAt = l1;
+        strLine.setBounds (lineOf (left, 0));
+        fingLine.setBounds (lineOf (right, 0));
+        if (innerToggles[0] != nullptr) innerToggles[0]->slotAt = l0;
+        if (innerToggles[1] != nullptr) innerToggles[1]->slotAt = l1;
+        innerCells[0] = innerW[0] > 0 ? lineOf (left, 1) : juce::Rectangle<int>();
+        innerCells[1] = innerW[1] > 0 ? lineOf (right, 1) : juce::Rectangle<int>();
+        return;
     }
 
+    if (walkerLines)
+    {
+        walkerLines = false;
+        strLine.setVisible (false);
+        fingLine.setVisible (false);
+        for (juce::Component* c : { (juce::Component*) &hpfSw, (juce::Component*) &lpfSw, (juce::Component*) &hpfLabel,
+                                    (juce::Component*) &lpfLabel, (juce::Component*) &hpfSlopeBox, (juce::Component*) &lpfSlopeBox })
+            c->setVisible (true);
+    }
+
+    const auto hpfCell = row.removeFromLeft (cutW);
+    innerCells[0] = row.removeFromLeft (innerW[0]);
     const auto lpfCell = row.removeFromRight (cutW);
+    innerCells[1] = row.removeFromRight (innerW[1]);
+
+    // The whole cell, not a square of it: the name over the dial is 13 px now, and MIDDLE at that
+    // size is wider than the dial under it. The knob draws its dial at the smaller of the two
+    // sides that are left, centred, so the dial is the size it was.
+    const juce::Rectangle<int> firstCell = row.withWidth (row.getWidth() / n);
+    layBands (row);
 
     // The cuts hang off the first knob's geometry, so an empty row still has to put them somewhere.
     const auto first = bandKnobs.empty() ? firstCell : bandKnobs.front()->getBounds();
@@ -661,16 +879,36 @@ void EqSection::layOutRow (juce::Rectangle<int> row)
 
     switchCell (hpfCell, hpfSw, hpfLabel, hpfSlopeBox);
     switchCell (lpfCell, lpfSw, lpfLabel, lpfSlopeBox);
+
+    // The block's own switches from the names' line down to the cuts' switches' foot: the line under is the cuts'
+    // choices', which may run over them (FINGERS).
+    for (auto& cell : innerCells)
+        if (! cell.isEmpty())
+            cell.setBottom (hpfSw.getBottom());
+
+    // The bass's choices may run left of their cells (FINGERS): over the knob beside them, not under it.
+    if (bassStandard())
+    {
+        hpfSlopeBox.toFront (false);
+        lpfSlopeBox.toFront (false);
+    }
+
 }
 
-void EqSection::layOutCurve (juce::Rectangle<int> area, int cornerReserve)
+void EqSection::holdOn (const char* paramId)
 {
-    // The curve is the whole well it was given; whose tone it wears rides its top-right corner, left
-    // of whatever the block keeps there for itself.
-    curve.setBounds (area);
+    if (auto* p = state.getParameter (paramId); p != nullptr && p->getValue() < 0.5f)
+    {
+        p->beginChangeGesture();
+        p->setValueNotifyingHost (1.0f);
+        p->endChangeGesture();
+    }
+}
 
-    modeBtn.setBounds (area.getRight() - cornerReserve - 6 - modeBtnW, area.getY() + 4, modeBtnW, 22);
-    modeBtn.toFront (false);
+void EqSection::layOutCurve (juce::Rectangle<int> area)
+{
+    // The curve is the whole well it was given; whose tone it wears is the page's name, in the well's corner.
+    curve.setBounds (area);
 }
 
 } // namespace orbitamp

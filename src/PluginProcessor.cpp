@@ -4,6 +4,17 @@
 #include "PluginProcessor.h"
 #include "Product.h"
 #include "Parameters.h"
+
+#include <felitronics/chorus/ChorusLaw.h>
+#include <felitronics/envfilter/EnvelopeFilterLaw.h>
+#include <felitronics/octave/OctaveLaw.h>
+
+#include <cstring>
+#include <map>
+#include <mutex>
+#include <panel/Panel.h>   // cabir::knownState: a cabinet of a box the table knows, or none
+#include <synth/CabSynth.h>
+#include <BinaryData.h>
 #include "device/FactoryShelf.h"
 #include "device/IrLibrary.h"
 
@@ -26,7 +37,7 @@ void gatherFormerIrs (const Product& product)
             return true;
 
         const auto gathered = device::IrLibrary::gather (device::IrLibrary::formerDirectory (product.name),
-                                                         device::IrLibrary::directory(), product.name);
+                                                         device::IrLibrary::directory (product.irsFolder()), product.name);
 
         // A file that would not copy is tried again on the next start; what was copied is not copied twice.
         if (gathered.failed == 0)
@@ -60,6 +71,7 @@ namespace
         if (product.opening != nullptr)
             product.opening (product, opening);
         opening.stereoMode = environment;
+        opening.packTones  = product.chain == Chain::bass;     // its pack's tone, where the pack opens it
 
         auto all = params::createLayout (product.name, opening);
         if (product.addParameters != nullptr)
@@ -87,10 +99,12 @@ AmpProcessor::AmpProcessor (const Product& product)
                },
                felitronics::appkit::CompareHistory::Config {}),
       // GitHub's latest release of THIS repo, the running version, and the badge's own settings file.
-      // The checker asks nothing on its own — see updateChecker(). The repository releases every amp
-      // together, under the family's plain vX.Y.Z, so every amp asks for that "latest release", as
-      // OrbitAmp always has: no tag prefix (see Product.h).
+      // The checker asks nothing on its own — see updateChecker(). The amps are released together under
+      // the family's plain vX.Y.Z, and ask for that "latest release", as OrbitAmp always has; the basses
+      // are a family of their own, tagged bass-vX.Y.Z (installer/bass.ini), and ask for the highest of
+      // those (see Product.h).
       updater ({ .ownerRepo      = "darwinscat/orbit-amp",
+                 .tagPrefix      = ownProduct.chain == Chain::bass ? "bass-" : "",
                  .productName    = ownProduct.name,
                  .currentVersion = ORBITAMP_VERSION,
                  .settings       = [this] { return updateStore->file(); } })
@@ -113,6 +127,7 @@ AmpProcessor::AmpProcessor (const Product& product)
         p.lpfOn    = apvts.getRawParameterValue (params::eqLpfOn (l));
         p.lpfHz    = apvts.getRawParameterValue (params::eqLpfHz (l));
         p.lpfSlope = apvts.getRawParameterValue (params::eqLpfSlope (l));
+        p.eqMode   = apvts.getRawParameterValue (params::blockEqMode (params::eqBlockId (l)));
         p.b3On     = apvts.getRawParameterValue (params::eqB3On (l));
 
         for (int b = 0; b < 3; ++b)
@@ -147,9 +162,43 @@ AmpProcessor::AmpProcessor (const Product& product)
     {
         const auto& link = params::chainLinks[(size_t) i];
         rowOn[(size_t) i] = link.onParam != nullptr ? apvts.getRawParameterValue (link.onParam) : nullptr;
+        rowPresent[(size_t) i] = link.presentParam != nullptr ? apvts.getRawParameterValue (link.presentParam) : nullptr;
     }
     if (! ownProduct.tunerSwitch)
         rowOn[(size_t) params::rowTuner] = nullptr;   // it listens always (Product::tunerSwitch)
+
+    // The bass's own parameters, where its chain has them.
+    if (ownProduct.chain == Chain::bass)
+    {
+        const auto raw = [this] (const char* id) { return apvts.getRawParameterValue (id); };
+        bass = { raw (params::compAmount), raw (params::compAttack), raw (params::compRelease), raw (params::compCharacter),
+                 raw (params::ampBlend), raw (params::ampBlendHz), raw (params::ampBlendInvert), raw (params::cabMix),
+                 raw (params::bassHpf), raw (params::bassHpfHz4), raw (params::bassHpfHz5),
+                 raw (params::bassLpf), raw (params::bassLpfHzFingers), raw (params::bassLpfHzSlap),
+                 raw (params::octaveAmount), raw (params::octaveToneHz),
+                 raw (params::filterAmount), raw (params::filterMode), raw (params::filterDirection), raw (params::filterResonance),
+                 raw (params::filterRange), raw (params::filterKeepLows), raw (params::filterKeepHz),
+                 raw (params::filterReleaseMs),
+                 raw (params::chorusAmount), raw (params::chorusRateHz), raw (params::chorusCrossoverHz) };
+        bass.hpfOn         = raw (params::bassHpfOn);
+        bass.lpfOn         = raw (params::bassLpfOn);
+        bass.compRatio     = raw (params::compRatio);
+        bass.compThreshold = raw (params::compThreshold);
+        jassert (bass.compAmount != nullptr && bass.lpfHzSlap != nullptr && bass.chorusCrossoverHz != nullptr && bass.compThreshold != nullptr);
+    }
+
+    // OrbitAmp's COMP's (Product::guitarComp): the bass's, the same parameters.
+    if (ownProduct.chain != Chain::bass && ownProduct.guitarComp)
+    {
+        const auto raw = [this] (const char* id) { return apvts.getRawParameterValue (id); };
+        bass.compAmount    = raw (params::compAmount);
+        bass.compAttack    = raw (params::compAttack);
+        bass.compRelease   = raw (params::compRelease);
+        bass.compCharacter = raw (params::compCharacter);
+        bass.compRatio     = raw (params::compRatio);
+        bass.compThreshold = raw (params::compThreshold);
+        jassert (bass.compAmount != nullptr && bass.compThreshold != nullptr);
+    }
 
     gateThresholdParam = apvts.getRawParameterValue (params::gateThreshold);
     gatePosParam       = apvts.getRawParameterValue (params::gatePos);
@@ -190,7 +239,15 @@ AmpProcessor::AmpProcessor (const Product& product)
     for (auto* p : getParameters())
         if (auto* ranged = dynamic_cast<juce::RangedAudioParameter*> (p))
             if (auto* raw = apvts.getRawParameterValue (ranged->paramID))
-                parameterGuards.push_back ({ raw, ranged->convertFrom0to1 (engineDefault (*ranged)) });
+            {
+                // The bass's effects' sliders keep their last number through a NaN: their default, 0, would switch an
+                // effect off on an invalid automation point (review round 3).
+                const bool holds = ranged->paramID == params::octaveAmount || ranged->paramID == params::filterAmount
+                                || ranged->paramID == params::chorusAmount || ranged->paramID == params::compAmount
+                                || ranged->paramID == params::compThreshold || ranged->paramID == params::compRatio;
+                const float fallback = ranged->convertFrom0to1 (engineDefault (*ranged));
+                parameterGuards.push_back ({ raw, fallback, holds, fallback });
+            }
 
     // The product's own half, where it has one. HERE, before the history takes its baseline: what it
     // settles as it is built — the cockpit's chain, its channel, its pack — is how the amp starts,
@@ -205,6 +262,8 @@ AmpProcessor::AmpProcessor (const Product& product)
     // (takeFormerCabinet).
     seedSwitchNames();
     apvts.state.setProperty (cabOpeningId, params::cabIrDefault, nullptr);
+    if (! takeFreshCabinet (apvts.state))   // the cabinet a fresh one opens on, where it has one of its own...
+        takeBassCabinet (apvts.state);      // ...else a fresh bass amp's, which the catalog has none of
     history.reset();
     history.markSaved();
 
@@ -247,6 +306,7 @@ juce::MemoryBlock AmpProcessor::buildSavedState()
     // fresh on reopen. (It said otherwise here for a long time — it never did.)
     auto workspace = history.toTree();
     embedCabIrs (workspace);   // the player's own IRs travel with the session, whole
+    stamp (workspace);         // ...and whose session it is
 
     if (auto xml = workspace.createXml())
         copyXmlToBinary (*xml, out);
@@ -349,6 +409,10 @@ void AmpProcessor::setStateInformation (const void* data, int sizeInBytes)
     if (! loadable)
         return;
 
+    // ...nor is another chain's: a guitar amp's session on the bass, or the bass's on a guitar amp (stamp, belongs).
+    if (! belongs (tree))
+        return;
+
     // The session just handed over IS the session now, whether or not the message thread has
     // applied it yet: a host that restores and saves back to back from a worker thread must get
     // back what it gave, not the state before. Counted as pending until it lands — see
@@ -364,11 +428,35 @@ void AmpProcessor::setStateInformation (const void* data, int sizeInBytes)
         // The embedded IRs go to the store and leave the tree before anyone else sees it: the
         // history would otherwise keep megabytes in its baseline and compare them every tick.
         self.takeEmbeddedIrs (t);
+        unstamp (t);
 
         // ...and a state of 0.8.0's, its trim and its gate where they belong now; one saved while DARK
         // MATTER was the cabinet every amp opened on, on the one they open on now.
         self.takeFormerTrims (t);
         self.takeFormerCabinet (t);
+        // ...and a bass's on a guitar cabinet, on the bass's own — but where the product opens on a cabinet of its own
+        // (Product::freshCabinet), a session or a preset keeps what it saved, or none: a drawn one it saved before its
+        // bytes were drawn is drawn again, and nothing else is put over it.
+        if (self.ownProduct.freshCabinet != nullptr)
+        {
+            // Every state inside the tree — the live one, each register's — found by its type, wherever the envelope nests it.
+            std::function<void (const juce::ValueTree&)> drawAgain = [&self, &drawAgain] (const juce::ValueTree& s)
+            {
+                if (s.hasType (stateType))
+                {
+                    const auto from = s.getProperty (params::cabIrUserFrom).toString();
+                    const auto key  = s.getProperty (params::cabIrUserKey).toString();
+                    if (const auto synth = cabSynthOf (from); synth.valid && (key.isEmpty() || self.cabIrEmbeds.find (key) == nullptr))
+                        self.requestDrawnOnce (synth.state, from);
+                    return;
+                }
+                for (const auto& child : s)
+                    drawAgain (child);
+            };
+            drawAgain (t);
+        }
+        else
+            self.takeBassCabinet (t);
 
         // The aim's bookkeeping belongs to the thread that runs it. Arming it here rather than at
         // the top of setStateInformation also means it is armed AFTER the tree has landed, which
@@ -414,9 +502,11 @@ void AmpProcessor::setStateInformation (const void* data, int sizeInBytes)
 
 void AmpProcessor::selectDemoLoop (int index)
 {
-    const int n = (int) std::size (params::demoLoopFiles);
+    const bool bass = ownProduct.chain == Chain::bass;
+    const auto& loops = params::demoLoopsOf (bass);
+    const int n = (int) loops.files.size();
     demoLoopIndex = juce::jlimit (0, n - 1, index);
-    demo.setLoop (params::demoLoopsDir().getChildFile (params::demoLoopFiles[demoLoopIndex]), getSampleRate());
+    demo.setLoop (params::demoLoopsDir (bass).getChildFile (loops.files[(size_t) demoLoopIndex]), getSampleRate());
 }
 
 void AmpProcessor::takeFormerTrims (juce::ValueTree& tree) const
@@ -496,6 +586,74 @@ void AmpProcessor::takeFormerCabinet (juce::ValueTree& tree)
 
     for (auto child : tree)
         takeFormerCabinet (child);
+}
+
+namespace
+{
+    /** What a pick of a player's IR takes of its file: its bytes, where they are an IR the cabinet plays —
+        not too big to be kept inside a session (EmbeddedIrs), and audio. */
+    bool readCabFile (const juce::File& file, juce::MemoryBlock& bytes)
+    {
+        return file.existsAsFile() && file.getSize() <= device::EmbeddedIrs::maxBytes
+            && file.loadFileAsData (bytes) && core::CabinetIr::decodes (bytes.getData(), bytes.getSize());
+    }
+
+    /** ...and what it leaves on the state: the IR's name, where in the library under `root` it came from,
+        and the key of its bytes in the store. */
+    void nameCabFile (juce::ValueTree& tree, const juce::File& file, const juce::File& root, const juce::String& key)
+    {
+        // Where it came from, in the library's own terms and one spelling on every system — a tick in
+        // the menu, and nothing that the sound depends on.
+        const auto from = file.getRelativePathFrom (root).replaceCharacter ('\\', '/');
+
+        // The key LAST: it is the one the pump and the face watch, and by then the name beside it is
+        // already the right one.
+        tree.setProperty (params::cabIrUserName, file.getFileNameWithoutExtension(), nullptr);
+        tree.setProperty (params::cabIrUserFrom, from, nullptr);
+        tree.setProperty (params::cabIrUserKey,  key, nullptr);
+    }
+}
+
+void AmpProcessor::takeBassCabinet (juce::ValueTree& tree)
+{
+    if (! tree.isValid() || ownProduct.chain != Chain::bass)
+        return;
+
+    if (tree.hasType (stateType))
+    {
+        // What it plays: an IR of the player's the store holds, or the number `cabIr` keeps — the live
+        // parameter's, for the live tree, whose own copy of it may not have caught up yet.
+        const auto key = tree.getProperty (params::cabIrUserKey).toString();
+        int number = params::cabIrDefault;
+        if (tree == apvts.state)
+        {
+            const auto* p = apvts.getParameter (params::cabIr);
+            number = juce::roundToInt (p->convertFrom0to1 (p->getValue()));
+        }
+        else if (const auto p = tree.getChildWithProperty ("id", juce::String (params::cabIr)); p.isValid())
+            number = juce::roundToInt ((float) p.getProperty ("value"));
+
+        if ((key.isNotEmpty() && cabIrEmbeds.find (key) != nullptr) || ownProduct.playsCabIr (number))
+            return;
+
+        const auto root = device::IrLibrary::directory (ownProduct.irsFolder());
+        for (const auto& file : device::IrLibrary::listed (root))
+        {
+            juce::MemoryBlock bytes;
+            if (! readCabFile (file, bytes))
+                continue;
+
+            if (const auto added = cabIrEmbeds.add (std::move (bytes)); added.isNotEmpty())
+            {
+                nameCabFile (tree, file, root, added);
+                return;
+            }
+        }
+        return;
+    }
+
+    for (auto child : tree)
+        takeBassCabinet (child);
 }
 
 juce::String AmpProcessor::loadedAs() const
@@ -603,13 +761,20 @@ const AmpProcessor::IrBytes& AmpProcessor::cabIrBytes (const Product& product, i
     });
 
     jassert (shelf.size() == (size_t) params::cabIrNames.size());
-    const auto& ir = shelf[(size_t) juce::jlimit (0, (int) shelf.size() - 1, index)];
+    index = juce::jlimit (0, (int) shelf.size() - 1, index);
+    const auto& ir = shelf[(size_t) index];
+
+    // A NUMBER OF THE OTHER CHAIN'S is no cabinet at all, whatever the factory folder holds: a bass amp
+    // plays no guitar cabinet — not even RED GIANT in its place — and a guitar amp no bass one.
+    static const IrBytes none { nullptr, 0, nullptr };
+    if (! product.playsCabIr (index))
+        return none;
 
     // A place the product holds empty — a face plays none of the shelf's `Other` — plays RED GIANT, the
-    // cabinet every product opens on: a host that moves the number there hears a cabinet the product has.
-    // With the factory folder missing that one is empty too, and no bytes is what the cabinet is given:
-    // the cabinet loads nothing then: where it is loaded, an IR with no bytes is passed over.
-    return ir.data != nullptr ? ir : shelf[(size_t) params::cabIrDefault];
+    // cabinet every guitar amp opens on: a host that moves the number there hears a cabinet the product
+    // has. With the factory folder missing that one is empty too, and no bytes is what the cabinet is
+    // given: the cabinet loads nothing then: where it is loaded, an IR with no bytes is passed over.
+    return ir.data != nullptr ? ir : product.playsCabIr (params::cabIrDefault) ? shelf[(size_t) params::cabIrDefault] : none;
 }
 
 AmpProcessor::CabChoice AmpProcessor::cabChoice() const
@@ -636,6 +801,8 @@ AmpProcessor::CabChoice AmpProcessor::cabChoice() const
 void AmpProcessor::chooseCabFactory (int index)
 {
     index = juce::jlimit (0, params::cabIrNames.size() - 1, index);
+    if (! ownProduct.playsCabIr (index))
+        return;     // the other chain's: never this amp's to play
 
     const auto choice = cabChoice();
 
@@ -665,28 +832,215 @@ void AmpProcessor::chooseCabFactory (int index)
 bool AmpProcessor::chooseCabFile (const juce::File& file)
 {
     juce::MemoryBlock bytes;
-
-    if (! file.existsAsFile() || file.getSize() > device::EmbeddedIrs::maxBytes
-        || ! file.loadFileAsData (bytes) || ! core::CabinetIr::decodes (bytes.getData(), bytes.getSize()))
+    if (! readCabFile (file, bytes))
         return false;
 
     const auto key = cabIrEmbeds.add (std::move (bytes));
     if (key.isEmpty())
         return false;
 
-    // Where it came from, in the library's own terms and one spelling on every system — a tick in
-    // the menu, and nothing that the sound depends on.
-    const auto from = file.getRelativePathFrom (device::IrLibrary::directory()).replaceCharacter ('\\', '/');
-
-    // The key LAST: it is the one the pump and the face watch, and by then the name beside it is
-    // already the right one.
-    apvts.state.setProperty (params::cabIrUserName, file.getFileNameWithoutExtension(), nullptr);
-    apvts.state.setProperty (params::cabIrUserFrom, from, nullptr);
-    apvts.state.setProperty (params::cabIrUserKey,  key, nullptr);
+    nameCabFile (apvts.state, file, device::IrLibrary::directory (ownProduct.irsFolder()), key);
 
     // No parameter moved: without this, a host would not know the session has something to save.
     updateHostDisplay (ChangeDetails{}.withNonParameterStateChanged (true));
     return true;
+}
+
+AmpProcessor::~AmpProcessor()
+{
+    apvts.state.removeListener (this);
+}
+
+AmpProcessor::DrawnCab AmpProcessor::renderDrawn (const cabir::State& state, bool live)
+{
+    static const auto table = cabir::synth::parseTable (std::string (BinaryData::cabinets_txt, (size_t) BinaryData::cabinets_txtSize));
+    // The mic that did not move kept, the one that did rendered at half the size while the hand is on it.
+    if (cabRenderer == nullptr)
+        cabRenderer = std::make_unique<cabir::synth::PairRenderer>();
+    const auto ir  = cabRenderer->render (table, state.box, cabir::synth::pairOf (state), live ? (size_t) 1 << 13 : (size_t) 1 << 14);
+    const auto wav = cabir::synth::wav24 (ir.mix, 48000);
+    DrawnCab drawn;
+    drawn.bytes = std::make_shared<juce::MemoryBlock> (wav.data(), wav.size());
+    drawn.parts = ir.a.empty() ? std::shared_ptr<const CabParts>() : std::make_shared<const CabParts> (CabParts { ir.a, ir.b });
+    return drawn;
+}
+
+AmpProcessor::DrawnCab AmpProcessor::drawnOnce (const juce::String& from, const DrawnCab* keep)
+{
+    static std::mutex lock;
+    static std::map<juce::String, DrawnCab> drawn;
+    const std::scoped_lock held (lock);
+    if (keep != nullptr)
+        return drawn[from] = *keep;
+    const auto it = drawn.find (from);
+    return it != drawn.end() ? it->second : DrawnCab {};
+}
+
+void AmpProcessor::keepDrawn (juce::ValueTree& tree, const cabir::State& state, const juce::MemoryBlock& bytes,
+                              std::shared_ptr<const CabParts> parts)
+{
+    // Kept: and loaded even when it is the very cabinet the state already named — a drag that ends where it began has
+    // left a live one playing in between.
+    cabIrStale = true;
+
+    const auto key = cabIrEmbeds.add (juce::MemoryBlock (bytes));
+    if (key.isEmpty())
+        return;
+    cabKeptPartsKey = key;
+    cabKeptParts = std::move (parts);
+
+    tree.setProperty (params::cabIrUserKey, key, nullptr);
+    tree.setProperty (params::cabIrUserName, juce::String (state.box), nullptr);
+    tree.setProperty (params::cabIrUserFrom, cabSynthFrom (state), nullptr);
+}
+
+void AmpProcessor::requestCabSynth (const cabir::State& state, bool live)
+{
+    const int mine = ++cabSynthLatest;
+    std::weak_ptr<int> alive = cabSynthAlive;
+
+    cabSynthPool.addJob ([this, alive, mine, state, live]
+    {
+        if (mine != cabSynthLatest.load())
+            return;   // superseded before it began
+
+        const auto drawn = renderDrawn (state, live);
+        auto bytes = drawn.bytes;
+        auto parts = drawn.parts;
+
+        juce::MessageManager::callAsync ([this, alive, mine, state, bytes, parts, live]
+        {
+            if (alive.lock() == nullptr || bytes->getSize() == 0)
+                return;
+
+            // A hand still moving asks again before the worker is done, every time: what it finished is heard all the
+            // same, unless a later one was heard already — so the sound follows the hand as fast as the worker renders.
+            if (live)
+            {
+                if (mine <= cabSynthHeard)
+                    return;
+                cabSynthHeard = mine;
+                this->cab.load (bytes->getData(), bytes->getSize());   // heard, not kept: the state still names the last kept
+                heardCab (bytes, "live:" + juce::String (mine), false, parts);
+                return;
+            }
+
+            // Kept: only the latest asked.
+            if (mine != cabSynthLatest.load())
+                return;
+            cabSynthHeard = mine;
+
+            keepDrawn (apvts.state, state, *bytes, parts);
+            updateHostDisplay (ChangeDetails{}.withNonParameterStateChanged (true));
+        });
+    });
+}
+
+void AmpProcessor::requestDrawnOnce (const cabir::State& state, const juce::String& from)
+{
+    std::weak_ptr<int> alive = cabSynthAlive;
+
+    cabSynthPool.addJob ([this, alive, state, from]
+    {
+        auto drawn = drawnOnce (from);
+        if (drawn.bytes == nullptr)
+        {
+            drawn = renderDrawn (state, false);
+            if (drawn.bytes != nullptr && drawn.bytes->getSize() > 0)
+                drawnOnce (from, &drawn);
+        }
+
+        juce::MessageManager::callAsync ([this, alive, state, from, drawn]
+        {
+            if (alive.lock() == nullptr || drawn.bytes == nullptr || drawn.bytes->getSize() == 0)
+                return;
+
+            // Only while the live state still waits for it: a session, a preset or a hand's pick in between keeps its own.
+            if (apvts.state.getProperty (params::cabIrUserKey).toString().isNotEmpty()
+                || apvts.state.getProperty (params::cabIrUserFrom).toString() != from)
+                return;
+
+            // Where a fresh one opens, not a step of anybody's: kept outside the history, and a state that was saved stays so.
+            const bool wasSaved = ! history.hasUnsavedChanges();
+            {
+                const felitronics::appkit::CompareHistory::ScopedSuppress quietly (history);
+                keepDrawn (apvts.state, state, *drawn.bytes, drawn.parts);
+            }
+            if (wasSaved)
+                history.markSaved();
+            updateHostDisplay (ChangeDetails{}.withNonParameterStateChanged (true));
+        });
+    });
+}
+
+bool AmpProcessor::takeFreshCabinet (juce::ValueTree& tree)
+{
+    if (ownProduct.freshCabinet == nullptr || ! tree.isValid() || ! tree.hasType (stateType))
+        return false;
+
+    const auto from = ownProduct.freshCabinet();
+    const auto synth = cabSynthOf (from);
+    if (! synth.valid)
+        return false;
+
+    // In place of whatever it played: the fresh one's, waiting for its bytes — or with them, where this process has
+    // drawn it already.
+    for (const auto* id : { params::cabIrUserKey, params::cabIrUserName, params::cabIrUserFrom })
+        tree.removeProperty (id, nullptr);
+    tree.setProperty (params::cabIrUserName, juce::String (synth.state.box), nullptr);
+    tree.setProperty (params::cabIrUserFrom, from, nullptr);
+
+    if (const auto drawn = drawnOnce (from); drawn.bytes != nullptr)
+        keepDrawn (tree, synth.state, *drawn.bytes, drawn.parts);
+    else
+        requestDrawnOnce (synth.state, from);
+    return true;
+}
+
+void AmpProcessor::resetToDefault()
+{
+    // ...and back to a fresh instance's IDENTITY too. The device and switch names are not parameters, so setting every
+    // parameter to its default leaves them behind — and the aim would then put the outgoing device straight back over
+    // the default one.
+    auto tree = stateForSaving (true);
+
+    for (auto* p : getParameters())
+        if (auto* rp = dynamic_cast<juce::RangedAudioParameter*> (p))
+        {
+            auto child = tree.getChildWithProperty ("id", rp->paramID);
+            if (child.isValid())
+                child.setProperty ("value", rp->convertFrom0to1 (engineDefault (*rp)), nullptr);
+        }
+    if (! takeFreshCabinet (tree))  // the cabinet a fresh one opens on...
+        takeBassCabinet (tree);     // ...or a bass's, as a fresh one's
+
+    history.applyEdit (history.active(), tree, "Reset to default");
+}
+
+void AmpProcessor::heardCab (std::shared_ptr<const juce::MemoryBlock> bytes, const juce::String& identity, bool kept,
+                             std::shared_ptr<const CabParts> parts)
+{
+    if (kept && cabHeardNow.kept && identity == cabHeardIdentity)
+        return;   // the same IR loaded again: nothing new heard
+    cabHeardNow = { std::move (bytes), cabHeardNow.serial + 1, kept, std::move (parts) };
+    cabHeardIdentity = identity;
+}
+
+juce::String AmpProcessor::cabSynthFrom (const cabir::State& state)
+{
+    return juce::String (cabir::toToml (state));
+}
+
+AmpProcessor::CabSynthChoice AmpProcessor::cabSynthOf (const CabChoice& choice)
+{
+    return choice.isUser() ? cabSynthOf (choice.from) : CabSynthChoice {};
+}
+
+AmpProcessor::CabSynthChoice AmpProcessor::cabSynthOf (const juce::String& from)
+{
+    if (const auto state = cabir::knownState (from.toStdString()))
+        return { *state, true };
+    return {};
 }
 
 void AmpProcessor::embedCabIrs (juce::ValueTree& tree) const
@@ -735,7 +1089,7 @@ void AmpProcessor::pumpDeviceWork()
                     slot = i;
             boostSlot.store (slot, std::memory_order_relaxed);
         }
-        const bool turbo = slot < 0 && preampBoostParam->load() > 0.5f;
+        const bool turbo = slot < 0 && preampBoostParam->load() > 0.5f && ownProduct.chain != Chain::bass;
 
         // Selectors next: they and the gain dial pick a file together, and a stale one would send
         // resolve looking for a combination the player is not on any more.
@@ -750,7 +1104,8 @@ void AmpProcessor::pumpDeviceWork()
         const auto mode = static_cast<params::EqMode> (juce::roundToInt (
             apvts.getRawParameterValue (params::blockEqMode (blk))->load()));
 
-        block.setRaw (mode == params::EqMode::ours);
+        // On the bass, no choice: a pack with a tone of its own plays it, and one with none the bass's standard.
+        block.setRaw (bassEq() ? ! block.hasWearableTone() : mode == params::EqMode::ours);
         block.applySelectors (selectors);
         block.setGain (gainParam->load(), smoothParam->load() > 0.5f, turbo);
 
@@ -766,6 +1121,15 @@ void AmpProcessor::pumpDeviceWork()
     };
 
     pump (preamp,   preampGainParam, preampSmoothParam, params::preampMeasured, params::preampId);
+
+    // The AMP's BLEND, the capture against its clean low end: the player's crossover, told from here as every
+    // other setting of the device is. BLEND 1 — the crossover's amount 0 — is the player without it. This pump
+    // runs from the message thread's timer and from prepareToPlay, which a host may call from a thread of its own:
+    // the message thread tells it here (or the only thread there is, with no MessageManager at all), and a prepare elsewhere tells it itself
+    // (tellBlend, from prepareToPlay) — both under one control-side lock, never the audio callback's.
+    if (bass.blend != nullptr
+        && (juce::MessageManager::existsAndIsCurrentThread() || juce::MessageManager::getInstanceWithoutCreating() == nullptr))
+        tellBlend();
 
     // A model that landed may carry rate-matching the host has to know about.
     reportLatency();
@@ -787,15 +1151,20 @@ void AmpProcessor::pumpDeviceWork()
     // second waits for a message-thread retry that a render with no message loop never makes.
     {
         core::CabinetIr::Post post;
-        post.trimOn       = cabTrimOnParam->load() > 0.5f;
+        // The bass trims nothing: its face has no trim (the place under its picture is its IRs' two doors), and a low
+        // end needs the IR's length.
+        post.trimOn       = ownProduct.chain != Chain::bass && cabTrimOnParam->load() > 0.5f;
         post.trimFraction = cabTrimParam->load();
         const auto slopeDb = [] (float v)
         { return params::eqSlopeValues[juce::jlimit (0, (int) std::size (params::eqSlopeValues) - 1,
                                                      juce::roundToInt (v))]; };
-        post.hpfOn        = cabHpfOnParam->load() > 0.5f;
+        // The bass's cuts are a stage of their own after DI/CAB; the cabinet's, hidden on its face, are never in its
+        // sound, whatever their parameters say.
+        const bool cabCuts = ownProduct.chain != Chain::bass;
+        post.hpfOn        = cabCuts && cabHpfOnParam->load() > 0.5f;
         post.hpfHz        = cabHpfHzParam->load();
         post.hpfSlope     = slopeDb (cabHpfSlopeParam->load());
-        post.lpfOn        = cabLpfOnParam->load() > 0.5f;
+        post.lpfOn        = cabCuts && cabLpfOnParam->load() > 0.5f;
         post.lpfHz        = cabLpfHzParam->load();
         post.lpfSlope     = slopeDb (cabLpfSlopeParam->load());
         post.phase        = cabPhaseParam->load() > 0.5f;
@@ -819,10 +1188,16 @@ void AmpProcessor::pumpDeviceWork()
             const auto* p = apvts.getParameter (params::cabIr);
             const int now = juce::roundToInt (p->convertFrom0to1 (p->getValue()));
 
-            if (! cabIrParamBaselineStale && now != lastCabIrParam
-                && apvts.state.hasProperty (params::cabIrUserKey))
-                for (const auto* id : { params::cabIrUserKey, params::cabIrUserName, params::cabIrUserFrom })
-                    apvts.state.removeProperty (id, nullptr);
+            if (! cabIrParamBaselineStale && now != lastCabIrParam)
+            {
+                if (apvts.state.hasProperty (params::cabIrUserKey))
+                    for (const auto* id : { params::cabIrUserKey, params::cabIrUserName, params::cabIrUserFrom })
+                        apvts.state.removeProperty (id, nullptr);
+
+                // ...and a number the product does not play — a bass amp's lane over the guitar's shelf —
+                // plays the bass's own: the first of the player's bass IRs again, or no cabinet.
+                takeBassCabinet (apvts.state);
+            }
 
             cabIrParamBaselineStale = false;
             lastCabIrParam = now;
@@ -836,9 +1211,23 @@ void AmpProcessor::pumpDeviceWork()
             lastCabIr = choice.identity();
 
             if (choice.isUser())
+            {
                 cab.load (choice.bytes->getData(), choice.bytes->getSize());
+                heardCab (std::make_shared<const juce::MemoryBlock> (*choice.bytes), choice.identity(), true,
+                          choice.key == cabKeptPartsKey ? cabKeptParts : nullptr);
+            }
             else if (const auto& bytes = cabIrBytes (ownProduct, choice.factory); bytes.data != nullptr)
+            {
                 cab.load (bytes.data, (size_t) bytes.size);     // none, with the factory folder missing
+                heardCab (std::make_shared<const juce::MemoryBlock> (bytes.data, (size_t) bytes.size), choice.identity(), true);
+            }
+            else if (ownProduct.chain == Chain::bass)
+            {
+                // A BASS ON NO CABINET — a session that saved none, over one that played the fresh one's — plays none:
+                // not the IR it played before.
+                cab.loadNothing();
+                heardCab ({}, choice.identity(), true);   // nothing heard: no response to draw
+            }
         }
     }
     else if (cabIrStale.exchange (false))
@@ -958,6 +1347,7 @@ void AmpProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
         limiterCeilingSet = 1.0e9f;
     }
 
+    cab.setReference (ownProduct.chain == Chain::bass ? core::CabinetIr::Reference::bass : core::CabinetIr::Reference::guitar);
     cab.prepare (sampleRate, block, channels);
     cabIrStale = true;   // the pump reloads the chosen IR into the freshly prepared engine
 
@@ -1002,9 +1392,72 @@ void AmpProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 
     // Over the channels the bus carries — one or two, by the layouts this plugin accepts. A prepare
     // either refuses keeps that link out of the sound (see delayReady), the way the limiter's does.
-    delayReady  = delay.prepare (sampleRate, block, channels);
-    reverbReady = reverb.prepare (sampleRate, block, channels);
+    // A chain with no place for them never prepares them: they hold no memory and never run. (The bass's has them, out of
+    // its strip until the player adds them: runSpaceStage.)
+    delayReady  = chainHolds (params::rowDelay)  && delay.prepare (sampleRate, block, channels);
+    reverbReady = chainHolds (params::rowReverb) && reverb.prepare (sampleRate, block, channels);
     preamp.prepare (sampleRate, block, channels);
+    if (bass.compAmount != nullptr)   // the bass's COMP, or OrbitAmp's — and its right twin where the chain can be stereo
+    {
+        (void) bassComp.prepare (sampleRate, block);   // a refusal leaves it a wire (BassComp::process)
+        bassComp.snapAmount (bass.compAmount->load());
+        if (ownProduct.chain != Chain::bass)
+        {
+            (void) compRight.prepare (sampleRate, block);
+            compRight.snapAmount (bass.compAmount->load());
+            compRightRan = false;
+        }
+        compTap.prepare (sampleRate);
+    }
+    if (ownProduct.chain != Chain::bass)   // the guitar's input cut: snapped where it stands at the first block
+        guitarInputCut.prepare (sampleRate);
+    if (ownProduct.chain == Chain::bass)
+    {
+        octaveTap->prepare (sampleRate);
+        filterTap.prepare (sampleRate);
+        filterTapLive = false;
+        bassCuts.prepare (sampleRate);
+        for (auto& c : innerCuts)
+            c.prepare (sampleRate);
+        diNow  = juce::jlimit (0.0f, 1.0f, (100.0f - bass.cabMix->load()) * 0.01f);
+        diStep = (float) (1000.0 / (juce::jmax (8000.0, sampleRate) * 20.0));   // the prepared rate, not getSampleRate()'s
+
+        // The three effects: mono up to the chorus, which takes the bus's planes. TOLD WHERE THEY STAND BEFORE THEIR
+        // PREPARES, which snap to what they were told: a slider at 0 or standing by is idle from the first sample (CHORUS's
+        // stage used to arrive at its last knobs and fade out of them over 20 ms, wet at amount 0); one up arrives on its
+        // knobs, not gliding to them. Their own doors are theirs (core).
+        octaveToldValid = filterToldValid = chorusToldValid = false;
+        tellOctave();
+        tellFilter();
+        tellChorus();
+        octaverReady   = octaver.prepare (sampleRate, block, 1);
+        envFilterReady = envFilter.prepare (sampleRate, block, 1);
+        chorusReady    = chorus.prepare (sampleRate, block, juce::jlimit (1, 2, channels));
+        chorusTap.prepare (sampleRate, chorus);   // its phase where the stage's restart put it
+        for (auto& w : effectWorking)
+            w.store (false, std::memory_order_relaxed);
+        filterKey.setSize (1, block);
+
+        // THE BACK HALF'S WIDTH: two planes from CHORUS on, on a stereo bus — ALWAYS, the chorus idle or not. Collapsing
+        // to one while it idles would start the second plane's cabinet cold the moment it engages: an IR's length of
+        // left and right apart. So the cabinet, the DI, the cuts and the limiter cost two planes here, and the load
+        // window says so (LoadBreakdown). A narrower call is played at this width (processBlock).
+        bassWide.store (juce::jlimit (1, 2, channels), std::memory_order_relaxed);
+        narrowBus.setSize (juce::jlimit (1, 2, channels), block);
+        diDry.setSize (juce::jmax (2, channels), block);
+
+        // The DELAY and the REVERB: their input kept aside, the low cut on what they add, their pictures' taps.
+        spaceDry.setSize (2, block);
+        for (auto& stage : wetCuts)
+            for (auto& c : stage)
+            {
+                c.design (true, params::bassWetCutHz, sampleRate);
+                c.reset();
+            }
+        delayTap.prepare (sampleRate);
+        reverbTap.prepare (sampleRate);
+        spaceRunning = {};
+    }
     demo.prepare (sampleRate);
     ear.prepare (sampleRate);
     scopeDry.setSize (1, block);
@@ -1037,8 +1490,19 @@ void AmpProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
         blockFade[(size_t) i].prepare (sampleRate);
         blockFade[(size_t) i].snapTo (linkWorks ((params::ChainRow) i));
     }
+    // The bass's DELAY and REVERB fade on their place in the strip, not on their switch: standing by, they ring out.
+    if (ownProduct.chain == Chain::bass)
+        for (const auto row : { params::rowDelay, params::rowReverb })
+            blockFade[(size_t) row].snapTo (linkInRig (row));
+    if (bass.compAmount != nullptr)   // the bass's COMP is in toward its knob up as well (processChunk)
+        blockFade[(size_t) params::rowComp].snapTo (linkWorks (params::rowComp) && bass.compAmount->load() > 0.0f);
 
     pumpDeviceWork();
+
+    // ...and the AMP's BLEND as the state has it, whatever thread prepares: a host that sets it, prepares on a worker and
+    // renders at once — an offline render, its message thread busy — plays it from the first block.
+    if (bass.blend != nullptr)
+        tellBlend();
 
     // The boost's level where the state has it — after the pump, which has found the pack's Boost.
     boostGain.reset (sampleRate, boostRampSeconds);
@@ -1056,7 +1520,8 @@ void AmpProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 
 bool AmpProcessor::boostOn() const noexcept
 {
-    if (! linkWorks (params::rowPreamp))
+    // No BOOST on the bass (the owner, 31.10): no key, no lift, no push up the dial.
+    if (! linkWorks (params::rowPreamp) || ownProduct.chain == Chain::bass)
         return false;
 
     // The pack's own Boost, past its first position — the BOOST key lights the same way.
@@ -1126,6 +1591,349 @@ void AmpProcessor::updateReverbSettings() noexcept
     reverb.setHpfHz (reverbHpfHzParam->load());
 }
 
+template <typename SpaceStage>
+void AmpProcessor::runSpaceStage (SpaceStage& stage, bool ready, params::ChainRow row, int which, core::SpaceTap& tap,
+                                  const std::atomic<bool>& watched, bool adds, float* const* channels, int numChannels,
+                                  int numSamples) noexcept
+{
+    // PRESENCE ALONE decides whether it runs — a call that carries no channel (a gap, law 11c) included.
+    const bool inRig = linkInRig (row);
+    const auto span  = blockFade[(size_t) row].advance (numSamples, inRig);
+    const bool run   = ready && core::BypassFade::runs (span, inRig);
+
+    // OUT OF THE STRIP: cleared once its fade is done, and not run at all — a stage added again starts silent.
+    const auto clear = [&]
+    {
+        stage.reset();
+        for (auto& c : wetCuts[(size_t) which])
+            c.reset();
+        tap.breakTrace();
+        spaceRunning[(size_t) which] = false;
+        spaceFresh[(size_t) which] = true;
+    };
+
+    if (! run)
+    {
+        if (spaceRunning[(size_t) which])
+            clear();
+        return;
+    }
+    spaceRunning[(size_t) which] = true;
+
+    // Its picture written only while on screen AND at work — in the chain, switched on, its MIX up: standing by (its
+    // tail ringing out or not) or at 0, it stands still (the owner, 31.10).
+    const bool fed   = linkWorks (row);
+    const bool write = watched.load (std::memory_order_relaxed) && fed && adds;
+
+    // ADDED AGAIN, ITS FIRST CALL UNFED. A cleared stage's door stands wherever its first call's feed puts it, with no
+    // travel (TapeDelay, AmpReverb) — open, it took the note already sounding mid-wave, and the echo gave that edge back
+    // a delay later, a click at full level (the owner, 03.11: "not at once"). Shut for this one call, it opens on the
+    // next over its own fade, as the switch opens it.
+    const bool feed = fed && ! std::exchange (spaceFresh[(size_t) which], false);
+
+    if (numChannels <= 0 || channels == nullptr)
+    {
+        // A GAP: the stage takes it as its own (its channels stop, its clocks go on); the wet's cuts and the picture's
+        // hops run over the silence it adds there.
+        (void) stage.process (nullptr, 0, numSamples, feed);
+        for (auto& c : wetCuts[(size_t) which])
+            for (int i = 0; i < numSamples; ++i)
+                (void) c.process (0.0f);
+        for (int i = 0; i < numSamples; ++i)
+            tap.take (0.0f, write);
+    }
+    else
+    {
+        const int nch   = juce::jmin (numChannels, 2);
+        const int chunk = juce::jmax (1, spaceDry.getNumSamples());
+
+        // In pieces of the kept input's length: a host's longer call is played as several, the same samples.
+        const int   ramp = juce::jlimit (0, numSamples, span.ramp);
+        const float step = span.moving && ramp > 0 ? (span.to - span.from) / (float) ramp : 0.0f;
+
+        for (int done = 0; done < numSamples;)
+        {
+            const int n = juce::jmin (chunk, numSamples - done);
+            float* part[2] = { channels[0] + done, nch > 1 ? channels[1] + done : nullptr };
+
+            for (int ch = 0; ch < nch; ++ch)
+                juce::FloatVectorOperations::copy (spaceDry.getWritePointer (ch), part[ch], n);
+
+            (void) stage.process (part, nch, n, feed);   // prepared for the bus's planes and its block: it cannot refuse
+
+            for (int i = 0; i < n; ++i)
+            {
+                const int   at   = done + i;
+                const float gain = ! span.moving ? span.to : (at < ramp ? span.from + step * (float) (at + 1) : span.to);
+                float loudest = 0.0f;
+                for (int ch = 0; ch < nch; ++ch)
+                {
+                    const float dry = spaceDry.getReadPointer (ch)[i];
+                    const float wet = wetCuts[(size_t) which][(size_t) ch].process (part[ch][i] - dry) * gain;
+                    part[ch][i] = dry + wet;
+                    loudest = juce::jmax (loudest, std::abs (wet));
+                }
+                tap.take (loudest, write);
+            }
+            done += n;
+        }
+    }
+
+    // ITS FADE OUT OF THE STRIP ENDED IN THIS CALL: cleared now, not a call later — added again in the very next call, it
+    // starts silent, its old tail gone.
+    if (! inRig && ! (span.to > 0.0f))
+        clear();
+}
+
+void AmpProcessor::tellBlend()
+{
+    const std::scoped_lock control (blendControl);
+    preamp.setCrossover (1.0f - bass.blend->load(), bass.blendHz->load(), bass.blendInvert->load() > 0.5f);   // BLEND 1: the capture alone
+}
+
+namespace
+{
+    /** The same knobs, byte for byte. Sound only while the structs hold their fields and nothing between them — no
+        padding a memcmp would read: the sizes below are the sums of their fields, and a field added in core stops the
+        build here, to be looked at. */
+    template <typename P>
+    bool sameKnobs (const P& a, const P& b) noexcept { return std::memcmp (&a, &b, sizeof (P)) == 0; }
+
+    static_assert (sizeof (felitronics::octave::OctaverParams) == 7 * sizeof (float), "OctaverParams: 7 floats, no padding");
+    static_assert (sizeof (felitronics::envfilter::EnvelopeFilterParams)
+                       == 9 * sizeof (float) + sizeof (felitronics::envfilter::Direction) + sizeof (felitronics::envfilter::Mode),
+                   "EnvelopeFilterParams: 9 floats and 2 enums, no padding");
+    static_assert (sizeof (felitronics::chorus::BassChorusParams) == 5 * sizeof (float), "BassChorusParams: 5 floats, no padding");
+}
+
+void AmpProcessor::tellOctave() noexcept
+{
+    // The menu is the stage's current knobs — what it was last told, the law's own fields with them — and the menu's
+    // fields from their parameters (the family's contract: paramsForAmount's menu is the stage's current params).
+    auto menu = octaveToldValid ? octaveTold : felitronics::octave::OctaverParams {};
+    menu.sub2Top = 0.0f;
+    menu.toneHz  = bass.octaveToneHz->load();
+    menu.subHpHz = params::octaveSubHpHz;
+    menu.gateDb  = linkWorks (params::rowGate) && gateThresholdParam != nullptr
+                     ? juce::jlimit (-90.0f, -20.0f, gateThresholdParam->load()) : params::octaveGateIdleDb;
+    const float amount = linkWorks (params::rowOctave) ? bass.octave->load() : 0.0f;
+    octaveLive = amount > 0.0f;   // at work: its picture written (runOctave)
+    octaveWorks.store (octaveLive, std::memory_order_relaxed);
+    const auto  p = felitronics::octave::paramsForAmount (amount, menu);
+    if (! octaveToldValid || ! sameKnobs (p, octaveTold))
+    {
+        octaver.setParams (p);
+        ++effectTold[0];
+        octaveTold = p;
+        octaveToldValid = true;
+    }
+}
+
+felitronics::envfilter::EnvelopeFilterParams AmpProcessor::filterKnobsNow (felitronics::envfilter::EnvelopeFilterParams menu) const noexcept
+{
+    if (bass.filter == nullptr)
+        return menu;
+    const int range = juce::jlimit (0, 2, juce::roundToInt (bass.filterRange->load()));
+    menu.attackMs   = params::filterAttackMs;
+    menu.releaseMs  = bass.filterReleaseMs->load();
+    menu.sweepLoHz  = params::filterRangeHz[range][0];
+    menu.sweepHiHz  = params::filterRangeHz[range][1];
+    menu.direction  = juce::roundToInt (bass.filterDirection->load()) == 1 ? felitronics::envfilter::Direction::down
+                                                                            : felitronics::envfilter::Direction::up;
+    menu.mode       = juce::roundToInt (bass.filterMode->load()) == 1 ? felitronics::envfilter::Mode::bandPass
+                                                                       : felitronics::envfilter::Mode::lowPass;
+    menu.resonance  = bass.filterResonance->load();
+    menu.keepLows   = bass.filterKeepLows->load() > 0.5f ? 1.0f : 0.0f;
+    menu.keepLowsHz = bass.filterKeepHz->load();
+    const float amount = linkWorks (params::rowFilter) ? bass.filter->load() : 0.0f;
+    return felitronics::envfilter::paramsForAmount (amount, menu);
+}
+
+void AmpProcessor::tellFilter() noexcept
+{
+    const auto p = filterKnobsNow (filterToldValid ? filterTold : felitronics::envfilter::EnvelopeFilterParams {});
+    filterLive = bass.filter != nullptr && linkWorks (params::rowFilter) && bass.filter->load() > 0.0f;   // its picture written
+    if (! filterToldValid || ! sameKnobs (p, filterTold))
+    {
+        envFilter.setParams (p);
+        ++effectTold[1];
+        filterTold = p;
+        filterToldValid = true;
+    }
+}
+
+void AmpProcessor::tellChorus() noexcept
+{
+    auto menu = chorusToldValid ? chorusTold : chorus.params();
+    menu.rateHz      = bass.chorusRateHz->load();
+    menu.crossoverHz = bass.chorusCrossoverHz->load();
+    menu.delayMs     = params::chorusCentreMs;
+    const float amount = linkWorks (params::rowChorus) ? bass.chorus->load() : 0.0f;
+    chorusLive = amount > 0.0f;   // at work: its picture written (runChorus)
+    const auto  p = felitronics::chorus::paramsForAmount (amount, menu);
+    if (! chorusToldValid || ! sameKnobs (p, chorusTold))
+    {
+        chorus.setParams (p);
+        ++effectTold[2];
+        chorusTold = p;
+        chorusToldValid = true;
+    }
+}
+
+void AmpProcessor::runOctave (float* const* channels, int numChannels, int numSamples) noexcept
+{
+    if (! octaverReady)
+        return;
+    tellOctave();
+    // Its picture written only while on screen AND at work: standing by or at 0 it stands still (the owner, 31.10).
+    if (numChannels < 1 || numChannels > 2 || ! octaveWatched.load (std::memory_order_relaxed) || ! octaveLive)
+    {
+        (void) octaver.process (channels, numChannels, numSamples);
+        return;
+    }
+
+    // Its picture on screen: the stage run a piece at a time, its input kept before it adds the sub, and both handed to
+    // the tap. The stage's output does not depend on how its calls are sliced (its law 8: the audio-time grid), so the
+    // pieces play bit for bit what one call would.
+    for (int done = 0; done < numSamples; )
+    {
+        const int n = juce::jmin (numSamples - done, (int) octaveDry.size());
+        float* piece[2] = { channels[0] + done, numChannels > 1 ? channels[1] + done : nullptr };
+        std::copy_n (piece[0], n, octaveDry.data());
+        (void) octaver.process (piece, numChannels, n);
+        octaveTap->write (octaveDry.data(), piece[0], n);
+        done += n;
+    }
+}
+
+void AmpProcessor::runFilter (float* const* channels, int numChannels, int numSamples) noexcept
+{
+    if (! envFilterReady)
+        return;
+    tellFilter();
+    const bool keyed = numChannels > 0 && numSamples <= filterKey.getNumSamples();
+
+    // ITS PICTURE ON SCREEN: the stage run a COLUMN at a time, each piece ending where the tap closes a column, so the trail
+    // carries a cutoff per column, not a block's. Its output does not depend on how its calls are sliced (law 8: the
+    // audio-time grid), so the pieces play bit for bit what one call would. A fresh look takes the next column whatever
+    // it holds. Standing by or at 0 it is not written: the picture stands still (the owner, 31.10); at work again, a fresh
+    // look.
+    const bool watched = filterWatched.load (std::memory_order_relaxed) && filterLive;
+    if (watched && ! filterTapLive)
+        filterTap.wake();
+    filterTapLive = watched;
+    if (! watched || numChannels < 1)
+    {
+        const float* key[] = { filterKey.getReadPointer (0) };
+        (void) envFilter.process (channels, numChannels, numSamples, keyed ? key : nullptr, keyed ? 1 : 0);
+        if (watched)
+            filterTap.write (envFilter.shownCutoffHz(), numSamples);
+    }
+    else
+        for (int done = 0; done < numSamples; )
+        {
+            const int n = juce::jmin (numSamples - done, filterTap.untilColumn());
+            float* piece[2] = { channels[0] + done, numChannels > 1 ? channels[1] + done : nullptr };
+            const float* key[] = { filterKey.getReadPointer (0) + done };
+            (void) envFilter.process (piece, numChannels, n, keyed ? key : nullptr, keyed ? 1 : 0);
+            filterTap.write (envFilter.shownCutoffHz(), n);
+            done += n;
+        }
+    effectWorking[1].store (! envFilter.isIdle(), std::memory_order_relaxed);
+}
+
+void AmpProcessor::runChorus (float* const* channels, int numChannels, int numSamples) noexcept
+{
+    if (! chorusReady)
+        return;
+    tellChorus();
+    const bool wasIdle = chorus.isIdle();
+    const bool ran     = chorus.process (channels, numChannels, numSamples);
+    chorusTap.follow (chorus, wasIdle, ran ? numSamples : 0,
+                      chorusWatched.load (std::memory_order_relaxed) && chorusLive);   // at work only: standing by, still
+    effectWorking[2].store (! chorus.isIdle(), std::memory_order_relaxed);
+}
+
+void AmpProcessor::passGap (int numSamples) noexcept
+{
+    // A GAP IS TIME WITH SILENCE: the five cuts run over silence of its length — their memories decaying, their glides and
+    // fades going on — a block at a time on the scratch bus (no allocation); the input's cut makes FILTER's key of it, as
+    // it would of a silent input; the three effects take the gap as theirs (law 11c) — and DELAY and REVERB, told their
+    // knobs first (the host's tempo with them), so a change made before a gap glides through it as through silence.
+    sanitiseParameters();
+    updateDelaySettings();
+    updateReverbSettings();
+    const int most = juce::jmax (1, juce::jmin (preparedBlock.load (std::memory_order_relaxed), narrowBus.getNumSamples(),
+                                                filterKey.getNumSamples()));
+    const int wide = juce::jlimit (1, juce::jmin (2, narrowBus.getNumChannels()), bassWide.load (std::memory_order_relaxed));
+    const auto inner = innerCutSettings();
+    const auto end   = bassCutSettings();
+    for (int start = 0; start < numSamples; start += most)
+    {
+        const int len = juce::jmin (most, numSamples - start);
+        float* plane[] = { narrowBus.getWritePointer (0) };
+        for (int k = 0; k < (int) innerCuts.size(); ++k)
+        {
+            narrowBus.clear (0, 0, len);
+            innerCuts[(size_t) k].process (plane, 1, len, inner);
+            if (k == 0)
+                filterKey.copyFrom (0, 0, narrowBus, 0, 0, len);
+        }
+        narrowBus.clear (0, len);
+        bassCuts.process (narrowBus.getArrayOfWritePointers(), wide, len, end);
+
+        runOctave (nullptr, 0, len);
+        if (envFilterReady)
+        {
+            // The key is consumed through a gap (envfilter's contract) — a column at a time while ENVELOPE's picture is on
+            // screen, so it follows the sweep falling through the gap as through silence.
+            tellFilter();
+            const bool watched = filterWatched.load (std::memory_order_relaxed) && filterLive;
+            if (watched && ! filterTapLive)
+                filterTap.wake();
+            filterTapLive = watched;
+            for (int done = 0; done < len; )
+            {
+                const int n = watched ? juce::jmin (len - done, filterTap.untilColumn()) : len - done;
+                const float* key[] = { filterKey.getReadPointer (0) + done };
+                (void) envFilter.process (nullptr, 0, n, key, 1);
+                if (watched)
+                    filterTap.write (envFilter.shownCutoffHz(), n);
+                done += n;
+            }
+            effectWorking[1].store (! envFilter.isIdle(), std::memory_order_relaxed);
+        }
+        runChorus (nullptr, 0, len);
+
+        // ...and DELAY and REVERB, present and running: theirs too — their channels stop (core's law 11a), their clocks,
+        // their doors and their presence fades go on.
+        runSpaceStage (delay, delayReady, params::rowDelay, 0, delayTap, delayWatched, delayAdds(), nullptr, 0, len);
+        runSpaceStage (reverb, reverbReady, params::rowReverb, 1, reverbTap, reverbWatched, reverbAdds(), nullptr, 0, len);
+    }
+}
+
+core::BassCuts::Settings AmpProcessor::innerCutSettings() const noexcept
+{
+    auto s  = bassCutSettings();
+    s.hpfHz /= 3.0;                                                     // a third of the chosen: a tenth of a decibel of the lowest string
+    s.hpfOn  = s.hpfOn && ! innerCutsOut.load (std::memory_order_relaxed);
+    s.lpfOn  = false;                                                   // the LPF is the END's alone
+    return s;
+}
+
+core::BassCuts::Settings AmpProcessor::bassCutSettings() const noexcept
+{
+    const auto hpf = static_cast<params::BassHpf> (juce::jlimit (0, 1, juce::roundToInt (bass.hpf->load())));
+    const auto lpf = static_cast<params::BassLpf> (juce::jlimit (0, 1, juce::roundToInt (bass.lpf->load())));
+
+    core::BassCuts::Settings s;
+    s.hpfOn = bass.hpfOn->load() > 0.5f;
+    s.hpfHz = (double) (hpf == params::BassHpf::four ? bass.hpfHz4 : bass.hpfHz5)->load();
+    s.lpfOn = bass.lpfOn->load() > 0.5f;
+    s.lpfHz = (double) (lpf == params::BassLpf::slap ? bass.lpfHzSlap : bass.lpfHzFingers)->load();
+    return s;
+}
+
 void AmpProcessor::updateEqSettings() noexcept
 {
     const auto slope = [] (float v)
@@ -1138,7 +1946,7 @@ void AmpProcessor::updateEqSettings() noexcept
         const auto& p = eqParams[(size_t) l];
 
         core::EqLink::Settings s;
-        s.hpfOn    = p.hpfOn->load() > 0.5f;
+        s.hpfOn    = ! bassEq() && p.hpfOn->load() > 0.5f;   // the bass's HPF is its own (bassCuts)
         s.hpfHz    = (double) p.hpfHz->load();
         s.hpfSlope = slope (p.hpfSlope->load());
         s.loDb     = (double) p.loDb->load();
@@ -1155,7 +1963,7 @@ void AmpProcessor::updateEqSettings() noexcept
         s.b3Q      = (double) p.bellQ[2]->load();
         s.hiDb     = (double) p.hiDb->load();
         s.hiHz     = (double) p.hiHz->load();
-        s.lpfOn    = p.lpfOn->load() > 0.5f;
+        s.lpfOn    = ! bassEq() && p.lpfOn->load() > 0.5f;   // ...and its LPF
         s.lpfHz    = (double) p.lpfHz->load();
         s.lpfSlope = slope (p.lpfSlope->load());
 
@@ -1171,12 +1979,26 @@ void AmpProcessor::updateEqSettings() noexcept
         // Asked of the block, not of the parameter alone: a device that measured nothing has no
         // native stack to hand over, its face collapses the choice to ours, and the DSP has to
         // reach the same verdict or the block ends up with no tone stack at all.
-        const auto mode = static_cast<params::EqMode> (juce::roundToInt (
-            apvts.getRawParameterValue (params::blockEqMode (params::eqBlockId (l)))->load()));
+        //
+        // The parameter is looked up once (EqLinkParams::eqMode): its id is built from strings, and building it here
+        // allocated twice a block on the audio thread.
+        const auto mode = static_cast<params::EqMode> (juce::roundToInt (eqParams[(size_t) l].eqMode->load()));
 
         const auto& blockFor = blockAt ((size_t) l);
 
-        if (mode == params::EqMode::native && blockFor.hasWearableTone())
+        // THE BASS'S EQ IS THE SGT-DI'S (params::bassMidMinHz): BASS, MIDDLE at its swept frequency and TREBLE — the
+        // second bell and the scalpel are held out of its sound. Ours on a pack with no tone of its own; on a pack with
+        // one, the pack's plays (the owner, 02.11: two kinds of EQ, the rig's and the standard) and ours stands flat.
+        if (bassEq())
+        {
+            s.b1Hz = juce::jlimit ((double) params::bassMidMinHz, (double) params::bassMidMaxHz, s.b1Hz);
+            s.b2Db = 0.0;
+            s.b3On = false;
+            s.b3Db = 0.0;
+            if (blockFor.hasWearableTone())
+                s.loDb = s.b1Db = s.hiDb = 0.0;
+        }
+        else if (mode == params::EqMode::native && blockFor.hasWearableTone())
         {
             s.loDb = 0.0;
             s.b1Db = 0.0;
@@ -1203,8 +2025,12 @@ bool AmpProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
 
 params::StereoMode AmpProcessor::modeOfEnvironment() const
 {
-    // Only what the AudioProcessor itself knows: the layout reads it while this processor's own
-    // members are still being made.
+    // Only what the AudioProcessor itself knows, and its product, which is made before anything that
+    // reads this: the layout reads it while this processor's own members are still being made. The
+    // bass's chain is one signal wherever it runs (Product::chain).
+    if (ownProduct.chain == Chain::bass)
+        return params::StereoMode::mono;
+
     return wrapperType == wrapperType_Standalone ? params::StereoMode::stereoSpace
          : getTotalNumInputChannels() >= 2       ? params::StereoMode::stereo
                                                  : params::StereoMode::mono;
@@ -1254,6 +2080,33 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
     const int total = buffer.getNumSamples();
     const int most  = preparedBlock.load (std::memory_order_relaxed);
 
+    // THE BASS'S BACK HALF HAS ONE WIDTH, the prepared bus's (bassWide, see prepareToPlay). A call carrying fewer
+    // channels is played on a scratch bus of that width — its missing plane the one signal the chain carries up to
+    // CHORUS anyway — and the planes it does carry are handed back, so no stage ever sees its width change without a
+    // prepare: the cuts keep every plane's coefficients, no delay line keeps a stale plane, the limiter never resets
+    // under the left. 2 -> 1 -> 2 plays exactly as calls that never narrowed. A call of positive length carrying NO
+    // channel is a gap (law 11c): the three effects are told it, their shared clocks running as through silence.
+    if (const int wide = bassWide.load (std::memory_order_relaxed); wide > 0 && most > 0 && buffer.getNumChannels() < wide)
+    {
+        if (buffer.getNumChannels() == 0)
+        {
+            if (total > 0)
+                passGap (total);
+            return;
+        }
+        for (int start = 0; start < total; start += most)
+        {
+            const int len = juce::jmin (most, total - start);
+            for (int ch = 0; ch < wide; ++ch)
+                narrowBus.copyFrom (ch, 0, buffer, juce::jmin (ch, buffer.getNumChannels() - 1), start, len);
+            juce::AudioBuffer<float> part (narrowBus.getArrayOfWritePointers(), wide, 0, len);
+            processChunk (part);
+            for (int ch = 0; ch < buffer.getNumChannels(); ++ch)
+                buffer.copyFrom (ch, start, narrowBus, ch, 0, len);
+        }
+        return;
+    }
+
     if (most <= 0 || total <= most)
     {
         processChunk (buffer);
@@ -1276,9 +2129,15 @@ void AmpProcessor::sanitiseParameters() noexcept
     // re-poisoned every block, silent for as long as the lane holds it. One pass here, before any
     // stage reads anything: a value that is not a number reads as the parameter's default until
     // someone sends a real one. A couple of hundred compares a block.
-    for (const auto& guard : parameterGuards)
-        if (! std::isfinite (guard.value->load (std::memory_order_relaxed)))
-            guard.value->store (guard.fallback, std::memory_order_relaxed);
+    // One that holds its last (the bass's effects' sliders) reads as the last number it had instead.
+    for (auto& guard : parameterGuards)
+    {
+        const float v = guard.value->load (std::memory_order_relaxed);
+        if (! std::isfinite (v))
+            guard.value->store (guard.holdsLast ? guard.last : guard.fallback, std::memory_order_relaxed);
+        else if (guard.holdsLast)
+            guard.last = v;
+    }
 }
 
 /** HOW HARD THE STAGE WORKS — TEMPORARY, for tuning by ear (ui/HumTuning.h). The machine's three
@@ -1383,8 +2242,10 @@ void AmpProcessor::removeHum (juce::AudioBuffer<float>& buffer) noexcept
     // an empty socket on the interface with its gain up, hissing — was enough to keep it from ever
     // hearing the room quiet, so AUTO never decided and the hum it did take off came off slowly.
     // Outside STEREO the second channel stops, as any channel a host stops does.
-    const auto playing = static_cast<params::StereoMode> (
-        juce::jlimit (0, params::stereoModes.size() - 1, juce::roundToInt (stereoModeParam->load())));
+    const auto playing = ownProduct.chain == Chain::bass   // the bass's chain is mono, whatever the mode says
+                             ? params::StereoMode::mono
+                             : static_cast<params::StereoMode> (
+                                   juce::jlimit (0, params::stereoModes.size() - 1, juce::roundToInt (stereoModeParam->load())));
     const int played = playing == params::StereoMode::stereo ? buffer.getNumChannels() : 1;
     const int numIn = juce::jmin (juce::jmin (getTotalNumInputChannels(), played, buffer.getNumChannels()),
                                   humStage.maxChannels(), humDry.getNumChannels());
@@ -1517,10 +2378,21 @@ void AmpProcessor::processChunk (juce::AudioBuffer<float>& buffer)
     // made at the seam, so the space is wide and the amp is paid for once. The seam stands BEFORE
     // the delay, not before the reverb: the delay's OFFSET is a stereo of its own, and a spread
     // the room then works on is wider than a spread the room has to make alone.
-    const auto mode = static_cast<params::StereoMode> (
-        juce::jlimit (0, params::stereoModes.size() - 1, juce::roundToInt (stereoModeParam->load())));
+    //
+    // THE BASS'S CHAIN IS MONO, whatever the mode's parameter says (a state of another amp's, a host's
+    // automation): one signal from the gate to the limiter, copied to the outputs at the end. Its stereo
+    // will be its CHORUS's alone, and only above the low end.
+    const auto mode = ownProduct.chain == Chain::bass
+                          ? params::StereoMode::mono
+                          : static_cast<params::StereoMode> (
+                                juce::jlimit (0, params::stereoModes.size() - 1, juce::roundToInt (stereoModeParam->load())));
     const int nch     = mode == params::StereoMode::stereo ? numChannels : juce::jmin (1, numChannels);
-    const int nchBack = mode == params::StereoMode::mono   ? nch         : numChannels;
+    // The bass's chain turns stereo at its CHORUS (Chain::bass): one signal up to it, the bus's planes from it on —
+    // the cabinet, the DI, the cuts, OUT and LIMIT per channel. A mono bus stays one voice.
+    // ...never wider than it was prepared: a host handing more channels than the bus it prepared gets the left copied to
+    // the rest after the limiter, as a mono bus's outputs are.
+    const int nchBack = ownProduct.chain == Chain::bass   ? juce::jmin (juce::jmax (1, bassWide.load (std::memory_order_relaxed)), 2, numChannels)
+                      : mode == params::StereoMode::mono   ? nch : numChannels;
 
     // The captured blocks take a BUFFER — this alias holds only the channels the chain works.
     juce::AudioBuffer<float> chainView (const_cast<float**> (channels), nch, numSamples);
@@ -1529,6 +2401,13 @@ void AmpProcessor::processChunk (juce::AudioBuffer<float>& buffer)
     // front, right after the tuner's ear: it keys off the raw guitar — the cleanest key there is —
     // and kills the hum before any dirt can multiply it. Its enable crossfade makes the toggle
     // pop-free, so it runs unconditionally and the switch is an argument.
+    // THE BASS'S HPF ACROSS THE CHAIN (innerCuts): its gentle cuts at the input and after COMP, OCTAVE and the AMP.
+    const auto innerSettings = bass.hpf != nullptr ? innerCutSettings() : core::BassCuts::Settings {};
+    const auto innerCut = [&] (int at)
+    {
+        if (bass.hpf != nullptr && nch > 0)
+            innerCuts[(size_t) at].process (channels, 1, numSamples, innerSettings);
+    };
     const auto tGate = PerfClock::now();
     {
         // Of the channels the chain WORKS, not of everything that was handed in: in MONO and in STEREO
@@ -1561,6 +2440,20 @@ void AmpProcessor::processChunk (juce::AudioBuffer<float>& buffer)
     // The gate KEYS here whatever it ends up muting — dual detection: the decision is made on the
     // raw input, the attenuation lands where the parameter says. The enable crossfade makes the
     // toggle pop-free, so analyse runs unconditionally and the switch is an argument.
+    // THE BASS'S INPUT CUT (innerCuts) — after the IN meter, which reads the jack (a DI's rumble that clips shows there),
+    // and before the gate's key and FILTER's: no detector pumps on sub rumble.
+    innerCut (0);
+
+    // THE GUITAR'S INPUT CUT (params::guitarInputCutHz), every guitar amp's, always: at the same place — after the IN meter,
+    // before every key and every stage.
+    if (ownProduct.chain != Chain::bass && nch > 0)
+    {
+        core::BassCuts::Settings in;
+        in.hpfOn = true;
+        in.hpfHz = params::guitarInputCutHz;
+        guitarInputCut.process (channels, nch, numSamples, in);
+    }
+
     gate.analyse (channels, nch, numSamples,
                   linkWorks (params::rowGate), gateThresholdParam->load());
     gateMeterDb.store (juce::Decibels::gainToDecibels (gate.currentGain(), -90.0f));
@@ -1577,6 +2470,68 @@ void AmpProcessor::processChunk (juce::AudioBuffer<float>& buffer)
         gate.applyGain (channels, nch, numSamples);
 
     nsStage[stGate] = elapsedNs (tGate);
+
+    // FILTER's key, kept before COMP touches the signal: the gated input, the string itself — the filter follows the
+    // playing, not the compressed signal nor the octave's sub.
+    if (bass.filter != nullptr && nch > 0 && numSamples <= filterKey.getNumSamples())
+    {
+        filterKey.copyFrom (0, 0, buffer, 0, 0, numSamples);
+
+        // ...gated wherever the gate mutes: at the START the copy is taken after the mute; at the END (the default) the
+        // curve the gate has just analysed is laid on the copy here, so a closed gate closes the detector too and the
+        // playing under the threshold does not move the sweep.
+        if (! muteAtStart)
+        {
+            float* key[] = { filterKey.getWritePointer (0) };
+            (void) gate.applyGain (key, 1, numSamples);
+        }
+    }
+
+    // THE BASS'S COMP (Chain::bass), after the gate, on its one signal: ONE KNOB (core::BassComp). Its STANDBY is
+    // the house's crossfade, toward the link in AND its knob up; standing by with the knob up it is fed, not heard;
+    // at 0 nothing is computed and the block passes bit for bit. OrbitAmp's the same, before its AMP as a pedal stands;
+    // in STEREO its right signal through a twin of its own (compRight), started fresh whenever it starts working again.
+    if (bass.compAmount != nullptr && nch > 0)
+    {
+        const auto a = PerfClock::now();
+        const double amount = (double) bass.compAmount->load();
+        const auto span = blockFade[(size_t) params::rowComp].advance (numSamples, linkWorks (params::rowComp) && amount > 0.0);
+        const auto attack    = static_cast<core::BassComp::Attack>    (juce::jlimit (0, 2, juce::roundToInt (bass.compAttack->load())));
+        const auto release   = static_cast<core::BassComp::Release>   (juce::jlimit (0, 2, juce::roundToInt (bass.compRelease->load())));
+        const auto character = static_cast<core::BassComp::Character> (juce::jlimit (0, core::BassComp::characterCount - 1, juce::roundToInt (bass.compCharacter->load())));
+        const double threshold = (double) bass.compThreshold->load(), ratio = (double) bass.compRatio->load();
+        bassComp.tap = compWatched.load (std::memory_order_relaxed) ? &compTap : nullptr;   // the picture on screen, or nobody
+        bassComp.process (channels[0], numSamples, amount, span, attack, release, character, threshold, ratio);
+        if (nch > 1 && ownProduct.chain != Chain::bass)
+        {
+            if (! compRightRan)
+            {
+                compRight.reset();
+                compRight.snapAmount (amount);
+            }
+            compRight.process (channels[1], numSamples, amount, span, attack, release, character, threshold, ratio);
+        }
+        compRightRan = nch > 1;
+        compGrDb.store (bassComp.grDb.load (std::memory_order_relaxed), std::memory_order_relaxed);
+        innerCut (1);   // after COMP
+        nsStage[stComp] = elapsedNs (a);
+    }
+
+    // THE BASS'S OCTAVE, then its FILTER (Chain::bass), on the one signal, before the AMP: the sub goes into the amp
+    // with the note, and the filter sweeps both.
+    if (bass.octave != nullptr && nch > 0)
+    {
+        const auto a = PerfClock::now();
+        runOctave (channels, 1, numSamples);
+        innerCut (2);   // after OCTAVE: its sub's own DC and thumps go before FILTER and the AMP hear them
+        nsStage[stOctave] = elapsedNs (a);
+    }
+    if (bass.filter != nullptr && nch > 0)
+    {
+        const auto a = PerfClock::now();
+        runFilter (channels, 1, numSamples);
+        nsStage[stFilter] = elapsedNs (a);
+    }
 
     // A captured block, whole: the capture, then its own EQ.
     //
@@ -1701,7 +2656,21 @@ void AmpProcessor::processChunk (juce::AudioBuffer<float>& buffer)
         }
     };
 
+    // AMP and TONE, one captured block: the capture wearing the pack's own tone knobs (EqMode::native),
+    // then its console — the bass's TONE as much as the guitar's.
+    if (probing.load (std::memory_order_relaxed) && nch > 0)
+        for (int i = 0; i < numSamples; ++i)
+            probeAmpInPeak = juce::jmax (probeAmpInPeak, std::abs (channels[0][i]));
+
     captured (preamp, 0, params::rowPreamp, blockOutDb[0], stPreamp, stPreampEq);
+    innerCut (3);   // after the AMP — after BLEND's sum, never inside one leg: both legs the same phase
+
+    if (probing.load (std::memory_order_relaxed) && nch > 0)
+    {
+        for (int i = 0; i < numSamples; ++i)
+            probeAmpOutSum += (double) channels[0][i];
+        probeAmpOutCount += numSamples;
+    }
 
     // MUTE pre-reverb — the G-String architecture, and the default: everything the chain ADDED
     // (the preamp's hiss) dies here too, and the reverb tail past it rings out.
@@ -1714,13 +2683,35 @@ void AmpProcessor::processChunk (juce::AudioBuffer<float>& buffer)
     for (int ch = nch; ch < nchBack; ++ch)
         buffer.copyFrom (ch, 0, buffer, 0, 0, numSamples);
 
+    // THE BASS'S CHORUS (Chain::bass), on the planes the seam just made: two distinct copies on a stereo bus, so each
+    // gets its own voice — above the low end only, which stays one, in the centre. Its DELAY and REVERB follow it,
+    // before the cabinet, as the guitar's do (runSpaceStage).
+    if (bass.chorus != nullptr && nchBack > 0)
+    {
+        const auto a = PerfClock::now();
+        runChorus (channels, nchBack, numSamples);
+        nsStage[stChorus] = elapsedNs (a);
+    }
+
     // The echo before the space: repeats of what the preamp made, which the reverb then rooms.
     // First of the wide stages — the OFFSET is the block's stereo, so it works the back half's
     // channels.
     // STANDBY is the insert's bypass: the block keeps running, it just stops being fed, and the
     // repeats already in the line ring out into the dry. Which is also why a bypassed block still
     // costs: so does a bypassed insert, in every DAW there is.
-    if (delayReady)
+    if (ownProduct.chain == Chain::bass)
+    {
+        // Its own (runSpaceStage): the wet's lows cut; out of the strip, faded and then cleared and not run.
+        const auto a = PerfClock::now();
+        runSpaceStage (delay, delayReady, params::rowDelay, 0, delayTap, delayWatched, delayAdds(), channels, nchBack, numSamples);
+        if (spaceRunning[0])
+            nsStage[stDelay] = elapsedNs (a);
+        const auto b = PerfClock::now();
+        runSpaceStage (reverb, reverbReady, params::rowReverb, 1, reverbTap, reverbWatched, reverbAdds(), channels, nchBack, numSamples);
+        if (spaceRunning[1])
+            nsStage[stReverb] = elapsedNs (b);
+    }
+    else if (delayReady)
     {
         const auto a = PerfClock::now();
 
@@ -1729,13 +2720,17 @@ void AmpProcessor::processChunk (juce::AudioBuffer<float>& buffer)
 
         nsStage[stDelay] = elapsedNs (a);
     }
-    else
+    else if (chainHolds (params::rowDelay))
     {
         delay.reset();
     }
 
     // The room stands by the same way the echo does: unfed, still ringing out. See the delay above.
-    if (reverbReady)
+    if (ownProduct.chain == Chain::bass)
+    {
+        // run above, with the delay
+    }
+    else if (reverbReady)
         { const auto a = PerfClock::now();
           const bool fed = linkWorks (params::rowReverb);
 
@@ -1760,7 +2755,7 @@ void AmpProcessor::processChunk (juce::AudioBuffer<float>& buffer)
                                juce::roundToInt (juce::jmax (8000.0, getSampleRate()) / 30.0)); }
 
           nsStage[stReverb] = elapsedNs (a); }
-    else
+    else if (chainHolds (params::rowReverb))
         reverb.reset();
 
     // The cabinet closes the tone: the IR speaks last, before the master's hand and the safety.
@@ -1780,6 +2775,22 @@ void AmpProcessor::processChunk (juce::AudioBuffer<float>& buffer)
               juce::FloatVectorOperations::copy (fadeDry.getWritePointer (ch),
                                                  buffer.getReadPointer (ch), numSamples);
 
+      // THE CAB'S MIX: the DI is the signal the cabinet is handed, kept aside to be mixed with what the
+      // cabinet makes of it — the cabinet's IR plays at sample zero, so the two line up as they are. With the
+      // cabinet out there is nothing to mix against, and the share does nothing.
+      //
+      // The share GLIDES, owned by the audio thread (20 ms for the whole travel), so a hand, a recall or automation is
+      // never a step of the difference between the two; settled, the mix is the plain one. With the cabinet fully
+      // out the share lands where it is asked at once — there is nothing to glide against.
+      const float diWant = bass.cabMix != nullptr ? juce::jlimit (0.0f, 1.0f, (100.0f - bass.cabMix->load()) * 0.01f) : 0.0f;   // MIX: the cabinet's share
+      const bool  diMix  = bass.cabMix != nullptr && cabOn && (diWant > 0.0f || diNow > 0.0f)
+                        && numSamples <= diDry.getNumSamples();
+      if (bass.cabMix != nullptr && ! cabOn)
+          diNow = diWant;
+      if (diMix)
+          for (int ch = 0; ch < nchBack; ++ch)
+              juce::FloatVectorOperations::copy (diDry.getWritePointer (ch), buffer.getReadPointer (ch), numSamples);
+
       if (cabOn)
       {
           const float* d = buffer.getReadPointer (0);
@@ -1792,6 +2803,36 @@ void AmpProcessor::processChunk (juce::AudioBuffer<float>& buffer)
 
       if (cabFade)
           core::BypassFade::blend (channels, fadeDry.getArrayOfReadPointers(), nchBack, numSamples, cabSpan);
+
+      if (diMix)
+      {
+          const bool  gliding = diNow < diWant || diNow > diWant;
+          const float step    = diStep;
+          float       end     = diNow;
+          for (int ch = 0; ch < nchBack; ++ch)
+          {
+              float*       out = channels[ch];
+              const float* di  = diDry.getReadPointer (ch);
+              if (gliding)
+              {
+                  float sh = diNow;
+                  for (int i = 0; i < numSamples; ++i)
+                  {
+                      sh = diWant > sh ? juce::jmin (diWant, sh + step) : juce::jmax (diWant, sh - step);
+                      out[i] = (1.0f - sh) * out[i] + sh * di[i];
+                  }
+                  end = sh;
+              }
+              else if (diNow >= 1.0f)   // all DI: the signal the cabinet was handed, bit for bit
+                  juce::FloatVectorOperations::copy (out, di, numSamples);
+              else if (diNow > 0.0f)
+              {
+                  juce::FloatVectorOperations::multiply (out, 1.0f - diNow, numSamples);
+                  juce::FloatVectorOperations::addWithMultiply (out, di, diNow, numSamples);
+              }
+          }
+          diNow = end;
+      }
 
       // Once the fade is over and nothing of the cabinet is in the sum, drop what it remembers.
       // Otherwise the first IR-length after it comes back convolves what was played BEFORE it
@@ -1810,6 +2851,16 @@ void AmpProcessor::processChunk (juce::AudioBuffer<float>& buffer)
       cabOutDb.store (juce::Decibels::gainToDecibels (
           buffer.getMagnitude (0, 0, numSamples), -90.0f));
       nsStage[stCab] = elapsedNs (a); }
+
+    // THE BASS'S CUTS (Chain::bass), a stage of their own after DI/CAB, so the DI is cut as the cabinet is —
+    // not the cabinet's own two, baked into its IR, which the bass leaves off: HPF by the strings, LPF by the
+    // hand (params::bassHpf, bassLpf). Off, the stage is a wire. Its time is the cabinet's on the breakdown.
+    if (bass.hpf != nullptr)
+    {
+        const auto a = PerfClock::now();
+        bassCuts.process (channels, nchBack, numSamples, bassCutSettings());
+        nsStage[stCab] += elapsedNs (a);
+    }
 
     // THE BOOST'S LEVEL (params::boostLevel): the lift of a boost that is on, after everything that
     // makes the sound and before the master's hand and the limiter, so the ceiling still holds at +9.

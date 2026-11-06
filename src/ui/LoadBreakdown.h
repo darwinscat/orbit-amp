@@ -31,20 +31,45 @@ struct LoadBreakdown final : public juce::Component,
             if (const auto own = nameOf (stage, brief); own.isNotEmpty())
                 return own;
 
-        return brief ? params::stageNames[stage].brief : params::stageNames[stage].full;
+        // The bass's back half runs two planes on a stereo bus, its CHORUS idle or not (AmpProcessor::bassBackPlanes):
+        // the rows of what costs two planes there say so — CHORUS, CAB (its cuts' time is the cabinet's) and LIMIT.
+        const juce::String name = brief ? params::stageNames[stage].brief : params::stageNames[stage].full;
+        const bool twice = amp.bassBackPlanes() == 2
+                        && (stage == params::stChorus || stage == params::stCab || stage == params::stLimit);
+        return twice ? name + " x2" : name;
     }
+
+    /** Its window's owner is going: no more reading the processor (the callout goes by its own dismissal). */
+    void detach() noexcept
+    {
+        stopTimer();
+        detached = true;   // a paint or a click arriving after its face went reads nothing of the processor
+    }
+    bool isDetached() const noexcept { return detached; }
 
     explicit LoadBreakdown (AmpProcessor& p) : amp (p)
     {
         // Sized for EVERY stage, not for the ones standing when it opened: presence can be
         // switched while this callout is up, and a panel that grew a row would spill into its
         // own buttons. The unused rows cost a little air and nothing else.
-        setSize (360, 26 + graphH + 6 + AmpProcessor::numStages * rowH + 34 + 34);
+        // ...the stages its product's chain holds, that is: a stage it has no link for has no row at all.
+        int held = 0;
+        for (int i = 0; i < AmpProcessor::numStages; ++i)
+            held += stageHeld (i) ? 1 : 0;
+        setSize (360, 26 + graphH + 6 + held * rowH + 34 + 34);
         startTimerHz (15);
     }
 
     /** A link STANDING BY keeps its row and its real number — a bypassed insert costs what it
         costs in any DAW — but reads faint: the bypass bought you nothing. */
+    /** Whether the product's chain has the stage at all — a guitar amp's has no COMP, OCTAVE, ENVELOPE or CHORUS (the
+        bass's holds every one): a stage it does not hold has no row here. */
+    bool stageHeld (int stage) const
+    {
+        const int row = params::rowForStage ((params::Stage) stage);
+        return row >= params::numChainRows || amp.chainHolds ((params::ChainRow) row);
+    }
+
     bool stageWorking (int stage) const
     {
         const int row = params::rowForStage ((params::Stage) stage);
@@ -65,6 +90,8 @@ struct LoadBreakdown final : public juce::Component,
 
     void mouseDown (const juce::MouseEvent& e) override
     {
+        if (detached)
+            return;
         if (resetArea().contains (e.getPosition()))
         {
             for (auto& w : amp.stageWorst)
@@ -96,6 +123,8 @@ struct LoadBreakdown final : public juce::Component,
 
         for (int i = 0; i < AmpProcessor::numStages; ++i)
         {
+            if (! stageHeld (i))
+                continue;
             t << juce::String::formatted ("%-8s %7.1f%% %7.0f%%\n", stageName (i, true).toRawUTF8(),
                                           amp.stageLoad[i].load(), amp.stageWorst[i].load());
         }
@@ -106,6 +135,8 @@ struct LoadBreakdown final : public juce::Component,
 
     void paint (juce::Graphics& g) override
     {
+        if (detached)
+            return;   // its face is gone, the processor perhaps with it
         auto r = getLocalBounds().reduced (12, 4);
 
         {
@@ -153,6 +184,8 @@ struct LoadBreakdown final : public juce::Component,
 
         for (int i = 0; i < AmpProcessor::numStages; ++i)
         {
+            if (! stageHeld (i))
+                continue;
             auto row = r.removeFromTop (rowH);
             const float v = amp.stageLoad[i].load();
             const bool total   = i == AmpProcessor::stTotal;
@@ -220,6 +253,8 @@ struct LoadBreakdown final : public juce::Component,
 
     void timerCallback() override
     {
+        if (detached)
+            return;
         if (copied > 0)
             --copied;
         repaint();
@@ -228,6 +263,7 @@ struct LoadBreakdown final : public juce::Component,
     enum { rowH = 22, graphH = 64 };   // rowH is 13 px of type and the air around it
     AmpProcessor& amp;
     int copied = 0;
+    bool detached = false;
 };
 
 /** Opens it as a callout pointing at `anchor`, which is in screen coordinates — the words that were
@@ -237,12 +273,13 @@ struct LoadBreakdown final : public juce::Component,
     With the DSP figure near the window's right edge that was the right, out over whatever stands
     beside the plugin. Refitted into the window the sides with no room drop out, and the box opens
     over the faceplate, its arrow on the words. A window too small to hold it keeps JUCE's choice. */
-inline void openLoadBreakdown (AmpProcessor& amp, juce::Rectangle<int> anchor, juce::Rectangle<int> window)
+inline juce::CallOutBox& openLoadBreakdown (AmpProcessor& amp, juce::Rectangle<int> anchor, juce::Rectangle<int> window)
 {
     auto& box = juce::CallOutBox::launchAsynchronously (std::make_unique<LoadBreakdown> (amp), anchor, nullptr);
 
     if (box.getWidth() < window.getWidth() && box.getHeight() < window.getHeight())
         box.updatePosition (anchor, window);
+    return box;
 }
 
 } // namespace orbitamp

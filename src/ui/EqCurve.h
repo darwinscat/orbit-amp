@@ -179,8 +179,17 @@ public:
         picture already use: right-click a thing, get that thing's choices. */
     std::function<void (juce::Point<int>)> onContextMenu;
 
+    /** A PLAIN CLICK ON AN EMPTY SPOT — no handle under the press, no drag, one click — told once the double-click
+        interval has run out with no second click after it. Deferred because a double click on an empty spot is
+        already a word of its own (onCurveDoubleClick summons the scalpel), and must not also mean this; the second
+        press of a double click calls the first one's click off. The owner moves the well to its next page with it,
+        as a click on any other page of the well does. */
+    std::function<void()> onEmptyClick;
+
     void mouseDown (const juce::MouseEvent& e) override
     {
+        ++clickTicket;   // any press calls off a click still waiting to be told, the second of a double click first
+
         if (e.mods.isPopupMenu())
         {
             if (onContextMenu != nullptr)
@@ -189,8 +198,9 @@ public:
             return;
         }
 
-        dragging   = handleAt (e.position);
-        stepAnchor = e.position.y;
+        dragging     = handleAt (e.position);
+        stepAnchor   = e.position.y;
+        pressedEmpty = dragging < 0 && e.getNumberOfClicks() == 1;
         if (dragging >= 0 && onDragActive)
             onDragActive (dragging, true);
     }
@@ -223,12 +233,24 @@ public:
         onHandleDrag (dragging, hz, db);
     }
 
-    void mouseUp (const juce::MouseEvent&) override
+    void mouseUp (const juce::MouseEvent& e) override
     {
         if (dragging >= 0 && onDragActive)
             onDragActive (dragging, false);
 
-        dragging = -1;
+        const bool emptyClick = pressedEmpty && dragging < 0 && e.mouseWasClicked() && e.getNumberOfClicks() == 1
+                                && ! e.mods.isPopupMenu() && onEmptyClick != nullptr;
+        dragging     = -1;
+        pressedEmpty = false;
+
+        if (emptyClick)
+            juce::Timer::callAfterDelay (juce::MouseEvent::getDoubleClickTimeout(),
+                                         [safe = juce::Component::SafePointer<EqCurve> (this), ticket = clickTicket]
+                                         {
+                                             if (safe != nullptr && safe->clickTicket == ticket && safe->isShowing()
+                                                 && safe->onEmptyClick != nullptr)
+                                                 safe->onEmptyClick();
+                                         });
     }
 
     void mouseMove (const juce::MouseEvent& e) override
@@ -262,6 +284,8 @@ public:
 
     void mouseDoubleClick (const juce::MouseEvent& e) override
     {
+        ++clickTicket;   // a double click is never also a click (onEmptyClick)
+
         if (const int over = handleAt (e.position); over >= 0)
         {
             if (onHandleDoubleClick != nullptr)
@@ -507,6 +531,8 @@ private:
     juce::Array<Marker> markers;
     int hovered  = -1;
     int dragging = -1;
+    bool pressedEmpty = false;   // the press landed on no handle, the first of its clicks (onEmptyClick)
+    int  clickTicket  = 0;       // which press an empty click waiting to be told belongs to
     float stepAnchor = 0.0f;
 
     friend class WebFaceplate;   // the site's kit reads where the parts stand (WebFaceplate.h)

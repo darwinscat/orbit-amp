@@ -189,9 +189,13 @@ $p"
   done
 }
 
-# The data first, always: the amps play nothing without it.
+# The data first, always: the amps play nothing without it. ADDED to the folder, never put in its place: every
+# family of amps (installer/family.ini, bass.ini) lays its files in the one Factory, each amp reading its own list.
 echo "Data        $DATA/Factory"
-place "$here/Factory" "$DATA"
+run mkdir -p "$DATA/Factory"
+run cp -R "$here/Factory/." "$DATA/Factory/"
+placed="$placed
+$DATA/Factory"
 
 for pick in $chosen; do
   case $pick in

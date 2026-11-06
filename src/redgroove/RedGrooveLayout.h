@@ -1,0 +1,159 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of OrbitAmp — see LICENSE.
+
+#pragma once
+
+#include "../face/Stage.h"
+
+#include <juce_graphics/juce_graphics.h>
+
+#include <array>
+#include <vector>
+
+/** WHERE EVERYTHING STANDS ON THE WALKER'S DASHBOARD, in the stage's own 1672 x 941 — measured off its render
+    (resources/redgroove/dashboard.webp, drawn at twice the stage), which was painted after the layout's drawing
+    scaled by 1.045. The knobs' sockets are where bake-art fits them to the picture (tools/bake-art/Walker.cpp), to
+    a tenth of a pixel, and its check holds them there. Its dome is the picture's transparent top; under it, the dashboard's two rows: KEYS, the
+    maker's plate and TUNER along the top; IN, AMP, TONE, EFFECTS, CABINET and OUT along the bottom. */
+namespace orbitamp::redgroove::layout
+{
+
+using face::stage::width;
+using face::stage::height;
+
+/** THE DOME: the picture's transparent top, where the world shows; the sill under it from here down. */
+inline const juce::Rectangle<float> dome { 0.0f, 0.0f, width, 525.0f };
+
+// THE TOP ROW'S TWO PANELS are mirror twins in the picture, the right one the left moved across by `panelShift`. KEYS and
+// TUNER changed places (the owner, 03.11): each is drawn where the other's picture is (Cabin::paintStatic) — KEYS right,
+// TUNER left.
+inline const juce::Rectangle<float> leftPanelArt { 8.0f, 550.0f, 540.0f, 110.0f };
+inline constexpr float panelShift = 1117.0f;
+
+// THE KEYS PANEL, on the right: six holes for push keys, UNDO and REDO wider, then A B C D.
+inline constexpr float keyRowY = 622.5f;
+inline constexpr std::array<float, 6> keyX { 1204.8f, 1301.5f, 1384.0f, 1456.0f, 1526.5f, 1597.0f };
+inline constexpr float historyKeyWidth = 74.0f, registerKeyWidth = 51.0f, keyHeight = 36.0f;
+inline const juce::Point<float> keysTitle { 1165.0f, 576.0f };          // "KEYS", from its left edge
+
+// THE MAKER'S PLATE: the six-sided plate the family's cat is cut in, and the two plates beside it.
+inline constexpr std::array<juce::Point<float>, 7> emblemFace {{
+    { 792.5f, 539.0f }, { 880.0f, 539.0f }, { 899.0f, 570.0f }, { 886.0f, 640.0f },
+    { 837.0f, 648.0f }, { 788.0f, 640.0f }, { 774.0f, 570.0f } }};
+inline const juce::Rectangle<float> emblemMark { 800.0f, 555.0f, 74.0f, 74.0f };
+inline const juce::Rectangle<float> poweredByPlate { 561.5f, 611.5f, 202.5f, 34.5f };
+inline const juce::Rectangle<float> makerNamePlate { 908.5f, 611.5f, 203.0f, 34.5f };
+
+// THE TUNER PANEL, on the left: its screen, and its title over it.
+inline const juce::Rectangle<float> tunerScreen { 48.0f, 586.5f, 459.0f, 57.0f };
+inline const juce::Point<float> tunerTitle { 51.0f, 576.0f };
+
+// THE BOTTOM ROW'S PANELS, their titles' places (each from its left edge, IN and OUT centred).
+inline constexpr float panelTitleY = 682.0f;
+inline const juce::Point<float> inTitle      { 79.5f, panelTitleY };
+inline const juce::Point<float> ampTitle     { 175.5f, panelTitleY };
+inline const juce::Point<float> toneTitle    { 623.0f, panelTitleY };
+inline const juce::Point<float> effectsTitle { 955.0f, panelTitleY };
+inline const juce::Point<float> cabinetTitle { 1260.0f, panelTitleY };
+inline const juce::Point<float> outTitle     { 1586.0f, panelTitleY };
+
+// IN: the trim's fader in its slot at the outer edge, the meter toward the middle; GATE's slot under them.
+inline const juce::Rectangle<float> inFaderSlot { 41.5f, 712.5f, 17.5f, 121.5f };
+inline const juce::Rectangle<float> inMeterSlot { 88.5f, 707.5f, 26.5f, 132.5f };
+inline const juce::Rectangle<float> gateSlot    { 32.5f, 868.5f, 94.0f, 38.0f };
+
+// OUT: its mirror — the meter toward the middle, the level's fader at the outer edge; LIMITER's slot under.
+inline const juce::Rectangle<float> outMeterSlot { 1545.0f, 707.5f, 26.0f, 132.5f };
+inline const juce::Rectangle<float> outFaderSlot { 1602.5f, 713.5f, 17.5f, 121.5f };
+inline const juce::Rectangle<float> limiterSlot  { 1536.0f, 868.5f, 104.0f, 39.0f };
+
+inline constexpr float faderWidth = 40.0f;          // a column fader's box round its slot
+inline constexpr float faderCapLength = 16.0f;      // ...and its cap's render, across the slot
+inline constexpr float faderCapSquash = 0.5f;       // ...at half its render's height, every fader (the owner, 03.11)
+
+// AMP: CHANNEL's lever slot, COMP, GR's column, DRIVE (the hero) and BLEND — each a socket in the picture. BLEND is a
+// fader now and DRIVE a size up into the room it left (the owner, 03.11): the picture's socket (driveArt, driveArtSocket)
+// drawn larger where DRIVE stands, its old one under it.
+inline const juce::Point<float> driveArt { 418.8f, 791.5f };
+inline constexpr float driveArtSocket = 120.0f;
+inline const juce::Point<float> drive { 426.0f, 791.5f };
+inline constexpr float driveSocket = 140.0f, driveKnob = 121.0f;
+inline constexpr float knobNameY = 712.0f;          // the row the knobs' names stand in, over AMP and TONE
+
+// TONE: three sockets for as many tone knobs as the bass's standard has, and MID FREQ's slot under them.
+inline constexpr std::array<float, 3> toneX { 645.5f, 753.1f, 860.5f };
+inline constexpr float toneY = 765.1f, toneSocket = 77.0f, toneKnob = 64.0f;
+
+// THE OTHER KNOBS: COMP and BLEND either side of DRIVE — each in its socket; `diCab` the socket in the cabinet's panel
+// that held DI/CAB's knob. A ring round every knob, in its socket's groove, `ringInset` inside the socket's edge.
+inline const juce::Point<float> comp { 287.7f, 794.6f }, blend { 532.0f, 794.5f }, diCab { 1280.4f, 826.1f };
+
+// BLEND: a fader where its knob was, IN's slot at its full length, its name over it and its reading under it as the
+// knobs' are; the knob's socket under plain panel from over and under it.
+inline const juce::Rectangle<float> blendSlot { 538.0f - 8.75f, 735.0f, 17.5f, 121.5f };
+inline const juce::Rectangle<float> blendSocketArt { blend.x - 45.0f, 750.0f, 90.0f, 96.0f };
+inline constexpr float smallSocket = 78.0f, smallKnob = 64.0f;
+inline constexpr float ringInset = 3.5f, ringWidth = 2.5f, driveRingWidth = 3.0f;
+
+// COMP's squeeze: across over COMP's knob (the owner, 03.11), the picture's slot between COMP and DRIVE under plain panel.
+inline const juce::Rectangle<float> grSlot { 336.5f, 753.5f, 12.5f, 85.0f };
+inline const juce::Rectangle<float> grBar { comp.x - 30.0f, 730.0f, 60.0f, 9.0f };
+
+// THE EFFECTS: three slots, OCTAVE, ENVELOPE and CHORUS, a vertical fader in each.
+inline constexpr std::array<float, 3> effectX { 975.0f, 1073.8f, 1170.0f };
+inline constexpr float effectTop = 734.0f, effectBottom = 864.0f, effectFaderWidth = 44.0f;
+inline constexpr float effectNameRoom = 80.0f;      // each name set condensed into this, where wider: air between them
+inline constexpr float effectNameTracking = 0.02f;  // ...and tracked tighter than the panel's other names
+
+// MIDDLE's frequency: the slot lying under the tones, a fader across it; its ends' words beside it.
+inline const juce::Rectangle<float> midFreqSlot { 683.5f, 865.0f, 141.5f, 16.0f };
+inline constexpr float midFreqCap = 12.0f;
+
+// THE READINGS, a row under each group of controls: the AMP's, the effects' and DI/CAB's; the tones'; MIDDLE's
+// frequency over its slot; IN's and OUT's levers over their lamps' slots.
+inline constexpr float valueY = 882.0f, toneValueY = 822.0f, midFreqValueY = 849.0f, levelValueY = 855.0f;
+// CAB / DI: a fader where DI/CAB's knob was (the owner, 03.11), CAB over it, DI under it, no reading — its slot IN's,
+// the middle left out to fit, and the knob's socket under plain panel from beside it.
+inline const juce::Rectangle<float> diCabSlot { diCab.x - 8.75f, 784.0f, 17.5f, 95.0f };
+inline const juce::Rectangle<float> diCabSocketArt { diCab.x - 43.0f, diCab.y - 43.0f, 86.0f, 86.0f };
+inline const juce::Rectangle<float> diCabPlainArt { 1322.0f, diCab.y - 43.0f, 62.0f, 86.0f };
+inline constexpr float cabWordY = 771.0f, diWordY = 893.0f;
+
+// PRESET, the version, MEM and CPU: on the sill over the maker's two plates — PRESET and the version over POWERED BY,
+// MEM and CPU over DARWIN'S CAT.
+inline constexpr float sillY = 586.0f;
+inline const juce::Rectangle<float> presetPlace  { 560.0f, sillY - 14.0f, 116.0f, 28.0f };
+inline const juce::Rectangle<float> versionPlace { 682.0f, sillY - 14.0f, 84.0f, 28.0f };
+inline const juce::Rectangle<float> memoryPlace  { 910.0f, sillY - 14.0f, 124.0f, 28.0f };
+inline const juce::Rectangle<float> loadPlace    { 1040.0f, sillY - 14.0f, 72.0f, 28.0f };
+
+// CHANNEL: the lever's slot left in the AMP's panel, its two places from the top — B15, SVT — the first's name over
+// the slot, the second's under it: beside it there is no room short of COMP's socket.
+inline constexpr float leverX = 189.5f;
+inline const std::vector<float> leverPlaces { 766.0f, 829.0f };
+inline const std::vector<juce::Point<float>> leverNames { { leverX, 729.0f }, { leverX, 866.0f } };
+inline const juce::Rectangle<float> leverBox { 158.0f, 712.0f, 64.0f, 170.0f };
+
+// THE CUTS' SWITCHES, right of DI/CAB: the HPF's by the strings over the LPF's by the hand, each a slot the picture
+// paints, its two words over it.
+inline const juce::Rectangle<float> lowCutSlot  { 1389.0f, 788.5f, 52.0f, 28.0f };
+inline const juce::Rectangle<float> highCutSlot { 1389.0f, 862.0f, 52.0f, 28.0f };
+inline constexpr float cutWordsAbove = 14.0f, cutWordRoom = 78.0f;
+
+// THE SWITCHES' COLUMN, right of DI/CAB, one line a switch (the owner, 02.11): STR, FING/SLAP, then the pack's ULTRA LO
+// and ULTRA HI — each the cuts' slot, cut out of the picture, its slot at switchSlotX and its line's centre here.
+inline constexpr float switchSlotX = 1409.0f, switchSlotW = 52.0f, switchSlotH = 24.0f;
+inline constexpr std::array<float, 4> switchLineY { 780.0f, 816.0f, 852.0f, 888.0f };
+inline constexpr float switchRuleX = 1325.0f;   // the line parting the column from DI/CAB, cut into the panel
+
+// THE PICTURE'S SCREEN, across the top of CABINET's panel — gone under plain panel (Cabin::paintStatic): in its place
+// the cabinet's slot lying across, a slider in it, OCTAVE's socket turned a quarter and its middle drawn longer; the
+// gear right of it; and the cabinet's name over it, under CABINET (the owner, 05.11).
+inline const juce::Rectangle<float> cabinetScreen { 1246.0f, 707.5f, 251.5f, 49.0f };
+inline const juce::Rectangle<float> octaveSocketArt { effectX[0] - 10.0f, effectTop - 1.0f, 20.0f, 131.5f };   // to its rim's edge
+inline constexpr float cabinetSlotY = 742.0f;                                                                   // the slot's middle
+inline const juce::Rectangle<float> cabinetSlot { 1256.0f, cabinetSlotY - 10.0f, 206.0f, 20.0f };
+inline const juce::Rectangle<float> cabinetControl { cabinetSlot.getX(), cabinetSlotY - 22.0f, 244.0f, 44.0f };  // the slider, then the gear
+inline const juce::Rectangle<float> cabinetName { cabinetSlot.getX(), 704.0f, cabinetControl.getWidth(), 20.0f };
+
+} // namespace orbitamp::redgroove::layout

@@ -4,8 +4,11 @@
 #pragma once
 
 #include "../core/TunerEar.h"
+#include "../core/TunerPoly.h"
+#include "../core/TunerStrobe.h"
+#include "PolyView.h"
+#include "StrobeView.h"
 #include "Theme.h"
-#include "ZoneSwitch.h"
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
@@ -18,38 +21,40 @@ namespace orbitamp
     dash and a dim scale.
 
     It reads the same TunerEar every other needle reads, on its own repaint clock — the ear is
-    pumped by the processor, so this is drawing only. */
+    pumped by the processor, so this is drawing only. While the player reads by the STROBE (the
+    processor pumps it only then), its bands stand where the ruler stood, the note's name and the
+    cents are the strobe's note's, and the stripes wear the needle's colour. While the player reads by
+    POLY, a lane for every string stands in a row where the note, the ruler and the cents stood
+    (PolyView.h) — no HUM label: the analysis models the mains itself. */
 class TunerStrip final : public juce::Component,
                          private juce::Timer
 {
 public:
-    explicit TunerStrip (const core::TunerEar& tunerEar) : ear (tunerEar)
+    TunerStrip (const core::TunerEar& tunerEar, const core::TunerStrobe& tunerStrobe, const core::TunerPoly& tunerPoly)
+        : ear (tunerEar), strobe (tunerStrobe), poly (tunerPoly)
     {
         setMouseCursor (juce::MouseCursor::PointingHandCursor);
         startTimerHz (30);
-
-        mute.setTooltip ("Mute the output while tuning");
-        mute.setMouseCursor (juce::MouseCursor::PointingHandCursor);
-        addAndMakeVisible (mute);
     }
 
-    /** The MUTE pill, under the cents — the strip's one switch. The owner attaches it to the
-        tuner's mute parameter; the strip only gives it a place. It takes its own clicks, so a
-        click on it never opens the big tuner. */
-    ZoneSwitch mute;
-
-    void resized() override
-    {
-        mute.setBounds (muteArea().toNearestInt());
-    }
+    /** MUTE IS IN THE STRIP'S MENU (the owner, 01.11), a right click — no pill on it any more; while the output is
+        muted a crossed-out speaker BLINKS at the scale's left. The owner says whether it is (the tuner's parameter). */
+    std::function<bool()> isMuted;
+    std::function<void (juce::Point<int> screenPos)> onMenu;
 
     /** A click opens the big tuner — the strip is the glance, the zoom is the look. */
     std::function<void()> onClick;
 
     void mouseDown (const juce::MouseEvent& e) override
     {
-        // Left only — a right-click is never "open the lens".
-        if (! e.mods.isPopupMenu() && onClick != nullptr)
+        // Left only — a right-click is never "open the lens": it is the strip's menu.
+        if (e.mods.isPopupMenu())
+        {
+            if (onMenu != nullptr)
+                onMenu (e.getScreenPosition());
+            return;
+        }
+        if (onClick != nullptr)
             onClick();
     }
 
@@ -66,15 +71,40 @@ public:
         g.setColour (theme::panel);
         g.fillRoundedRectangle (r, theme::radiusMd);
 
+        // ---- POLY: the lanes in a row across the strip (MUTE is in its menu, no pill) ----
+        if (poly.on())
+        {
+            const auto lanes = r.reduced (14.0f, insetY);
+            const polyview::Ink ink { theme::displayFont (13.0f).withExtraKerningFactor (0.05f), theme::tx, theme::txFaint,
+                                      inTune, theme::orange, theme::violet.withAlpha (0.6f), theme::lilac, 25.0f, 2.5f };
+            polyview::paintRow (g, lanes, poly.lanes (true), ink, polyGap);
+            return;
+        }
+
         const bool live  = ear.live();
-        const auto note  = ear.nearestNote();
-        const bool green = ear.green();
+        const bool strobing = strobe.on();
+        const auto note  = strobing && strobe.note() >= 0 ? core::PitchTracker::Note { strobe.note(), strobe.cents (ear.hz()) }
+                                                          : ear.nearestNote();
+        const int  hum   = live ? ear.humMains() : 0;   // the mains it is taken for, 0 = a note
+        const bool green = ear.green() && hum == 0;
 
         auto inner = r.reduced (14.0f, insetY);
 
-        // ---- the note, left ----
+        // ---- the note, left — or HUM and its mains where the name and the octave stand ----
         auto noteArea = inner.removeFromLeft (52.0f);
-        if (live)
+        if (hum != 0)
+        {
+            const auto font = theme::displayFont (humPx);
+            const float w   = theme::trackedWidth ("HUM", font, 0.05f);
+
+            g.setColour (theme::tx);
+            theme::drawTracked (g, "HUM", noteArea.withWidth (w), font, 0.05f, juce::Justification::centredLeft);
+
+            g.setColour (theme::txDim);
+            theme::drawTracked (g, juce::String (hum), noteArea.withTrimmedLeft (w + 3.0f), font, 0.05f,
+                                juce::Justification::centredLeft);
+        }
+        else if (live)
         {
             const auto name = juce::String (core::PitchTracker::noteName (note.midi));
             const auto font = theme::displayFont (20.0f);
@@ -95,13 +125,12 @@ public:
             g.fillRoundedRectangle (noteArea.getX(), noteArea.getCentreY() - 2.0f, 30.0f, 4.0f, 2.0f);
         }
 
-        // ---- the MUTE pill at the far right, the cents just before it ----
-        inner.removeFromRight (muteW + muteGap);
+        // ---- the cents at the far right ----
         auto centsArea = inner.removeFromRight (52.0f);
         if (live)
         {
             const auto cents = juce::String (juce::roundToInt (note.cents));
-            g.setColour (theme::txDim);
+            g.setColour (hum != 0 ? theme::txDim.withMultipliedAlpha (humDim) : theme::txDim);
             theme::drawTracked (g, (note.cents >= 0.5f ? "+" : "") + cents + " C", centsArea,
                                 theme::displayFont (13.0f), 0.12f, juce::Justification::centredRight);
         }
@@ -109,6 +138,19 @@ public:
         // ---- the ruler between them, as wide as the note and the cents allow: the ruler is
         //      the tuner's actual instrument, the numbers are its captions ----
         const auto ruler = inner.reduced (9.0f, 0.0f);
+
+        // ---- or the strobe in its place: three bands, the needle's colour, still when in tune ----
+        if (strobing)
+        {
+            const auto ink = hum != 0 ? theme::lilac.withMultipliedAlpha (humDim)   // hum: they stay, dimmed
+                           : green    ? inTune
+                                      : inTune.interpolatedWith (theme::orange,
+                                            juce::jlimit (0.0f, 1.0f, std::abs (ear.needle()) / 25.0f));
+            strobeview::paintBands (g, ruler, strobe, live, ink, theme::violet.withAlpha (0.16f),
+                                    theme::lilac.withAlpha (0.5f), strobePeriod, 1.5f);
+            return;
+        }
+
         const float midY = ruler.getCentreY();
         const float bandH = ruler.getHeight();   // the scale's wash and its zero: the strip's inner height
         const auto centsX = [&ruler] (float cents)
@@ -154,34 +196,54 @@ public:
         {
             // The needle says HOW off with its colour: green at home, orange by 25 cents out.
             const float x = centsX (ear.needle());
-            const auto  needle = green ? inTune
-                                       : inTune.interpolatedWith (theme::orange,
-                                             juce::jlimit (0.0f, 1.0f, std::abs (ear.needle()) / 25.0f));
+            auto needle = green ? inTune
+                                : inTune.interpolatedWith (theme::orange,
+                                      juce::jlimit (0.0f, 1.0f, std::abs (ear.needle()) / 25.0f));
+            if (hum != 0)
+                needle = needle.withMultipliedAlpha (humDim);   // hum: the reading stays, dimmed
 
             // A little taller than the scale, as it always stood — inside the strip's own well.
             const float nh = bandH + 4.0f;
-            g.setColour (needle.withAlpha (0.18f));
+            g.setColour (needle.withMultipliedAlpha (0.18f));
             g.fillRoundedRectangle (x - 5.0f, midY - nh * 0.5f - 2.0f, 10.0f, nh + 4.0f, 5.0f);
-            g.setColour (needle.withAlpha (0.45f));
+            g.setColour (needle.withMultipliedAlpha (0.45f));
             g.fillRoundedRectangle (x - 2.5f, midY - nh * 0.5f - 1.0f, 5.0f, nh + 2.0f, 2.5f);
             g.setColour (needle);
             g.fillRoundedRectangle (x - 1.25f, midY - nh * 0.5f, 2.5f, nh, 1.25f);
         }
+
+        // MUTED: a crossed-out speaker at the scale's left, blinking — orange, the family's "look here".
+        if (isMuted != nullptr && isMuted() && (juce::Time::getMillisecondCounter() / 500) % 2 == 0)
+            paintMutedSpeaker (g, juce::Rectangle<float> (16.0f, 14.0f).withCentre ({ ruler.getX() + 12.0f, midY }));
+    }
+
+    static void paintMutedSpeaker (juce::Graphics& g, juce::Rectangle<float> b)
+    {
+        juce::Path speaker;
+        const float x = b.getX(), y = b.getY(), w = b.getWidth(), h = b.getHeight();
+        speaker.startNewSubPath (x, y + h * 0.35f);
+        speaker.lineTo (x + w * 0.25f, y + h * 0.35f);
+        speaker.lineTo (x + w * 0.55f, y);
+        speaker.lineTo (x + w * 0.55f, y + h);
+        speaker.lineTo (x + w * 0.25f, y + h * 0.65f);
+        speaker.lineTo (x, y + h * 0.65f);
+        speaker.closeSubPath();
+        g.setColour (theme::orange);
+        g.fillPath (speaker);
+        g.drawLine (x + w * 0.68f, y + h * 0.3f, x + w, y + h * 0.7f, 1.5f);
+        g.drawLine (x + w * 0.68f, y + h * 0.7f, x + w, y + h * 0.3f, 1.5f);
     }
 
 private:
     void timerCallback() override { repaint(); }
 
-    static constexpr float muteW = 26.0f, muteH = 13.0f, muteGap = 8.0f;
+    /** HUM in the note's place, its mains beside it where the octave stands, both at the reading
+        size: smaller than a note's name, so the two fit the same 52 px. The needle and the cents
+        under the label at `humDim` of their light. */
+    static constexpr float humPx = 13.0f, humDim = 0.4f;
     static constexpr float insetY = 5.0f;
-
-    /** Where the pill stands: at the far right, centred on the strip, the cents just before it —
-        the same insets `paint` lays the row out with. */
-    juce::Rectangle<float> muteArea() const
-    {
-        return getLocalBounds().toFloat().reduced (14.0f, insetY)
-                   .removeFromRight (muteW).withSizeKeepingCentre (muteW, muteH);
-    }
+    static constexpr float strobePeriod = 32.0f;   // the fundamental's stripe, px; its octaves' 16 and 8
+    static constexpr float polyGap = 8.0f;         // between POLY's lanes, px
 
 public:
     /** WORKING or standing by — see VolumeColumn::setLive. A tuner standing by hears nothing (the
@@ -209,6 +271,8 @@ private:
     inline static const juce::Colour inTune { 0xff5fc97a };   // the character ramp's clean green
 
     const core::TunerEar& ear;
+    const core::TunerStrobe& strobe;
+    const core::TunerPoly& poly;
 
     friend class WebFaceplate;   // the site's kit reads where the parts stand (WebFaceplate.h)
 

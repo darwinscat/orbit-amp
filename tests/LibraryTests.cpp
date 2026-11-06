@@ -546,8 +546,12 @@ int ORBITAMP_GATE_MAIN()
         const auto factory = DeviceLibrary::scan (DeviceLibrary::ampSlot, true, set.getChildFile ("Devices"), none, everyPack);
         const auto shelf = DeviceLibrary::shelfOf (factory);
 
-        report ("the set's packs make four devices, by name",  names (shelf.factory) == "Friedman IR-X, Soldano X88-IR, Two Notes ReVolt, Victory V4",
+        // Five since the bass's own pack joined the set (the owner's SGT-DI, 02.11): the guitar's four and the bass's one.
+        report ("the set's packs make five devices, by name",  names (shelf.factory) == "Ampeg SGT-DI, Friedman IR-X, Soldano X88-IR, Two Notes ReVolt, Victory V4",
                 names (shelf.factory));
+        report ("...the bass's SGT-DI a device of its own",    named (shelf.factory, "Ampeg SGT-DI") != nullptr
+                                                                  && named (shelf.factory, "Ampeg SGT-DI")->channels.size() == 1,
+                channels (named (shelf.factory, "Ampeg SGT-DI")));
         report ("...a device is its packs' common words",      named (shelf.factory, "Victory V4") != nullptr
                                                                   && named (shelf.factory, "Friedman IR-X") != nullptr);
         report ("X88-IR: one alias, so the stems name them",   channels (named (shelf.factory, "Soldano X88-IR")) == "Normal, Altered, Crunch, Overdrive",

@@ -3,9 +3,13 @@
 
 #pragma once
 
+#include "OnFirst.h"
 #include "Theme.h"
 
 #include <juce_audio_processors/juce_audio_processors.h>
+
+#include <algorithm>
+#include <vector>
 
 namespace orbitamp
 {
@@ -17,7 +21,8 @@ namespace orbitamp
 
     Blocks subclass this and fill `layOutContent` / `paintContent`; the frame owns nothing about
     what is inside. It holds no parameter and reaches nothing — the owner wires `onToggled`. */
-class BlockFrame : public juce::Component
+class BlockFrame : public juce::Component,
+                   public onfirst::Owner
 {
 public:
     enum class Kind { captured, dsp };
@@ -82,12 +87,24 @@ public:
         clicks write the negation of ITS value and the visual follows the attachment's echo — a
         widget that flips its own memory first can drift from the parameter and stay drifted,
         which is exactly how two switches on one parameter once disagreed. */
+    /** The switch a menu's ON writes (onfirst::show): the power parameter, the one its strip arrow writes. */
+    juce::RangedAudioParameter* blockSwitch() const noexcept override { return powerParam; }
+
     void attachPower (juce::RangedAudioParameter& param)
     {
         powerParam = &param;
         power = std::make_unique<juce::ParameterAttachment> (param,
             [this] (float v) { setBlockOn (v > 0.5f, juce::dontSendNotification); });
         power->sendInitialUpdate();
+    }
+
+    /** A PICTURE THAT DIMS WHILE ITS BLOCK DOES NOTHING — its `amount` (BLEND, the slider, MIX) at 0 — as it does standing
+        by (the owner, 31.10: it stands still then too); the block's controls stay lit and live. */
+    void dimWhenIdle (juce::Component& picture, juce::RangedAudioParameter& amount)
+    {
+        idlePicture = &picture;
+        idleAtt = std::make_unique<juce::ParameterAttachment> (amount, [this] (float v) { idle = ! (v > 0.0f); dimChildren(); });
+        idleAtt->sendInitialUpdate();
     }
 
     /** Re-reads the power parameter into the visual state — insurance against any stale widget,
@@ -193,6 +210,21 @@ public:
             paintSwitch (g, sw);
     }
 
+    /** ORBITBASS: the block's MENU on a right click anywhere on the frame, in place of the power menu — the one door to
+        it: no frame wears a gear (the owner, 01.11). Off unless asked: the guitar faces keep the power menu. */
+    void setBlockMenu (std::function<void()> open) { onBlockMenu = std::move (open); }
+
+    bool hasBlockMenu() const noexcept { return onBlockMenu != nullptr; }
+
+    /** How far the content stands in from each side of the box. */
+    static constexpr int contentInsetX() noexcept { return padX; }
+
+    /** The name's box on the border, in the block's own coordinates; empty where it writes none there. */
+    virtual juce::Rectangle<int> titleBounds() const
+    {
+        return showTitle && titleInBorder ? titleArea() : juce::Rectangle<int>();
+    }
+
     void resized() override final
     {
         shield.setBounds (getLocalBounds());
@@ -206,7 +238,10 @@ public:
         // never need hunting for a target.
         if (e.mods.isPopupMenu())
         {
-            showPowerMenu (e.getScreenPosition());
+            if (onBlockMenu != nullptr)
+                onBlockMenu();
+            else
+                showPowerMenu (e.getScreenPosition());
             return;
         }
 
@@ -224,6 +259,15 @@ public:
     {
         if (! hasSwitch)
             return;
+
+        // ON first and ruled off, then whose it is (onfirst::show) — the block's switch, as every menu it opens.
+        if (powerParam != nullptr)
+        {
+            juce::PopupMenu named;
+            named.addSectionHeader (title.toUpperCase());
+            onfirst::show (named, this, juce::PopupMenu::Options().withTargetScreenArea ({ screenPos.x, screenPos.y, 1, 1 }), {});
+            return;
+        }
 
         juce::PopupMenu m;
         m.addSectionHeader (title.toUpperCase());
@@ -284,6 +328,17 @@ protected:
         indicating), not merely dim. */
     virtual void blockOnChanged (bool) {}
 
+public:
+    /** A CHILD THAT IS NOT THE BLOCK'S, though it stands on its face — the bass's COMP beside the AMP's dial, its
+        cuts on the cabinet: it works whether the block works or not, so the block's STANDBY neither dims it nor
+        shields it. Its own switch, if it has one, is its own business. */
+    void keepOutsideStandby (juce::Component& c)
+    {
+        independent.push_back (&c);
+        c.setAlpha (1.0f);
+    }
+
+protected:
     /** Blocks rebuild their faces (a device change makes new knobs mid-life) — every child that
         arrives inherits the block's dimming, and the shield stays on top of all of them. */
     void childrenChanged() override
@@ -304,14 +359,32 @@ private:
             frame.mouseDown (e.getEventRelativeTo (&frame));
         }
 
+        /** Not over a child that is not the block's (keepOutsideStandby): there the click goes through. */
+        bool hitTest (int x, int y) override
+        {
+            for (const auto* c : frame.independent)
+                if (c->isVisible() && c->getBounds().contains (x, y))
+                    return false;
+            return true;
+        }
+
         BlockFrame& frame;
     };
 
     void dimChildren()
     {
         for (auto* c : getChildren())
-            if (c != &shield)
+            if (c != &shield && std::find (independent.begin(), independent.end(), c) == independent.end())
                 c->setAlpha (on ? 1.0f : theme::offAlpha);
+
+        // The idle picture: dimmed while on and doing nothing — its own alpha, once, whether a child or deeper in.
+        if (auto* pic = idlePicture.getComponent())
+        {
+            if (pic->getParentComponent() == this)
+                pic->setAlpha (on && ! idle ? 1.0f : theme::offAlpha);
+            else
+                pic->setAlpha (on && idle ? theme::offAlpha : 1.0f);
+        }
     }
 
     /** Keeps the shield the frontmost child. Guarded: toFront itself fires childrenChanged. */
@@ -320,7 +393,8 @@ private:
         if (shieldRaising || getNumChildComponents() == 0)
             return;
 
-        if (getChildComponent (getNumChildComponents() - 1) == &shield)
+        const int last = getNumChildComponents() - 1;
+        if (getChildComponent (last) == &shield)
             return;
 
         shieldRaising = true;
@@ -474,6 +548,9 @@ protected:
         guards', whose rails switch them on when dragged (GuardBlock.h). */
     bool shieldsWhenOff = true;
 
+    /** The block's menu, a right click's (setBlockMenu). */
+    std::function<void()> onBlockMenu;
+
 private:
 
     juce::String title;
@@ -481,9 +558,13 @@ private:
     bool hasSwitch = true;
     bool on = true;
     bool shieldRaising = false;
+    std::vector<juce::Component*> independent;   // keepOutsideStandby — declared before the shield, which reads it
     OffShield shield { *this };
     juce::RangedAudioParameter* powerParam = nullptr;
     std::unique_ptr<juce::ParameterAttachment> power;
+    std::unique_ptr<juce::ParameterAttachment> idleAtt;
+    juce::Component::SafePointer<juce::Component> idlePicture;   // safe: a derived block's picture goes before this frame does
+    bool idle = false;
 
     friend class WebFaceplate;   // the site's kit reads where the parts stand (WebFaceplate.h)
 

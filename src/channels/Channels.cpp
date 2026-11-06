@@ -5,7 +5,10 @@
 
 #include "Set.h"
 #include "../Parameters.h"
+#include "../device/BassCabinets.h"
 #include "../device/IrLibrary.h"
+
+#include <BassDozen.h>
 
 #include <algorithm>
 #include <array>
@@ -21,6 +24,10 @@ namespace
     const juce::Identifier activeId { "active" };
     const juce::Identifier indexId  { "i" };
     const juce::Identifier cabinetId { AmpProcessor::recordCabinetId };    // ...which a state of before is converted by
+    const juce::Identifier cabinetSlotId { "cabinet_slot" };               // ...or a drawn one's slot (Lineup::cabinets)
+
+    /** A drawn cabinet's slot, on the product's node: what it holds, as a `from`. */
+    juce::Identifier slotId (int slot) { return juce::Identifier ("cabinet_slot_" + juce::String (slot)); }
 
     // A pair's record (Lineup::pairs) says which of the two it was left playing, and the tones by their
     // knobs: the two packs may keep them in different places.
@@ -70,6 +77,60 @@ namespace
                                                    : juce::Array<juce::File>());
     }
 
+    /** THE TONE KNOBS OF A PRODUCT WHOSE CONSOLE IS THE BASS'S STANDARD (Product::eqStandard), on a pack with no tone
+        of its own: the standard's three — BASS the console's low shelf, MIDDLE its first bell (its frequency swept
+        apart), TREBLE its high shelf — the tone that sounds on the bass's chain where the pack states none
+        (AmpProcessor::bassEq). The console is the AMP's, the only one. */
+    constexpr int ampConsole = 0;
+    const juce::StringArray bassStandardTones { "Bass", "Middle", "Treble" };
+
+    bool onBassStandard (const AmpProcessor& amp)
+    {
+        return amp.product().eqStandard() == params::EqStandard::bass;
+    }
+
+    juce::String bassStandardTone (int knob)
+    {
+        switch (knob)
+        {
+            case 0:  return params::eqLoDb (ampConsole);
+            case 1:  return params::eqBellDb (ampConsole, 0);
+            case 2:  return params::eqHiDb (ampConsole);
+            default: return {};
+        }
+    }
+
+    /** THE ROLES OF A BASS PACK'S TONES, by their places in its list: its DIALS — swept, and no frequency knob — its
+        FREQUENCY KNOB (namz::rig::isFrequencyKnob: the one a dial's band names by `hz_by`), and its tone SWITCHES, no
+        sweep and a filter on its positions. A pack with a dial or a switch PLAYS A TONE OF ITS OWN on the bass, and
+        the bass's standard stands back (AmpProcessor::bassEq). */
+    struct BassTones
+    {
+        std::vector<int> dials, switches;
+        int frequency = -1;
+
+        bool playsTone() const noexcept { return ! dials.empty() || ! switches.empty(); }
+    };
+
+    BassTones bassTonesOf (const std::vector<namz::rig::Tone>& tones)
+    {
+        BassTones out;
+        for (int t = 0; t < (int) tones.size(); ++t)
+        {
+            const auto& tone = tones[(size_t) t];
+            if (namz::rig::isFrequencyKnob (tone))
+            {
+                if (out.frequency < 0)
+                    out.frequency = t;
+            }
+            else if (tone.sweep > 0)
+                out.dials.push_back (t);
+            else if (core::CapturedBlock::switchCarriesBands (tone))
+                out.switches.push_back (t);
+        }
+        return out;
+    }
+
     /** A channel's record in the node; made if `create` and it is not there. */
     juce::ValueTree recordOf (juce::ValueTree node, int channel, bool create)
     {
@@ -93,6 +154,14 @@ Channels::Channels (AmpProcessor& p, const Lineup& l) : amp (p), line (l)
             if (const auto id = toneOf (c, t); id.isNotEmpty())
                 tones.addIfNotAlreadyThere (id);
     kept.addArray (tones);
+    for (int c = 0; c < count(); ++c)                   // ...and on the bass, its pack's frequency knob and tone switches
+    {
+        if (const auto id = frequencyOf (c); id.isNotEmpty())
+            kept.addIfNotAlreadyThere (id);
+        for (int w = 0; w < maxTones; ++w)
+            if (const auto id = toneSwitchOf (c, w); id.isNotEmpty())
+                kept.addIfNotAlreadyThere (id);
+    }
     for (int s = 0; s < params::numSelectors; ++s)      // where its pack's switches stand
         kept.add (params::selectorId (params::preampId, s));
     kept.add (params::cabHpfOn);
@@ -101,12 +170,22 @@ Channels::Channels (AmpProcessor& p, const Lineup& l) : amp (p), line (l)
     kept.add (params::reverbType);
     kept.add (params::delayMix);
     kept.add (params::delayDiv);        // the note value; the tempo it is counted in is the song's, not a channel's
+    for (const auto& id : line.kept)    // ...and what the product's own channels keep beside (Lineup::kept)
+        kept.addIfNotAlreadyThere (id);
 
     readCabinets();
 }
 
 void Channels::readCabinets()
 {
+    if (line.drawnCabinets)
+    {
+        irs.clear();        // drawn, not files: none of the build's, none of the player's
+        factory = 0;
+        irKeys.clear();
+        return;
+    }
+
     // The cabinets: a channel keeps its own too, but by NAME — a cabinet is a file, not a parameter.
     // The build's own stand first and the player's after them, each group in the order of its names:
     // what a player adds never lands among the factory ones. The build's own are the ones the product's
@@ -114,7 +193,7 @@ void Channels::readCabinets()
     irs = cabinetsAmong (bundledCabinets (amp.product().name), set::cabinetsIn (device::DeviceLibrary::factoryDirectory()));
 
     factory = irs.size();
-    irs.addArray (cabinetsIn (device::IrLibrary::directory()));
+    irs.addArray (cabinetsIn (device::IrLibrary::directory (amp.product().irsFolder())));
     irKeys.clear();
 }
 
@@ -122,7 +201,7 @@ Channels::Added Channels::importCabinets (const juce::StringArray& paths)
 {
     Added out;
     const auto before = irs;
-    const auto library = device::IrLibrary::directory();
+    const auto library = device::IrLibrary::directory (amp.product().irsFolder());
 
     for (const auto& path : paths)
     {
@@ -245,7 +324,7 @@ void Channels::nameCabinet (const juce::File& file)
 {
     amp.apvts.state.setProperty (params::cabIrUserName, file.getFileNameWithoutExtension(), nullptr);
     amp.apvts.state.setProperty (params::cabIrUserFrom,
-                                 file.getRelativePathFrom (device::IrLibrary::directory()).replaceCharacter ('\\', '/'), nullptr);
+                                 file.getRelativePathFrom (device::IrLibrary::directory (amp.product().irsFolder())).replaceCharacter ('\\', '/'), nullptr);
 }
 
 bool Channels::renameCabinet (int index, const juce::String& name)
@@ -259,7 +338,7 @@ bool Channels::renameCabinet (int index, const juce::String& name)
     // The name it will have, cut the way the library cuts it: legal, and with the file's own extension.
     const auto legal = juce::File::createLegalFileName (name.trim()).upToLastOccurrenceOf (".", false, false);
     const auto renamed = file.getSiblingFile (legal + file.getFileExtension());
-    if (legal.isEmpty() || ! device::IrLibrary::rename (device::IrLibrary::directory(), file, name))
+    if (legal.isEmpty() || ! device::IrLibrary::rename (device::IrLibrary::directory (amp.product().irsFolder()), file, name))
         return false;
 
     // A CHANNEL REMEMBERS ITS CABINET BY THE FILE'S NAME, and so does the sound that is playing: both
@@ -278,7 +357,7 @@ bool Channels::renameCabinet (int index, const juce::String& name)
 bool Channels::removeCabinet (int index)
 {
     if (index < factory || index >= irs.size()
-        || ! device::IrLibrary::remove (device::IrLibrary::directory(), irs[index]))
+        || ! device::IrLibrary::remove (device::IrLibrary::directory (amp.product().irsFolder()), irs[index]))
         return false;
 
     readCabinets();
@@ -313,6 +392,103 @@ void Channels::chooseCabinetNamed (const juce::String& stem)
     chooseCabinet (defaultCabinet());   // not here any more, or never chosen: the one a channel opens on
 }
 
+juce::String Channels::drawnPlaying() const
+{
+    const auto now = amp.apvts.state.getProperty (params::cabIrUserFrom).toString();
+    if (drawnAsked.isNotEmpty() && now == drawnOver)
+        return drawnAsked;      // still rendering: what was asked for is what the channel has
+    drawnAsked.clear();         // landed — or a hand, an undo or a preset since: the state's is the truth
+    return AmpProcessor::cabSynthOf (now).valid ? now : juce::String();
+}
+
+void Channels::playDrawn (const juce::String& from)
+{
+    const auto synth = AmpProcessor::cabSynthOf (from);
+    if (! synth.valid || from == drawnPlaying())
+        return;
+    drawnOver  = amp.apvts.state.getProperty (params::cabIrUserFrom).toString();
+    drawnAsked = from;
+    amp.requestCabSynth (synth.state);
+}
+
+int Channels::cabinetSlot() const
+{
+    const auto live = node().getProperty (cabinetSlotId);
+    const int slot = live.isVoid() ? line.channels[(size_t) memoryOf (active())].cabinet : (int) live;
+    return juce::jlimit (0, juce::jmax (0, cabinetSlots() - 1), slot);
+}
+
+namespace
+{
+    /** The dozen's slot a preset of it stands at (BassDozen.h), or -1. */
+    int dozenSlot (const char* stem)
+    {
+        for (int i = 0; i < (int) std::size (bassCabinets); ++i)
+            if (juce::String (bassCabinets[i]) == stem)
+                return i < (int) device::BassCabinets::dozen().size() ? i : -1;
+        return -1;
+    }
+}
+
+juce::String Channels::slotName (int slot) const
+{
+    if (slot < 0 || slot >= cabinetSlots() || line.cabinets[(size_t) slot].preset == nullptr)
+        return {};
+    const int at = dozenSlot (line.cabinets[(size_t) slot].preset);
+    return at >= 0 ? device::BassCabinets::dozen()[(size_t) at].name : juce::String();
+}
+
+juce::String Channels::slotFrom (int slot) const
+{
+    if (slot < 0 || slot >= cabinetSlots())
+        return {};
+    if (const auto* preset = line.cabinets[(size_t) slot].preset)   // a preset's: fixed, nothing of the player's over it
+    {
+        const int at = dozenSlot (preset);
+        return at >= 0 ? AmpProcessor::cabSynthFrom (device::BassCabinets::dozen()[(size_t) at].state) : juce::String();
+    }
+    if (const auto set = node().getProperty (slotId (slot)).toString(); AmpProcessor::cabSynthOf (set).valid)
+        return set;
+    // Never set: the lineup's box, its own mic at its cap, the horn as the lineup says — and its second mic, where it
+    // has one, 30 cm out on the axis, on one clock, a third of the blend.
+    const auto& own = line.cabinets[(size_t) slot];
+    cabir::State state;
+    state.box = own.box;
+    state.horn = own.horn;
+    if (own.second != nullptr)
+    {
+        state.b = { true, own.second, 0.0, 0.0, 0.30, 0.0 };
+        state.blend = 0.35;
+        state.align = true;
+    }
+    return AmpProcessor::cabSynthFrom (state);
+}
+
+void Channels::hearSlot (int slot)
+{
+    if (const auto synth = AmpProcessor::cabSynthOf (slotFrom (slot)); synth.valid)
+        amp.requestCabSynth (synth.state, true);
+}
+
+void Channels::chooseSlot (int slot)
+{
+    // Rendered and kept even where the sound already names it: the hand on its way has had others heard.
+    ensureNode().setProperty (cabinetSlotId, juce::jlimit (0, cabinetSlots() - 1, slot), nullptr);
+    const auto from = slotFrom (cabinetSlot());
+    if (const auto synth = AmpProcessor::cabSynthOf (from); synth.valid)
+    {
+        drawnOver  = amp.apvts.state.getProperty (params::cabIrUserFrom).toString();
+        drawnAsked = from;
+        amp.requestCabSynth (synth.state);
+    }
+}
+
+void Channels::keepInSlot (const juce::String& from)
+{
+    if (cabinetSlots() > 0 && AmpProcessor::cabSynthOf (from).valid)
+        ensureNode().setProperty (slotId (cabinetSlot()), from, nullptr);
+}
+
 void Channels::align()
 {
     if (const int pack = packFor (active()); pack >= 0 && pack != juce::roundToInt (plain (params::preampDevice)))
@@ -322,7 +498,12 @@ void Channels::align()
     }
     hold (active());
 
-    if (const int playing = cabinet(); playing < 0)
+    if (line.drawnCabinets)
+    {
+        if (drawnPlaying() != slotFrom (cabinetSlot()))
+            playDrawn (slotFrom (cabinetSlot()));   // the sound not the slot's — a fresh instance, a state of before
+    }
+    else if (const int playing = cabinet(); playing < 0)
     {
         chooseCabinet (defaultCabinet());
     }
@@ -353,7 +534,7 @@ juce::ValueTree Channels::ensureNode()
     if (! n.isValid())
     {
         n = juce::ValueTree (nodeType());
-        n.setProperty (activeId, 0, nullptr);
+        n.setProperty (activeId, juce::jlimit (0, count() - 1, line.opensAt), nullptr);    // a tag or a flag may make it before adopt does
         amp.apvts.state.appendChild (n, nullptr);
     }
     return n;
@@ -370,6 +551,18 @@ int Channels::packFor (int channel) const
 
 juce::StringArray Channels::toneNamesOf (int channel) const
 {
+    if (onBassStandard (amp))
+    {
+        const auto all = packTonesOf (channel);
+        const auto roles = bassTonesOf (all);
+        if (! roles.playsTone())
+            return bassStandardTones;
+        juce::StringArray names;            // the pack's dials, its frequency knob and switches stand elsewhere
+        for (const int t : roles.dials)
+            names.add (juce::String (all[(size_t) t].name).trim());
+        return names;
+    }
+
     juce::StringArray names;
     if (const int pack = packFor (channel); pack >= 0)
         for (const auto& stage : amp.preamp.packs.getReference (pack).rig.chain)
@@ -384,6 +577,59 @@ juce::StringArray Channels::toneNamesOf (int channel) const
 }
 
 std::vector<namz::rig::Tone> Channels::tonesOf (int channel) const
+{
+    if (! onBassStandard (amp))
+        return packTonesOf (channel);
+
+    std::vector<namz::rig::Tone> out;      // the standard's knobs are no tone of the pack's; a pack's dials are
+    const auto all = packTonesOf (channel);
+    for (const int t : bassTonesOf (all).dials)
+        out.push_back (all[(size_t) t]);
+    return out;
+}
+
+juce::String Channels::frequencyOf (int channel) const
+{
+    if (! onBassStandard (amp))
+        return {};
+    const int t = bassTonesOf (packTonesOf (channel)).frequency;
+    return t >= 0 ? params::preampMeasured (t) : juce::String();
+}
+
+bool Channels::frequencyToneOf (int channel, namz::rig::Tone& out) const
+{
+    if (! onBassStandard (amp))
+        return false;
+    const auto all = packTonesOf (channel);
+    const int t = bassTonesOf (all).frequency;
+    if (t < 0)
+        return false;
+    out = all[(size_t) t];
+    return true;
+}
+
+juce::String Channels::toneSwitchOf (int channel, int which) const
+{
+    if (! onBassStandard (amp))
+        return {};
+    const auto roles = bassTonesOf (packTonesOf (channel));
+    return which >= 0 && which < (int) roles.switches.size() ? params::preampMeasured (roles.switches[(size_t) which])
+                                                              : juce::String();
+}
+
+bool Channels::toneSwitchToneOf (int channel, int which, namz::rig::Tone& out) const
+{
+    if (! onBassStandard (amp))
+        return false;
+    const auto all = packTonesOf (channel);
+    const auto roles = bassTonesOf (all);
+    if (which < 0 || which >= (int) roles.switches.size())
+        return false;
+    out = all[(size_t) roles.switches[(size_t) which]];
+    return true;
+}
+
+std::vector<namz::rig::Tone> Channels::packTonesOf (int channel) const
 {
     std::vector<namz::rig::Tone> out;
     if (const int pack = packFor (channel); pack >= 0)
@@ -400,7 +646,15 @@ std::vector<namz::rig::Tone> Channels::tonesOf (int channel) const
 
 juce::String Channels::toneOf (int channel, int knob) const
 {
-    // Knob i is the pack's tone i: there while its list goes that far.
+    // Knob i is the pack's tone i: there while its list goes that far. On the bass, the pack's i-th dial — or, on a
+    // pack with no tone of its own, the bass's standard's i-th.
+    if (onBassStandard (amp))
+    {
+        const auto roles = bassTonesOf (packTonesOf (channel));
+        if (! roles.playsTone())
+            return bassStandardTone (knob);
+        return knob >= 0 && knob < (int) roles.dials.size() ? params::preampMeasured (roles.dials[(size_t) knob]) : juce::String();
+    }
     return knob >= 0 && knob < toneNamesOf (channel).size() ? params::preampMeasured (knob) : juce::String();
 }
 
@@ -455,12 +709,13 @@ bool Channels::adopt()
     auto* device = amp.apvts.getParameter (params::preampDevice);
     const int playing = juce::roundToInt (plain (params::preampDevice));
     const bool chosen = device != nullptr && playing != juce::roundToInt (device->convertFrom0to1 (amp.engineDefault (*device)));
+    const int opens = juce::jlimit (0, count() - 1, line.opensAt);
     int channel = -1;
-    for (int c = 0; c < count() && channel < 0; ++c)       // two channels on one pack: the first of them
-        if (chosen && packFor (c) >= 0 && packFor (c) == playing)
+    for (int k = 0; k < count() && channel < 0; ++k)       // two channels on one pack: the one it opens on first
+        if (const int c = (opens + k) % count(); chosen && packFor (c) >= 0 && packFor (c) == playing)
             channel = c;
 
-    ensureNode().setProperty (activeId, juce::jmax (0, channel), nullptr);
+    ensureNode().setProperty (activeId, channel >= 0 ? channel : opens, nullptr);
     align();    // the first channel's pack if none of ours was playing, and a cabinet of ours — names settled with them
     return true;
 }
@@ -610,8 +865,14 @@ juce::ValueTree Channels::whole() const
         full.setProperty (cabinetId, live ? cabinetPlaying()
                                           : record.hasProperty (cabinetId) ? record[cabinetId].toString() : opening,
                           nullptr);
+        if (line.drawnCabinets)
+            full.setProperty (cabinetSlotId, live ? cabinetSlot()
+                                                  : record.hasProperty (cabinetSlotId) ? (int) record[cabinetSlotId] : line.channels[(size_t) c].cabinet,
+                              nullptr);
         out.appendChild (full, nullptr);
     }
+    for (int slot = 0; slot < cabinetSlots(); ++slot)     // the slots, one set for every channel: what each holds
+        out.setProperty (slotId (slot), slotFrom (slot), nullptr);
     return out;
 }
 
@@ -634,6 +895,8 @@ void Channels::store (juce::ValueTree record) const
     for (int f = 0; f < numFlags; ++f)
         record.setProperty (flagIds[(size_t) f], flag ((Flag) f), nullptr);
     record.setProperty (cabinetId, cabinetPlaying(), nullptr);
+    if (line.drawnCabinets)
+        record.setProperty (cabinetSlotId, cabinetSlot(), nullptr);
 }
 
 void Channels::recall (int channel, const juce::ValueTree& record)
@@ -655,7 +918,15 @@ void Channels::recall (int channel, const juce::ValueTree& record)
     hold (channel);     // whatever the record says: a host may have moved it while the channel played
     for (int f = 0; f < numFlags; ++f)
         setFlag ((Flag) f, record.isValid() && (bool) record.getProperty (flagIds[(size_t) f], false));
-    chooseCabinetNamed (record.getProperty (cabinetId).toString());
+    if (line.drawnCabinets)
+    {
+        // The slot it stands at — the lineup's, never visited — and what that slot holds, rendered.
+        const int own = line.channels[(size_t) memoryOf (juce::jlimit (0, count() - 1, channel))].cabinet;
+        ensureNode().setProperty (cabinetSlotId, record.isValid() && record.hasProperty (cabinetSlotId) ? (int) record[cabinetSlotId] : own, nullptr);
+        playDrawn (slotFrom (cabinetSlot()));
+    }
+    else
+        chooseCabinetNamed (record.getProperty (cabinetId).toString());
 }
 
 float Channels::plain (const juce::String& paramId) const
@@ -682,7 +953,7 @@ float Channels::defaultOf (int channel, const juce::String& paramId) const
     // A tone of its pack where the pack starts it (core::CapturedBlock::defaultNorm, as OrbitAmp's panel
     // opens it): a sweep at its reference, the middle of it on every pack here — and a tone of positions on
     // its reference position, not on the parameter's middle, which on a three-way switch is the second.
-    const auto packTones = tonesOf (memoryOf (juce::jlimit (0, count() - 1, channel)));
+    const auto packTones = packTonesOf (memoryOf (juce::jlimit (0, count() - 1, channel)));
     for (size_t t = 0; t < packTones.size(); ++t)
         if (paramId == params::preampMeasured ((int) t))
             return (float) core::CapturedBlock::defaultNorm (packTones[t]);

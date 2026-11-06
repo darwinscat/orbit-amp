@@ -98,6 +98,8 @@ static const orbitamp::Product& switchedTunerAmp()
 
 static thread_local long long gAllocations = 0;
 
+#include "MallocCount.h"   // the malloc family, where a program can see it
+
 #if ORBITAMP_COUNT_ALLOCATIONS
 static void* countedAlloc (std::size_t n)
 {
@@ -3657,6 +3659,98 @@ int main()
                 juce::String (two, 2) + " s");
         report ("and never more than the cap, however long it rings", runaway <= 30.0 + 1.0e-6,
                 juce::String (runaway, 2) + " s");
+    }
+
+    // ORBITBASS'S CHAIN ALLOCATES NOTHING EITHER: its COMP, OCTAVE, FILTER and CHORUS turned up and moved, its BLEND,
+    // DI/CAB and cuts, every block of a few seconds of playing counted — the same counter, the bass's own processor.
+    {
+        static const orbitamp::Product bassQuiet = [] { auto p = orbitamp::products::orbitBass(); p.firstStart = nullptr; return p; }();
+        orbitamp::AmpProcessor amp (bassQuiet);
+        amp.inlineLoads = true;
+        amp.prepareToPlay (48000.0, 512);
+        amp.pumpDeviceWork();
+        for (const auto& [id, v] : { std::pair<const char*, float> { orbitamp::params::compAmount, 0.7f },
+                                      { orbitamp::params::octaveAmount, 0.8f }, { orbitamp::params::filterAmount, 0.9f },
+                                      { orbitamp::params::chorusAmount, 0.8f }, { orbitamp::params::ampBlend, 0.5f },
+                                      { orbitamp::params::bassLpfOn, 1.0f }, { orbitamp::params::cabMix, 40.0f } })
+            set (amp, id, v);
+        amp.pumpDeviceWork();
+
+        // THE INSTRUMENT FIRST: an allocation made on purpose, of each family, is seen — or the zero below says nothing.
+        static void* volatile sink = nullptr;
+        countMallocsHere (true);
+        const long long n0 = gAllocations, m0 = mallocsSoFar();
+        sink = std::malloc (64);
+        std::free (sink);
+        { juce::HeapBlock<float> held (256); sink = held.get(); }
+        sink = ::operator new (24);   // a call, not a new-expression: the compiler may not elide it
+        ::operator delete (sink);
+        const long long sawNew = gAllocations - n0, sawMalloc = mallocsSoFar() - m0;
+       #if ORBITAMP_COUNT_ALLOCATIONS
+        report ("the counter sees an allocation made on purpose: operator new", sawNew >= 1, juce::String (sawNew));
+       #endif
+       #if ORBITAMP_COUNT_MALLOCS
+        report ("...and malloc and JUCE's HeapBlock", sawMalloc >= 3, juce::String (sawMalloc));
+       #else
+        std::printf ("orbitbass: malloc and its family are not counted on this system — operator new is\n");
+       #endif
+
+        // FROM THE FIRST BLOCK — a fresh prepare, then every block counted: the stages' first calls, their wakes from idle
+        // and their falls back to it, a COMP started fresh, the arrows switched.
+        amp.prepareToPlay (48000.0, 512);
+        amp.pumpDeviceWork();
+        amp.compWatched.store (true);   // COMP's block on screen: its taps written every block, and that allocates nothing either
+        amp.octaveWatched.store (true); // ...and OCTAVE's picture: its stage run in pieces, its tap written
+        amp.filterWatched.store (true); // ...ENVELOPE's: its tap written every block
+        amp.chorusWatched.store (true); // ...and CHORUS's: its phase's ring written every hop
+        juce::AudioBuffer<float> buf (2, 512);
+        juce::MidiBuffer midi;
+        long long n = 0, inBass = 0, inBassMalloc = 0;
+        const auto play = [&] (int blocks)
+        {
+            for (int b = 0; b < blocks; ++b)
+            {
+                for (int i = 0; i < 512; ++i, ++n)
+                {
+                    const double t = (double) n / 48000.0;
+                    const auto v = (float) (0.3 * std::exp (-3.0 * std::fmod (t, 0.5)) * std::sin (2.0 * 3.14159265358979 * 55.0 * t));
+                    buf.setSample (0, i, v);
+                    buf.setSample (1, i, v);
+                }
+                const long long b0 = gAllocations, m1 = mallocsSoFar();   // processBlock alone: a hand on a parameter is the message thread's
+                amp.processBlock (buf, midi);
+                inBass       += gAllocations - b0;
+                inBassMalloc += mallocsSoFar() - m1;
+            }
+        };
+        play (300);
+        set (amp, orbitamp::params::octaveAmount, 0.0f);   // the sliders moved while playing: the laws and the doors
+        set (amp, orbitamp::params::filterMode, 1.0f);
+        set (amp, orbitamp::params::chorusRateHz, 2.5f);
+        set (amp, orbitamp::params::compAmount, 0.0f);
+        play (100);                                         // ...OCTAVE and COMP falling to idle
+        set (amp, orbitamp::params::octaveAmount, 1.0f);    // ...waking
+        set (amp, orbitamp::params::compAmount, 0.6f);      // ...a fresh COMP
+        set (amp, orbitamp::params::chorusAmount, 0.0f);
+        play (100);
+        for (const auto* on : { orbitamp::params::compOn, orbitamp::params::octaveOn, orbitamp::params::filterOn, orbitamp::params::chorusOn })
+            set (amp, on, 0.0f);                            // the arrows out...
+        play (100);
+        for (const auto* on : { orbitamp::params::compOn, orbitamp::params::octaveOn, orbitamp::params::filterOn, orbitamp::params::chorusOn })
+            set (amp, on, 1.0f);                            // ...and in again
+        play (100);
+        set (amp, orbitamp::params::chorusAmount, 0.8f);    // ...and CHORUS woken from idle
+        play (100);
+        countMallocsHere (false);
+        std::printf ("\norbitbass: 800 blocks from the first, every effect woken, stopped and switched, allocated %lld times"
+                     " (operator new), %lld (malloc family)\n", inBass, inBassMalloc);
+       #if ORBITAMP_COUNT_ALLOCATIONS
+        report ("OrbitBass's processBlock allocates nothing from its first block, its effects waking and stopping, all four pictures shown (COMP, OCTAVE, ENVELOPE, CHORUS)", inBass == 0,
+                juce::String (inBass));
+       #endif
+       #if ORBITAMP_COUNT_MALLOCS
+        report ("...nor anything of the malloc family", inBassMalloc == 0, juce::String (inBassMalloc));
+       #endif
     }
 
     std::printf ("\n%s\n", failures != 0 ? "FAILURES" : "all checks passed");
