@@ -186,10 +186,12 @@ int ORBITAMP_GATE_MAIN()
         }
         check (ownPacks, "...each on the pack its lineup says");
 
+        // ...on the channel its lineup opens on (Lineup::opensAt): the first, but the walker's SVT.
         const auto* device = amp->apvts.getParameter (params::preampDevice);
-        check (channels.active() == 0 && device != nullptr
-                   && juce::roundToInt (device->convertFrom0to1 (device->getValue())) == channels.packFor (0),
-               "...and it opens on the first, playing");
+        const int opener = lineup->opensAt;
+        check (channels.active() == opener && device != nullptr
+                   && juce::roundToInt (device->convertFrom0to1 (device->getValue())) == channels.packFor (opener),
+               juce::String ("...and it opens on ") + (opener == 0 ? "the first" : lineup->channels[(size_t) opener].name) + ", playing");
     }
 
     // WHAT A HOST IS TOLD OF A FRESH AMP. The default each parameter declares is what the host shows,
@@ -290,6 +292,8 @@ int ORBITAMP_GATE_MAIN()
 
         for (const auto& [product, lineup] : family())
         {
+            if (product.chain == Chain::bass)
+                continue;       // a bass amp among the family's faces (the walker): held below, with OrbitBass
             juce::StringArray held;
             bool everyNumberPlays = true;
             for (int i = 0; i < params::cabIrNames.size(); ++i)
@@ -314,13 +318,18 @@ int ORBITAMP_GATE_MAIN()
                        + "), and keeps the player's IRs in `IRs`");
         }
 
-        const auto& bass = products::orbitBass();
-        bool none = cabinetsOn (bass) == 0;
-        for (int i = 0; i < params::cabIrNames.size(); ++i)
-            none = none && ! bass.playsCabIr (i) && AmpProcessor::cabIrBytes (bass, i).data == nullptr;
-        check (bass.chain == Chain::bass && none && juce::String (bass.irsFolder()) == "Bass IRs",
-               "OrbitBass plays no guitar cabinet: no place of the shelf held, no number a cabinet, RED GIANT none; "
-               "the player's IRs in `Bass IRs`");
+        // ...THE BASS AMPS, OrbitBass and the walker alike: none of the shelf, whatever the number; their player's IRs in
+        // `Bass IRs` — the walker's cabinets drawn besides (channels::Lineup::drawnCabinets), no file at all.
+        for (const auto* bass : { &products::orbitBass(), &products::redGrooveBass() })
+        {
+            bool none = cabinetsOn (*bass) == 0;
+            for (int i = 0; i < params::cabIrNames.size(); ++i)
+                none = none && ! bass->playsCabIr (i) && AmpProcessor::cabIrBytes (*bass, i).data == nullptr;
+            const bool drawn = bass != &products::redGrooveBass() || redgroove::lineup().drawnCabinets;
+            check (bass->chain == Chain::bass && none && drawn && juce::String (bass->irsFolder()) == "Bass IRs",
+                   juce::String (bass->name) + " plays no guitar cabinet: no place of the shelf held, no number a cabinet, RED GIANT none; "
+                   "the player's IRs in `Bass IRs`" + (bass == &products::redGrooveBass() ? ", its own cabinets drawn" : ""));
+        }
     }
 
     // TWO AT ONCE — and every one of them at once, the cockpit twice.

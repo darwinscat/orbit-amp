@@ -48,6 +48,12 @@ struct Checks
             ++failed;
     }
 
+    /** A check that does not apply to this amp, said so with why — never silently left out. */
+    void skip (const juce::String& what, const juce::String& why)
+    {
+        std::printf ("skip  %s — %s\n", what.toRawUTF8(), why.toRawUTF8());
+    }
+
     /** What main() returns: 0 when every check held. */
     int finish() const
     {
@@ -64,6 +70,7 @@ struct Channel
     const char* reverb;             // what INIT opens it on: the room...
     float wet, echo;                // ...how much of it, and how much delay
     const char* opens = nullptr;    // where the product's gate says this channel's opening in a line of its own
+    const char* cabinet = nullptr;  // where the product's cabinets are drawn (Lineup::drawnCabinets): the preset it opens on, by its stem
 };
 
 /** A mark on DRIVE's dial, where the packs are captures shot at several hours of the gear's own knob:
@@ -169,18 +176,20 @@ inline const Product& product()
                },
                "each gear is one of the V4's three, its TURBO the same with the Boost on"),
         // The walker: the bass's two amps, B15 and SVT, a gear each and each its own memory, on the bass's chain —
-        // no room and no delay in its strip, each opening on the engine's share of a plate it never plays. Until the
-        // bass's captures are trained, the ReVolt's clean and crunch, the Boost held off on both.
+        // no room and no delay in its strip, each opening on the engine's share of a plate it never plays. Both the
+        // Ampeg SGT-DI's two voices, each gear holding its Voice; each on a cabinet of its own among the bass's dozen,
+        // drawn, B15 the 1x15 and SVT the 8x10 (src/redgroove/RedGrooveLineup.cpp).
         { "RedGrooveBass", "walker", "REDGROOVE_GATE_OWNS_HOME",
           {
-              { "revolt-clean-poweramp-bf62",  "Boost=off", "Plate", 30.0f, 0.0f },
-              { "revolt-crunch-poweramp-73a7", "Boost=off", "Plate", 30.0f, 0.0f },
+              { "sgt-di-19a4", "Voice=B15", "Plate", 30.0f, 0.0f, nullptr, "rock-14-1x15-thump" },
+              { "sgt-di-19a4", "Voice=SVT", "Plate", 30.0f, 0.0f, nullptr, "rock-03-8x10-stack" },
           },
           nullptr,
           {},
           "both gears' packs are installed",
-          "both gears' tone knobs are the bass's standard's three, Bass, Middle and Treble, on the AMP's console, whatever the pack",
-          "...and both on the build's RED GIANT",
+          "both gears' tone knobs are their pack's dials on the bass's chain — the SGT-DI's Bass, Mid and Treble, its Freq and its "
+          "two switches apart — or, on a pack with no tone of its own, the bass's standard's three",
+          "...and each gear on its own of the bass's dozen, drawn: B15 the 1x15, SVT the 8x10",
           true,
           false },
     };

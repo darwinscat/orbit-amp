@@ -58,6 +58,7 @@ private:
     void showIrMenu (juce::Component* from = nullptr);
 
     juce::String shownIr;   // CabChoice::identity + "|" + name of what the face last showed
+    juce::String shownText; // ...and the name it showed for it (shownName)
 
     /** The picture wears what the parameters say — the cuts, the trim — so it draws the sound. */
     void pushToWave();
@@ -142,6 +143,10 @@ public:
 
     /** OrbitBass's DI/CAB rail, or none on the guitar's (a gate reads it). */
     GuardRail* diRail() noexcept;
+
+    /** What the border names as the cabinet that plays, as last shown — "1: 8x10 STACK", a player's own IR's name, NO IR
+        (a gate reads it). */
+    const juce::String& shownName() const noexcept { return shownText; }
 
     /** THE IR MENU, as the block opens it (showIrMenu): the shelf the product plays, a submenu for each of its
         folders, item `1 + number`; then the player's own IRs out of the product's folder of them, item

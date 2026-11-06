@@ -270,6 +270,7 @@ void CabinetBlock::refreshIr (bool force, bool keepTrimWord)
         shown = named.isNotEmpty() ? named : CabWindow::labelOf (synth);
     }
     slots.refresh();
+    shownText = shown;
     ir.setEntries ({ { shown, 0, false } });
     ir.setSelection (0);
 

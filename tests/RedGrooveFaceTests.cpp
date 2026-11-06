@@ -6,11 +6,13 @@
 //
 //   - the face coming up, and coming up again, leaves BASS, MIDDLE and TREBLE where the player put them;
 //   - COMP's knob is its threshold turned round: at the top of its travel -48 dB, at the bottom 0, a double click -24;
-//   - MIDDLE's frequency lies across on a logarithmic travel, 200 Hz at its foot, 3 kHz at its head, opening at 1 kHz;
+//   - MIDDLE's frequency lies across, 200 Hz at its foot, 3 kHz at its head, opening at 1 kHz — the pack's FREQ knob on
+//     its own travel where the pack has one (the SGT-DI's), or the standard MIDDLE's frequency on a logarithmic one;
 //   - BLEND, DI/CAB and the three effects' faders turn their parameters;
 //   - the channel lever: a host's CHANNEL moves it and the sound, the number keys and the lever itself move both;
 //   - the cuts' switches stand where their parameters do and throw them;
-//   - the cabinet's screen names the cabinet that plays, and OFF while it is out.
+//   - the cabinet's screen names the cabinet that plays — the drawn preset of the gear's slot, once it has landed — and
+//     OFF while it is out.
 //
 // Each control is found by the name the face gives it. main() returns 0 when every check held.
 
@@ -92,20 +94,55 @@ int ORBITAMP_GATE_MAIN()
     check (std::abs (plain (params::compThreshold) + 48.0f) < 0.05f, "...all the way round -48 dB");
     check (comp != nullptr && std::abs (comp->defaultValue - 0.5f) < 1.0e-3f, "...and a double click puts it at -24 dB, half way");
 
-    // MIDDLE'S FREQUENCY, across: 200 Hz to 3 kHz on a logarithmic travel.
-    auto* mid = dynamic_cast<face::ColumnFader*> (named (*face, "midFreq"));
-    if (mid != nullptr)
-        mid->setValue (0.5f, true);
-    const float half = params::bassMidMinHz * std::sqrt (params::bassMidMaxHz / params::bassMidMinHz);
-    check (mid != nullptr && std::abs (plain (params::eqBellHz (0, 0)) - half) < 1.0f,
-           "MIDDLE's frequency half way across is " + juce::String (half, 1) + " Hz, the span's middle on a logarithmic travel");
-    setPlain (params::eqBellHz (0, 0), 3000.0f);
-    const bool atHead = mid != nullptr && std::abs (mid->getValue() - 1.0f) < 1.0e-3f;
-    setPlain (params::eqBellHz (0, 0), 100.0f);
-    check (atHead && mid != nullptr && mid->getValue() < 1.0e-3f, "...3 kHz at its head, and a frequency under 200 Hz at its foot");
-    if (mid != nullptr)
-        mid->setValue (mid->defaultValue, true);    // what a double click on it does (face::ColumnFader)
-    check (mid != nullptr && std::abs (plain (params::eqBellHz (0, 0)) - 1000.0f) < 1.0f, "...and a double click puts it back at 1 kHz");
+    // MIDDLE'S FREQUENCY, across: 200 Hz to 3 kHz. ON A PACK WITH A FREQUENCY KNOB of its own (the SGT-DI's FREQ, the
+    // owner, 03.11) the fader is that knob on its own travel (Channels::frequencyOf) — its positions 200, 500 Hz, 1, 2 and
+    // 3 kHz at a quarter of the way each — and the frequency it says is where the knob puts MID's band
+    // (rigplayer::frequencyAt); on a pack with none, the standard MIDDLE's frequency on a logarithmic travel.
+    {
+        auto& walker = channels::Engine::of (*amp).channels;
+        auto* mid = dynamic_cast<face::ColumnFader*> (named (*face, "midFreq"));
+        namz::rig::Tone freq;
+        const bool packs = walker.frequencyToneOf (walker.active(), freq);
+        const juce::String id = packs ? walker.frequencyOf (walker.active()) : juce::String (params::eqBellHz (0, 0));
+        // The frequency MIDDLE's fader stands for now: the pack's knob where it is, or the standard's parameter.
+        const auto hzNow = [&] () -> float
+        {
+            if (! packs)
+                return plain (id);
+            double hz = 0.0, q = 0.0;
+            const auto at = std::to_string (juce::roundToInt (juce::jlimit (0.0f, 1.0f, plain (id)) * (float) freq.sweep));
+            return felitronics::rigplayer::frequencyAt (freq, at, hz, q) ? (float) hz : -1.0f;
+        };
+        if (mid != nullptr)
+            mid->setValue (0.5f, true);
+        const float half = packs ? 1000.0f : params::bassMidMinHz * std::sqrt (params::bassMidMaxHz / params::bassMidMinHz);
+        check (mid != nullptr && std::abs (hzNow() - half) < 1.0f,
+               "MIDDLE's frequency half way across is " + juce::String (half, 1) + " Hz, "
+                   + (packs ? "the pack's FREQ knob at its middle" : "the span's middle on a logarithmic travel")
+                   + " (" + juce::String (hzNow(), 1) + ")");
+        if (packs)
+        {
+            if (mid != nullptr)
+                mid->setValue (1.0f, true);
+            const float head = hzNow();
+            if (mid != nullptr)
+                mid->setValue (0.0f, true);
+            const float foot = hzNow();
+            check (std::abs (head - 3000.0f) < 1.0f && std::abs (foot - 200.0f) < 1.0f,
+                   "...3 kHz at its head and 200 Hz at its foot (" + juce::String (head, 0) + ", " + juce::String (foot, 0) + ")");
+        }
+        else
+        {
+            setPlain (id, 3000.0f);
+            const bool atHead = mid != nullptr && std::abs (mid->getValue() - 1.0f) < 1.0e-3f;
+            setPlain (id, 100.0f);
+            check (atHead && mid != nullptr && mid->getValue() < 1.0e-3f, "...3 kHz at its head, and a frequency under 200 Hz at its foot");
+        }
+        if (mid != nullptr)
+            mid->setValue (mid->defaultValue, true);    // what a double click on it does (face::ColumnFader)
+        check (mid != nullptr && std::abs (hzNow() - 1000.0f) < 1.0f,
+               "...and a double click puts it back at 1 kHz (" + juce::String (hzNow(), 1) + ")");
+    }
 
     // BLEND, DI/CAB and the effects turn their parameters.
     const auto turns = [&face, &plain] (const char* name, float travel, const char* id, float want)
@@ -141,10 +178,18 @@ int ORBITAMP_GATE_MAIN()
            "the lever has the walker's two gears and stands on the one that plays");
     if (lever != nullptr)
     {
-        channel->setValueNotifyingHost (channel->convertTo0to1 (1.0f));
-        engine.pump();
-        check (lever->getPlace() == 1 && channels.active() == 1 && playing() == channels.packFor (1),
-               "a host's CHANNEL on SVT moves the lever there, and the sound with it");
+        // From B15, where a host puts it first — the walker opens on SVT (Lineup::opensAt) — to SVT: the lever moves.
+        const auto byHost = [&] (int to)
+        {
+            channel->setValueNotifyingHost (channel->convertTo0to1 ((float) to));
+            engine.pump();
+            juce::MessageManager::getInstance()->runDispatchLoopUntil (100);   // whatever the face takes on its timer
+        };
+        byHost (0);
+        const bool wasOnB15 = lever->getPlace() == 0 && channels.active() == 0;
+        byHost (1);
+        check (wasOnB15 && lever->getPlace() == 1 && channels.active() == 1 && playing() == channels.packFor (1),
+               "a host's CHANNEL on SVT, from B15, moves the lever there, and the sound with it");
         face->keyPressed (juce::KeyPress ('1'));
         check (lever->getPlace() == 0 && channels.active() == 0 && asked() == 0 && playing() == channels.packFor (0),
                "the 1 key pulls B15: the lever, the sound and CHANNEL");
@@ -167,13 +212,25 @@ int ORBITAMP_GATE_MAIN()
     check (juce::roundToInt (plain (params::bassHpf)) == (int) params::BassHpf::five && juce::roundToInt (plain (params::bassLpf)) == (int) params::BassLpf::slap,
            "...and thrown, throw them: 5 STR, SLAP");
 
-    // THE CABINET'S SCREEN.
+    // THE CABINET'S SCREEN: the walker's cabinets are drawn (channels::Lineup::drawnCabinets), rendered on a worker and
+    // landing on the message thread (AmpProcessor::requestCabSynth) — so the loop runs until the gear's slot plays, and
+    // then the screen names its preset (Channels::slotName).
     auto* screen = dynamic_cast<redgroove::CabinetScreen*> (named (*face, "cabinet"));
-    const int cab = channels.cabinet();
+    const int slot = channels.cabinetSlot();
+    const auto slotPlays = [&]
+    {
+        const auto heard = AmpProcessor::cabSynthOf (amp->cabChoice());
+        const auto own = AmpProcessor::cabSynthOf (channels.slotFrom (slot));
+        return heard.valid && own.valid && heard.state == own.state;
+    };
+    for (int waited = 0; waited < 300 && ! slotPlays(); ++waited)     // up to 30 s: a render takes well under one
+        juce::MessageManager::getInstance()->runDispatchLoopUntil (100);
+    const bool landed = slotPlays();
     if (screen != nullptr)
         screen->refresh();
-    check (screen != nullptr && cab >= 0 && screen->says() == channels::Channels::cabinetName (channels.cabinets()[cab]).toUpperCase(),
-           "the cabinet's screen names the cabinet that plays" + (screen != nullptr ? ": " + screen->says() : juce::String()));
+    check (screen != nullptr && landed && channels.slotName (slot).isNotEmpty() && screen->says() == channels.slotName (slot),
+           "the cabinet's screen names the cabinet that plays, once it lands" + juce::String (landed ? "" : " (it never landed)")
+               + (screen != nullptr ? ": " + screen->says() : juce::String()) + " — the slot's " + channels.slotName (slot));
     channels.setCabinetOn (false);
     if (screen != nullptr)
         screen->refresh();

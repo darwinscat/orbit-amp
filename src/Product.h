@@ -106,6 +106,12 @@ struct Product
         not; RedGrooveBass's walker does (the owner, 02.11: the forest breathes with the bass from the first note). */
     bool viewLitByDefault = false;
 
+    /** THE CABINET A FRESH INSTANCE AND INIT OPEN ON, where the product opens on a drawn one of its own — its `from`, as
+        AmpProcessor::cabSynthFrom writes a cab-ir-generator state — or none: every other amp opens on its catalog's
+        number (params::cabIrDefault), and the walker on its gears' own slots (channels::Lineup). OrbitBass: the bass's
+        dozen's first, 1: 8x10 STACK (the owner, 06.11). A session or a preset keeps the cabinet it saved, or none. */
+    juce::String (*freshCabinet) () = nullptr;
+
     /** WHICH STANDARD EQ ITS AMP'S CONSOLE IS (params::EqStandard): the bass's on the bass's chain, the guitar's on
         every other. Read from the chain for now, and asked HERE and nowhere else — the console's face
         (EqSection::setStandard) and the processor's EQ (AmpProcessor::bassEq) both come to this one question — so the

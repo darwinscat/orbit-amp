@@ -10,6 +10,8 @@
 #include <felitronics/octave/OctaveLaw.h>
 
 #include <cstring>
+#include <map>
+#include <mutex>
 #include <panel/Panel.h>   // cabir::knownState: a cabinet of a box the table knows, or none
 #include <synth/CabSynth.h>
 #include <BinaryData.h>
@@ -260,7 +262,8 @@ AmpProcessor::AmpProcessor (const Product& product)
     // (takeFormerCabinet).
     seedSwitchNames();
     apvts.state.setProperty (cabOpeningId, params::cabIrDefault, nullptr);
-    takeBassCabinet (apvts.state);   // a fresh bass amp's cabinet, which the catalog has none of yet
+    if (! takeFreshCabinet (apvts.state))   // the cabinet a fresh one opens on, where it has one of its own...
+        takeBassCabinet (apvts.state);      // ...else a fresh bass amp's, which the catalog has none of
     history.reset();
     history.markSaved();
 
@@ -431,7 +434,29 @@ void AmpProcessor::setStateInformation (const void* data, int sizeInBytes)
         // MATTER was the cabinet every amp opened on, on the one they open on now.
         self.takeFormerTrims (t);
         self.takeFormerCabinet (t);
-        self.takeBassCabinet (t);   // ...and a bass's on a guitar cabinet, on the bass's own
+        // ...and a bass's on a guitar cabinet, on the bass's own — but where the product opens on a cabinet of its own
+        // (Product::freshCabinet), a session or a preset keeps what it saved, or none: a drawn one it saved before its
+        // bytes were drawn is drawn again, and nothing else is put over it.
+        if (self.ownProduct.freshCabinet != nullptr)
+        {
+            // Every state inside the tree — the live one, each register's — found by its type, wherever the envelope nests it.
+            std::function<void (const juce::ValueTree&)> drawAgain = [&self, &drawAgain] (const juce::ValueTree& s)
+            {
+                if (s.hasType (stateType))
+                {
+                    const auto from = s.getProperty (params::cabIrUserFrom).toString();
+                    const auto key  = s.getProperty (params::cabIrUserKey).toString();
+                    if (const auto synth = cabSynthOf (from); synth.valid && (key.isEmpty() || self.cabIrEmbeds.find (key) == nullptr))
+                        self.requestDrawnOnce (synth.state, from);
+                    return;
+                }
+                for (const auto& child : s)
+                    drawAgain (child);
+            };
+            drawAgain (t);
+        }
+        else
+            self.takeBassCabinet (t);
 
         // The aim's bookkeeping belongs to the thread that runs it. Arming it here rather than at
         // the top of setStateInformation also means it is armed AFTER the tree has landed, which
@@ -826,6 +851,49 @@ AmpProcessor::~AmpProcessor()
     apvts.state.removeListener (this);
 }
 
+AmpProcessor::DrawnCab AmpProcessor::renderDrawn (const cabir::State& state, bool live)
+{
+    static const auto table = cabir::synth::parseTable (std::string (BinaryData::cabinets_txt, (size_t) BinaryData::cabinets_txtSize));
+    // The mic that did not move kept, the one that did rendered at half the size while the hand is on it.
+    if (cabRenderer == nullptr)
+        cabRenderer = std::make_unique<cabir::synth::PairRenderer>();
+    const auto ir  = cabRenderer->render (table, state.box, cabir::synth::pairOf (state), live ? (size_t) 1 << 13 : (size_t) 1 << 14);
+    const auto wav = cabir::synth::wav24 (ir.mix, 48000);
+    DrawnCab drawn;
+    drawn.bytes = std::make_shared<juce::MemoryBlock> (wav.data(), wav.size());
+    drawn.parts = ir.a.empty() ? std::shared_ptr<const CabParts>() : std::make_shared<const CabParts> (CabParts { ir.a, ir.b });
+    return drawn;
+}
+
+AmpProcessor::DrawnCab AmpProcessor::drawnOnce (const juce::String& from, const DrawnCab* keep)
+{
+    static std::mutex lock;
+    static std::map<juce::String, DrawnCab> drawn;
+    const std::scoped_lock held (lock);
+    if (keep != nullptr)
+        return drawn[from] = *keep;
+    const auto it = drawn.find (from);
+    return it != drawn.end() ? it->second : DrawnCab {};
+}
+
+void AmpProcessor::keepDrawn (juce::ValueTree& tree, const cabir::State& state, const juce::MemoryBlock& bytes,
+                              std::shared_ptr<const CabParts> parts)
+{
+    // Kept: and loaded even when it is the very cabinet the state already named — a drag that ends where it began has
+    // left a live one playing in between.
+    cabIrStale = true;
+
+    const auto key = cabIrEmbeds.add (juce::MemoryBlock (bytes));
+    if (key.isEmpty())
+        return;
+    cabKeptPartsKey = key;
+    cabKeptParts = std::move (parts);
+
+    tree.setProperty (params::cabIrUserKey, key, nullptr);
+    tree.setProperty (params::cabIrUserName, juce::String (state.box), nullptr);
+    tree.setProperty (params::cabIrUserFrom, cabSynthFrom (state), nullptr);
+}
+
 void AmpProcessor::requestCabSynth (const cabir::State& state, bool live)
 {
     const int mine = ++cabSynthLatest;
@@ -836,14 +904,9 @@ void AmpProcessor::requestCabSynth (const cabir::State& state, bool live)
         if (mine != cabSynthLatest.load())
             return;   // superseded before it began
 
-        static const auto table = cabir::synth::parseTable (std::string (BinaryData::cabinets_txt, (size_t) BinaryData::cabinets_txtSize));
-        // The mic that did not move kept, the one that did rendered at half the size while the hand is on it.
-        if (cabRenderer == nullptr)
-            cabRenderer = std::make_unique<cabir::synth::PairRenderer>();
-        const auto ir  = cabRenderer->render (table, state.box, cabir::synth::pairOf (state), live ? (size_t) 1 << 13 : (size_t) 1 << 14);
-        const auto wav = cabir::synth::wav24 (ir.mix, 48000);
-        auto bytes = std::make_shared<juce::MemoryBlock> (wav.data(), wav.size());
-        auto parts = ir.a.empty() ? std::shared_ptr<const CabParts>() : std::make_shared<const CabParts> (CabParts { ir.a, ir.b });
+        const auto drawn = renderDrawn (state, live);
+        auto bytes = drawn.bytes;
+        auto parts = drawn.parts;
 
         juce::MessageManager::callAsync ([this, alive, mine, state, bytes, parts, live]
         {
@@ -867,22 +930,91 @@ void AmpProcessor::requestCabSynth (const cabir::State& state, bool live)
                 return;
             cabSynthHeard = mine;
 
-            // Kept: and loaded even when it is the very cabinet the state already named — a drag that ends where it
-            // began has left a live one playing in between.
-            cabIrStale = true;
-
-            const auto key = cabIrEmbeds.add (std::move (*bytes));
-            if (key.isEmpty())
-                return;
-            cabKeptPartsKey = key;
-            cabKeptParts = parts;
-
-            apvts.state.setProperty (params::cabIrUserKey, key, nullptr);
-            apvts.state.setProperty (params::cabIrUserName, juce::String (state.box), nullptr);
-            apvts.state.setProperty (params::cabIrUserFrom, cabSynthFrom (state), nullptr);
+            keepDrawn (apvts.state, state, *bytes, parts);
             updateHostDisplay (ChangeDetails{}.withNonParameterStateChanged (true));
         });
     });
+}
+
+void AmpProcessor::requestDrawnOnce (const cabir::State& state, const juce::String& from)
+{
+    std::weak_ptr<int> alive = cabSynthAlive;
+
+    cabSynthPool.addJob ([this, alive, state, from]
+    {
+        auto drawn = drawnOnce (from);
+        if (drawn.bytes == nullptr)
+        {
+            drawn = renderDrawn (state, false);
+            if (drawn.bytes != nullptr && drawn.bytes->getSize() > 0)
+                drawnOnce (from, &drawn);
+        }
+
+        juce::MessageManager::callAsync ([this, alive, state, from, drawn]
+        {
+            if (alive.lock() == nullptr || drawn.bytes == nullptr || drawn.bytes->getSize() == 0)
+                return;
+
+            // Only while the live state still waits for it: a session, a preset or a hand's pick in between keeps its own.
+            if (apvts.state.getProperty (params::cabIrUserKey).toString().isNotEmpty()
+                || apvts.state.getProperty (params::cabIrUserFrom).toString() != from)
+                return;
+
+            // Where a fresh one opens, not a step of anybody's: kept outside the history, and a state that was saved stays so.
+            const bool wasSaved = ! history.hasUnsavedChanges();
+            {
+                const felitronics::appkit::CompareHistory::ScopedSuppress quietly (history);
+                keepDrawn (apvts.state, state, *drawn.bytes, drawn.parts);
+            }
+            if (wasSaved)
+                history.markSaved();
+            updateHostDisplay (ChangeDetails{}.withNonParameterStateChanged (true));
+        });
+    });
+}
+
+bool AmpProcessor::takeFreshCabinet (juce::ValueTree& tree)
+{
+    if (ownProduct.freshCabinet == nullptr || ! tree.isValid() || ! tree.hasType (stateType))
+        return false;
+
+    const auto from = ownProduct.freshCabinet();
+    const auto synth = cabSynthOf (from);
+    if (! synth.valid)
+        return false;
+
+    // In place of whatever it played: the fresh one's, waiting for its bytes — or with them, where this process has
+    // drawn it already.
+    for (const auto* id : { params::cabIrUserKey, params::cabIrUserName, params::cabIrUserFrom })
+        tree.removeProperty (id, nullptr);
+    tree.setProperty (params::cabIrUserName, juce::String (synth.state.box), nullptr);
+    tree.setProperty (params::cabIrUserFrom, from, nullptr);
+
+    if (const auto drawn = drawnOnce (from); drawn.bytes != nullptr)
+        keepDrawn (tree, synth.state, *drawn.bytes, drawn.parts);
+    else
+        requestDrawnOnce (synth.state, from);
+    return true;
+}
+
+void AmpProcessor::resetToDefault()
+{
+    // ...and back to a fresh instance's IDENTITY too. The device and switch names are not parameters, so setting every
+    // parameter to its default leaves them behind — and the aim would then put the outgoing device straight back over
+    // the default one.
+    auto tree = stateForSaving (true);
+
+    for (auto* p : getParameters())
+        if (auto* rp = dynamic_cast<juce::RangedAudioParameter*> (p))
+        {
+            auto child = tree.getChildWithProperty ("id", rp->paramID);
+            if (child.isValid())
+                child.setProperty ("value", rp->convertFrom0to1 (engineDefault (*rp)), nullptr);
+        }
+    if (! takeFreshCabinet (tree))  // the cabinet a fresh one opens on...
+        takeBassCabinet (tree);     // ...or a bass's, as a fresh one's
+
+    history.applyEdit (history.active(), tree, "Reset to default");
 }
 
 void AmpProcessor::heardCab (std::shared_ptr<const juce::MemoryBlock> bytes, const juce::String& identity, bool kept,
@@ -1088,6 +1220,13 @@ void AmpProcessor::pumpDeviceWork()
             {
                 cab.load (bytes.data, (size_t) bytes.size);     // none, with the factory folder missing
                 heardCab (std::make_shared<const juce::MemoryBlock> (bytes.data, (size_t) bytes.size), choice.identity(), true);
+            }
+            else if (ownProduct.chain == Chain::bass)
+            {
+                // A BASS ON NO CABINET — a session that saved none, over one that played the fresh one's — plays none:
+                // not the IR it played before.
+                cab.loadNothing();
+                heardCab ({}, choice.identity(), true);   // nothing heard: no response to draw
             }
         }
     }

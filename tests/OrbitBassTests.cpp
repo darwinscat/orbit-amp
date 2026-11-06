@@ -4,7 +4,7 @@
 // Gate for ORBITBASS'S CHAIN (src/Product.h, Chain::bass), headless, run as OrbitBass:
 //
 //   where a fresh one stands — the gate off, COMP on at BLEND half, the AMP's BLEND 100 % at 150 Hz, the CAB's MIX 70 %, its own HPF at
-//   5 (22 Hz) and LPF off, the cabinet's own cuts off, no delay and no reverb, mono, on its one temporary pack;
+//   5 (22 Hz) and LPF in at FINGERS, the cabinet's own cuts off, no delay and no reverb, mono, on its one pack, the SGT-DI;
 //   its strip — GATE, COMP, AMP, CAB, LIMIT, in that order — while OrbitAmp's keeps the delay and the reverb
 //   and has no COMP, nor any of the bass's parameters;
 //   its sound — the delay and the reverb never in it, whatever their switches say; one signal to both
@@ -21,6 +21,7 @@
 #include "Parameters.h"
 #include "core/BassComp.h"
 #include "core/FilterTap.h"
+#include "device/BassCabinets.h"
 #include "device/DeviceLibrary.h"
 #include "device/FactoryShelf.h"
 #include "device/IrLibrary.h"
@@ -41,6 +42,7 @@
 #include "ui/GuardRail.h"
 #include "ui/EqSection.h"
 #include "ui/CapturedBlockPanel.h"
+#include "ui/ChannelLever.h"
 #include "ui/BassControls.h"
 #include "ui/Selector.h"
 #include "ui/VoicingSelector.h"
@@ -57,6 +59,7 @@
 #include <thread>
 #include <limits>
 #include <map>
+#include <optional>
 #include <string>
 #include <tuple>
 #include <type_traits>
@@ -78,12 +81,43 @@ namespace
         return it->second;
     }
 
-    std::unique_ptr<AmpProcessor> make (const Product& p)
+    /** A processor as a host makes one: fresh, its cabinet whatever a fresh one opens on — the bass's drawn on the worker
+        and landing on the message thread, which nobody runs here unless a check does. */
+    std::unique_ptr<AmpProcessor> made (const Product& p)
     {
         auto amp = std::make_unique<AmpProcessor> (quiet (p));
         amp->inlineLoads = true;            // no message loop here: a model lands inside the pump
         amp->prepareToPlay (sampleRate, blockSize);
         amp->pumpDeviceWork();
+        return amp;
+    }
+
+    /** The message loop run until `a` plays a drawn cabinet, up to ten seconds; what it plays then. */
+    AmpProcessor::CabSynthChoice drawnOn (AmpProcessor& a)
+    {
+        for (int i = 0; i < 200 && ! AmpProcessor::cabSynthOf (a.cabChoice()).valid; ++i)
+            juce::MessageManager::getInstance()->runDispatchLoopUntil (50);
+        a.pumpDeviceWork();
+        return AmpProcessor::cabSynthOf (a.cabChoice());
+    }
+
+    /** ...AND THE ONE THE GATE HEARS: a bass on the cabinet the gate leaves first in its `Bass IRs` (ITS CABINETS, below),
+        RED GIANT's bytes as `Fixture 1.wav` — what OrbitAmp opens on, so the two chains can be held side by side — as a
+        session that played it opens, no step of the history; before that file is there, on the fresh one's, landed. */
+    std::unique_ptr<AmpProcessor> make (const Product& p)
+    {
+        auto amp = made (p);
+        if (p.chain != Chain::bass || p.freshCabinet == nullptr)
+            return amp;
+        const auto fixture = device::IrLibrary::directory (p.irsFolder()).getChildFile ("Fixture 1.wav");
+        if (fixture.existsAsFile() && amp->chooseCabFile (fixture))
+        {
+            amp->pumpDeviceWork();
+            amp->history.reset();
+            amp->history.markSaved();
+        }
+        else
+            (void) drawnOn (*amp);
         return amp;
     }
 
@@ -335,10 +369,10 @@ int ORBITAMP_GATE_MAIN()
     // ---- ITS CABINETS: NEVER A GUITAR AMP'S --------------------------------------------------------------
     // A guitar amp's cabinets and a bass amp's never cross (Product::playsCabIr, Product::irsFolder): the bass plays no
     // cabinet of the shelf, which holds none of the bass's yet, and keeps the player's own in `Bass IRs`, beside the
-    // guitar's `IRs`, each listing none of the other's. A fresh one opens on the first of its own, and with none there on
-    // no cabinet at all. This takes files into the player's folders, so only where the home is the gate's own
-    // (ORBITBASS_GATE_OWNS_HOME, tests/gates.txt). The cabinet the rest of the gate hears is the one it leaves there
-    // first: RED GIANT's bytes, as `Bass IRs/Fixture 1.wav`.
+    // guitar's `IRs`, each listing none of the other's. A fresh one opens on the bass's dozen's first, 1: 8x10 STACK,
+    // whatever `Bass IRs` holds; a session keeps what it saved. This takes files into the player's folders, so only where
+    // the home is the gate's own (ORBITBASS_GATE_OWNS_HOME, tests/gates.txt). The cabinet the rest of the gate hears is the
+    // one it leaves there first, put on every bass it makes (make): RED GIANT's bytes, as `Bass IRs/Fixture 1.wav`.
     if (juce::SystemStats::getEnvironmentVariable ("ORBITBASS_GATE_OWNS_HOME", {}).isEmpty())
         check (false, "the bass's cabinets are tried in a home of the gate's own (ORBITBASS_GATE_OWNS_HOME): tools/run-gates.sh makes one");
     else
@@ -361,36 +395,88 @@ int ORBITAMP_GATE_MAIN()
             return items;
         };
 
-        // WITH NONE THERE: no cabinet. No IR loads, and the cabinet's share is silent: at the CAB's MIX 70 % the DI's 30 % alone.
-        juce::MemoryBlock before;
+        // A FRESH ONE OPENS ON THE BASS'S DOZEN'S FIRST, 1: 8x10 STACK, drawn (the owner, 06.11) — never on no cabinet and
+        // never on a guitar's: rendered on the worker the first time in a process and landing on the message thread, no
+        // step of anybody's, the state as saved as it was; and its CAB block names it.
+        const auto& stack = device::BassCabinets::dozen().front();
+        const auto onStack = [&stack] (const AmpProcessor& a)
         {
-            auto fresh = make (bass);
+            const auto plays = AmpProcessor::cabSynthOf (a.cabChoice());
+            return plays.valid && plays.state == stack.state;
+        };
+        const auto cabBlockOf = [] (juce::Component& root)
+        {
+            CabinetBlock* found = nullptr;
+            std::function<void (juce::Component&)> walk = [&] (juce::Component& c)
+            {
+                if (auto* b = dynamic_cast<CabinetBlock*> (&c); b != nullptr && found == nullptr)
+                    found = b;
+                for (auto* child : c.getChildren())
+                    walk (*child);
+            };
+            walk (root);
+            return found;
+        };
+        juce::MemoryBlock none;    // a session on no cabinet at all
+        {
+            auto fresh = made (bass);
+            const auto plays = drawnOn (*fresh);
             bool shelfNone = true;
             for (int i = 0; i < params::cabIrNames.size(); ++i)
                 shelfNone = shelfNone && AmpProcessor::cabIrBytes (bass, i).data == nullptr;
-            check (! fresh->cabChoice().isUser() && shelfNone,
-                   "with no IR in `Bass IRs`, a fresh one plays no cabinet: none of the player's, no number of the shelf, RED GIANT none");
+            check (stack.name == "1: 8x10 STACK" && onStack (*fresh) && device::BassCabinets::nameOf (plays.state) == stack.name
+                       && shelfNone && ! fresh->history.canUndo() && ! fresh->history.hasUnsavedChanges(),
+                   "with no IR in `Bass IRs`, a fresh one opens on the dozen's first, drawn, once it lands — "
+                       + (plays.valid ? device::BassCabinets::nameOf (plays.state) : juce::String ("nothing"))
+                       + " — no number of the shelf a cabinet, RED GIANT none, no step to undo and nothing unsaved");
+
+            {
+                std::unique_ptr<juce::AudioProcessorEditor> ed (fresh->createEditor());
+                auto* block = cabBlockOf (*ed);
+                for (int i = 0; i < 40 && block != nullptr && block->shownName() != stack.name; ++i)
+                    juce::MessageManager::getInstance()->runDispatchLoopUntil (50);
+                check (block != nullptr && block->shownName() == stack.name,
+                       "...its CAB block names it: " + (block != nullptr ? block->shownName() : juce::String ("no CAB block")));
+            }
 
             std::vector<juce::File> files;
             const auto items = menuOf (*fresh, files);
             check (items.joinIntoString (", ") == "No IRs yet (off)" && files.empty(),
-                   "...its CAB menu no cabinet of the shelf, a line that says there is none: " + items.joinIntoString (", "));
+                   "...its IR menu no cabinet of the shelf, a line that says there is none of the player's: " + items.joinIntoString (", "));
 
-            auto cabOut = make (bass);
+            // A SESSION ON NO CABINET — a fresh one's, its cabinet taken off every state in it — keeps none: no IR loads,
+            // and the cabinet's share is silent: at the CAB's MIX 70 % the DI's 30 % alone.
+            fresh->getStateInformation (none);
+            auto tree = juce::ValueTree::fromXml (*juce::AudioProcessor::getXmlFromBinary (none.getData(), (int) none.getSize()));
+            std::function<void (juce::ValueTree)> uncabinet = [&uncabinet] (juce::ValueTree t)
+            {
+                for (const auto* id : { params::cabIrUserKey, params::cabIrUserName, params::cabIrUserFrom })
+                    t.removeProperty (id, nullptr);
+                for (auto child : t)
+                    uncabinet (child);
+            };
+            uncabinet (tree);
+            none.reset();
+            juce::AudioProcessor::copyXmlToBinary (*tree.createXml(), none);
+
+            auto onNone = made (bass), cabOut = made (bass);
+            onNone->setStateInformation (none.getData(), (int) none.getSize());
+            for (int i = 0; i < 4; ++i)
+                juce::MessageManager::getInstance()->runDispatchLoopUntil (50);   // nothing to land, nothing lands
+            onNone->pumpDeviceWork();
             set (*cabOut, params::cabOn, 0.0f);
-            const auto heard = play (*fresh, 120, false), dry = play (*cabOut, 120, false);
+            const auto heard = play (*onNone, 120, false), dry = play (*cabOut, 120, false);
             float worst = 0.0f;
             for (size_t i = 0; i < heard.l.size(); ++i)
                 worst = std::max (worst, std::abs (heard.l[i] - 0.3f * dry.l[i]));
-            check (peak (dry.l) > 1.0e-3f && worst <= 1.0e-5f,
-                   "...and plays the DI's 30 % alone, the cabinet's share silent (worst apart " + juce::String (worst, 8) + " of peak "
-                       + juce::String (peak (heard.l), 4) + ")");
-
-            // A session of before: the bass on RED GIANT's number, which it played then, with no IR of the player's.
-            fresh->getStateInformation (before);
+            check (! onNone->cabChoice().isUser() && peak (dry.l) > 1.0e-3f && worst <= 1.0e-5f,
+                   "a session on no cabinet keeps none, the fresh one's not put over it: the DI's 30 % alone, the cabinet's share "
+                   "silent (worst apart " + juce::String (worst, 8) + " of peak " + juce::String (peak (heard.l), 4) + ")");
         }
 
-        // ...AND WITH SOME: the first, in the order the tree lists them — not the order they came in.
+        // ...AND WITH SOME IN `Bass IRs`: still the dozen's first, as a guitar amp opens on RED GIANT whatever its `IRs`
+        // hold — at once now, this process having drawn it; the player's own a pick away, the first in the order the tree
+        // lists them — not the order they came in.
         const auto put = [&redGiant] (const juce::File& f, char nudge)
         {
             juce::MemoryBlock bytes (redGiant.data, (size_t) redGiant.size);
@@ -402,11 +488,16 @@ int ORBITAMP_GATE_MAIN()
         const auto guitarOwn = guitarIrs.getChildFile ("Guitar own.wav");
         check (put (second, 4) && put (first, 0) && put (guitarOwn, 8), "two IRs into `Bass IRs`, the second first, and one into `IRs`");
         {
-            auto fresh = make (bass);
+            auto fresh = made (bass);
+            check (onStack (*fresh) && ! fresh->history.canUndo(),
+                   "a fresh one opens on the dozen's first with IRs in `Bass IRs` too, at once: " + fresh->cabChoice().name);
+
+            check (fresh->chooseCabFile (first), "...a pick of the first of `Bass IRs`...");
+            fresh->pumpDeviceWork();
             const auto opens = fresh->cabChoice();
             check (opens.isUser() && opens.name == "Fixture 1" && opens.from == "Fixture 1.wav"
                        && (int) opens.bytes->getSize() == redGiant.size && std::memcmp (opens.bytes->getData(), redGiant.data, (size_t) redGiant.size) == 0,
-                   "a fresh one opens on the first of `Bass IRs`, as a pick of it leaves the state: " + opens.name + ", " + opens.from);
+                   "...plays it, as a pick of it leaves the state: " + opens.name + ", " + opens.from);
 
             // The other chain's number is never picked, nor the guitar's player's IR listed.
             fresh->chooseCabFactory (params::cabIrDefault);
@@ -426,13 +517,45 @@ int ORBITAMP_GATE_MAIN()
                    "...and a host moving `cab_ir` to KAIJU TAMER's number plays the first of `Bass IRs` again, never the shelf's: "
                        + fresh->cabChoice().name);
 
-            // A STATE ON THE GUITAR'S NUMBER — the session of before — lands on the bass's own, not on RED GIANT.
+            // A SESSION OR A PRESET KEEPS THE CABINET IT SAVED (the owner, 06.11): the player's own, a drawn one, none — the
+            // fresh one's never put over it, the message loop run after.
             check (fresh->chooseCabFile (second) && fresh->cabChoice().name == "Fixture 2", "a bass playing the second...");
-            fresh->setStateInformation (before.getData(), (int) before.getSize());
-            check (fresh->cabChoice().isUser() && fresh->cabChoice().name == "Fixture 1"
-                       && juce::roundToInt (value (*fresh, params::cabIr)) == params::cabIrDefault,
-                   "...given a session of before, on RED GIANT's number with no IR of the player's, plays the first of `Bass IRs`, RED GIANT's number kept: "
-                       + fresh->cabChoice().name);
+            fresh->pumpDeviceWork();
+            juce::MemoryBlock onSecond;
+            fresh->getStateInformation (onSecond);
+            const auto& thump = device::BassCabinets::dozen()[6];
+            fresh->requestCabSynth (thump.state);
+            const auto drew = drawnOn (*fresh);
+            juce::MemoryBlock onThump;
+            fresh->getStateInformation (onThump);
+            const auto opensFrom = [&] (const juce::MemoryBlock& session)
+            {
+                auto later = made (bass);
+                later->setStateInformation (session.getData(), (int) session.getSize());
+                for (int i = 0; i < 6; ++i)
+                    juce::MessageManager::getInstance()->runDispatchLoopUntil (50);
+                later->pumpDeviceWork();
+                return later;
+            };
+            const auto two = opensFrom (onSecond), seven = opensFrom (onThump), nothing = opensFrom (none);
+            const auto sevenPlays = AmpProcessor::cabSynthOf (seven->cabChoice());
+            check (two->cabChoice().isUser() && two->cabChoice().name == "Fixture 2"
+                       && drew.valid && drew.state == thump.state && sevenPlays.valid && sevenPlays.state == thump.state
+                       && ! nothing->cabChoice().isUser() && juce::roundToInt (value (*nothing, params::cabIr)) == params::cabIrDefault,
+                   "...a session that saved another cabinet opens on that one: the player's " + two->cabChoice().name + ", the dozen's "
+                       + (sevenPlays.valid ? device::BassCabinets::nameOf (sevenPlays.state) : juce::String ("nothing"))
+                       + ", and one on no cabinet on none, RED GIANT's number kept");
+
+            // INIT: the fresh one's cabinet again, whatever played — at once, one step of the history, undone whole.
+            const int depth = two->history.undoDepth();
+            two->resetToDefault();
+            for (int i = 0; i < 40; ++i)
+                two->history.tick();
+            const bool initStack = onStack (*two);
+            two->history.undo();
+            two->pumpDeviceWork();
+            check (initStack && two->history.undoDepth() == depth && two->cabChoice().name == "Fixture 2",
+                   "INIT opens on the dozen's first again, as one step, undone back on " + two->cabChoice().name);
         }
 
         // EACH LISTS ITS OWN AND NONE OF THE OTHER'S: the library, the CAB menu, the SETUP tree, a face's channels.
@@ -506,10 +629,14 @@ int ORBITAMP_GATE_MAIN()
                "its HPF at 5, 22 Hz (4 at 32 Hz)");
         check (a.apvts.getParameter (params::bassHpfHz5)->getNormalisableRange().start <= 20.0f,
                "...in a range that reaches 20 Hz");
-        check (value (a, params::bassLpfOn) < 0.5f && juce::roundToInt (value (a, params::bassLpf)) == (int) params::BassLpf::fingers
+        // ...and its LPF IN: its pack, the SGT-DI, has switches of its tone, which its face stands where the cuts' switches
+        // were — both cuts always in, the switch under each choosing between their places (the owner, 03.11).
+        check (declared (a, params::bassLpfOn) > 0.5f && value (a, params::bassLpfOn) > 0.5f && declared (a, params::bassHpfOn) > 0.5f
+                   && juce::roundToInt (value (a, params::bassLpf)) == (int) params::BassLpf::fingers
                    && juce::approximatelyEqual (value (a, params::bassLpfHzFingers), 4500.0f)
                    && juce::approximatelyEqual (value (a, params::bassLpfHzSlap), 9500.0f),
-               "its LPF off (FINGERS at 4.5 kHz, SLAP at 9.5 kHz)");
+               "its LPF in, as it declares — its pack's tone has switches, which stand where the cuts' did, so both cuts are "
+               "always in — at FINGERS, 4.5 kHz (SLAP at 9.5 kHz)");
         check (value (a, params::cabHpfOn) < 0.5f && value (a, params::cabLpfOn) < 0.5f,
                "the cabinet's own cuts off: its IR plays as it was shot");
         check (value (a, params::compOn) > 0.5f && juce::approximatelyEqual (value (a, params::compAmount), 0.5f)
@@ -535,12 +662,100 @@ int ORBITAMP_GATE_MAIN()
                "the amp, the cabinet and the limiter on");
 
         const auto packs = device::DeviceLibrary::scan (bass.name, device::DeviceLibrary::ampSlot);
-        check (packs.size() == 1 && packs.getReference (0).rigId == "revolt-clean-poweramp-bf62"
+        check (packs.size() == 1 && packs.getReference (0).rigId == "sgt-di-19a4"
                    && packs.getReference (0).bundled && juce::roundToInt (value (a, params::preampDevice)) == 0,
-               "it plays its one temporary pack, the ReVolt Clean (" + juce::String (packs.size()) + " in its list)");
+               "it plays its one pack, the Ampeg SGT-DI (" + juce::String (packs.size()) + " in its list)");
         check (a.getTailLengthSeconds() >= 8.0 && a.getTailLengthSeconds() <= 30.0,
                "its tail counts the echo and the room, which a player may add while a host keeps the first answer ("
                    + juce::String (a.getTailLengthSeconds(), 2) + " s)");
+    }
+
+    // THE CUTS IN WITH THE WINDOW SHUT, AND A WINDOW THAT MOVES NOTHING (OrbitBassStart.cpp, EqSection::layOutRow): a fresh
+    // one plays both cuts with no face ever made — a 6 kHz tone as far under it as under the LPF switched in by hand, and
+    // farther than with it out; its face coming up, laid out at its least width and at 16:9, moves no parameter and leaves
+    // no step to undo; and the hand's first step after it is undone whole, nothing of the face's with it.
+    {
+        const auto sixK = [] (AmpProcessor& t)
+        {
+            juce::AudioBuffer<float> buf (2, blockSize);
+            juce::MidiBuffer midi;
+            double sum = 0.0;
+            long long at = 0, counted = 0;
+            for (int b = 0; b < 200; ++b)
+            {
+                for (int i = 0; i < blockSize; ++i, ++at)
+                {
+                    const auto v = (float) (0.1 * std::sin (juce::MathConstants<double>::twoPi * 6000.0 * (double) at / sampleRate));
+                    buf.setSample (0, i, v);
+                    buf.setSample (1, i, v);
+                }
+                t.processBlock (buf, midi);
+                t.pumpDeviceWork();
+                if (b >= 100)
+                    for (int i = 0; i < blockSize; ++i, ++counted)
+                        sum += (double) buf.getSample (0, i) * buf.getSample (0, i);
+            }
+            return 10.0 * std::log10 (sum / (double) counted + 1.0e-30);
+        };
+        auto shut = make (bass), byHand = make (bass), without = make (bass);
+        for (auto* t : { shut.get(), byHand.get(), without.get() })
+        {
+            set (*t, params::cabOn, 0.0f);
+            set (*t, params::compAmount, 0.0f);
+        }
+        set (*byHand, params::bassLpfOn, 0.0f);
+        set (*byHand, params::bassLpfOn, 1.0f);
+        set (*without, params::bassLpfOn, 0.0f);
+        const double heard = sixK (*shut), handIn = sixK (*byHand), out = sixK (*without);
+        check (value (*shut, params::bassHpfOn) > 0.5f && value (*shut, params::bassLpfOn) > 0.5f
+                   && std::abs (heard - handIn) < 0.01 && heard < out - 3.0,
+               "a fresh one plays both cuts with no window ever open: a 6 kHz tone at " + juce::String (heard, 1) + " dB, "
+                   + juce::String (handIn, 1) + " with the LPF switched in by hand, " + juce::String (out, 1) + " with it out");
+
+        auto t = make (bass);
+        const auto settled = [&t] { for (int i = 0; i < 40; ++i) t->history.tick(); };
+        settled();
+        std::vector<float> before;
+        for (auto* p : t->getParameters())
+            before.push_back (p->getValue());
+        const int depth = t->history.undoDepth();
+        const auto movedFrom = [&t] (const std::vector<float>& was)
+        {
+            juce::StringArray ids;
+            const auto& all = t->getParameters();
+            for (int i = 0; i < all.size(); ++i)
+                if (all[i]->getValue() != was[(size_t) i])
+                    if (auto* withId = dynamic_cast<juce::AudioProcessorParameterWithID*> (all[i]))
+                        ids.add (withId->getParameterID());
+            return ids;
+        };
+        std::unique_ptr<juce::AudioProcessorEditor> ed (t->createEditor());
+        const int h = ed->getHeight();
+        ed->setSize (10, h);                                            // laid out at its least width...
+        ed->setSize (juce::roundToInt ((float) h * 16.0f / 9.0f), h);   // ...and at 16:9
+        settled();
+        const auto moved = movedFrom (before);
+        const int steps = t->history.undoDepth() - depth;
+        check (moved.isEmpty() && steps == 0,
+               "...its face coming up, laid out at its least width and at 16:9, moves no parameter and leaves no step to undo ("
+                   + juce::String (steps) + " step(s)" + (moved.isEmpty() ? juce::String() : "; moved " + moved.joinIntoString (" ")) + ")");
+
+        // The hand's first step after it — the AMP's ON, as its menu turns it over — undone whole.
+        auto m = bass::blockMenu (t->apvts, "AMP");
+        int onId = 0;
+        for (juce::PopupMenu::MenuItemIterator it (m.items); it.next();)
+            if (it.getItem().text == "ON")
+                onId = it.getItem().itemID;
+        if (onId > 0 && onId <= (int) m.acts.size())
+            m.acts[(size_t) onId - 1]();
+        settled();
+        const auto picked = movedFrom (before);
+        t->history.undo();
+        const auto left = movedFrom (before);
+        check (onId > 0 && picked == juce::StringArray (params::preampOn) && left.isEmpty(),
+               "...and the hand's next step, the AMP's ON, moves that alone and one undo takes it back whole (moved "
+                   + picked.joinIntoString (" ") + (left.isEmpty() ? juce::String() : "; left " + left.joinIntoString (" ")) + ")");
+        ed.reset();
     }
 
     // ---- ITS STRIP -----------------------------------------------------------------------------------
@@ -650,14 +865,14 @@ int ORBITAMP_GATE_MAIN()
     }
 
     // OrbitAmp's links in OrbitAmp's order, less the delay and the reverb: an OrbitAmp on the same pack,
-    // every other parameter as OrbitBass's, its delay and reverb off, plays what OrbitBass plays.
+    // every other parameter as OrbitBass's, its delay and reverb off, plays what OrbitBass plays. The pack is
+    // OrbitBass's own, the SGT-DI — a guitar amp's list and a bass amp's never cross (CMakeLists.txt: ORBITAMP_PLAYS),
+    // so the twin is handed it, as a player's own pack would be.
     {
-        int place = -1;
-        const auto list = device::DeviceLibrary::scan (products::orbitAmp().name, device::DeviceLibrary::ampSlot);
-        for (int i = 0; i < list.size() && place < 0; ++i)
-            if (list.getReference (i).rigId == "revolt-clean-poweramp-bf62")
-                place = i;
-        check (place >= 0, "OrbitAmp plays the ReVolt Clean too (place " + juce::String (place) + ")");
+        const auto bassList = device::DeviceLibrary::scan (bass.name, device::DeviceLibrary::ampSlot);
+        const int own = juce::roundToInt (value (*amp, params::preampDevice));
+        const bool handed = own >= 0 && own < bassList.size() && bassList.getReference (own).rigId == "sgt-di-19a4";
+        check (handed, "OrbitAmp's twin is handed OrbitBass's own pack, the SGT-DI (" + juce::String (bassList.size()) + " in the bass's list)");
 
         // The bass plays no cabinet of the shelf (ITS CABINETS): it opens on the first of the player's `Bass IRs`, which
         // holds RED GIANT's bytes here — what OrbitAmp opens on at the number the bass's `cab_ir` keeps.
@@ -671,10 +886,17 @@ int ORBITAMP_GATE_MAIN()
 
         // An OrbitAmp on the same pack, every other parameter as `from`'s, prepared again once it stands so —
         // every link starting from silence, as OrbitBass's did; what it plays, against what `heard` did.
-        const auto twin = [&] (AmpProcessor& from, const Out& heard, const juce::String& what)
+        const auto twinPlays = [&] (AmpProcessor& from, const juce::String& what)
         {
             auto same = make (products::orbitAmp());
-            set (*same, params::preampDevice, (float) place);
+            if (handed)
+            {
+                same->preamp.packs.add (bassList.getReference (own));
+                const int place = same->preamp.packs.size() - 1;
+                set (*same, params::preampDevice, (float) place);
+                same->preamp.select (place);
+                same->pumpDeviceWork();
+            }
             for (int pass = 0; pass < 2; ++pass)   // a device that lands may move its own; the second pass holds
                 for (auto* p : from.getParameters())
                     if (auto* ranged = dynamic_cast<juce::RangedAudioParameter*> (p);
@@ -705,14 +927,20 @@ int ORBITAMP_GATE_MAIN()
 
             same->prepareToPlay (sampleRate, blockSize);
             same->pumpDeviceWork();
-            return worstApart (play (*same, blocks, false).l, heard.l);
+            return play (*same, blocks, false);
+        };
+        const auto twin = [&] (AmpProcessor& from, const Out& heard, const juce::String& what)
+        {
+            return worstApart (twinPlays (from, what).l, heard.l);
         };
 
-        // OrbitBass as at step 1: COMP at 0, the AMP's BLEND 100 %, its HPF off, the DI's share none (the CAB's MIX 100 %).
+        // OrbitBass as at step 1: COMP at 0, the AMP's BLEND 100 %, its HPF and its LPF off, the DI's share none (the CAB's
+        // MIX 100 %).
         const auto asBefore = [&]
         {
             auto b = make (bass);
             set (*b, params::bassHpfOn, 0.0f);
+            set (*b, params::bassLpfOn, 0.0f);
             set (*b, params::cabMix, 100.0f);
             set (*b, params::compAmount, 0.0f);   // COMP's BLEND at 0: no compressor, as at step 1
             return b;
@@ -765,13 +993,32 @@ int ORBITAMP_GATE_MAIN()
                    "...and its frequency and its polarity are heard too");
         }
 
-        // The cabinets in, on the same IR's bytes, at the CAB's MIX 100 %: the cabinet alone, bit for bit.
+        // The cabinets in, on the same IR's bytes, at the CAB's MIX 100 %: the cabinet alone — the same stage, its IR
+        // levelled by each chain's own reference (core::CabinetIr::Reference: a bass amp's against the bass's band, the
+        // owner 04.11): what OrbitBass plays is the twin's times that one level, sample for sample, and the level is not
+        // nothing — the two references do not agree on a guitar's IR.
         {
             auto cabOnly = asBefore();
             const auto heard = play (*cabOnly, blocks, false, true);   // through the guitar's input cut, as above
-            const float worst = twin (*cabOnly, heard, "the cabinets in, the CAB's MIX 100 %");
-            check (worst <= 5.0e-6f,   // each chain's standard EQ, as above
-                   "...plays what OrbitBass plays through the guitar's input cut, the cabinet alone (worst apart " + juce::String (worst, 9) + " of peak " + juce::String (peak (heard.l), 4) + ")");
+            const auto his = twinPlays (*cabOnly, "the cabinets in, the CAB's MIX 100 %");
+            double ab = 0.0, bb = 0.0;
+            for (size_t i = 0; i < his.l.size() && i < heard.l.size(); ++i)
+            {
+                ab += (double) heard.l[i] * (double) his.l[i];
+                bb += (double) his.l[i] * (double) his.l[i];
+            }
+            const double k = bb > 0.0 ? ab / bb : 0.0;
+            std::vector<float> levelled (his.l.size());
+            for (size_t i = 0; i < his.l.size(); ++i)
+                levelled[i] = (float) (k * (double) his.l[i]);
+            const float worst = worstApart (levelled, heard.l);
+            const double kDb = juce::Decibels::gainToDecibels (k, -200.0);
+            // Within -80 dB, not 5e-6: the cabinet cuts the silence at either end of its IR at -80 dBFS AFTER the level
+            // (core::CabinetIr::rebuild), so a tap or two at the tail's end that one level keeps the other cuts.
+            check (worst <= 1.0e-4f && std::abs (kDb) > 0.01 && std::abs (kDb) < 12.0,
+                   "...plays what OrbitBass plays through the guitar's input cut, the cabinet alone, but for the level each chain's "
+                   "reference gives its IR (" + juce::String (kDb, 2) + " dB), within -80 dB, where the IR's silence is cut (worst "
+                   "apart then " + juce::String (worst, 9) + " of peak " + juce::String (peak (heard.l), 4) + ")");
         }
     }
 
@@ -1045,7 +1292,9 @@ int ORBITAMP_GATE_MAIN()
 
         // BLEND IS PARALLEL COMPRESSION, SAMPLE-ALIGNED: at half, what comes out is the dry and the all-compressed summed
         // half and half, sample for sample; and the all-compressed IS the dry times core's own squeeze and the make-up at
-        // the same sample — no lookahead, no latency between the two.
+        // the same sample — no lookahead, no latency between the two. The make-up is what the squeeze has taken from this
+        // playing, followed sample by sample (BassComp, the owner 02.11), so it is read where each sample is made: the
+        // stage fed one sample a call — its time its own, the host's blocks nothing to it (COMP AUTO, above).
         {
             struct Run { std::vector<float> out, gr, mk; };
             const auto runAt = [] (double blend)
@@ -1057,20 +1306,18 @@ int ORBITAMP_GATE_MAIN()
                 core::BypassFade link;
                 link.prepare (sampleRate);
                 link.snapTo (blend > 0.0);
-                std::vector<float> x ((size_t) blockSize);
                 long long n = 0;
                 for (int b = 0; b < 100; ++b)
-                {
                     for (int i = 0; i < blockSize; ++i, ++n)
-                        x[(size_t) i] = (float) (0.5 * std::exp (-2.0 * std::fmod ((double) n / sampleRate, 0.6))
-                                                 * std::sin (juce::MathConstants<double>::twoPi * 97.0 * (double) n / sampleRate));
-                    // RELEASE SLOW: its make-up one number once snapped (AUTO's follows the hold, a glide within the block).
-                    c.process (x.data(), blockSize, blend, link.advance (blockSize, blend > 0.0),
-                               BassComp::Attack::med, BassComp::Release::slow, BassComp::Character::smooth);
-                    r.out.insert (r.out.end(), x.begin(), x.end());
-                    r.gr.insert (r.gr.end(), c.squeezeDb(), c.squeezeDb() + blockSize);
-                    r.mk.insert (r.mk.end(), (size_t) blockSize, (float) c.makeupNow());   // snapped, its knobs still: one number
-                }
+                    {
+                        float x = (float) (0.5 * std::exp (-2.0 * std::fmod ((double) n / sampleRate, 0.6))
+                                           * std::sin (juce::MathConstants<double>::twoPi * 97.0 * (double) n / sampleRate));
+                        c.process (&x, 1, blend, link.advance (1, blend > 0.0),
+                                   BassComp::Attack::med, BassComp::Release::slow, BassComp::Character::smooth);
+                        r.out.push_back (x);
+                        r.gr.push_back (c.squeezeDb()[0]);
+                        r.mk.push_back ((float) c.makeupNow());   // the make-up this very sample was given
+                    }
                 return r;
             };
             const auto dryRun = runAt (0.0), allRun = runAt (1.0), halfRun = runAt (0.5);
@@ -1452,30 +1699,104 @@ int ORBITAMP_GATE_MAIN()
                    && value (*amp, params::chorusAmount) == 0.0f,
                "OCTAVE, FILTER and CHORUS stand in the strip, their sliders at 0");
 
-        // At 0, whatever their menus say, each is the dry bit for bit — both outputs.
+        // At 0, whatever their menus say, each is the dry bit for bit — both outputs. WHAT STEP 2b PLAYED, it played on the
+        // pack OrbitBass had then, the ReVolt Clean, with its LPF off: so the replay is on that pack — handed back to it from
+        // OrbitAmp's list, as a player's own would be — and the LPF off; on today's pack, the SGT-DI, the three at 0 with
+        // their menus moved play what they play at their defaults, bit for bit, both sides.
         {
-            auto moved = make (bass);
-            set (*moved, params::octaveToneHz, 400.0f);
-            set (*moved, params::filterMode, 1.0f);
-            set (*moved, params::filterResonance, 12.0f);
-            set (*moved, params::filterKeepLows, 0.0f);
-            set (*moved, params::chorusRateHz, 2.5f);
-            set (*moved, params::chorusCrossoverHz, 500.0f);
-            // The HPF's inner cuts are the chain's since 31.10 and not step 2b's: out here, measured on their own below.
-            moved->innerCutsOut.store (true);
-            set (*moved, params::compAmount, 0.0f);   // COMP at 0 as at step 2b (its BLEND is half by default since 31.10)
-            auto freshAmp = make (bass);
-            freshAmp->innerCutsOut.store (true);
-            set (*freshAmp, params::compAmount, 0.0f);
-            const auto heard = play (*moved, stepTwoB.blocks, false);
-            const auto fresh = play (*freshAmp, stepTwoB.blocks, false);
-            const float apartL = worstApart (heard.l, stepTwoB.was), apartR = worstApart (heard.r, stepTwoB.was);
-            const float apartPlain = worstApart (fresh.l, stepTwoB.was);
-            check (stepTwoB.was.size() == (size_t) (stepTwoB.blocks * blockSize) && apartL <= stepTwoB.allowed
-                       && apartR <= stepTwoB.allowed && apartPlain <= stepTwoB.allowed,
-                   "the three at 0, their menus moved — and at their defaults: what step 2b (78e037a) played, "
-                       + juce::String ("within 5e-6") + ", both sides (worst "
-                       + juce::String (apartL, 9) + " / " + juce::String (apartR, 9) + ", defaults " + juce::String (apartPlain, 9) + ")");
+            std::optional<device::DeviceLibrary::Pack> revolt;
+            for (const auto& pack : device::DeviceLibrary::scan (products::orbitAmp().name, device::DeviceLibrary::ampSlot))
+                if (! revolt.has_value() && pack.rigId == "revolt-clean-poweramp-bf62")
+                    revolt = pack;
+            const auto asAtStepTwoB = [&] (AmpProcessor& t, bool thenPack)
+            {
+                // The HPF's inner cuts are the chain's since 31.10 and not step 2b's: out here, measured on their own below.
+                t.innerCutsOut.store (true);
+                set (t, params::compAmount, 0.0f);   // COMP at 0 as at step 2b (its BLEND is half by default since 31.10)
+                if (! thenPack)
+                    return;
+                set (t, params::bassLpfOn, 0.0f);    // the LPF as it stood then: off (in since its pack has switches, 06.11)
+                if (revolt.has_value())
+                {
+                    t.preamp.packs.add (*revolt);
+                    const int at = t.preamp.packs.size() - 1;
+                    set (t, params::preampDevice, (float) at);
+                    t.preamp.select (at);
+                    t.pumpDeviceWork();
+                }
+            };
+            const auto movedMenus = [&] (AmpProcessor& t)
+            {
+                set (t, params::octaveToneHz, 400.0f);
+                set (t, params::filterMode, 1.0f);
+                set (t, params::filterResonance, 12.0f);
+                set (t, params::filterKeepLows, 0.0f);
+                set (t, params::chorusRateHz, 2.5f);
+                set (t, params::chorusCrossoverHz, 500.0f);
+            };
+
+            // ...BUT FOR THE CABINET'S LEVEL: a bass amp's cabinet is levelled against the bass's reference since 04.11
+            // (core::CabinetIr::Reference::bass), not the guitar's as at step 2b — one gain on the cabinet's share and nothing
+            // on the DI's. So the replay is taken apart where the CAB's MIX puts its two together — the DI alone (MIX 0) and
+            // the cabinet alone (MIX 100) — and step 2b is its DI's share of the one plus that one gain on the other: found,
+            // said, and everything else within 5e-6, both sides, the menus moved and at their defaults.
+            const float diShare = 1.0f - declared (*amp, params::cabMix) / 100.0f;
+            const auto replay = [&] (bool menus, float mix)
+            {
+                auto t = make (bass);
+                if (menus)
+                    movedMenus (*t);
+                asAtStepTwoB (*t, true);
+                set (*t, params::cabMix, mix);
+                return play (*t, stepTwoB.blocks, false);
+            };
+            struct Fit { double levelDb = 0.0; float l = 1.0f, r = 1.0f; };
+            const auto fitted = [&] (bool menus)
+            {
+                const auto di = replay (menus, 0.0f), cab = replay (menus, 100.0f);
+                Fit f;
+                if (di.l.size() != stepTwoB.was.size() || cab.l.size() != stepTwoB.was.size())
+                    return f;
+                double num = 0.0, den = 0.0;
+                for (size_t i = 0; i < stepTwoB.was.size(); ++i)
+                {
+                    num += ((double) stepTwoB.was[i] - (double) diShare * di.l[i]) * (double) cab.l[i];
+                    den += (double) cab.l[i] * (double) cab.l[i];
+                }
+                const double share = den > 0.0 ? num / den : 0.0;                // the cabinet's share, step 2b's level on it
+                f.levelDb = juce::Decibels::gainToDecibels (share / (1.0 - (double) diShare), -200.0);
+                std::vector<float> l (stepTwoB.was.size()), r (stepTwoB.was.size());
+                for (size_t i = 0; i < l.size(); ++i)
+                {
+                    l[i] = (float) ((double) diShare * di.l[i] + share * cab.l[i]);
+                    r[i] = (float) ((double) diShare * di.r[i] + share * cab.r[i]);
+                }
+                f.l = worstApart (l, stepTwoB.was);
+                f.r = worstApart (r, stepTwoB.was);
+                return f;
+            };
+            // Within -80 dB, not 5e-6: the cabinet cuts its IR's silence at -80 dBFS after the level (core::CabinetIr::rebuild),
+            // so a tap or two at the tail's end that one level keeps the other cuts; the menus moved and the defaults alike.
+            const auto movedFit = fitted (true), plainFit = fitted (false);
+            constexpr float trimmed = 1.0e-4f;
+            check (revolt.has_value() && stepTwoB.was.size() == (size_t) (stepTwoB.blocks * blockSize)
+                       && movedFit.l <= trimmed && movedFit.r <= trimmed && plainFit.l <= trimmed
+                       && movedFit.l == plainFit.l && std::abs (movedFit.levelDb - plainFit.levelDb) < 1.0e-6 && std::abs (plainFit.levelDb) > 0.01,
+                   "the three at 0, their menus moved — and at their defaults: what step 2b (78e037a) played on its pack, the ReVolt "
+                   "Clean, its LPF off, but for the level its cabinet is given against the bass's reference ("
+                       + juce::String (plainFit.levelDb, 3) + " dB at step 2b), within -80 dB where the IR's silence is cut, the two "
+                       "the same, both sides (worst " + juce::String (movedFit.l, 9) + " / " + juce::String (movedFit.r, 9) + ", defaults "
+                       + juce::String (plainFit.l, 9) + ")");
+
+            auto movedNow = make (bass), freshNow = make (bass);
+            movedMenus (*movedNow);
+            asAtStepTwoB (*movedNow, false);
+            asAtStepTwoB (*freshNow, false);
+            const auto heardNow = play (*movedNow, stepTwoB.blocks, false), plainNow = play (*freshNow, stepTwoB.blocks, false);
+            const float nowL = worstApart (heardNow.l, plainNow.l), nowR = worstApart (heardNow.r, plainNow.r);
+            check (nowL == 0.0f && nowR == 0.0f && peak (plainNow.l) > 1.0e-3f,
+                   "...and on today's pack, the SGT-DI, the three at 0 with their menus moved play what they play at their defaults, "
+                   "bit for bit, both sides (worst " + juce::String (nowL, 9) + " / " + juce::String (nowR, 9) + ")");
         }
         // Each turned up is heard.
         for (const auto& [id, name] : { std::pair<const char*, const char*> { params::octaveAmount, "OCTAVE" },
@@ -4440,17 +4761,24 @@ int ORBITAMP_GATE_MAIN()
                         std::printf ("\n");
                     }
 
-            // ...and where it leaves the rest: a quieter note comes up, a louder one goes down — toward each other.
+            // ...and where it leaves the rest. THE MAKE-UP IS WHAT THE SQUEEZE HAS TAKEN FROM THIS PLAYING (BassComp, the owner
+            // 02.11), not a number the curve gives the reference note: a quiet note the threshold never reaches is given
+            // nothing — it passes at unity, driving nothing harder into the amp — and a loud one held is given back what was
+            // taken from it, so a steady note stands where it came in; the squeeze is the playing's shape, not its level.
+            juce::String rest;
             for (const auto ch : everyCharacter)
             {
                 const double q50 = gainDb (-36.0, 0.5, ch, A::med, R::automatic, 110.0), q100 = gainDb (-36.0, 1.0, ch, A::med, R::automatic, 110.0);
                 const double l50 = gainDb (-6.0, 0.5, ch, A::med, R::automatic, 110.0),  l100 = gainDb (-6.0, 1.0, ch, A::med, R::automatic, 110.0);
-                ok = ok && q100 > q50 && q50 > 0.5 && l100 < l50 && l50 < -0.5;
+                ok = ok && std::abs (q50) <= 0.1 && std::abs (q100) <= 0.1 && std::abs (l50) <= 0.5 && std::abs (l100) <= 0.5;
+                rest << " " << juce::String (chName (ch)).trimEnd() << " " << juce::String (q50, 2) << "/" << juce::String (q100, 2)
+                     << ", " << juce::String (l50, 2) << "/" << juce::String (l100, 2) << ";";
             }
             check (ok, "COMP's BLEND level-neutral: a -18 dBFS RMS note at 55..440 Hz within 0.5 dB at BLEND 50 and 100 % for every "
                        "CHARACTER (all five) x ATTACK x RELEASE (worst " + juce::String (worst, 2) + " dB, " + worstAt + "); B0 off by up to "
                        + juce::String (lowB, 2) + " dB and E1 by " + juce::String (lowE, 2) + " (the key's 30 Hz high-pass, not judged); "
-                       "a quiet note up, a loud one down");
+                       "a quiet note at -36 dBFS at unity within 0.1 dB, a loud one at -6 given back what was taken, within 0.5 dB "
+                       "(BLEND 50/100, dB:" + rest + ")");
 
             // ...AND ITS KNOWN LIMIT (BassComp::readsDb): the table is the defaults'; at the threshold and ratio's corners the
             // reference note drifts — printed, and held within 1.2 dB so a regression past that shows. The gentlest ratio,
@@ -6598,16 +6926,18 @@ int ORBITAMP_GATE_MAIN()
         }
     }
 
-    // ---- A PACK'S TONE SWITCHES AS CELLS OF THE AMP'S TONE ROW (the owner, 02.11): ULTRA LO and ULTRA HI, the SGT-DI's —
-    //      HPF, ULTRA LO, BASS, MIDDLE, TREBLE, ULTRA HI, LPF — and no longer under GAIN: inside the AMP and clear of all
-    //      else at the least width and at 16:9, the well and the dials as with no switch; a pack with none, the row's five
-    //      cells as they were; the bass's GAIN and lever sections narrower, the well wider by them; each a hand's toggle on
-    //      its selector's parameter, a click or a drag one position and one gesture; a position called off written 0; and
-    //      a guitar amp's picks under its GAIN, its sections as wide as ever. ----
+    // ---- A PACK'S TONE SWITCHES IN THE AMP'S TONE ROW, ONE LINE EACH AS THE WALKER HAS THEM (the owner, 02.11 and
+    //      03.11): ULTRA LO and ULTRA HI, the SGT-DI's — STR 4 / 5 over ULTRA LO left of the dials, FING / SLAP over ULTRA HI
+    //      right of them, the cuts' on/off switches gone and the cuts always in — and no longer under GAIN: inside the AMP
+    //      and clear of all else at the least width and at 16:9, the well and the dials' line as with no switch; a pack
+    //      with none, the row's five cells as they were; the bass's GAIN and lever sections narrower, the well wider by
+    //      them; each a hand's toggle on its tone's slot, a click or a drag one position and one gesture; a position called
+    //      off written 0; and a guitar amp's picks under its GAIN, its sections as wide as ever. ----
     {
-        // A FAKE PACK: the set's ReVolt Clean with Ultra Lo (-, off, +) and Ultra Hi (off, +) in place of its Boost, every
-        // combination on a capture it has — Ultra Hi's + on the Boost's; or, `switches` false, its Gain alone.
-        const auto fake = [] (AmpProcessor& t, bool switches)
+        // A GUITAR AMP'S FAKE PACK: the set's ReVolt Clean with Ultra Lo (-, off, +) and Ultra Hi (off, +) as SWITCHES OF
+        // THE PACK (its selectors) in place of its Boost, every combination on a capture it has — Ultra Hi's + on the
+        // Boost's; or, `switches` false, its Gain alone. OrbitAmp carries the ReVolt Clean; OrbitBass does not.
+        const auto fakeSelectors = [] (AmpProcessor& t, bool switches)
         {
             int at = -1;
             for (int i = 0; i < t.preamp.packs.size() && at < 0; ++i)
@@ -6657,6 +6987,45 @@ int ORBITAMP_GATE_MAIN()
             return t.preamp.selectors().size() == (switches ? 2 : 0);
         };
 
+        // THE BASS'S FAKE PACK, its own: the SGT-DI with its tone's two switches, ULTRA LO (-, off, +) and ULTRA HI (off, +)
+        // — the flat position the pack writes 0 written "off" — or (`switches` false) with no switch of its tone at all, its
+        // dials and FREQ alone.
+        const auto fakeTone = [] (AmpProcessor& t, bool switches)
+        {
+            if (t.preamp.packs.isEmpty() || t.preamp.packs.getReference (0).rigId != "sgt-di-19a4")
+                return false;
+            auto pack = t.preamp.packs.getReference (0);
+            auto* stage = const_cast<namz::rig::Stage*> (pack.rig.firstKnown());
+            if (stage == nullptr)
+                return false;
+            int count = 0;
+            std::vector<namz::rig::Tone> tones;
+            for (auto one : stage->tone)
+            {
+                const bool isSwitch = one.sweep <= 0 && core::CapturedBlock::switchCarriesBands (one);
+                if (isSwitch && ! switches)
+                    continue;
+                if (isSwitch)
+                {
+                    ++count;
+                    for (auto& position : one.positions)
+                        if (position.value == "0")
+                            position.value = "off";
+                    if (one.reference == "0")
+                        one.reference = "off";
+                    if (one.defaultValue == "0")
+                        one.defaultValue = "off";
+                }
+                tones.push_back (one);
+            }
+            stage->tone = tones;
+            t.preamp.packs.set (0, pack);
+            set (t, params::preampDevice, 0.0f);
+            t.preamp.select (0);
+            t.pumpDeviceWork();
+            return count == (switches ? 2 : 0);
+        };
+
         const auto panelIn = [] (juce::Component& root)
         {
             CapturedBlockPanel* found = nullptr;
@@ -6680,6 +7049,7 @@ int ORBITAMP_GATE_MAIN()
             std::vector<VSwitch*> picks;
             std::vector<juce::Rectangle<int>> dials, cuts;
             juce::Rectangle<int> well, gain, smooth, blend;
+            ChannelLever* lever = nullptr;   // the pack's voice on the bass's lever (B15 / SVT), where it has one
         };
         const auto look = [&] (juce::Component& ed)
         {
@@ -6693,6 +7063,8 @@ int ORBITAMP_GATE_MAIN()
             std::vector<juce::Rectangle<int>> knobs;
             for (auto* c : l.panel->getChildren())
             {
+                if (auto* lever = dynamic_cast<ChannelLever*> (c))
+                    l.lever = lever;
                 if (! c->isVisible())
                     continue;
                 if (auto* s = dynamic_cast<ToggleSwitch*> (c))
@@ -6738,48 +7110,58 @@ int ORBITAMP_GATE_MAIN()
         static_assert (ToggleSwitch::fontH >= 13.0f, "a toggle's words at reading size");
         const float middleW = theme::trackedWidth ("MIDDLE", theme::displayFont (13.0f), 0.15f);   // the widest dial's name
 
-        auto withSwitches = make (bass), plainPack = make (bass), stock = make (bass);
-        const bool faked = fake (*withSwitches, true) && fake (*plainPack, false);
-        std::unique_ptr<juce::AudioProcessorEditor> ed (withSwitches->createEditor()), plainEd (plainPack->createEditor()),
-                                                    stockEd (stock->createEditor());
+        auto withSwitches = make (bass), plainPack = make (bass);
+        const bool faked = fakeTone (*withSwitches, true) && fakeTone (*plainPack, false);
+        std::unique_ptr<juce::AudioProcessorEditor> ed (withSwitches->createEditor()), plainEd (plainPack->createEditor());
         const int h = ed->getHeight();
         juce::StringArray inRow, asBefore, narrower;
         juce::String cells;   // the row's cells at the least width, for the line
+        // A toggle by the name its hint opens with: STR, STYL (FING / SLAP), ULTRA LO, ULTRA HI.
+        const auto toggleOf = [] (const Look& l, const juce::String& head) -> ToggleSwitch*
+        {
+            for (auto* s : l.toggles)
+                if (s->getTooltip().startsWith (head + ":"))
+                    return s;
+            return nullptr;
+        };
         for (const int width : { -1, juce::roundToInt ((float) h * 16.0f / 9.0f) })
         {
-            for (auto* e : { ed.get(), plainEd.get(), stockEd.get() })
+            for (auto* e : { ed.get(), plainEd.get() })
                 e->setSize (width < 0 ? 10 : width, h);   // narrower than the least: laid out at the least
             const juce::String where = "at " + juce::String (ed->getWidth()) + " px: ";
-            const auto l = look (*ed), plain = look (*plainEd), bare = look (*stockEd);
-            if (l.panel == nullptr || plain.panel == nullptr || bare.panel == nullptr)
+            const auto l = look (*ed), plain = look (*plainEd);
+            if (l.panel == nullptr || plain.panel == nullptr)
             {
                 inRow.add (where + "no AMP");
                 continue;
             }
 
-            // WITH SWITCHES: HPF, ULTRA LO, the three dials, ULTRA HI, LPF, in that order, nothing over anything.
-            if (l.toggles.size() != 2 || l.dials.size() != 3 || l.cuts.size() != 2 || ! l.picks.empty())
+            // WITH SWITCHES: four toggles — the cuts' STR and FING / SLAP, the pack's ULTRA LO and ULTRA HI — no cut's own
+            // on/off switch and no pick; STR over ULTRA LO left of every dial, FING over ULTRA HI right of every dial; the
+            // dials BASS, MIDDLE with its FREQ, TREBLE; each toggle as wide as its words, inside the AMP's tone row, over
+            // nothing.
+            auto* str = toggleOf (l, "STR");
+            auto* fing = toggleOf (l, "STYL");
+            auto* lo = toggleOf (l, "ULTRA LO");
+            auto* hi = toggleOf (l, "ULTRA HI");
+            if (l.toggles.size() != 4 || str == nullptr || fing == nullptr || lo == nullptr || hi == nullptr || l.dials.size() != 4
+                || ! l.cuts.empty() || ! l.picks.empty())
             {
                 inRow.add (where + juce::String ((int) l.toggles.size()) + " toggles, " + juce::String ((int) l.dials.size()) + " dials, "
                            + juce::String ((int) l.cuts.size()) + " cuts, " + juce::String ((int) l.picks.size()) + " picks");
                 continue;
             }
-            std::vector<juce::Rectangle<int>> row { l.cuts[0], l.toggles[0]->getBounds(), l.dials[0], l.dials[1], l.dials[2],
-                                                    l.toggles[1]->getBounds(), l.cuts[1] };
-            for (size_t k = 1; k < row.size(); ++k)
-                if (row[k].getX() < row[k - 1].getRight())
-                    inRow.add (where + "cell " + juce::String ((int) k) + " " + row[k].toString() + " left of " + row[k - 1].toString());
-            for (size_t k = 0; k < 2; ++k)
+            const int dialsFrom = l.dials.front().getX(), dialsTo = l.dials.back().getRight();
+            if (str->getBottom() > lo->getY() || fing->getBottom() > hi->getY())
+                inRow.add (where + "STR " + str->getBounds().toString() + " not over ULTRA LO " + lo->getBounds().toString()
+                           + ", or FING " + fing->getBounds().toString() + " not over ULTRA HI " + hi->getBounds().toString());
+            if (str->getRight() > dialsFrom || lo->getRight() > dialsFrom || fing->getX() < dialsTo || hi->getX() < dialsTo)
+                inRow.add (where + "a side's switches over the dials " + juce::String (dialsFrom) + ".." + juce::String (dialsTo));
+            for (auto* s : { str, lo, fing, hi })
             {
-                auto* s = l.toggles[k];
                 const auto b = s->getBounds();
                 const juce::String which = s->getTooltip().upToFirstOccurrenceOf (":", false, false);
-                if (which != (k == 0 ? "ULTRA LO" : "ULTRA HI"))
-                    inRow.add (where + "toggle " + juce::String ((int) k) + " is " + which);
-                if (b != l.panel->console().innerCell ((int) k) || b.getY() != l.dials[0].getY() || b.getBottom() != l.cuts[0].getBottom())
-                    inRow.add (where + which + " at " + b.toString() + ": not from the names' line " + juce::String (l.dials[0].getY())
-                               + " to the cuts' foot " + juce::String (l.cuts[0].getBottom()));
-                if (b.getWidth() < s->idealWidth() || b.getWidth() < EqSection::cutW)
+                if (b.getWidth() < s->idealWidth())
                     inRow.add (where + which + " " + juce::String (b.getWidth()) + " wide, its words " + juce::String (s->idealWidth()));
                 if (! l.panel->sections()[2].contains (b) || ! l.panel->getLocalBounds().reduced (1).contains (b))
                     inRow.add (where + which + " outside the AMP's tone row");
@@ -6787,75 +7169,95 @@ int ORBITAMP_GATE_MAIN()
                     if (c != s && c->isVisible() && c->getBounds().intersects (b))
                         inRow.add (where + which + " over " + juce::String (typeid (*c).name()) + " " + c->getBounds().toString());
             }
-            for (size_t k = 0; k < 3 && k < plain.dials.size(); ++k)
-                if (l.dials[k].getY() != plain.dials[k].getY() || l.dials[k].getHeight() != plain.dials[k].getHeight()
-                    || (float) l.dials[k].getWidth() < juce::jmax ((float) Knob::smallSide, middleW))
+            for (size_t k = 0; k < l.dials.size() && k < plain.dials.size(); ++k)
+                if (l.dials[k].getY() != plain.dials[k].getY() || l.dials[k].getHeight() != plain.dials[k].getHeight())
                     inRow.add (where + "dial " + juce::String ((int) k) + " " + l.dials[k].toString() + ", with no switch " + plain.dials[k].toString());
+            for (const size_t k : { (size_t) 0, (size_t) 3 })      // BASS and TREBLE, each a share of its own
+                if ((float) l.dials[k].getWidth() < juce::jmax ((float) Knob::smallSide, middleW))
+                    inRow.add (where + "dial " + juce::String ((int) k) + " " + l.dials[k].toString() + " narrower than its name");
             if (l.well != plain.well)
                 inRow.add (where + "the well " + l.well.toString() + ", with no switch " + plain.well.toString());
             if (width < 0)
-                cells << "HPF 64, ULTRA LO " << l.toggles[0]->getWidth() << ", dials " << l.dials[0].getWidth() << ", ULTRA HI "
-                      << l.toggles[1]->getWidth() << ", LPF 64, the well " << l.well.getWidth() << " x " << l.well.getHeight();
+                cells << "STR " << str->getWidth() << " over ULTRA LO " << lo->getWidth() << ", dials " << l.dials[0].getWidth() << ", FING "
+                      << fing->getWidth() << " over ULTRA HI " << hi->getWidth() << ", the well " << l.well.getWidth() << " x " << l.well.getHeight();
 
-            // WITHOUT: the five cells as the row always laid them — the cuts a cut's width each side of three equal dials
-            // edge to edge — the same for a pack of no switch and ReVolt's, whose only one is BOOST, none on the bass.
-            for (const auto* p : { &plain, &bare })
+            // WITHOUT: the five cells as the row always laid them — the cuts a cut's width each side of three equal shares
+            // edge to edge, BASS, MIDDLE with its FREQ and TREBLE — the cuts' own switches back, no toggle and no pick.
             {
-                const juce::String who = p == &plain ? "no switch: " : "ReVolt's: ";
-                if (! p->toggles.empty() || p->dials.size() != 3 || p->cuts.size() != 2 || ! p->picks.empty()
+                const auto* p = &plain;
+                const juce::String who = "no switch: ";
+                if (! p->toggles.empty() || p->dials.size() != 4 || p->cuts.size() != 2 || ! p->picks.empty()
                     || ! p->panel->console().innerCell (0).isEmpty() || ! p->panel->console().innerCell (1).isEmpty())
+                    asBefore.add (where + who + juce::String ((int) p->toggles.size()) + " toggles, " + juce::String ((int) p->dials.size())
+                                  + " dials, " + juce::String ((int) p->cuts.size()) + " cuts");
+                else
                 {
-                    asBefore.add (where + who + juce::String ((int) p->toggles.size()) + " toggles, " + juce::String ((int) p->dials.size()) + " dials");
-                    continue;
+                    const auto s3 = p->panel->sections()[2];
+                    const int shareW = (s3.getWidth() - 2 * EqSection::cutW) / 3;
+                    const auto share = [&] (int k) { return juce::Rectangle<int> (s3.getX() + EqSection::cutW + k * shareW, p->dials[0].getY(), shareW, p->dials[0].getHeight()); };
+                    if (p->dials[0] != share (0) || p->dials[3] != share (2))
+                        asBefore.add (where + who + "BASS at " + p->dials[0].toString() + ", TREBLE at " + p->dials[3].toString()
+                                      + " (their shares " + share (0).toString() + ", " + share (2).toString() + ")");
+                    if (! share (1).contains (p->dials[1]) || ! share (1).contains (p->dials[2]))
+                        asBefore.add (where + who + "MIDDLE " + p->dials[1].toString() + " and its FREQ " + p->dials[2].toString()
+                                      + " outside their share " + share (1).toString());
+                    if (std::abs (p->cuts[0].getCentreX() - (s3.getX() + EqSection::cutW / 2)) > 1
+                        || std::abs (p->cuts[1].getCentreX() - (s3.getRight() - EqSection::cutW / 2)) > 1)
+                        asBefore.add (where + who + "the cuts' switches at " + p->cuts[0].toString() + " and " + p->cuts[1].toString());
                 }
-                const auto s3 = p->panel->sections()[2];
-                const int knobW = (s3.getWidth() - 2 * EqSection::cutW) / 3;
-                for (int k = 0; k < 3; ++k)
-                    if (p->dials[(size_t) k] != juce::Rectangle<int> (s3.getX() + EqSection::cutW + k * knobW, p->dials[0].getY(), knobW, p->dials[0].getHeight()))
-                        asBefore.add (where + who + "dial " + juce::String (k) + " at " + p->dials[(size_t) k].toString());
-                if (std::abs (p->cuts[0].getCentreX() - (s3.getX() + EqSection::cutW / 2)) > 1
-                    || std::abs (p->cuts[1].getCentreX() - (s3.getRight() - EqSection::cutW / 2)) > 1)
-                    asBefore.add (where + who + "the cuts' switches at " + p->cuts[0].toString() + " and " + p->cuts[1].toString());
             }
-            if (plain.dials != bare.dials || plain.well != bare.well)
-                asBefore.add (where + "no switch and ReVolt's apart");
 
             // THE BASS'S NARROWER SECTIONS: GAIN's column as wide as its dial or SMOOTH, BLEND right after it, the lever's 80
-            // (the owner, 02.11); the well and its row of hands take the rest.
+            // (the owner, 02.11) — or as wide as the lever it holds needs for its names, the pack's voices B15 and SVT (the
+            // owner, 02.11 later); the well and its row of hands take the rest.
             for (const auto* p : { &l, &plain })
             {
                 const auto& s = p->panel->sections();
                 const int gainW = juce::jmax (p->gain.getWidth(), p->smooth.getWidth());
-                if (s[1].getWidth() != 80 || s[0].getWidth() != gainW + CapturedBlockPanel::bassSideW || p->smooth.isEmpty()
+                const int leverW = juce::jmax (80, p->lever != nullptr ? juce::roundToInt (std::ceil (ChannelLever::idealWidth (p->lever->channelNames()))) + 2 : 0);
+                if (s[1].getWidth() != leverW || s[0].getWidth() != gainW + CapturedBlockPanel::bassSideW || p->smooth.isEmpty()
                     || p->blend.getX() < s[0].getRight() - CapturedBlockPanel::bassSideW || p->blend.getRight() > s[0].getRight()
                     || p->well.getX() != s[2].getX() || p->well.getRight() != s[2].getRight())
                     narrower.add (where + "GAIN's section " + s[0].toString() + " (its dial " + p->gain.toString() + ", SMOOTH " + p->smooth.toString()
-                                  + ", BLEND " + p->blend.toString() + "), the lever's " + s[1].toString() + ", the well " + p->well.toString()
-                                  + " in " + s[2].toString());
+                                  + ", BLEND " + p->blend.toString() + "), the lever's " + s[1].toString() + " (its own " + juce::String (leverW)
+                                  + "), the well " + p->well.toString() + " in " + s[2].toString());
             }
         }
-        check (faked && inRow.isEmpty(), "a pack's tone switches are cells of the AMP's tone row (HPF, ULTRA LO, BASS, MIDDLE, TREBLE, ULTRA HI, "
-                                         "LPF) at the least width and 16:9: from the names' line to the cuts' foot, as wide as their words, "
-                                         "inside the AMP and over nothing, no pick under GAIN; the well and the dials as with no switch ("
-                                         + cells + ")" + (inRow.isEmpty() ? juce::String() : ": " + inRow.joinIntoString ("; ")));
-        check (faked && asBefore.isEmpty(), "with no switch the tone row is its five cells as before: HPF, three equal dials edge to edge, LPF"
+        check (faked && inRow.isEmpty(), "a pack's tone switches stand in the AMP's tone row as the walker's do — STR over ULTRA LO left "
+                                         "of the dials, FING over ULTRA HI right of them, the cuts' own switches gone — at the least width "
+                                         "and 16:9: as wide as their words, inside the AMP and over nothing, no pick under GAIN; the well "
+                                         "and the dials' line as with no switch (" + cells + ")"
+                                         + (inRow.isEmpty() ? juce::String() : ": " + inRow.joinIntoString ("; ")));
+        check (faked && asBefore.isEmpty(), "with no switch the tone row is its five cells as before: HPF, three equal shares edge to edge "
+                                            "(BASS, MIDDLE with its FREQ, TREBLE), LPF"
                                             + (asBefore.isEmpty() ? juce::String() : ": " + asBefore.joinIntoString ("; ")));
         check (faked && narrower.isEmpty(), "the bass's GAIN section as wide as its dial or SMOOTH, BLEND right after it, the lever's section "
-                                            "80, the well and its row of hands the rest" + (narrower.isEmpty() ? juce::String() : ": " + narrower.joinIntoString ("; ")));
+                                            "80 or as wide as its voices' names, the well and its row of hands the rest"
+                                            + (narrower.isEmpty() ? juce::String() : ": " + narrower.joinIntoString ("; ")));
 
-        // Each moves its selector: a click one position toward where it lands, back from the end it is against; a drag
-        // one position its way; one gesture each; the parameter moved from elsewhere moves the dot; the hint all of it.
+        // Each moves its tone: a click one position toward where it lands, back from the end it is against; a drag one
+        // position its way; one gesture each; the parameter moved from elsewhere moves the dot; the hint all of it.
         {
             juce::StringArray wrong;
             const auto l = look (*ed);
-            for (size_t k = 0; k < l.toggles.size(); ++k)
+            int toggles = 0;
+            for (const auto& [head, place] : { std::pair<const char*, int> { "ULTRA LO", 4 }, std::pair<const char*, int> { "ULTRA HI", 5 } })
             {
-                auto& s = *l.toggles[k];
-                const auto id = params::selectorId (params::preampId, (int) k);
+                auto* sw = toggleOf (l, head);
+                const auto id = params::blockMeasured (params::preampId, place);
                 auto* p = withSwitches->apvts.getParameter (id);
+                if (sw == nullptr || p == nullptr)
+                {
+                    wrong.add (juce::String (head) + (sw == nullptr ? ": no toggle" : ": no parameter " + id));
+                    continue;
+                }
+                ++toggles;
+                auto& s = *sw;
+                const int n = s.count();
+                const auto at = [&] { return juce::roundToInt (p->getValue() * (float) juce::jmax (1, n - 1)); };
+                set (*withSwitches, id, 0.0f);          // from its first position, wherever the pack opens it
                 Gestures gestures;
                 p->addListener (&gestures);
-                const auto at = [&] { return juce::roundToInt (value (*withSwitches, id.toRawUTF8())); };
                 const float lineY = (float) s.getHeight() - (float) ToggleSwitch::ovalH * 0.5f;
                 const auto click = [&] (float x)
                 {
@@ -6882,21 +7284,21 @@ int ORBITAMP_GATE_MAIN()
                 click (right);
                 click (right);              // to the last, or back from it
                 path << " " << at();
-                const juce::String want = s.count() == 3 ? "0 1 0 2" : "0 1 0 0";
+                const juce::String want = n == 3 ? "0 1 0 2" : "0 1 0 0";
                 if (path != want || gestures.begun != 4)
                     wrong.add (s.getTooltip() + ": " + path + " (want " + want + "), " + juce::String (gestures.begun) + " gestures");
-                set (*withSwitches, id, 1.0f);
+                p->removeListener (&gestures);
+                set (*withSwitches, id, 1.0f / (float) juce::jmax (1, n - 1));
                 if (s.selectedIndex() != 1)
                     wrong.add (s.getTooltip() + ": the parameter at 1, the dot at " + juce::String (s.selectedIndex()));
                 const auto hint = s.getTooltip();
                 for (const char* word : { "ULTRA", "-", "OFF", "+" })
-                    if (! hint.contains (word) && ! (k == 1 && juce::String (word) == "-"))
+                    if (! hint.contains (word) && ! (juce::String (head) == "ULTRA HI" && juce::String (word) == "-"))
                         wrong.add ("the hint \"" + hint + "\" names no " + word);
-                p->removeListener (&gestures);
             }
-            check (l.toggles.size() == 2 && wrong.isEmpty(), "each tone switch moves its selector, a click or a drag one position "
-                                                             "and one gesture, the parameter its dot; its hint names it and every "
-                                                             "position" + (wrong.isEmpty() ? juce::String() : ": " + wrong.joinIntoString ("; ")));
+            check (toggles == 2 && wrong.isEmpty(), "each tone switch moves its tone, a click or a drag one position and one "
+                                                    "gesture, the parameter its dot; its hint names it and every position"
+                                                    + (wrong.isEmpty() ? juce::String() : ": " + wrong.joinIntoString ("; ")));
         }
 
         // A POSITION CALLED OFF IS WRITTEN 0, as the pedal marks it (the owner, 02.11), in any case, and so is a 0; every
@@ -6908,9 +7310,9 @@ int ORBITAMP_GATE_MAIN()
                 if (ToggleSwitch::markFor (in) != out)
                     wrong.add (in + " -> " + ToggleSwitch::markFor (in));
             const auto l = look (*ed);
-            if (l.toggles.size() == 2)
+            if (auto* hiSwitch = toggleOf (l, "ULTRA HI"))
             {
-                auto& hi = *l.toggles[1];
+                auto& hi = *hiSwitch;
                 const auto shot = [] (juce::Component& c) { return c.createComponentSnapshot (c.getLocalBounds(), true, 1.0f); };
                 const auto same = [] (const juce::Image& a, const juce::Image& b)
                 {
@@ -6922,8 +7324,12 @@ int ORBITAMP_GATE_MAIN()
                                 return false;
                     return true;
                 };
-                set (*withSwitches, params::selectorId (params::preampId, 1), 0.0f);   // at off, lit as the mark it is
-                ToggleSwitch zero;   // a pack that says 0
+                set (*withSwitches, params::blockMeasured (params::preampId, 5), 0.0f);   // at off, lit as the mark it is
+                ToggleSwitch zero;   // a pack that says 0, drawn as the face draws its tone switches
+                zero.oneLine    = hi.oneLine;
+                zero.walkerLook = hi.walkerLook;
+                zero.slotAt     = hi.slotAt;
+                zero.accent     = hi.accent;
                 zero.setItems ("ULTRA HI", { "0", "+" }, 0);
                 zero.setBounds (hi.getLocalBounds());
                 if (! same (shot (hi), shot (zero)))
@@ -6940,7 +7346,7 @@ int ORBITAMP_GATE_MAIN()
         {
             juce::StringArray wrong;
             auto guitar = make (products::orbitAmp()), guitarPlain = make (products::orbitAmp());
-            const bool fakedGuitar = fake (*guitar, true) && fake (*guitarPlain, false);
+            const bool fakedGuitar = fakeSelectors (*guitar, true) && fakeSelectors (*guitarPlain, false);
             std::unique_ptr<juce::AudioProcessorEditor> ge (guitar->createEditor()), gp (guitarPlain->createEditor());
             const int gh = ge->getHeight();
             for (const int width : { -1, juce::roundToInt ((float) gh * 16.0f / 9.0f) })

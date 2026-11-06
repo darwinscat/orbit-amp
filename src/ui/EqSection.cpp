@@ -793,15 +793,11 @@ void EqSection::layOutRow (juce::Rectangle<int> row)
 
     // ON THE BASS WITH A PACK'S SWITCHES, every switch on ONE LINE as the walker has them, two a side of the dials (the
     // owner, 02.11 and 03.11): STR 4 / 5 over the pack's first left of them, FING / SLAP over its second right of them,
-    // each side's slots in one column. The cuts are always in there, as on the walker.
+    // each side's slots in one column. The cuts are always in there, as on the walker — opened so by the processor where
+    // its pack has switches (OrbitBassStart.cpp), never written by a layout: a window coming up moves no parameter.
     if (bassStandard() && (innerW[0] > 0 || innerW[1] > 0))
     {
-        if (! walkerLines)
-        {
-            walkerLines = true;
-            holdOn (params::bassHpfOn);
-            holdOn (params::bassLpfOn);
-        }
+        walkerLines = true;
         for (juce::Component* c : { (juce::Component*) &hpfSw, (juce::Component*) &lpfSw, (juce::Component*) &hpfLabel,
                                     (juce::Component*) &lpfLabel, (juce::Component*) &hpfSlopeBox, (juce::Component*) &lpfSlopeBox })
             c->setVisible (false);

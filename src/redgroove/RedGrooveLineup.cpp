@@ -40,10 +40,11 @@ const channels::Lineup& lineup()
     // its two voices, B15 and SVT, a gear each (CMakeLists.txt: REDGROOVEBASS_SET). No room and no delay: the
     // bass's chain holds neither (params::bassChainHolds).
     //
-    // EACH GEAR IS AN AMP OF ITS OWN: beside what every channel keeps — DRIVE, the tones (the bass's standard's
-    // BASS, MIDDLE and TREBLE, Channels::toneOf), the cabinet — its BLEND, MIDDLE's frequency, COMP's threshold,
-    // OCTAVE, ENVELOPE, CHORUS and DI/CAB. The instrument and the hand are the player's on every gear: 5 STR /
-    // 4 STR and FINGERS / SLAP are kept by no channel.
+    // EACH GEAR IS AN AMP OF ITS OWN: beside what every channel keeps — DRIVE, the tones (the pack's dials where it
+    // states a tone, the SGT-DI's BASS, MID and TREBLE with its FREQ and its ULTRA LO / ULTRA HI switches, or on a pack
+    // with none the bass's standard's BASS, MIDDLE and TREBLE: Channels::toneOf), the cabinet — its BLEND, the standard
+    // MIDDLE's frequency, COMP's threshold, OCTAVE, ENVELOPE, CHORUS and DI/CAB. The instrument and the hand are the
+    // player's on every gear: 5 STR / 4 STR and FINGERS / SLAP are kept by no channel.
     //
     // WHAT THE WALKER HOLDS WHERE IT IS: COMP on, all of the signal through it, at 4:1 on OPTO — its knob is the
     // threshold alone; OCTAVE, ENVELOPE and CHORUS in the strip and on — their sliders are their amounts, 0 the

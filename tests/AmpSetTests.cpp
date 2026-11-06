@@ -74,13 +74,24 @@ int ORBITAMP_GATE_MAIN()
     }
 
     // THE FAMILY'S SHELF, Darwin's Cat's own ten in the Orange's folder, none in Other — those are
-    // OrbitAmp's — and the ones the amp steps through are those ten.
+    // OrbitAmp's — and the ones the amp steps through are those ten. A BASS AMP's list names none of the
+    // shelf: a guitar amp's cabinets and a bass amp's never cross (Product::playsCabIr), and the walker's
+    // are drawn, cab-ir-generator's presets in the binary (channels::Lineup::drawnCabinets).
     {
         int orange = 0, other = 0;
         for (const auto& c : cabinets)
             (c.startsWith ("IRs/Orange PPC212V/") ? orange : other) += 1;
-        check (orange == 10 && other == 0, "the cabinets are the Orange's ten, none in Other: " + juce::String (orange) + " + " + juce::String (other));
-        check (cabinets.contains ("IRs/Orange PPC212V/02-dark-matter.wav"), "...DARK MATTER among them");
+        if (product.bass)
+        {
+            check (orange == 0 && other == 0, "the " + amp + "'s list names no cabinet of the shelf, its own drawn: "
+                                                  + juce::String (orange) + " + " + juce::String (other));
+            check.skip ("...DARK MATTER among them", "a bass amp plays no cabinet of the shelf");
+        }
+        else
+        {
+            check (orange == 10 && other == 0, "the cabinets are the Orange's ten, none in Other: " + juce::String (orange) + " + " + juce::String (other));
+            check (cabinets.contains ("IRs/Orange PPC212V/02-dark-matter.wav"), "...DARK MATTER among them");
+        }
 
         const auto ownCabinets = set::ownCabinets (factory, name);
         bool mine = ownCabinets.size() == cabinets.size();

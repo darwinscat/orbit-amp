@@ -120,6 +120,21 @@ public:
         rebuild();
     }
 
+    /** NO CABINET: an IR of nothing, loaded as one — the cabinet plays silence, as a silent file does (rebuild), in place
+        of whatever it played. A bass on no cabinet of its own (the player's restored session that saved none). Message
+        thread. */
+    void loadNothing()
+    {
+        juce::AudioBuffer<float> shot (1, 1);
+        shot.clear();
+
+        const std::scoped_lock lock (producer);
+        raw     = std::move (shot);
+        rawRate = 48000.0;
+        atHost.clear();
+        rebuild();
+    }
+
     /** The longest IR `load` takes — see `readerFor`. */
     static constexpr double maxSeconds = 5.0;
 
