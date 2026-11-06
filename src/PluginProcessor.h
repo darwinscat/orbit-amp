@@ -1606,8 +1606,8 @@ private:
         bypass fade, and then — in the call the fade ends in — the stage is cleared and not run at all. Its picture is
         written while `watched` and at work (switched on, `adds`: its MIX up). No channel (null, 0) is a gap: the stage
         takes it as its own (law 11c). */
-    template <typename Stage>
-    void runSpaceStage (Stage&, bool ready, params::ChainRow, int which, core::SpaceTap&, const std::atomic<bool>& watched,
+    template <typename SpaceStage>   // not "Stage": the class's own Stage (params::Stage) would hide it, and gcc says so
+    void runSpaceStage (SpaceStage&, bool ready, params::ChainRow, int which, core::SpaceTap&, const std::atomic<bool>& watched,
                         bool adds, float* const* channels, int numChannels, int numSamples) noexcept;
     bool delayAdds() const noexcept  { return delayMixParam != nullptr && delayMixParam->load() > 0.0f; }
     bool reverbAdds() const noexcept { return reverbMixParam != nullptr && reverbMixParam->load() > 0.0f; }

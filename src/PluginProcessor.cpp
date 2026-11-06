@@ -1452,8 +1452,8 @@ void AmpProcessor::updateReverbSettings() noexcept
     reverb.setHpfHz (reverbHpfHzParam->load());
 }
 
-template <typename Stage>
-void AmpProcessor::runSpaceStage (Stage& stage, bool ready, params::ChainRow row, int which, core::SpaceTap& tap,
+template <typename SpaceStage>
+void AmpProcessor::runSpaceStage (SpaceStage& stage, bool ready, params::ChainRow row, int which, core::SpaceTap& tap,
                                   const std::atomic<bool>& watched, bool adds, float* const* channels, int numChannels,
                                   int numSamples) noexcept
 {
