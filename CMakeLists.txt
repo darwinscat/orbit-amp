@@ -2360,6 +2360,13 @@ foreach(line IN LISTS _gate_lines)
         continue()
     endif()
     add_dependencies(Family_Gates ${target})
+    # A GATE'S STACK IS THE ONE IT HAS ON A MAC AND ON LINUX, 8 MB: Windows gives a program 1 MB, and the gates keep
+    # what they test on the stack — the tuner's strobe tests some 4 MB there (MSVC's /analyze) — so the tuner and
+    # the chain gates died on MSVC's runners of a stack overflow (0xC00000FD), the chain before its first line.
+    # The amps' own binaries keep Windows' default.
+    if(MSVC)
+        target_link_options(${target} PRIVATE /STACK:8388608)
+    endif()
     list(JOIN env " " env)
     string(APPEND _gate_manifest "${gate}\t$<TARGET_FILE:${target}>\t${env}\n")
 endforeach()
