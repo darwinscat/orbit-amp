@@ -3,6 +3,8 @@
 
 #include "PluginEditor.h"
 #include "PluginProcessor.h"
+#include "core/CapturedBlock.h"
+#include "device/DeviceLibrary.h"
 
 namespace orbitamp
 {
@@ -17,15 +19,41 @@ namespace
     /** WHERE A FRESH ORBITBASS STANDS, beyond the engine's: the engine's own (params::Opening). Its DELAY and REVERB
         are out of the strip (params::delayPresent, reverbPresent) — not in its sound or on its face until a player adds
         them — and their switches ON, so one added plays at once. The gate stays off, as every amp's does. Its cuts are
-        its own stage, not the cabinet's (params::bassHpf: the HPF at 5, a low B whole; the LPF off), so the cabinet's
-        own stay off and its IR plays as it was shot. The pack it opens on is the first of its list, which is its only
-        one for now (CMakeLists.txt: ORBITBASS_SET). */
+        its own stage, not the cabinet's (params::bassHpf: the HPF at 5, a low B whole; the LPF at FINGERS), so the
+        cabinet's own stay off and its IR plays as it was shot. The pack it opens on is the first of its list, which is
+        its only one (CMakeLists.txt: ORBITBASS_SET). */
     void bassOpening (const Product&, params::Opening&) {}
 
-    /** Its own parameters, after the engine's: COMP, BLEND, DI/CAB and its cuts. */
-    void bassParameters (const Product&, juce::AudioProcessorValueTreeState::ParameterLayout& layout)
+    /** WHETHER THE PACK A FRESH ORBITBASS OPENS ON — the first of its list — HAS SWITCHES OF ITS TONE, the SGT-DI's
+        ULTRA LO and ULTRA HI: tones of positions that carry bands (core::CapturedBlock::switchCarriesBands), no sweep.
+        Its face then stands them where the cuts' switches were, STR 4 / 5 and FING / SLAP one line each, as the walker
+        has them (EqSection::layOutRow) — and the cuts always in. */
+    bool opensOnToneSwitches (const Product& product)
     {
-        params::addBassParameters (layout);
+        const auto packs = device::DeviceLibrary::scan (product.name, device::DeviceLibrary::ampSlot);
+        if (packs.isEmpty())
+            return false;
+        for (const auto& stage : packs.getReference (0).rig.chain)
+        {
+            if (stage.kind != namz::rig::StageKind::Nam)
+                continue;
+            for (const auto& tone : stage.tone)
+                if (tone.sweep <= 0 && core::CapturedBlock::switchCarriesBands (tone))
+                    return true;
+            break;
+        }
+        return false;
+    }
+
+    /** Its own parameters, after the engine's: COMP, BLEND, DI/CAB and its cuts — both cuts IN where its pack has
+        switches of its tone (the owner, 03.11: the cuts' switches give their place to the pack's, the cuts always in).
+        Declared so, a fresh one plays them in with no window open, INIT and a host's reset bring them back in, and the
+        face coming up finds them so and moves nothing. */
+    void bassParameters (const Product& product, juce::AudioProcessorValueTreeState::ParameterLayout& layout)
+    {
+        params::Opening opening;
+        opening.bassLpfOn = opensOnToneSwitches (product);   // the HPF opens in on every bass
+        params::addBassParameters (layout, opening);
     }
 }
 

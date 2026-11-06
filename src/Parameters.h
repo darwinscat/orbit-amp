@@ -731,9 +731,10 @@ struct Opening
     bool  delayOn  = true;
     bool  reverbOn = true;
 
-    // THE BASS'S OWN, where a product holds them elsewhere than OrbitBass opens them (channels::Lineup::pinned,
-    // which channels::Engine::opening reads into these): all of the signal through COMP, and the LPF on. Declared by
-    // addBassParameters, which the product hands this Opening; engineDefault leaves them their declared defaults.
+    // THE BASS'S OWN, where a product opens them elsewhere than the engine: all of the signal through COMP, and the LPF
+    // on — the walker's held (channels::Lineup::pinned, which channels::Engine::opening reads into these), OrbitBass's LPF
+    // where its pack has switches of its tone (OrbitBassStart.cpp). Declared by addBassParameters, which the product hands
+    // this Opening; engineDefault leaves them their declared defaults.
     float compAmount = 0.5f;
     bool  bassLpfOn  = false;
 
