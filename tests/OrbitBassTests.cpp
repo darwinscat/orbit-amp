@@ -4426,9 +4426,15 @@ int ORBITAMP_GATE_MAIN()
             ok = ok && br != nullptr && br->getHeight() == want;
             said << " " << id << " " << (br != nullptr ? br->getHeight() : -1) << " (" << want << ")";
         }
+        // GATE's own menu comes through the catcher, as every menu does here: no window opens, which a machine
+        // with no display would have nowhere to put.
+        int caught = 0;
+        onfirst::catcher() = [&] (const juce::PopupMenu&, const std::function<void (int)>&) { ++caught; return true; };
         if (face != nullptr && face->gateBlock().onMenu != nullptr)
             face->gateBlock().onMenu ({});
-        ok = ok && face != nullptr && face->lastMenu.isEmpty();
+        onfirst::catcher() = nullptr;
+        ok = ok && face != nullptr && face->lastMenu.isEmpty() && caught == 1;
+        said << "; menus " << caught;
         check (ok, "GATE and LIMIT without a block's menu, their rails at full height:" + said + "; GATE's right click its own menu, no block's");
     }
 

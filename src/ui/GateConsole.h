@@ -5,6 +5,7 @@
 
 #include "../Parameters.h"
 #include "GateLearner.h"
+#include "OnFirst.h"
 
 #include <juce_audio_processors/juce_audio_processors.h>
 
@@ -171,13 +172,16 @@ public:
         // The menu outlives the click that opened it, and this console dies with its window.
         // Same guard the gear's and the limiter's menus carry — a weak reference rather than a
         // SafePointer only because this has no pixels and is not a Component.
-        menu (onAt).showMenuAsync (juce::PopupMenu::Options()
-                                       .withTargetScreenArea ({ screenPos.x, screenPos.y, 1, 1 }),
-                                   [safe = juce::WeakReference<GateConsole> (this), onAt] (int r)
-                                   {
-                                       if (safe != nullptr)
-                                           safe->pick (r, onAt);
-                                   });
+        //
+        // Through the gates' catcher, as every block's menu and value list goes (OnFirst.h): a gate answers it
+        // rather than open a window, which a machine with no display has nowhere to put.
+        onfirst::showList (menu (onAt),
+                           juce::PopupMenu::Options().withTargetScreenArea ({ screenPos.x, screenPos.y, 1, 1 }),
+                           [safe = juce::WeakReference<GateConsole> (this), onAt] (int r)
+                           {
+                               if (safe != nullptr)
+                                   safe->pick (r, onAt);
+                           });
     }
 
     /** What a pick of item `choice` of menu (onAt) does — the popup's answer, and a gate's without one. */
