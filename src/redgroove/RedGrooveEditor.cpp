@@ -898,11 +898,23 @@ void RedGrooveEditor::webExtras (const juce::File& dir, juce::DynamicObject& kit
         auto* m = new Obj();
         m->setProperty ("box", rect (boxOf (midFreq))); m->setProperty ("slot", rect (layout::midFreqSlot));
         m->setProperty ("sprite", "fader-cap"); m->setProperty ("capLength", layout::midFreqCap); m->setProperty ("across", true);
-        m->setProperty ("param", params::eqBellHz (0, 0));
-        auto* map = new Obj();
-        map->setProperty ("kind", "log"); map->setProperty ("minHz", params::bassMidMinHz); map->setProperty ("maxHz", params::bassMidMaxHz);
-        map->setProperty ("travel", "log (hz / minHz) / log (maxHz / minHz), left to right");
-        m->setProperty ("map", map);
+        // MID FREQ as the face binds it (above): on a pack with a frequency knob of its own — the SGT-DI's Freq — that
+        // knob's tone slot, its travel the slot's value 0..1 and its frequency where the pack's positions put it; no
+        // map, there being none of the kinds said here for that. On a pack with none, the standard MIDDLE's frequency
+        // on its logarithmic travel.
+        if (namz::rig::Tone freq; channels.frequencyToneOf (channels.active(), freq))
+        {
+            m->setProperty ("param", channels.frequencyOf (channels.active()));
+            m->setProperty ("map", juce::var());
+        }
+        else
+        {
+            m->setProperty ("param", params::eqBellHz (0, 0));
+            auto* map = new Obj();
+            map->setProperty ("kind", "log"); map->setProperty ("minHz", params::bassMidMinHz); map->setProperty ("maxHz", params::bassMidMaxHz);
+            map->setProperty ("travel", "log (hz / minHz) / log (maxHz / minHz), left to right");
+            m->setProperty ("map", map);
+        }
         m->setProperty ("reading", "hertz");
         o->setProperty ("midFreq", m);
     }
