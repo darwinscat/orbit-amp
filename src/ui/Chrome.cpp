@@ -246,21 +246,8 @@ void Chrome::showPresetMenu()
     // the reset is one undoable step like any preset load.
     menu.addItem ("Reset to default", [this]
     {
-        // ...and back to a fresh instance's IDENTITY too. The device and switch names are not
-        // parameters, so setting every parameter to its default leaves them behind — and the aim
-        // would then put the outgoing device straight back over the default one.
-        auto tree = amp.stateForSaving (true);
-
-        for (auto* p : amp.getParameters())
-            if (auto* rp = dynamic_cast<juce::RangedAudioParameter*> (p))
-            {
-                auto child = tree.getChildWithProperty ("id", rp->paramID);
-                if (child.isValid())
-                    child.setProperty ("value", rp->convertFrom0to1 (amp.engineDefault (*rp)), nullptr);
-            }
-        amp.takeBassCabinet (tree);   // a bass's cabinet, as a fresh one's
-
-        amp.history.applyEdit (amp.history.active(), tree, "Reset to default");
+        // ...and back to a fresh instance's identity and cabinet too (AmpProcessor::resetToDefault).
+        amp.resetToDefault();
         presetName = "Default";
         preset.setCurrentName (presetName);
     });

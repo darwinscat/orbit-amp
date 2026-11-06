@@ -386,8 +386,22 @@ public:
         and its key, name and `from` on the state, as a pick of it leaves them — so a session keeps what it
         played wherever it opens. With none there it is left as it is, on no cabinet: no bytes, and nothing
         loads, as with the factory folder missing. A guitar amp's state is left as it is. Any thread: it
-        touches `tree`, the IR store, which takes bytes from any, and reads the player's folder. */
+        touches `tree`, the IR store, which takes bytes from any, and reads the player's folder.
+        ...WHERE THE PRODUCT OPENS ON A CABINET OF ITS OWN (Product::freshCabinet, OrbitBass's) a fresh one and INIT
+        open on that (takeFreshCabinet) and a session or a preset keeps what it saved: this is then a host's `cab_ir`
+        moved onto a number the bass does not play alone. */
     void takeBassCabinet (juce::ValueTree& tree);
+
+    /** THE CABINET A FRESH ONE OPENS ON (Product::freshCabinet) — OrbitBass's the bass's dozen's first, 1: 8x10 STACK —
+        on `tree`, a fresh instance's or INIT's, in place of whatever it played: drawn, its bytes into the store at once
+        where this process has drawn it already, else drawn on the worker and kept only while the live state still waits
+        for it, so a session, a preset or a hand's pick that comes first keeps its own. Not undoable, not an edit. False,
+        changing nothing, for a product that opens on no cabinet of its own. Message thread. */
+    bool takeFreshCabinet (juce::ValueTree& tree);
+
+    /** RESET TO DEFAULT — INIT: every parameter back where a fresh instance stands, its identity and its cabinet with
+        them (takeFreshCabinet, else takeBassCabinet), as one step of the history. Message thread. */
+    void resetToDefault();
 
     /** The note (takeFormerCabinet): on every state, from the first moment of the processor's (its
         constructor) and of every state that lands. */
@@ -1651,6 +1665,21 @@ private:
                    std::shared_ptr<const CabParts> parts = {});
     juce::String cabKeptPartsKey;                      // the kept render's key, and its parts — for the pump to hand on
     std::shared_ptr<const CabParts> cabKeptParts;      // with the IR when it loads it
+
+    /** A drawn cabinet rendered: its IR as a WAV, and its two mics' parts where both are heard. */
+    struct DrawnCab
+    {
+        std::shared_ptr<juce::MemoryBlock> bytes;
+        std::shared_ptr<const CabParts> parts;
+    };
+    DrawnCab renderDrawn (const cabir::State&, bool live);   // the worker's alone (cabRenderer)
+    /** A drawn cabinet as this process has drawn it, by its `from` — or, given one, kept so for every processor after. */
+    static DrawnCab drawnOnce (const juce::String& from, const DrawnCab* keep = nullptr);
+    /** A render kept on `tree`, as a pick keeps it: its bytes into the store, its key, name and `from` on the tree. */
+    void keepDrawn (juce::ValueTree& tree, const cabir::State&, const juce::MemoryBlock& bytes, std::shared_ptr<const CabParts> parts);
+    /** The cabinet `from` says drawn on the worker — or taken as this process drew it — and kept on the live state only
+        if it still waits for it: still says `from`, with no bytes of its own. */
+    void requestDrawnOnce (const cabir::State&, const juce::String& from);
 
     /** Adds to a tree bound for disk every player's-own IR any state inside it names — the live
         one, and each register's. */

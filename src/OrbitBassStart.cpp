@@ -4,6 +4,7 @@
 #include "PluginEditor.h"
 #include "PluginProcessor.h"
 #include "core/CapturedBlock.h"
+#include "device/BassCabinets.h"
 #include "device/DeviceLibrary.h"
 
 namespace orbitamp
@@ -45,6 +46,14 @@ namespace
         return false;
     }
 
+    /** THE CABINET A FRESH ONE OPENS ON, and INIT: the bass's dozen's first, 1: 8x10 STACK (the owner, 06.11), drawn —
+        not no cabinet at all, whatever the player keeps in `Bass IRs`. A session or a preset keeps what it saved. */
+    juce::String freshCabinet()
+    {
+        const auto& dozen = device::BassCabinets::dozen();
+        return dozen.empty() ? juce::String() : AmpProcessor::cabSynthFrom (dozen.front().state);
+    }
+
     /** Its own parameters, after the engine's: COMP, BLEND, DI/CAB and its cuts — both cuts IN where its pack has
         switches of its tone (the owner, 03.11: the cuts' switches give their place to the pack's, the cuts always in).
         Declared so, a fresh one plays them in with no window open, INIT and a host's reset bring them back in, and the
@@ -72,6 +81,7 @@ const Product& products::orbitBass()
         p.tunerSwitch   = false;
         p.chain         = Chain::bass;
         p.tunerLowestHz = core::PitchTracker::bassLowestHz;
+        p.freshCabinet  = freshCabinet;
         return p;
     }();
     return orbitBass;
