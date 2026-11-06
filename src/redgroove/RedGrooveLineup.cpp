@@ -50,7 +50,7 @@ const channels::Lineup& lineup()
     // threshold alone; OCTAVE, ENVELOPE and CHORUS in the strip and on — their sliders are their amounts, 0 the
     // dry; both cuts on — the switches choose between their positions; no delay and no room in the strip.
     static const channels::Lineup walker {
-        "walker", "walker_channel", "SVT-410HE",
+        "walker", "walker_channel", "4x10-classic",
         {
             // Each gear at a cabinet of its own (the owner, 04.11): B15 at the dozen's 1x15, SVT at its 8x10.
             { "B15", "sgt-di-19a4", "Plate", std::nullopt, 0.0f, false, { "Voice", "B15" }, dozenAt ("rock-14-1x15-thump") },
