@@ -6,7 +6,7 @@
 // under the same names in each: view_make, view_build, view_context, view_create, view_error, view_gear,
 // view_turbo, view_settle, view_frame, view_draw, view_test, view_read, view_read_width,
 // view_read_height, view_destroy — and whatever more its world has (titan.cpp: view_wipers, view_lights; sky.cpp:
-// view_throttle, view_place).
+// view_throttle, view_place; walker.cpp: view_hear).
 
 #pragma once
 

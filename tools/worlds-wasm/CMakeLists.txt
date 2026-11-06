@@ -173,9 +173,11 @@ orbitamp_world(sky createSkyModule SOURCES
     "${ORBITAMP_ROOT}/src/catpit/CatpitSkyGl.cpp"
     EXTRA _view_throttle _view_place)
 
-# THE WALKER: RedGrooveBass's dome over the glowing forest. Its world is matched to its prototype to the last bit,
-# compiled without contraction as the app's build compiles it (a fused multiply-add rounds once where the JS rounds
-# twice; WebAssembly has none to fuse into, and this says so where a compiler might one day find one).
+# THE WALKER: RedGrooveBass's dome over the glowing forest — with the bass it hears of its own. Its world is matched to
+# its prototype to the last bit, compiled without contraction as the app's build compiles it (a fused multiply-add
+# rounds once where the JS rounds twice; WebAssembly has none to fuse into, and this says so where a compiler might one
+# day find one).
 orbitamp_world(walker createWalkerModule SOURCES
-    "${ORBITAMP_ROOT}/src/redgroove/view/WalkerGl.cpp" "${ORBITAMP_ROOT}/src/redgroove/view/WalkerWorld.cpp")
+    "${ORBITAMP_ROOT}/src/redgroove/view/WalkerGl.cpp" "${ORBITAMP_ROOT}/src/redgroove/view/WalkerWorld.cpp"
+    EXTRA _view_hear)
 set_source_files_properties("${ORBITAMP_ROOT}/src/redgroove/view/WalkerWorld.cpp" PROPERTIES COMPILE_OPTIONS "-ffp-contract=off")

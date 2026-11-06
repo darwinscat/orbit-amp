@@ -20,6 +20,15 @@
 // { wipers, lights } setting them from the start. CatpitAmp's sky is one more such view (sky-view.js): its gears are
 // the channels, counted from 0, and it has view.setThrottle (0..1, { settled }) — the lever anywhere along its
 // travel — and an option `place`, where the glass and the windshield are, which the module is given once it is made.
+// A world with an ear (RedGrooveBass's walker, walker-view.js) answers what is played, as the app's world lit by the
+// instrument does (WalkerDrive::hear, worlds/Play.h):
+//
+//   view.hear (peak);          // the amp's input's peak since the last call, linear (1 = full scale) — what the IN
+//                              // meter shows — once a frame or so from the page's audio. Not called, it is silence
+//
+// Each frame hears the largest peak said since the frame before it; a frame that comes before the page has said
+// anything since hears what it last said, for a tenth of a second, then silence — as the app's takePlay hands a
+// frame the last block's peak.
 //
 // The canvas lies over the windscreen's box. It renders at the screen's pixels (at most twice the CSS size) and
 // comes down to 0.75 and 0.5 of that by itself when frames run late, climbing back when they have room; it stops
@@ -54,6 +63,7 @@ function worldDrawn (canvas, options, post, world)
     let wipers = options.wipers ?? 0, lights = options.lights || [false, false];
     let cssW = options.cssW || 0, cssH = options.cssH || 0, dpr = options.dpr || 1;
     let throttle = null;            // the sky's lever, once moved (sky-view.js)
+    let heard = 0, lastHeard = 0, heardAt = -1, news = false;   // what the page said a world with an ear hears (view.hear)
     let M = null, failed = false, ready = false, drawn = false, active = !! options.on, steer = 0;
     let rung = 0, width = 0, height = 0, frame = 0, last = 0;
     const raf = typeof requestAnimationFrame === 'function' ? requestAnimationFrame : f => setTimeout (() => f (performance.now ()), 16);
@@ -101,6 +111,7 @@ function worldDrawn (canvas, options, post, world)
         last = t;
         if (dt > 0) ladder (dt);
         size ();
+        if (M._view_hear) { M._view_hear (news ? heard : t - heardAt < 0.1 ? lastHeard : 0); heard = 0; news = false; }
         M._view_frame (width, height, dt, steer);
         if (! drawn) { drawn = true; post ({ type: 'ready' }); }
     }
@@ -168,6 +179,7 @@ function worldDrawn (canvas, options, post, world)
             case 'turbo':  turbo = m.on; if (M && ! failed) M._view_turbo (turbo ? 1 : 0); break;
             case 'throttle': throttle = m.t; if (M && ! failed && M._view_throttle) { M._view_throttle (throttle); if (m.settled) M._view_settle (); } break;
             case 'steer':  steer = m.v; break;
+            case 'hear':   heard = Math.max (heard, m.peak); lastHeard = m.peak; heardAt = performance.now () / 1000; news = true; break;
             case 'wipers': wipers = m.speed; canopy (); break;
             case 'lights': lights = [m.left, m.right]; canopy (); break;
             case 'run':    active = m.on; active ? run () : halt (); break;
@@ -313,6 +325,11 @@ function createWorldView (canvas, world, url, { steer = false, onFallback = () =
         /** The searchlights' switches, left and right. */
         view.setLights = (left, right) => send ({ type: 'lights', left: !! left, right: !! right });
     }
+    if (world.ear)
+    {
+        /** What is played: the amp's input's peak since the last call, linear (1 = full scale). */
+        view.hear = peak => send ({ type: 'hear', peak: Math.abs (+peak || 0) });
+    }
     return view;
 }
 
@@ -321,5 +338,6 @@ function worldInert (world)
     const view = { setGear () {}, setTurbo () {}, setSteer () {}, start () {}, stop () {}, get quality () { return 0; }, ready: Promise.resolve (false), destroy () {} };
     if (world.canopy) { view.setWipers = () => {}; view.setLights = () => {}; }
     if (world.sky) view.setThrottle = () => {};
+    if (world.ear) view.hear = () => {};
     return view;
 }

@@ -7,8 +7,14 @@
 //
 // The drive is the plug-in's own, made as RedGrooveEditor::makeDrive makes it — in the product's gears, the horizon
 // 0.57 of the dome from its top — and handed what the windscreen hands it (Windscreen::renderFrame): the gear and TURBO
-// it holds, the steering, then a step and a frame. Its first frame is the app's (Windscreen::firstFrame, which made the
-// kit's posters): the world made in the drive's own first gear, then the gear asked for settled in and drawn with no step.
+// it holds, the steering, what was heard of the bass, then a step and a frame. Its first frame is the app's
+// (Windscreen::firstFrame, which made the kit's posters): the world made in the drive's own first gear, then the gear
+// asked for settled in and drawn with no step.
+//
+// THE BASS, HEARD: the forest answers the bass from the first note, as the plug-in's does unless the player says not to
+// (RedGrooveEditor: viewLitByDefault) — the drive is lit, and the peak the page hands view_hear before a frame is the
+// amp's input's (WalkerDrive::hear: the caps breathe with its level, a jump in it is an attack's flash and sparks).
+// Nothing handed is silence, the forest as it always was; a page that wants it unlit hands nothing.
 
 #include "redgroove/view/WalkerDrive.h"
 #include "view.h"
@@ -39,11 +45,13 @@ namespace
 
 extern "C"
 {
-    /** A drive in the product's gears; the gear and TURBO given are held, and settled in once the world is built. */
+    /** A drive in the product's gears, lit by the bass; the gear and TURBO given are held, and settled in once the world
+        is built. */
     EMSCRIPTEN_KEEPALIVE void view_make (int gears, int gear, int turbo)
     {
         gearsMade = gears;
         drive = std::make_unique<WalkerDrive> (gears, horizon);
+        drive->setLit (true);
         gearHeld = gear;
         turboHeld = turbo != 0;
     }
@@ -86,6 +94,10 @@ extern "C"
             return;
         drive->settle (gearHeld, turboHeld);
     }
+
+    /** The bass since the last frame: the amp's input's peak, linear (1 = full scale), handed to the drive before the
+        frame that steps it (view.js, view.hear) — the largest of several before a step is kept. */
+    EMSCRIPTEN_KEEPALIVE void view_hear (float peak) { drive->hear (peak, 0.0f); }
 
     /** One frame: the walk stepped by dt seconds with the hand on the glass at `steer`, drawn at w x h into the canvas. */
     EMSCRIPTEN_KEEPALIVE void view_frame (int w, int h, double dt, float steer)

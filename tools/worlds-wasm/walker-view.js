@@ -13,11 +13,19 @@
 //   view.setSteer (-1..1);     // the hand on the glass, from outside; or { steer: true } lets a drag across the canvas
 //                              // turn the walker — let go, it finds its own way among the stalks again
 //   view.setTurbo (on);        // TURBO, which RedGrooveBass's face has not: a long striding run, the spores a storm
+//   view.hear (peak);          // the bass: the amp's input's peak since the last call, linear (1 = full scale), what
+//                              // the IN meter shows — once a frame or so from the page's audio
 //   view.stop(); view.start(); view.destroy();
 //
 // The same calls as every rover's view, so a page drives it as it drives the ice: the lever's place as the gear, made
 // held and settled at it (`hold: true`, `gear`). Its gears are RedGrooveBass's two unless `gears` says otherwise (1 to
 // 3, the world's own). It walks at its own pace, as the plug-in does with no host's tempo; nothing reads a speed off it.
+//
+// One call more than a rover's: view.hear. The forest answers the bass from the first note, as the plug-in's does
+// unless the player turns it off (Lit by the bass): the caps breathe with the level — up in under half a second, down
+// in about one — and a jump in it is an attack, a flash on the near caps and sparks of spores from the ten nearest
+// (WalkerDrive::hear, WalkerWorld::step; the level between -50 and -12 dBFS, worlds/Play.h). Not called, it is
+// silence: the forest as it always was. A page that wants it unlit does not call it.
 //
 // The canvas lies over the dome's box (1672 x 525 in the app: the stage's top, the cabin's picture transparent there
 // but for the dome's bars); the horizon sits 0.57 of the way down it, as the app puts it. The rest — the quality ladder, the
@@ -27,7 +35,7 @@
 // are. A bench's `test` is WalkerViewDemo's (--horizon=0.57): { at: [x, z, headingDegrees], drive: seconds,
 // steer: -1..1, still: bool } (walker.cpp, view_test).
 
-const WALKER = { name: 'walker', module: createWalkerModule };
+const WALKER = { name: 'walker', module: createWalkerModule, ear: true };
 worldWorker (WALKER);
 
 export function createWalkerView (canvas, options = {})
