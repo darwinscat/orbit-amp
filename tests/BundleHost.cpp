@@ -633,8 +633,21 @@ void checkAu (const juce::File& bundle, const juce::StringArray& amps, const std
         const auto* own = shippedOf (amp);
         const auto entry = (CFDictionaryRef) CFArrayGetValueAtIndex (components, i);
 
-        if (! check (own != nullptr && CFGetTypeID (entry) == CFDictionaryGetTypeID(), amp + ": an entry, and the id its own AU shipped with known here"))
+        if (! check (CFGetTypeID (entry) == CFDictionaryGetTypeID(), amp + ": an entry"))
             return;
+
+        // An amp that joined after 0.8.0 — FrostPawAmp, AmberPawAmp, the basses — had no AU of its own to keep the
+        // id of: it is an effect of ours under its name, and that is all there is to hold it to.
+        if (own == nullptr)
+        {
+            check (plistValue (entry, "type") == "aufx" && plistValue (entry, "manufacturer") == "Dcat"
+                       && plistValue (entry, "name") == "Darwin's Cat: " + amp && plistValue (entry, "description") == amp
+                       && plistValue (entry, "version") == juce::String (version),
+                   "entry " + juce::String (i + 1) + ", " + amp + ": aufx " + plistValue (entry, "subtype")
+                       + " Dcat, joined after 0.8.0, no AU of its own to keep the id of");
+            factories.addIfNotAlreadyThere (plistValue (entry, "factoryFunction"));
+            continue;
+        }
 
         std::vector<const void*> keys ((size_t) CFDictionaryGetCount (entry));
         CFDictionaryGetKeysAndValues (entry, keys.data(), nullptr);
