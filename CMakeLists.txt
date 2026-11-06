@@ -155,7 +155,11 @@ include(cmake/PatchedWrappers.cmake)
 #
 # v0.61.2 changes one thing here: the echo's and the room's `feed` — what the DELAY / REVERB switches stop — fades over 5 ms where it switched at one sample, which the repeats played back as ticks. Fed, both
 # render bit for bit as on v0.61.0 (v0.61.1 touches only a wasm build of FlushToZero.h).
-set(ORBITAMP_FCORE_TAG "v0.61.2" CACHE STRING "felitronics-core release tag (fetched when no local checkout)")
+#
+# v0.62.0 brings the bass amps' own: octave (Octaver), envfilter (EnvelopeFilter) and chorus (BassChorus) —
+# OrbitBass's and RedGrooveBass's OCTAVE, ENVELOPE and CHORUS (src/core/OctaveTap.h, FilterTap.h, ChorusTap.h),
+# which until then built from an unreleased branch of the core alone.
+set(ORBITAMP_FCORE_TAG "v0.62.0" CACHE STRING "felitronics-core release tag (fetched when no local checkout)")
 
 set(ORBITAMP_FCORE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../felitronics-core"
     CACHE PATH "Local felitronics-core checkout (used if present); else the pinned release is fetched")
