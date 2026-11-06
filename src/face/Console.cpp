@@ -949,20 +949,44 @@ void Console::exportForWeb (const juce::File& dir)
         }
         auto* l = new juce::DynamicObject();
         l->setProperty ("channels", list);
-        l->setProperty ("cabinet", line.openingCabinet);
         // ...and the cabinets CAB steps through, in its order — the build's own, as an export has no
         // player's beside them — with the positions its slider has, a tick each.
         juce::Array<juce::var> cabinets;
-        for (const auto& file : channels.cabinets())
+        juce::String opening = line.openingCabinet;
+        if (line.drawnCabinets)
         {
-            auto* cab = new juce::DynamicObject();
-            cab->setProperty ("file", Channels::cabinetStem (file));
-            cab->setProperty ("name", Channels::cabinetName (file));
-            cab->setProperty ("folder", channels.cabinetFolder (cabinets.size()));
-            cabinets.add (juce::var (cab));
+            // ...WHERE THEY ARE DRAWN, NOT FILES (Lineup::drawnCabinets — the walker's, the bass's dozen): the product's
+            // slots in their order, each one of cab-ir-generator's presets by its file's stem — the site draws it from
+            // that preset itself, with the generator's own renderer, as the plug-in does — and named as the face names
+            // it, "1: 8x10 STACK", "7: 1x15 THUMP" (Channels::slotName); no shelf's folder, there being no shelf. And
+            // the cabinet the product opens on is the slot its opening channel stands at (Lineup::opener): the
+            // walker's SVT, at the dozen's 8x10. Every slot here is a preset's: one holding a box the player sets
+            // would have no preset to name it by.
+            for (int slot = 0; slot < channels.cabinetSlots(); ++slot)
+            {
+                const auto* preset = line.cabinets[(size_t) slot].preset;
+                jassert (preset != nullptr);
+                auto* cab = new juce::DynamicObject();
+                cab->setProperty ("file", juce::String (preset != nullptr ? preset : ""));
+                cab->setProperty ("name", channels.slotName (slot));
+                cab->setProperty ("folder", juce::String());
+                cabinets.add (juce::var (cab));
+            }
+            if (const int at = line.opener().cabinet; at >= 0 && at < channels.cabinetSlots() && line.cabinets[(size_t) at].preset != nullptr)
+                opening = line.cabinets[(size_t) at].preset;
         }
+        else
+            for (const auto& file : channels.cabinets())
+            {
+                auto* cab = new juce::DynamicObject();
+                cab->setProperty ("file", Channels::cabinetStem (file));
+                cab->setProperty ("name", Channels::cabinetName (file));
+                cab->setProperty ("folder", channels.cabinetFolder (cabinets.size()));
+                cabinets.add (juce::var (cab));
+            }
+        l->setProperty ("cabinet", opening);
         l->setProperty ("cabinets", cabinets);
-        l->setProperty ("cabSteps", juce::jmax (2, channels.cabinets().size()));
+        l->setProperty ("cabSteps", juce::jmax (2, cabinets.size()));
         auto* delay = new juce::DynamicObject();
         delay->setProperty ("division", params::delayDivisions[juce::roundToInt (channels.defaultOf (0, params::delayDiv))]);
         delay->setProperty ("bpm", channels.defaultOf (0, params::delayBpm));
