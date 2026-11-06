@@ -332,7 +332,7 @@ FetchContent_MakeAvailable(felitronics_appkit)
 # miniature the CAB block draws (cabir::panel, JUCE views in our theme — CabWindow::useOurLook), and the
 # table they read (CABIR_CABINETS). The same code is the cabinets' own app and web page.
 # ----------------------------------------------------------------------------
-set(ORBITAMP_CABIR_TAG "v0.1.2" CACHE STRING "cab-ir-generator release tag (fetched when no local checkout)")
+set(ORBITAMP_CABIR_TAG "v0.1.3" CACHE STRING "cab-ir-generator release tag (fetched when no local checkout)")
 set(ORBITAMP_CABIR_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../cab-ir-generator"
     CACHE PATH "Local cab-ir-generator checkout (used if present); else the ref is fetched")
 if(ORBITAMP_CABIR_DIR AND EXISTS "${ORBITAMP_CABIR_DIR}/CMakeLists.txt")
