@@ -21,6 +21,7 @@
 #include "Parameters.h"
 #include "core/BassComp.h"
 #include "core/FilterTap.h"
+#include "device/BassCabinets.h"
 #include "device/DeviceLibrary.h"
 #include "device/FactoryShelf.h"
 #include "device/IrLibrary.h"
@@ -80,12 +81,43 @@ namespace
         return it->second;
     }
 
-    std::unique_ptr<AmpProcessor> make (const Product& p)
+    /** A processor as a host makes one: fresh, its cabinet whatever a fresh one opens on — the bass's drawn on the worker
+        and landing on the message thread, which nobody runs here unless a check does. */
+    std::unique_ptr<AmpProcessor> made (const Product& p)
     {
         auto amp = std::make_unique<AmpProcessor> (quiet (p));
         amp->inlineLoads = true;            // no message loop here: a model lands inside the pump
         amp->prepareToPlay (sampleRate, blockSize);
         amp->pumpDeviceWork();
+        return amp;
+    }
+
+    /** The message loop run until `a` plays a drawn cabinet, up to ten seconds; what it plays then. */
+    AmpProcessor::CabSynthChoice drawnOn (AmpProcessor& a)
+    {
+        for (int i = 0; i < 200 && ! AmpProcessor::cabSynthOf (a.cabChoice()).valid; ++i)
+            juce::MessageManager::getInstance()->runDispatchLoopUntil (50);
+        a.pumpDeviceWork();
+        return AmpProcessor::cabSynthOf (a.cabChoice());
+    }
+
+    /** ...AND THE ONE THE GATE HEARS: a bass on the cabinet the gate leaves first in its `Bass IRs` (ITS CABINETS, below),
+        RED GIANT's bytes as `Fixture 1.wav` — what OrbitAmp opens on, so the two chains can be held side by side — as a
+        session that played it opens, no step of the history; before that file is there, on the fresh one's, landed. */
+    std::unique_ptr<AmpProcessor> make (const Product& p)
+    {
+        auto amp = made (p);
+        if (p.chain != Chain::bass || p.freshCabinet == nullptr)
+            return amp;
+        const auto fixture = device::IrLibrary::directory (p.irsFolder()).getChildFile ("Fixture 1.wav");
+        if (fixture.existsAsFile() && amp->chooseCabFile (fixture))
+        {
+            amp->pumpDeviceWork();
+            amp->history.reset();
+            amp->history.markSaved();
+        }
+        else
+            (void) drawnOn (*amp);
         return amp;
     }
 
@@ -337,10 +369,10 @@ int ORBITAMP_GATE_MAIN()
     // ---- ITS CABINETS: NEVER A GUITAR AMP'S --------------------------------------------------------------
     // A guitar amp's cabinets and a bass amp's never cross (Product::playsCabIr, Product::irsFolder): the bass plays no
     // cabinet of the shelf, which holds none of the bass's yet, and keeps the player's own in `Bass IRs`, beside the
-    // guitar's `IRs`, each listing none of the other's. A fresh one opens on the first of its own, and with none there on
-    // no cabinet at all. This takes files into the player's folders, so only where the home is the gate's own
-    // (ORBITBASS_GATE_OWNS_HOME, tests/gates.txt). The cabinet the rest of the gate hears is the one it leaves there
-    // first: RED GIANT's bytes, as `Bass IRs/Fixture 1.wav`.
+    // guitar's `IRs`, each listing none of the other's. A fresh one opens on the bass's dozen's first, 1: 8x10 STACK,
+    // whatever `Bass IRs` holds; a session keeps what it saved. This takes files into the player's folders, so only where
+    // the home is the gate's own (ORBITBASS_GATE_OWNS_HOME, tests/gates.txt). The cabinet the rest of the gate hears is the
+    // one it leaves there first, put on every bass it makes (make): RED GIANT's bytes, as `Bass IRs/Fixture 1.wav`.
     if (juce::SystemStats::getEnvironmentVariable ("ORBITBASS_GATE_OWNS_HOME", {}).isEmpty())
         check (false, "the bass's cabinets are tried in a home of the gate's own (ORBITBASS_GATE_OWNS_HOME): tools/run-gates.sh makes one");
     else
@@ -363,36 +395,88 @@ int ORBITAMP_GATE_MAIN()
             return items;
         };
 
-        // WITH NONE THERE: no cabinet. No IR loads, and the cabinet's share is silent: at the CAB's MIX 70 % the DI's 30 % alone.
-        juce::MemoryBlock before;
+        // A FRESH ONE OPENS ON THE BASS'S DOZEN'S FIRST, 1: 8x10 STACK, drawn (the owner, 06.11) — never on no cabinet and
+        // never on a guitar's: rendered on the worker the first time in a process and landing on the message thread, no
+        // step of anybody's, the state as saved as it was; and its CAB block names it.
+        const auto& stack = device::BassCabinets::dozen().front();
+        const auto onStack = [&stack] (const AmpProcessor& a)
         {
-            auto fresh = make (bass);
+            const auto plays = AmpProcessor::cabSynthOf (a.cabChoice());
+            return plays.valid && plays.state == stack.state;
+        };
+        const auto cabBlockOf = [] (juce::Component& root)
+        {
+            CabinetBlock* found = nullptr;
+            std::function<void (juce::Component&)> walk = [&] (juce::Component& c)
+            {
+                if (auto* b = dynamic_cast<CabinetBlock*> (&c); b != nullptr && found == nullptr)
+                    found = b;
+                for (auto* child : c.getChildren())
+                    walk (*child);
+            };
+            walk (root);
+            return found;
+        };
+        juce::MemoryBlock none;    // a session on no cabinet at all
+        {
+            auto fresh = made (bass);
+            const auto plays = drawnOn (*fresh);
             bool shelfNone = true;
             for (int i = 0; i < params::cabIrNames.size(); ++i)
                 shelfNone = shelfNone && AmpProcessor::cabIrBytes (bass, i).data == nullptr;
-            check (! fresh->cabChoice().isUser() && shelfNone,
-                   "with no IR in `Bass IRs`, a fresh one plays no cabinet: none of the player's, no number of the shelf, RED GIANT none");
+            check (stack.name == "1: 8x10 STACK" && onStack (*fresh) && device::BassCabinets::nameOf (plays.state) == stack.name
+                       && shelfNone && ! fresh->history.canUndo() && ! fresh->history.hasUnsavedChanges(),
+                   "with no IR in `Bass IRs`, a fresh one opens on the dozen's first, drawn, once it lands — "
+                       + (plays.valid ? device::BassCabinets::nameOf (plays.state) : juce::String ("nothing"))
+                       + " — no number of the shelf a cabinet, RED GIANT none, no step to undo and nothing unsaved");
+
+            {
+                std::unique_ptr<juce::AudioProcessorEditor> ed (fresh->createEditor());
+                auto* block = cabBlockOf (*ed);
+                for (int i = 0; i < 40 && block != nullptr && block->shownName() != stack.name; ++i)
+                    juce::MessageManager::getInstance()->runDispatchLoopUntil (50);
+                check (block != nullptr && block->shownName() == stack.name,
+                       "...its CAB block names it: " + (block != nullptr ? block->shownName() : juce::String ("no CAB block")));
+            }
 
             std::vector<juce::File> files;
             const auto items = menuOf (*fresh, files);
             check (items.joinIntoString (", ") == "No IRs yet (off)" && files.empty(),
-                   "...its CAB menu no cabinet of the shelf, a line that says there is none: " + items.joinIntoString (", "));
+                   "...its IR menu no cabinet of the shelf, a line that says there is none of the player's: " + items.joinIntoString (", "));
 
-            auto cabOut = make (bass);
+            // A SESSION ON NO CABINET — a fresh one's, its cabinet taken off every state in it — keeps none: no IR loads,
+            // and the cabinet's share is silent: at the CAB's MIX 70 % the DI's 30 % alone.
+            fresh->getStateInformation (none);
+            auto tree = juce::ValueTree::fromXml (*juce::AudioProcessor::getXmlFromBinary (none.getData(), (int) none.getSize()));
+            std::function<void (juce::ValueTree)> uncabinet = [&uncabinet] (juce::ValueTree t)
+            {
+                for (const auto* id : { params::cabIrUserKey, params::cabIrUserName, params::cabIrUserFrom })
+                    t.removeProperty (id, nullptr);
+                for (auto child : t)
+                    uncabinet (child);
+            };
+            uncabinet (tree);
+            none.reset();
+            juce::AudioProcessor::copyXmlToBinary (*tree.createXml(), none);
+
+            auto onNone = made (bass), cabOut = made (bass);
+            onNone->setStateInformation (none.getData(), (int) none.getSize());
+            for (int i = 0; i < 4; ++i)
+                juce::MessageManager::getInstance()->runDispatchLoopUntil (50);   // nothing to land, nothing lands
+            onNone->pumpDeviceWork();
             set (*cabOut, params::cabOn, 0.0f);
-            const auto heard = play (*fresh, 120, false), dry = play (*cabOut, 120, false);
+            const auto heard = play (*onNone, 120, false), dry = play (*cabOut, 120, false);
             float worst = 0.0f;
             for (size_t i = 0; i < heard.l.size(); ++i)
                 worst = std::max (worst, std::abs (heard.l[i] - 0.3f * dry.l[i]));
-            check (peak (dry.l) > 1.0e-3f && worst <= 1.0e-5f,
-                   "...and plays the DI's 30 % alone, the cabinet's share silent (worst apart " + juce::String (worst, 8) + " of peak "
-                       + juce::String (peak (heard.l), 4) + ")");
-
-            // A session of before: the bass on RED GIANT's number, which it played then, with no IR of the player's.
-            fresh->getStateInformation (before);
+            check (! onNone->cabChoice().isUser() && peak (dry.l) > 1.0e-3f && worst <= 1.0e-5f,
+                   "a session on no cabinet keeps none, the fresh one's not put over it: the DI's 30 % alone, the cabinet's share "
+                   "silent (worst apart " + juce::String (worst, 8) + " of peak " + juce::String (peak (heard.l), 4) + ")");
         }
 
-        // ...AND WITH SOME: the first, in the order the tree lists them — not the order they came in.
+        // ...AND WITH SOME IN `Bass IRs`: still the dozen's first, as a guitar amp opens on RED GIANT whatever its `IRs`
+        // hold — at once now, this process having drawn it; the player's own a pick away, the first in the order the tree
+        // lists them — not the order they came in.
         const auto put = [&redGiant] (const juce::File& f, char nudge)
         {
             juce::MemoryBlock bytes (redGiant.data, (size_t) redGiant.size);
@@ -404,11 +488,16 @@ int ORBITAMP_GATE_MAIN()
         const auto guitarOwn = guitarIrs.getChildFile ("Guitar own.wav");
         check (put (second, 4) && put (first, 0) && put (guitarOwn, 8), "two IRs into `Bass IRs`, the second first, and one into `IRs`");
         {
-            auto fresh = make (bass);
+            auto fresh = made (bass);
+            check (onStack (*fresh) && ! fresh->history.canUndo(),
+                   "a fresh one opens on the dozen's first with IRs in `Bass IRs` too, at once: " + fresh->cabChoice().name);
+
+            check (fresh->chooseCabFile (first), "...a pick of the first of `Bass IRs`...");
+            fresh->pumpDeviceWork();
             const auto opens = fresh->cabChoice();
             check (opens.isUser() && opens.name == "Fixture 1" && opens.from == "Fixture 1.wav"
                        && (int) opens.bytes->getSize() == redGiant.size && std::memcmp (opens.bytes->getData(), redGiant.data, (size_t) redGiant.size) == 0,
-                   "a fresh one opens on the first of `Bass IRs`, as a pick of it leaves the state: " + opens.name + ", " + opens.from);
+                   "...plays it, as a pick of it leaves the state: " + opens.name + ", " + opens.from);
 
             // The other chain's number is never picked, nor the guitar's player's IR listed.
             fresh->chooseCabFactory (params::cabIrDefault);
@@ -428,13 +517,45 @@ int ORBITAMP_GATE_MAIN()
                    "...and a host moving `cab_ir` to KAIJU TAMER's number plays the first of `Bass IRs` again, never the shelf's: "
                        + fresh->cabChoice().name);
 
-            // A STATE ON THE GUITAR'S NUMBER — the session of before — lands on the bass's own, not on RED GIANT.
+            // A SESSION OR A PRESET KEEPS THE CABINET IT SAVED (the owner, 06.11): the player's own, a drawn one, none — the
+            // fresh one's never put over it, the message loop run after.
             check (fresh->chooseCabFile (second) && fresh->cabChoice().name == "Fixture 2", "a bass playing the second...");
-            fresh->setStateInformation (before.getData(), (int) before.getSize());
-            check (fresh->cabChoice().isUser() && fresh->cabChoice().name == "Fixture 1"
-                       && juce::roundToInt (value (*fresh, params::cabIr)) == params::cabIrDefault,
-                   "...given a session of before, on RED GIANT's number with no IR of the player's, plays the first of `Bass IRs`, RED GIANT's number kept: "
-                       + fresh->cabChoice().name);
+            fresh->pumpDeviceWork();
+            juce::MemoryBlock onSecond;
+            fresh->getStateInformation (onSecond);
+            const auto& thump = device::BassCabinets::dozen()[6];
+            fresh->requestCabSynth (thump.state);
+            const auto drew = drawnOn (*fresh);
+            juce::MemoryBlock onThump;
+            fresh->getStateInformation (onThump);
+            const auto opensFrom = [&] (const juce::MemoryBlock& session)
+            {
+                auto later = made (bass);
+                later->setStateInformation (session.getData(), (int) session.getSize());
+                for (int i = 0; i < 6; ++i)
+                    juce::MessageManager::getInstance()->runDispatchLoopUntil (50);
+                later->pumpDeviceWork();
+                return later;
+            };
+            const auto two = opensFrom (onSecond), seven = opensFrom (onThump), nothing = opensFrom (none);
+            const auto sevenPlays = AmpProcessor::cabSynthOf (seven->cabChoice());
+            check (two->cabChoice().isUser() && two->cabChoice().name == "Fixture 2"
+                       && drew.valid && drew.state == thump.state && sevenPlays.valid && sevenPlays.state == thump.state
+                       && ! nothing->cabChoice().isUser() && juce::roundToInt (value (*nothing, params::cabIr)) == params::cabIrDefault,
+                   "...a session that saved another cabinet opens on that one: the player's " + two->cabChoice().name + ", the dozen's "
+                       + (sevenPlays.valid ? device::BassCabinets::nameOf (sevenPlays.state) : juce::String ("nothing"))
+                       + ", and one on no cabinet on none, RED GIANT's number kept");
+
+            // INIT: the fresh one's cabinet again, whatever played — at once, one step of the history, undone whole.
+            const int depth = two->history.undoDepth();
+            two->resetToDefault();
+            for (int i = 0; i < 40; ++i)
+                two->history.tick();
+            const bool initStack = onStack (*two);
+            two->history.undo();
+            two->pumpDeviceWork();
+            check (initStack && two->history.undoDepth() == depth && two->cabChoice().name == "Fixture 2",
+                   "INIT opens on the dozen's first again, as one step, undone back on " + two->cabChoice().name);
         }
 
         // EACH LISTS ITS OWN AND NONE OF THE OTHER'S: the library, the CAB menu, the SETUP tree, a face's channels.
