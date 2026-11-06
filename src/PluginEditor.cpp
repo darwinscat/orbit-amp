@@ -67,7 +67,7 @@ AmpEditor::AmpEditor (AmpProcessor& p)
     addAndMakeVisible (footer);
     // The two TEMPORARY strips under the footer, off unless this player asked for them (the gear).
     // The demo needs its loops on disk — a machine without them has no player to show.
-    showDemo   = params::demoLoopsPresent() && prefs::getBool (amp.product(), prefs::showDemo, false);
+    showDemo   = params::demoLoopsPresent (amp.product().chain == Chain::bass) && prefs::getBool (amp.product(), prefs::showDemo, false);
     showGlyphs = prefs::getBool (amp.product(), prefs::showGlyphs, false);
 
     faceplate.setEqRowOnTop (prefs::getBool (amp.product(), prefs::eqRowOnTop, false));
@@ -416,7 +416,7 @@ bool AmpEditor::keyPressed (const juce::KeyPress& key)
 void AmpEditor::applyViewPrefs()
 {
     faceplate.setEqRowOnTop (prefs::getBool (amp.product(), prefs::eqRowOnTop, false));
-    showDemo   = params::demoLoopsPresent() && prefs::getBool (amp.product(), prefs::showDemo, false);
+    showDemo   = params::demoLoopsPresent (amp.product().chain == Chain::bass) && prefs::getBool (amp.product(), prefs::showDemo, false);
     showGlyphs = prefs::getBool (amp.product(), prefs::showGlyphs, false);
     applyStripChoice();
     resized();

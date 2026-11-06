@@ -106,7 +106,7 @@ void SetupPanel::buildViewPage()
                       [this] (bool on) { prefs::setSpectraShown (amp.product(), on); if (onViewChanged) onViewChanged(); },
                       {}, false, {}, {}, {} });
 
-    if (params::demoLoopsPresent())   // no loops on disk: no player, and no offer of one
+    if (params::demoLoopsPresent (amp.product().chain == Chain::bass))   // no loops on disk: no player, and no offer of one
         add ("SHOW DEMO PLAYER", "the audition strip under the footer", prefs::showDemo, false);
 
     add ("EQ HANDS OVER THE CURVE", "the console's row of knobs sits above its picture, not below",

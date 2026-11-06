@@ -13,7 +13,7 @@ DemoStrip::DemoStrip (AmpProcessor& processor)
     : amp (processor)
 {
     addAndMakeVisible (loop);
-    loop.setItems (params::demoLoops, 0);
+    loop.setItems (params::demoLoopsOf (amp.product().chain == Chain::bass).names, 0);
 
     loop.onChange = [this] (int i)
     {

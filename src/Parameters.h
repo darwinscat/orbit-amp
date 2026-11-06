@@ -8,6 +8,8 @@
 
 #include <juce_audio_processors/juce_audio_processors.h>
 
+#include <vector>
+
 #include <CabinetCatalog.h>   // written by CMake from resources/cabinets.txt
 
 namespace orbitamp::params
@@ -316,31 +318,45 @@ inline const juce::StringArray stereoModes { "Mono", "Stereo", "Stereo Space" };
 enum class StereoMode { mono, stereo, stereoSpace };
 
 /** TEMPORARY — the audition loops, in the order the player offers them. Default is the first.
-    The site's demo loops, the same takes under the same names and in its order.
+    The site's demo loops, the same takes under the same names and in its order: a guitar amp's, and a bass amp's own —
+    the bass DI riffs Cab IR Generator plays, under its names (the owner, 06.11).
 
-    The audio is NOT shipped: it is read at run time from the dev machine's private folder, and
-    when that folder is absent the player and its menu entry are absent with it. The binary is the
-    same either way — presence of the folder is the whole switch. */
-inline const juce::StringArray demoLoops { "Eleven Light Years 1", "Eleven Light Years 2", "Eleven Light Years 3",
-                                           "Eleven Light Years 4", "Deep Space Is My Home 1",
-                                           "Deep Space Is My Home 2", "Cat's Hard Day", "I Am Projection",
-                                           "Fifth Dimension" };
-inline constexpr const char* demoLoopFiles[] = { "eleven-light-years-1.wav", "eleven-light-years-2.wav",
-                                                 "eleven-light-years-3.wav", "eleven-light-years-4.wav",
-                                                 "deep-space-is-my-home-1.wav", "deep-space-is-my-home-2.wav",
-                                                 "cats-hard-day.wav", "i-am-projection.wav",
-                                                 "fifth-dimension.wav" };
-
-inline juce::File demoLoopsDir()
+    The audio is NOT shipped: it is read at run time from the dev machine's private folder (the bass's in its bass/),
+    and when that folder is absent the player and its menu entry are absent with it. The binary is the same either way —
+    presence of the folder is the whole switch. */
+struct DemoLoops
 {
-    return juce::File::getSpecialLocation (juce::File::userHomeDirectory)
-        .getChildFile ("IdeaProjects/orbit-amp/.private/loops");
+    juce::StringArray names;
+    std::vector<const char*> files;
+    const char* folder;
+};
+
+inline const DemoLoops& demoLoopsOf (bool bass)
+{
+    static const DemoLoops guitar { { "Eleven Light Years 1", "Eleven Light Years 2", "Eleven Light Years 3",
+                                      "Eleven Light Years 4", "Deep Space Is My Home 1", "Deep Space Is My Home 2",
+                                      "Cat's Hard Day", "I Am Projection", "Fifth Dimension" },
+                                    { "eleven-light-years-1.wav", "eleven-light-years-2.wav", "eleven-light-years-3.wav",
+                                      "eleven-light-years-4.wav", "deep-space-is-my-home-1.wav", "deep-space-is-my-home-2.wav",
+                                      "cats-hard-day.wav", "i-am-projection.wav", "fifth-dimension.wav" },
+                                    "IdeaProjects/orbit-amp/.private/loops" };
+    static const DemoLoops bassLoops { { "Eleven Light Years", "Fifth Dimension 1", "Fifth Dimension 2",
+                                         "Deep Space is My Home 1", "Deep Space is My Home 2", "I am Projection" },
+                                       { "eleven-light-years.wav", "fifth-dimension-1.wav", "fifth-dimension-2.wav",
+                                         "deep-space-is-my-home-1.wav", "deep-space-is-my-home-2.wav", "i-am-projection.wav" },
+                                       "IdeaProjects/orbit-amp/.private/loops/bass" };
+    return bass ? bassLoops : guitar;
 }
 
-inline bool demoLoopsPresent()
+inline juce::File demoLoopsDir (bool bass)
 {
-    for (auto* name : demoLoopFiles)
-        if (demoLoopsDir().getChildFile (name).existsAsFile())
+    return juce::File::getSpecialLocation (juce::File::userHomeDirectory).getChildFile (demoLoopsOf (bass).folder);
+}
+
+inline bool demoLoopsPresent (bool bass)
+{
+    for (auto* name : demoLoopsOf (bass).files)
+        if (demoLoopsDir (bass).getChildFile (name).existsAsFile())
             return true;
 
     return false;

@@ -1439,7 +1439,7 @@ public:
 
 private:
     const std::atomic<bool>* litWanted = nullptr;                   // prefs::litCache, taken where the hum's are
-    int demoLoopIndex = -1;     // which of params::demoLoops the audition player holds
+    int demoLoopIndex = -1;     // which of params::demoLoopsOf the audition player holds
     std::atomic<float> playPeak { -1.0f }, playPick { -1.0f };     // takePlay's: -1 is nothing since it was last taken
     worlds::Ear ear;                                                // the audio thread's: the pick, on channel 0
 

@@ -475,9 +475,11 @@ void AmpProcessor::setStateInformation (const void* data, int sizeInBytes)
 
 void AmpProcessor::selectDemoLoop (int index)
 {
-    const int n = (int) std::size (params::demoLoopFiles);
+    const bool bass = ownProduct.chain == Chain::bass;
+    const auto& loops = params::demoLoopsOf (bass);
+    const int n = (int) loops.files.size();
     demoLoopIndex = juce::jlimit (0, n - 1, index);
-    demo.setLoop (params::demoLoopsDir().getChildFile (params::demoLoopFiles[demoLoopIndex]), getSampleRate());
+    demo.setLoop (params::demoLoopsDir (bass).getChildFile (loops.files[(size_t) demoLoopIndex]), getSampleRate());
 }
 
 void AmpProcessor::takeFormerTrims (juce::ValueTree& tree) const

@@ -2263,12 +2263,12 @@ void Console::showSettingsMenu()
     }
 
     // A loop through the amp in place of the guitar, where the loops are — see playDemo.
-    if (params::demoLoopsPresent())
+    if (params::demoLoopsPresent (amp.product().chain == Chain::bass))
     {
         menu.addSectionHeader ("DEMO");
         addChoice (menu, "Play", amp.demo.isPlaying(), [] (Console& e) { e.playDemo (-1); });
-        for (int i = 0; i < params::demoLoops.size(); ++i)
-            addChoice (menu, params::demoLoops[i], i == juce::jmax (0, amp.demoLoop()), [i] (Console& e) { e.playDemo (i); });
+        for (int i = 0; i < params::demoLoopsOf (amp.product().chain == Chain::bass).names.size(); ++i)
+            addChoice (menu, params::demoLoopsOf (amp.product().chain == Chain::bass).names[i], i == juce::jmax (0, amp.demoLoop()), [i] (Console& e) { e.playDemo (i); });
     }
 
     menu.showMenuAsync (juce::PopupMenu::Options().withMousePosition());
