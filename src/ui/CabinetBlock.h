@@ -72,9 +72,12 @@ private:
     struct BassRow;
     std::unique_ptr<BassRow> bassRow;
 
-    /** OrbitBass's cabinets, drawn (ui/CabPicker.h), in a window over the face that FACTORY IRS opens (ui/CabWindow.h):
-        the block is too narrow for them beside a delay and a reverb. */
-    void showCabPanel();
+    /** OrbitBass's cabinets, drawn (ui/CabPicker.h), in a window over the face (ui/CabWindow.h) — the block is too narrow
+        for them beside a delay and a reverb — on the player's own alone (the owner, 06.11): EDIT… on one keeps every
+        change in its file; the dozen's, fixed, and one of no name are edited as a copy, NEW FROM… asking its name first. */
+    void editCabinet();
+    void newCabinet();
+    void editIn (const juce::File& own);
 
     /** OrbitBass's row under the picture, where the guitar's trim stands (the owner, 06.11): the bass's dozen on a slider
         (CabinetSlots), CABINETS — the dozen by name, the player's own, EDIT… and SAVE AS… — and MY IRS (the player's
@@ -97,8 +100,7 @@ private:
     int libraryLook = 0;   // timer ticks to the next look at whether the library holds any IRs
     void lookAtLibrary();
 
-    /** OrbitBass: a click on the picture while one of its cabinets plays opens their panel — the picture is that
-        cabinet's. A drag or a right click is the picture's own. Declared before the picture, so it outlives it. */
+    /** OrbitBass: a click on the picture while one of its cabinets plays is EDIT… — the picture is that cabinet's. A drag or a right click is the picture's own. Declared before the picture, so it outlives it. */
     struct PictureClick final : public juce::MouseListener
     {
         std::function<void()> onClick;

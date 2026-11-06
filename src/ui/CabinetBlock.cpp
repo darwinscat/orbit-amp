@@ -87,7 +87,7 @@ CabinetBlock::CabinetBlock (AmpProcessor& processor)
         addChildComponent (myIrs);
         lookAtLibrary();
 
-        pictureClick.onClick = [this] { if (AmpProcessor::cabSynthOf (amp.cabChoice()).valid) showCabPanel(); };
+        pictureClick.onClick = [this] { editCabinet(); };
         wave.addMouseListener (&pictureClick, false);
     }
     else
@@ -493,20 +493,84 @@ void CabinetBlock::showIrMenu (juce::Component* from)
                         });
 }
 
-void CabinetBlock::showCabPanel()
+namespace
 {
-    CabWindow::open (amp, *this);
+    /** The player's own cabinet `state` is — its file — or none: one the same as the dozen's is the dozen's, fixed. */
+    juce::File ownFileOf (const cabir::State& state)
+    {
+        if (device::BassCabinets::dozenOf (state) >= 0)
+            return {};
+        for (const auto& c : device::BassCabinets::own())
+            if (c.state == state)
+                return c.file;
+        return {};
+    }
+}
+
+void CabinetBlock::editCabinet()
+{
+    // The player's own that plays opens in the window; the dozen's, and one of no name, are made the player's own first.
+    const auto playing = AmpProcessor::cabSynthOf (amp.cabChoice());
+    if (! playing.valid)
+        return;
+    if (const auto file = ownFileOf (playing.state); file != juce::File())
+        editIn (file);
+    else
+        newCabinet();
+}
+
+void CabinetBlock::newCabinet()
+{
+    // A copy of what plays, by a name the player gives it — the first number no own one has yet offered — then edited.
+    const auto playing = AmpProcessor::cabSynthOf (amp.cabChoice());
+    if (! playing.valid)
+        return;
+    const auto own = device::BassCabinets::own();
+    juce::String initial;
+    for (int n = (int) own.size() + 1; initial.isEmpty(); ++n)
+    {
+        initial = "MY CABINET " + juce::String (n);
+        for (const auto& c : own)
+            if (c.name == initial)
+                initial = {};
+    }
+    felitronics::appkit::textPrompt ("New cabinet from this one", initial,
+                                     [safe = juce::Component::SafePointer<CabinetBlock> (this), state = playing.state] (juce::String name)
+                                     {
+                                         const auto file = device::BassCabinets::save (name, state);
+                                         if (file == juce::File() || safe == nullptr)
+                                             return;
+                                         safe->refreshIr (true);
+                                         safe->editIn (file);
+                                     });
+}
+
+void CabinetBlock::editIn (const juce::File& own)
+{
+    // Every change the window keeps is written into the player's own file at once — no SAVE AS… after it.
+    CabWindow::open (amp, *this, [safe = juce::Component::SafePointer<CabinetBlock> (this), own] (const juce::String& from)
+    {
+        if (const auto synth = AmpProcessor::cabSynthOf (from); synth.valid && device::BassCabinets::keep (own, synth.state)
+                                                                && safe != nullptr)
+            safe->refreshIr (true);
+    });
 }
 
 void CabinetBlock::showCabinetsMenu()
 {
-    // The dozen by name, the player's own under them, then what makes and keeps one: EDIT… opens the cabinets' window on
-    // what plays, SAVE AS… keeps what plays as the player's own, by a name; RENAME and DELETE for those kept.
+    // The dozen by name, the player's own under them, then what makes and keeps one: EDIT… opens the player's own that
+    // plays in the cabinets' window, NEW FROM… copies the dozen's first (the dozen is fixed), SAVE AS… keeps what plays
+    // as the player's own, by a name; RENAME and DELETE for those kept.
     const auto playing = AmpProcessor::cabSynthOf (amp.cabChoice());
     const auto& dozen = device::BassCabinets::dozen();
     const auto own = device::BassCabinets::own();
     const auto plays = [&playing] (const cabir::State& s) { return playing.valid && playing.state == s; };
     enum { pickDozen = 1, pickOwn = 100, edit = 300, saveAs = 301, renameOwn = 400, deleteOwn = 600 };
+    const int atDozen = playing.valid ? device::BassCabinets::dozenOf (playing.state) : -1;
+    const auto editWord = ! playing.valid                                ? juce::String ("EDIT...")
+                        : ownFileOf (playing.state) != juce::File()      ? juce::String ("EDIT...")
+                        : atDozen >= 0                                   ? "NEW FROM " + dozen[(size_t) atDozen].name + "..."
+                                                                         : juce::String ("NEW FROM THIS...");
 
     juce::PopupMenu menu;
     for (int i = 0; i < (int) dozen.size(); ++i)
@@ -518,7 +582,7 @@ void CabinetBlock::showCabinetsMenu()
     for (int i = 0; i < (int) own.size(); ++i)
         menu.addItem (pickOwn + i, own[(size_t) i].name, true, plays (own[(size_t) i].state));
     menu.addSeparator();
-    menu.addItem (edit, "EDIT...", true, false);
+    menu.addItem (edit, editWord, playing.valid, false);
     menu.addItem (saveAs, "SAVE AS...", playing.valid, false);
     if (! own.empty())
     {
@@ -544,7 +608,7 @@ void CabinetBlock::showCabinetsMenu()
                        else if (r >= pickOwn && r < pickOwn + (int) own.size())
                            self.amp.requestCabSynth (own[(size_t) (r - pickOwn)].state);
                        else if (r == edit)
-                           self.showCabPanel();
+                           self.editCabinet();
                        else if (r == saveAs)
                            self.saveCabinetAs();
                        else if (r >= renameOwn && r < renameOwn + (int) own.size())
@@ -568,7 +632,7 @@ void CabinetBlock::saveCabinetAs()
     felitronics::appkit::textPrompt ("Save the cabinet as", initial,
                                      [safe = juce::Component::SafePointer<CabinetBlock> (this), state = playing.state] (juce::String name)
                                      {
-                                         if (device::BassCabinets::save (name, state) && safe != nullptr)
+                                         if (device::BassCabinets::save (name, state) != juce::File() && safe != nullptr)
                                              safe->refreshIr (true);
                                      });
 }

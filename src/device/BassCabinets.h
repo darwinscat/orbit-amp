@@ -41,8 +41,11 @@ struct BassCabinets
     static juce::String nameOf (const cabir::State& state);
 
     /** The playing cabinet kept as the player's own under `name` — a cabinet of that name already there is replaced.
-        False where the file could not be written. */
-    static bool save (const juce::String& name, const cabir::State& state);
+        Its file, or none where it could not be written. */
+    static juce::File save (const juce::String& name, const cabir::State& state);
+
+    /** A player's own rewritten as `state`, its name and style kept: EDIT… on one keeps every change in its file. */
+    static bool keep (const juce::File& file, const cabir::State& state);
 
     /** A player's own renamed, or moved to the Trash. */
     static bool rename (const juce::File& file, const juce::String& name);

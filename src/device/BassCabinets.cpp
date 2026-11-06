@@ -13,10 +13,16 @@ namespace orbitamp::device
 
 namespace
 {
-    /** A preset's own name, `name = "ROCK · 8x10 STACK"`, as its first line has it. */
-    juce::String nameIn (const juce::String& text)
+    /** A preset's own name, `name = "ROCK · 8x10 STACK"`, as its first line has it — or another of its quoted keys. */
+    juce::String nameIn (const juce::String& text, const char* key = "name")
     {
-        return text.fromFirstOccurrenceOf ("name = \"", false, false).upToFirstOccurrenceOf ("\"", false, false);
+        return text.fromFirstOccurrenceOf (juce::String (key) + " = \"", false, false).upToFirstOccurrenceOf ("\"", false, false);
+    }
+
+    /** The cabinets' own preset, as cab-ir-generator writes one: its name and style, then the state. */
+    juce::String presetText (const juce::String& name, const juce::String& style, const cabir::State& state)
+    {
+        return "name = \"" + name + "\"\nstyle = \"" + style + "\"\n\n" + juce::String (cabir::toToml (state));
     }
 
     /** One of the dozen's presets the binary carries, by its file's stem: its text. */
@@ -104,17 +110,27 @@ juce::String BassCabinets::cleaned (const juce::String& name)
     return name.removeCharacters ("\"\\\r\n\t").trim();
 }
 
-bool BassCabinets::save (const juce::String& name, const cabir::State& state)
+juce::File BassCabinets::save (const juce::String& name, const cabir::State& state)
 {
     const auto clean = cleaned (name);
     if (clean.isEmpty())
-        return false;
-    // The cabinets' own preset, as cab-ir-generator writes one: its name and style, then the state.
-    const auto text = "name = \"" + clean + "\"\nstyle = \"Custom\"\n\n" + juce::String (cabir::toToml (state));
+        return {};
     for (const auto& c : own())   // one of that name: replaced, under whatever file it had
         if (c.name == clean && c.file.existsAsFile())
             c.file.deleteFile();
-    return folder().getChildFile (juce::File::createLegalFileName (clean) + ".toml").replaceWithText (text, false, false, "\n");
+    const auto file = folder().getChildFile (juce::File::createLegalFileName (clean) + ".toml");
+    return file.replaceWithText (presetText (clean, "Custom", state), false, false, "\n") ? file : juce::File();
+}
+
+bool BassCabinets::keep (const juce::File& file, const cabir::State& state)
+{
+    if (! file.existsAsFile() || ! file.isAChildOf (folder()))
+        return false;
+    const auto text = file.loadFileAsString();
+    const auto name = nameIn (text), style = nameIn (text, "style");
+    return file.replaceWithText (presetText (name.isNotEmpty() ? name : file.getFileNameWithoutExtension(),
+                                             style.isNotEmpty() ? style : juce::String ("Custom"), state),
+                                 false, false, "\n");
 }
 
 bool BassCabinets::rename (const juce::File& file, const juce::String& name)
@@ -123,7 +139,7 @@ bool BassCabinets::rename (const juce::File& file, const juce::String& name)
     if (clean.isEmpty() || ! file.existsAsFile() || ! file.isAChildOf (folder()))
         return false;
     const auto state = cabir::fromToml (file.loadFileAsString().toStdString());
-    if (! state || ! save (clean, *state))
+    if (! state || save (clean, *state) == juce::File())
         return false;
     // The new one written first, the old file only then — unless the new name landed in the same file.
     if (file != folder().getChildFile (juce::File::createLegalFileName (clean) + ".toml"))
