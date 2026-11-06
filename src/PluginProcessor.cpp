@@ -10,6 +10,7 @@
 #include <felitronics/octave/OctaveLaw.h>
 
 #include <cstring>
+#include <panel/Panel.h>   // cabir::knownState: a cabinet of a box the table knows, or none
 #include <synth/CabSynth.h>
 #include <BinaryData.h>
 #include "device/FactoryShelf.h"
@@ -901,7 +902,7 @@ AmpProcessor::CabSynthChoice AmpProcessor::cabSynthOf (const CabChoice& choice)
 
 AmpProcessor::CabSynthChoice AmpProcessor::cabSynthOf (const juce::String& from)
 {
-    if (const auto state = cabir::fromToml (from.toStdString()))
+    if (const auto state = cabir::knownState (from.toStdString()))
         return { *state, true };
     return {};
 }

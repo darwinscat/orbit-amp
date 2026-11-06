@@ -7,6 +7,7 @@
 
 #include <BassDozen.h>      // the generated list of the dozen's presets (CMakeLists.txt: THE BASS'S DOZEN)
 #include <BinaryData.h>
+#include <panel/Panel.h>   // cabir::knownState: a cabinet of a box the table knows, or none
 
 namespace orbitamp::device
 {
@@ -48,7 +49,7 @@ const std::vector<BassCabinets::Cabinet>& BassCabinets::dozen()
         for (const auto* stem : bassCabinets)
         {
             const auto text = carried (stem);
-            const auto state = cabir::fromToml (text.toStdString());
+            const auto state = cabir::knownState (text.toStdString());
             if (! state)
                 continue;
             // "ROCK · 8x10 STACK" said as "1: 8x10 STACK": its number, not its style (the owner, 06.11).
@@ -76,7 +77,7 @@ std::vector<BassCabinets::Cabinet> BassCabinets::own()
     for (const auto& file : folder().findChildFiles (juce::File::findFiles, false, "*.toml"))
     {
         const auto text = file.loadFileAsString();
-        if (const auto state = cabir::fromToml (text.toStdString()))
+        if (const auto state = cabir::knownState (text.toStdString()))
         {
             const auto name = nameIn (text);
             out.push_back ({ name.isNotEmpty() ? name : file.getFileNameWithoutExtension(), *state, file });
@@ -138,7 +139,7 @@ bool BassCabinets::rename (const juce::File& file, const juce::String& name)
     const auto clean = cleaned (name);
     if (clean.isEmpty() || ! file.existsAsFile() || ! file.isAChildOf (folder()))
         return false;
-    const auto state = cabir::fromToml (file.loadFileAsString().toStdString());
+    const auto state = cabir::knownState (file.loadFileAsString().toStdString());
     if (! state || save (clean, *state) == juce::File())
         return false;
     // The new one written first, the old file only then — unless the new name landed in the same file.
