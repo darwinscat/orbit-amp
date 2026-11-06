@@ -29,12 +29,15 @@
 // lexicographic), then by name. README.md is not a fragment.
 
 import { readdirSync, readFileSync, writeFileSync, unlinkSync } from 'node:fs';
-import { join, dirname } from 'node:path';
+import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const dir  = join(root, 'changelog.d');
-const book = join(root, 'CHANGELOG.md');
+// The family whose book this is: FAMILY_INI where said (installer/bass.ini, the basses'), else installer/family.ini —
+// its `book=` names the book, CHANGELOG.md when it names none.
+const iniText = readFileSync(process.env.FAMILY_INI ? resolve(root, process.env.FAMILY_INI) : join(root, 'installer', 'family.ini'), 'utf8');
+const book = join(root, (/^book=(.*)$/m.exec(iniText) || [])[1]?.trim() || 'CHANGELOG.md');
 
 const args     = process.argv.slice(2);
 const valueOf  = (flag) => { const i = args.indexOf(flag); return i === -1 ? '' : (args[i + 1] || '').trim(); };
@@ -68,7 +71,7 @@ if (mode === '--notes')
     const body = sectionOf(readFileSync(book, 'utf8'), version);
     if (! body)
     {
-        console.error(`CHANGELOG.md has no ${version} section — fold the notes first (--release ${version})`);
+        console.error(`${book} has no ${version} section — fold the notes first (--release ${version})`);
         process.exit(1);
     }
     console.log(body);
@@ -80,7 +83,7 @@ const EVERY    = 'Every amp';
 
 // The amps the tree builds, and the ones this release carries.
 const treeAmps   = [...readFileSync(join(root, 'CMakeLists.txt'), 'utf8').matchAll(/^add_amp\((\w+)/gm)].map(m => m[1]);
-const familyLine = /^amps=(.*)$/m.exec(readFileSync(join(root, 'installer', 'family.ini'), 'utf8'));
+const familyLine = /^amps=(.*)$/m.exec(iniText);
 const family     = familyLine ? familyLine[1].trim().split(/\s+/).filter(Boolean) : [];
 if (treeAmps.length === 0 || family.length === 0)
 {
