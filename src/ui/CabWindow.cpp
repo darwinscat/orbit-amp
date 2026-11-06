@@ -121,9 +121,10 @@ void CabWindow::findPlace (int cab, const CabPicker::Setup& setup, bool thorough
     // it where it was put — or the window went.
     static juce::ThreadPool searcher { 1 };
     const auto state = stateOf (cab, setup);
+    const auto playing = AmpProcessor::cabSynthOf (AmpProcessor::cabSynthFrom (state)).state;   // as the cabinet keeps it: its TOML's precision
     const bool pair = setup.aOn && setup.bOn, alone = setup.aOn;   // alone: which mic, with one heard — A, else B
     juce::Component::SafePointer<CabWindow> safe (this);
-    searcher.addJob ([safe, state, cab, setup, thorough, pair, alone]
+    searcher.addJob ([safe, state, playing, cab, setup, thorough, pair, alone]
     {
         static const auto table = cabir::synth::parseTable (std::string (BinaryData::cabinets_txt, (size_t) BinaryData::cabinets_txtSize));
         const auto tried = [safe] (const cabir::synth::Place& p, double score)
@@ -136,14 +137,14 @@ void CabWindow::findPlace (int cab, const CabPicker::Setup& setup, bool thorough
         };
         const auto place = pair ? cabir::synth::quietPlaceForB (table, state, (size_t) 1 << 13, tried, thorough)
                                 : cabir::synth::smoothPlaceForMic (table, state, (size_t) 1 << 14, tried);
-        juce::MessageManager::callAsync ([safe, state, cab, setup, place, pair, alone]
+        juce::MessageManager::callAsync ([safe, playing, cab, setup, place, pair, alone]
         {
             if (safe == nullptr)
                 return;
             safe->picker.endSearch();
             const auto now = AmpProcessor::cabSynthOf (safe->amp.cabChoice());
             const auto mic = [pair, alone] (const cabir::State& s) { return pair || ! alone ? s.b : s.a; };
-            if (! now.valid || ! (mic (now.state) == mic (state)) || now.state.box != state.box)
+            if (! now.valid || ! (mic (now.state) == mic (playing)) || now.state.box != playing.box)
                 return;
             auto moved = setup;
             auto& m = pair || ! alone ? moved.b : moved.a;
