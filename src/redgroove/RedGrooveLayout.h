@@ -145,6 +145,7 @@ inline constexpr float cutWordsAbove = 14.0f, cutWordRoom = 78.0f;
 inline constexpr float switchSlotX = 1409.0f, switchSlotW = 52.0f, switchSlotH = 24.0f;
 inline constexpr std::array<float, 4> switchLineY { 780.0f, 816.0f, 852.0f, 888.0f };
 inline constexpr float switchRuleX = 1325.0f;   // the line parting the column from DI/CAB, cut into the panel
+inline constexpr float cabinetSwitchY = panelTitleY;   // CABINET's own switch, OFF / ON, over the column in the title's row
 
 // THE PICTURE'S SCREEN, across the top of CABINET's panel — gone under plain panel (Cabin::paintStatic): in its place
 // the cabinet's slot lying across, a slider in it, OCTAVE's socket turned a quarter and its middle drawn longer; and the

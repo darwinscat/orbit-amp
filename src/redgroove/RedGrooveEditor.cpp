@@ -386,7 +386,8 @@ RedGrooveEditor::RedGrooveEditor (AmpProcessor& p)
       highCut (cabinInk(), "STYL", "F", "S"),
       ultraLo (cabinInk(), "U-LO", "-", "+", 3),
       ultraHi (cabinInk(), "U-HI", "0", "+", 2),
-      cabinet (cabinInk(), Art::of().faderCap, layout::faderCapLength, layout::faderCapSquash)
+      cabinet (cabinInk(), Art::of().faderCap, layout::faderCapLength, layout::faderCapSquash),
+      cabinetOn (cabinInk(), {}, {}, {})
 {
     // Everything this constructor sets is the face settling onto the state, not a player's edit.
     const felitronics::appkit::CompareHistory::ScopedSuppress settling (amp.history);
@@ -555,10 +556,10 @@ RedGrooveEditor::RedGrooveEditor (AmpProcessor& p)
     // THE CUTS' SWITCHES: the HPF by the strings, the LPF by the hand — both always in (channels::Lineup::pinned), the
     // switch choosing between their positions; a right click on either its positions' frequencies.
     // One line a switch, in a column right of DI/CAB: the name, the end positions' words either side of the slot.
-    const auto lineAt = [this] (SlideSwitch& sw, int line)
+    const auto lineAt = [this] (SlideSwitch& sw, float y)
     {
         const auto slot = juce::Rectangle<float> (layout::switchSlotW, layout::switchSlotH)
-                              .withCentre ({ layout::switchSlotX + 0.5f * layout::switchSlotW, layout::switchLineY[(size_t) line] });
+                              .withCentre ({ layout::switchSlotX + 0.5f * layout::switchSlotW, y });
         const float left = sw.nameRoom + sw.wordRoom + 6.0f, right = sw.wordRoom + 6.0f;
         const auto box = juce::Rectangle<float> (slot.getX() - left, slot.getY() - 3.0f, left + slot.getWidth() + right, slot.getHeight() + 6.0f);
         sw.slot = slot - box.getPosition();
@@ -569,10 +570,18 @@ RedGrooveEditor::RedGrooveEditor (AmpProcessor& p)
         addToStage (sw);
         sw.setBounds (box.toNearestInt());
     };
-    lineAt (lowCut, 0);
-    lineAt (highCut, 1);
-    lineAt (ultraLo, 2);
-    lineAt (ultraHi, 3);
+    lineAt (lowCut, layout::switchLineY[0]);
+    lineAt (highCut, layout::switchLineY[1]);
+    lineAt (ultraLo, layout::switchLineY[2]);
+    lineAt (ultraHi, layout::switchLineY[3]);
+
+    // CABINET'S OWN SWITCH, over the column in the title's row (the owner, 07.11): its cap at the left takes the cabinet out
+    // of the sound, the DI alone, and the name over the slider says OFF; at the right it is back. No words either side —
+    // the row has no room for them beside CABINET and its corner's screw. The slider moved brings it back too (chooseSlot).
+    cabinetOn.nameRoom = 0.0f;
+    cabinetOn.wordRoom = 0.0f;
+    lineAt (cabinetOn, layout::cabinetSwitchY);
+    cabinetOn.setComponentID ("cabinetOn");
 
     // ...each saying what it is in the tag over it while the hand is on it (the owner, 03.11).
     const auto sayOver = [this] (SlideSwitch& sw, juce::String words)
@@ -585,8 +594,10 @@ RedGrooveEditor::RedGrooveEditor (AmpProcessor& p)
     };
     sayOver (lowCut, bass::strHint);
     sayOver (highCut, bass::stylHint);
+    sayOver (cabinetOn, "The cabinet in the sound, or the DI alone");
     bindSwitch (lowCut, params::bassHpf);
     bindSwitch (highCut, params::bassLpf);
+    bindSwitch (cabinetOn, params::cabOn);
 
     // U-LO and U-HI: the pack's tone switches (Channels::toneSwitchOf), Ultra Lo and Ultra Hi — each on its tone slot,
     // a position its place in the pack's list. A pack with none has nothing for them to throw, and they are not there.
@@ -910,7 +921,8 @@ void RedGrooveEditor::webExtras (const juce::File& dir, juce::DynamicObject& kit
     // THE CUTS' SWITCHES: two positions each, a word over each, the one it stands at lit; the parameter's value is the position.
     {
         struct S { const char* id; const SlideSwitch* sw; const char* left; const char* right; const char* param; };
-        const S switches[] { { "lowCut", &lowCut, "5 STR", "4 STR", params::bassHpf }, { "highCut", &highCut, "FINGERS", "SLAP", params::bassLpf } };
+        const S switches[] { { "lowCut", &lowCut, "5 STR", "4 STR", params::bassHpf }, { "highCut", &highCut, "FINGERS", "SLAP", params::bassLpf },
+                             { "cabinetOn", &cabinetOn, "", "", params::cabOn } };   // no words: OFF left, ON right
         juce::Array<juce::var> a;
         for (const auto& w : switches)
         {
