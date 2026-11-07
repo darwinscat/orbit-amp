@@ -929,8 +929,8 @@ void RedGrooveEditor::webExtras (const juce::File& dir, juce::DynamicObject& kit
     // THE CUTS' SWITCHES: two positions each, a word over each, the one it stands at lit; the parameter's value is the position.
     {
         struct S { const char* id; const SlideSwitch* sw; const char* left; const char* right; const char* param; };
-        const S switches[] { { "lowCut", &lowCut, "5 STR", "4 STR", params::bassHpf }, { "highCut", &highCut, "FINGERS", "SLAP", params::bassLpf },
-                             { "cabinetOn", &cabinetOn, "", "", params::cabOn } };   // no words: OFF left, ON right
+        // CABINET's own switch is the app's alone: the page's face has none (the owner, 08.11).
+        const S switches[] { { "lowCut", &lowCut, "5 STR", "4 STR", params::bassHpf }, { "highCut", &highCut, "FINGERS", "SLAP", params::bassLpf } };
         juce::Array<juce::var> a;
         for (const auto& w : switches)
         {
@@ -940,6 +940,34 @@ void RedGrooveEditor::webExtras (const juce::File& dir, juce::DynamicObject& kit
             v->setProperty ("wordsY", w.sw->wordsY + box.getY()); v->setProperty ("wordRoom", w.sw->wordRoom);
             v->setProperty ("words", list ({ juce::var (w.left), juce::var (w.right) }));
             v->setProperty ("param", w.param); v->setProperty ("values", list ({ 0, 1 }));
+            a.add (juce::var (v));
+        }
+        // U-LO and U-HI under them (the owner, 08.11: the page shows them as the app does): the pack's tone switches, each
+        // on its tone slot — the parameter per channel, a position its normalised value, as many as the pack's tone has.
+        struct U { const char* id; const SlideSwitch* sw; const char* name; const char* left; const char* right; int which; };
+        const U ultras[] { { "ultraLo", &ultraLo, "U-LO", "-", "+", 0 }, { "ultraHi", &ultraHi, "U-HI", "0", "+", 1 } };
+        for (const auto& u : ultras)
+        {
+            juce::Array<juce::var> perChannel;
+            for (int c = 0; c < channels.lineup().count(); ++c)
+                perChannel.add (juce::var (channels.toneSwitchOf (c, u.which)));
+            const auto id = channels.toneSwitchOf (channels.active(), u.which);
+            namz::rig::Tone tone;
+            if (id.isEmpty() || ! channels.toneSwitchToneOf (channels.active(), u.which, tone))
+                continue;
+            const int positions = juce::jmax (2, (int) tone.positions.size());
+            auto* v = new Obj();
+            const auto box = boxOf (*u.sw);
+            v->setProperty ("id", u.id); v->setProperty ("name", u.name);
+            v->setProperty ("box", rect (box)); v->setProperty ("slot", rect (u.sw->slot + box.getPosition()));
+            v->setProperty ("wordsY", u.sw->wordsY + box.getY()); v->setProperty ("wordRoom", u.sw->wordRoom);
+            v->setProperty ("words", list ({ juce::var (u.left), juce::var (u.right) }));
+            v->setProperty ("param", id); v->setProperty ("paramPerChannel", perChannel);
+            juce::Array<juce::var> values;
+            for (int i = 0; i < positions; ++i)
+                values.add ((double) i / (double) (positions - 1));
+            v->setProperty ("values", values);
+            v->setProperty ("valuesAre", "the parameter's normalised value, a position each, left to right");
             a.add (juce::var (v));
         }
         o->setProperty ("switches", a);
