@@ -6,7 +6,7 @@ version of their own (installer/bass.ini; the guitar amps keep theirs in CHANGEL
 format follows [Keep a Changelog](https://keepachangelog.com/), and the project uses
 [Semantic Versioning](https://semver.org/).
 
-## [0.1.1] - 2026-11-07 - the cabinets' new window, the walker's cabinet switch
+## [0.1.1] - 2026-11-08 - the cabinets' new window, the walker's cabinet switch
 
 ### OrbitBass
 
