@@ -598,6 +598,14 @@ RedGrooveEditor::RedGrooveEditor (AmpProcessor& p)
     bindSwitch (lowCut, params::bassHpf);
     bindSwitch (highCut, params::bassLpf);
     bindSwitch (cabinetOn, params::cabOn);
+    // ...and CAB / DI with the cabinet out: nothing to share between (the processor's share does nothing then), so it is
+    // held where it stands, dimmed, out of the hand's reach (the owner, 07.11).
+    follow (params::cabOn, [this] (float v)
+    {
+        const bool on = v > 0.5f;
+        diCab.setEnabled (on);
+        diCab.setAlpha (on ? 1.0f : 0.5f);
+    })->sendInitialUpdate();
 
     // U-LO and U-HI: the pack's tone switches (Channels::toneSwitchOf), Ultra Lo and Ultra Hi — each on its tone slot,
     // a position its place in the pack's list. A pack with none has nothing for them to throw, and they are not there.
