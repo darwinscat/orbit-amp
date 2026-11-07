@@ -6,6 +6,25 @@ version of their own (installer/bass.ini; the guitar amps keep theirs in CHANGEL
 format follows [Keep a Changelog](https://keepachangelog.com/), and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [0.1.1] - 2026-11-07 - the cabinets' new window, the walker's cabinet switch
+
+### OrbitBass
+
+#### Changed
+- **The cabinets' window is Orbit Bass Cab Builder 0.2.0's**: in 16:9, the backs as pictures, the builder's name
+  across the response, a mic's distance and angle staying out while the hand goes to them, and a "?" that explains
+  what a comb is and why the line turns red. The cabinets themselves sound exactly as before.
+
+### RedGrooveBass
+
+#### Added
+- **CABINET's own switch**, in its title row: the cabinet out of the sound, the DI alone, and back. While it is out
+  the cabinet's name says OFF, its slider dims, and CAB / DI is held where it stands, there being nothing to mix.
+
+#### Fixed
+- **The cabinet's slider runs its slot and no further**: it used to keep the room of a gear that is gone, its groove
+  running past the slot. The slot now spans the cabinet's screen, the name centred over it.
+
 ## [0.1.0] - 2026-11-06 - the first bass amps: OrbitBass and RedGrooveBass
 
 ### Every amp
