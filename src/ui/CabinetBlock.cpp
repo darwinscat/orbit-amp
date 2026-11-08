@@ -68,12 +68,14 @@ CabinetBlock::CabinetBlock (AmpProcessor& processor)
         *amp.apvts.getParameter (params::cabIr),
         [this] (float) { refreshIr (false, true); });
 
-    // The name only says what plays: the row under the picture chooses — the twelve on its slider, CABINETS (the twelve
-    // by name, all of the builder's by style and size, the player's own, EDIT… and SAVE AS…), and the IRs — the bass's
-    // MY IRS, the player's own, while there are any (the owner, 06.11); the guitar's IRS, the factory's IRs and the
-    // player's, always (the owner, 08.11: the guitar amps' cabinets as the bass's).
+    // The row under the picture chooses — the twelve on its slider, CABINETS (the twelve by name, all of the builder's by
+    // style and size, the player's own, EDIT… and SAVE AS…) — and the bass's MY IRS, the player's own, while there are any
+    // (the owner, 06.11); the bass's name only says what plays. The guitar's (the owner, 08.11: its cabinets as the
+    // bass's) keeps its name opening the IRs, the factory's and the player's.
     {
-        ir.opens = false;
+        ir.opens = ! guitar();   // the guitar's name opens its IRs, as it always did: the block has no room for a door of them
+        if (guitar())
+            ir.onOpen = [this] { showIrMenu(); };
         factoryIrs.text = "CABINETS";
         factoryIrs.onOpen = [this] { showCabinetsMenu(); };
         slots.notches = (int) cabs.dozen().size();
@@ -85,16 +87,12 @@ CabinetBlock::CabinetBlock (AmpProcessor& processor)
         slots.onMove  = [this] (int i) { amp.requestCabSynth (cabs.dozen()[(size_t) i].state, true); };
         slots.onLetGo = [this] (int i) { amp.requestCabSynth (cabs.dozen()[(size_t) i].state); };
         addAndMakeVisible (slots);
-        myIrs.text = guitar() ? "IRS" : "MY IRS";
+        myIrs.text = "MY IRS";
         myIrs.onOpen = [this] { showIrMenu (&myIrs); };
         addAndMakeVisible (factoryIrs);
-        if (guitar())
-            addAndMakeVisible (myIrs);   // the factory's IRs among them: always some
-        else
-        {
-            addChildComponent (myIrs);
+        addChildComponent (myIrs);
+        if (! guitar())
             lookAtLibrary();
-        }
 
         pictureClick.onClick = [this] { editCabinet(); };
         wave.addMouseListener (&pictureClick, false);
@@ -992,6 +990,14 @@ void CabinetBlock::layOutContent (juce::Rectangle<int> area)
     const auto wholeRow = row;   // the bass's doors take it edge to edge: its cuts' seats stand empty
     area.removeFromBottom (gap);
 
+    // The guitar's TOP 12 on a row of its own over the cuts, the block's whole width: between HPF and LPF there is room
+    // for the two doors and no slider.
+    if (guitar())
+    {
+        slots.setBounds (area.removeFromBottom (switchRow).reduced (gap, 0));
+        area.removeFromBottom (gap);
+    }
+
     if (narrow)
     {
         switches[0].sw.setBounds (row.removeFromLeft (30).withSizeKeepingCentre (30, 16));
@@ -1022,9 +1028,16 @@ void CabinetBlock::layOutContent (juce::Rectangle<int> area)
                                                     row.getHeight()));
 
     // The row where the trim stood: the IRs' door at the right (the bass's MY IRS while there are any), CABINETS before
-    // it, and the twelve's slider across what is left — the bass's edge to edge, the guitar's between its two cuts.
+    // it, and the bass's dozen's slider across what is left, edge to edge; the guitar's two doors centred between its
+    // cuts, its slider on the row above.
+    if (guitar())
     {
-        auto r = guitar() ? row.reduced (gap, 0) : wholeRow;
+        const auto r = row.reduced (gap, 0);
+        factoryIrs.setBounds (r.withSizeKeepingCentre (juce::jmin (r.getWidth(), factoryIrs.idealWidth()), r.getHeight()));
+    }
+    else
+    {
+        auto r = wholeRow;
         if (myIrs.isVisible())
         {
             myIrs.setBounds (r.removeFromRight (juce::jmin (r.getWidth(), myIrs.idealWidth())));
