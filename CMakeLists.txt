@@ -1157,6 +1157,48 @@ juce_add_binary_data(OrbitAmpData
 # ...and the table the cabinet shelf is played by: its IRs themselves lie in the factory folder.
 target_link_libraries(OrbitAmpData INTERFACE OrbitAmpCabinetCatalog)
 
+# THE GUITAR'S CABINETS (the owner, 08.11): Orbit Guitar Cab Builder's table and every one of its presets, rendered live
+# as the bass's are — its TOP 12 first, the cabinets the guitar amps play (GuitarDozen.h, in their numbers' order), then
+# all of them, its styles' (TOP 12 among them) and its typical ones. A data target of its own, GuitarCabData: the
+# guitar's typical presets share their files' names with the bass's, and its table is cabinets.txt too.
+file(GLOB ORBITAMP_GUITAR_TOP_FILES CONFIGURE_DEPENDS "${cab_ir_generator_SOURCE_DIR}/data/guitar/presets/top12-*.toml")
+list(SORT ORBITAMP_GUITAR_TOP_FILES)
+list(LENGTH ORBITAMP_GUITAR_TOP_FILES _orbitamp_guitar_top_count)
+if(NOT _orbitamp_guitar_top_count EQUAL 12)
+    message(FATAL_ERROR "The guitar's TOP 12 is ${_orbitamp_guitar_top_count} presets in cab-ir-generator (${cab_ir_generator_SOURCE_DIR}), not 12")
+endif()
+set(_orbitamp_guitar_stems "")
+foreach(file IN LISTS ORBITAMP_GUITAR_TOP_FILES)
+    get_filename_component(stem "${file}" NAME_WE)
+    string(APPEND _orbitamp_guitar_stems "    \"${stem}\",\n")
+endforeach()
+file(GLOB ORBITAMP_GUITAR_PRESET_FILES CONFIGURE_DEPENDS
+    "${cab_ir_generator_SOURCE_DIR}/data/guitar/presets/*.toml" "${cab_ir_generator_SOURCE_DIR}/data/guitar/typical/*.toml")
+list(SORT ORBITAMP_GUITAR_PRESET_FILES)
+set(_orbitamp_guitar_all_stems "")
+foreach(file IN LISTS ORBITAMP_GUITAR_PRESET_FILES)
+    get_filename_component(stem "${file}" NAME_WE)
+    string(APPEND _orbitamp_guitar_all_stems "    \"${stem}\",\n")
+endforeach()
+file(CONFIGURE OUTPUT "${ORBITAMP_GENERATED_DIR}/GuitarDozen.h" @ONLY CONTENT
+"// Written by CMakeLists.txt (THE GUITAR'S CABINETS): cab-ir-generator's guitar presets the guitar amps play, its TOP 12,
+// by their files' stems, in order — and all of them, the styles' and the typical ones.
+#pragma once
+namespace orbitamp
+{
+inline constexpr const char* guitarCabinets[] =
+{
+@_orbitamp_guitar_stems@};
+inline constexpr const char* guitarPresets[] =
+{
+@_orbitamp_guitar_all_stems@};
+}
+")
+configure_file("${cab_ir_generator_SOURCE_DIR}/data/guitar/cabinets.txt" "${ORBITAMP_GENERATED_DIR}/guitar-cabinets.txt" COPYONLY)
+juce_add_binary_data(OrbitAmpGuitarCabData HEADER_NAME GuitarCabData.h NAMESPACE GuitarCabData
+    SOURCES "${ORBITAMP_GENERATED_DIR}/guitar-cabinets.txt" ${ORBITAMP_GUITAR_PRESET_FILES})
+target_link_libraries(OrbitAmpData INTERFACE OrbitAmpGuitarCabData)
+
 # ----------------------------------------------------------------------------
 # THE SHADERS: every GLSL program the faces draw with — the windscreens' worlds and the cockpit's sky —
 # as files in resources/shaders, a folder a world and what several share in common/, put together by
@@ -1263,7 +1305,8 @@ set(ORBITAMP_SOURCES
     src/ui/Footer.cpp
     src/ui/SetupPanel.cpp
     src/ui/WebFaceplate.cpp
-    src/device/BassCabinets.cpp
+    src/device/Cabinets.cpp
+    src/device/CabTables.cpp
     src/ui/library/DeviceListView.cpp
     src/ui/library/IrTreeView.cpp
     src/face/Controls.cpp)           # the family's controls — the AMP's channel lever is a face::DetentLever
@@ -1283,7 +1326,8 @@ set(FACE_SOURCES
     src/core/ProcessMemory.cpp
     src/channels/Channels.cpp
     src/channels/Engine.cpp
-    src/device/BassCabinets.cpp
+    src/device/Cabinets.cpp
+    src/device/CabTables.cpp
     src/channels/Presets.cpp
     src/channels/Set.cpp
     src/face/Cabs.cpp

@@ -4,6 +4,7 @@
 #include "CabWindow.h"
 
 #include "Theme.h"
+#include "../device/CabTables.h"
 
 #include <panel/Response.h>
 #include <synth/CabSynth.h>
@@ -126,7 +127,7 @@ void CabWindow::findPlace (int cab, const CabPicker::Setup& setup, bool thorough
     juce::Component::SafePointer<CabWindow> safe (this);
     searcher.addJob ([safe, state, playing, cab, setup, thorough, pair, alone]
     {
-        static const auto table = cabir::synth::parseTable (std::string (BinaryData::cabinets_txt, (size_t) BinaryData::cabinets_txtSize));
+        const auto& table = device::tableOf (device::kindOf (state.box));   // the bass's or the guitar's, as its box says
         const auto tried = [safe] (const cabir::synth::Place& p, double score)
         {
             juce::MessageManager::callAsync ([safe, p, score]
@@ -196,6 +197,8 @@ void CabWindow::open (AmpProcessor& amp, juce::Component& anchor, Kept kept)
     // Over the face above what opened it, its arrow at that one's top, inside the window where it fits: what opened it
     // stays in sight, answering the hand.
     const auto at = anchor.getScreenBounds();
+    // The panel drawing this amp's builder's boxes: the guitar's for a guitar amp, the bass's for a bass (CabTables.h).
+    device::drawCabinetsOf (amp.product().chain == Chain::guitar ? device::CabKind::guitar : device::CabKind::bass);
     auto& box = juce::CallOutBox::launchAsynchronously (std::unique_ptr<CabWindow> (new CabWindow (amp, std::move (kept))), at, nullptr);
 
     // Ours, not JUCE's grey-green: the face's panel under it, the CAB's orange line round it and its arrow.

@@ -3,62 +3,32 @@
 
 #pragma once
 
-#include <juce_core/juce_core.h>
-#include <synth/State.h>
-
-#include <vector>
+#include "Cabinets.h"
 
 namespace orbitamp::device
 {
 
-/** THE BASS'S CABINETS AS A PLAYER PICKS THEM, by name: the dozen the build carries (THE BASS'S DOZEN, CMakeLists.txt) —
-    twelve of cab-ir-generator's presets, fixed — and the player's own, kept as the same presets' files in `Bass Cabinets`
-    in the family's folder (OrbitBass's SAVE AS…), beside `Bass IRs`, where the cabinets' own app can read and write them
-    too. A cabinet's name says it as a person remembers it: its number in the dozen first — "7: 1x15 THUMP" (the owner,
-    06.11) — and a player's own as the player named it. */
+/** THE BASS'S CABINETS AS A PLAYER PICKS THEM: the bass's Cabinets (Cabinets.h) — its dozen (THE BASS'S DOZEN,
+    CMakeLists.txt), all of Orbit Bass Cab Builder's presets, and the player's own in `Bass Cabinets`, beside `Bass IRs` —
+    as the bass amps have always asked for them. */
 struct BassCabinets
 {
-    struct Cabinet
-    {
-        juce::String name;      // as shown: "7: 1x15 THUMP", or the player's own name
-        cabir::State state;
-        juce::File file;        // a player's own: its file; the dozen's: none
-        juce::String style;     // all's: the preset's style, "Rock", "Typical"
-    };
+    using Cabinet = Cabinets::Cabinet;
 
-    /** The dozen, in the build's order. */
-    static const std::vector<Cabinet>& dozen();
+    static const Cabinets& bass() { return Cabinets::of (CabKind::bass); }
 
-    /** ALL OF THEM (the owner, 06.11): every factory preset of cab-ir-generator's and its typical cabinets, the IR packs'
-        190, by style and number, the typical ones last — each named as its preset is, "ROCK · 8x10 CLASSIC". */
-    static const std::vector<Cabinet>& all();
-    static int allOf (const cabir::State& state);
-
-    /** The player's own, by name — read from the folder each time asked. */
-    static std::vector<Cabinet> own();
-
-    /** Where the player's own are kept: `Bass Cabinets` in the family's folder, made on first look. */
-    static juce::File folder();
-
-    /** The dozen's slot that `state` is, or -1. */
-    static int dozenOf (const cabir::State& state);
-
-    /** The name of the cabinet `state` is — the dozen's, else one of all, else the player's own; empty for none. */
-    static juce::String nameOf (const cabir::State& state);
-
-    /** The playing cabinet kept as the player's own under `name` — a cabinet of that name already there is replaced.
-        Its file, or none where it could not be written. */
-    static juce::File save (const juce::String& name, const cabir::State& state);
-
-    /** A player's own rewritten as `state`, its name and style kept: EDIT… on one keeps every change in its file. */
-    static bool keep (const juce::File& file, const cabir::State& state);
-
-    /** A player's own renamed, or moved to the Trash. */
-    static bool rename (const juce::File& file, const juce::String& name);
-    static bool remove (const juce::File& file);
-
-    /** A name as a file keeps it: no quotes, no backslashes, trimmed. */
-    static juce::String cleaned (const juce::String& name);
+    static const std::vector<Cabinet>& dozen()                       { return bass().dozen(); }
+    static const std::vector<Cabinet>& all()                         { return bass().all(); }
+    static int allOf (const cabir::State& state)                     { return bass().allOf (state); }
+    static std::vector<Cabinet> own()                                { return bass().own(); }
+    static juce::File folder()                                       { return bass().folder(); }
+    static int dozenOf (const cabir::State& state)                   { return bass().dozenOf (state); }
+    static juce::String nameOf (const cabir::State& state)           { return bass().nameOf (state); }
+    static juce::File save (const juce::String& name, const cabir::State& state) { return bass().save (name, state); }
+    static bool keep (const juce::File& file, const cabir::State& state)         { return bass().keep (file, state); }
+    static bool rename (const juce::File& file, const juce::String& name)        { return bass().rename (file, name); }
+    static bool remove (const juce::File& file)                      { return bass().remove (file); }
+    static juce::String cleaned (const juce::String& name)           { return Cabinets::cleaned (name); }
 };
 
 } // namespace orbitamp::device

@@ -12,7 +12,8 @@
 #include <cstring>
 #include <map>
 #include <mutex>
-#include <panel/Panel.h>   // cabir::knownState: a cabinet of a box the table knows, or none
+#include <panel/Panel.h>
+#include "device/CabTables.h"   // whose cabinet a state is, its table, and the state known against its own builder
 #include <synth/CabSynth.h>
 #include <BinaryData.h>
 #include "device/FactoryShelf.h"
@@ -853,7 +854,8 @@ AmpProcessor::~AmpProcessor()
 
 AmpProcessor::DrawnCab AmpProcessor::renderDrawn (const cabir::State& state, bool live)
 {
-    static const auto table = cabir::synth::parseTable (std::string (BinaryData::cabinets_txt, (size_t) BinaryData::cabinets_txtSize));
+    // The bass's table or the guitar's, as the box says whose cabinet this is (device/CabTables.h).
+    const auto& table = device::tableOf (device::kindOf (state.box));
     // The mic that did not move kept, the one that did rendered at half the size while the hand is on it.
     if (cabRenderer == nullptr)
         cabRenderer = std::make_unique<cabir::synth::PairRenderer>();
@@ -1038,7 +1040,7 @@ AmpProcessor::CabSynthChoice AmpProcessor::cabSynthOf (const CabChoice& choice)
 
 AmpProcessor::CabSynthChoice AmpProcessor::cabSynthOf (const juce::String& from)
 {
-    if (const auto state = cabir::knownState (from.toStdString()))
+    if (const auto state = device::knownCabinet (from.toStdString()))
         return { *state, true };
     return {};
 }
