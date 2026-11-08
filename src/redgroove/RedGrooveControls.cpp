@@ -317,6 +317,7 @@ void CabinetScreen::refresh()
             label->colour = shown == "OFF" ? ink.at (ink.values, 0.45f) : ink.values;
             label->set (shown);
         }
+        slider.setAlpha (shown == "OFF" ? 0.5f : 1.0f);   // out of the sound, the slider dims with its name
     }
     // The cap where the cabinet that plays stands — unless the hand has it.
     if (moving < 0 && notch != nullptr)

@@ -386,7 +386,8 @@ RedGrooveEditor::RedGrooveEditor (AmpProcessor& p)
       highCut (cabinInk(), "STYL", "F", "S"),
       ultraLo (cabinInk(), "U-LO", "-", "+", 3),
       ultraHi (cabinInk(), "U-HI", "0", "+", 2),
-      cabinet (cabinInk(), Art::of().faderCap, layout::faderCapLength, layout::faderCapSquash)
+      cabinet (cabinInk(), Art::of().faderCap, layout::faderCapLength, layout::faderCapSquash),
+      cabinetOn (cabinInk(), {}, {}, {})
 {
     // Everything this constructor sets is the face settling onto the state, not a player's edit.
     const felitronics::appkit::CompareHistory::ScopedSuppress settling (amp.history);
@@ -555,10 +556,10 @@ RedGrooveEditor::RedGrooveEditor (AmpProcessor& p)
     // THE CUTS' SWITCHES: the HPF by the strings, the LPF by the hand — both always in (channels::Lineup::pinned), the
     // switch choosing between their positions; a right click on either its positions' frequencies.
     // One line a switch, in a column right of DI/CAB: the name, the end positions' words either side of the slot.
-    const auto lineAt = [this] (SlideSwitch& sw, int line)
+    const auto lineAt = [this] (SlideSwitch& sw, float y)
     {
         const auto slot = juce::Rectangle<float> (layout::switchSlotW, layout::switchSlotH)
-                              .withCentre ({ layout::switchSlotX + 0.5f * layout::switchSlotW, layout::switchLineY[(size_t) line] });
+                              .withCentre ({ layout::switchSlotX + 0.5f * layout::switchSlotW, y });
         const float left = sw.nameRoom + sw.wordRoom + 6.0f, right = sw.wordRoom + 6.0f;
         const auto box = juce::Rectangle<float> (slot.getX() - left, slot.getY() - 3.0f, left + slot.getWidth() + right, slot.getHeight() + 6.0f);
         sw.slot = slot - box.getPosition();
@@ -569,10 +570,18 @@ RedGrooveEditor::RedGrooveEditor (AmpProcessor& p)
         addToStage (sw);
         sw.setBounds (box.toNearestInt());
     };
-    lineAt (lowCut, 0);
-    lineAt (highCut, 1);
-    lineAt (ultraLo, 2);
-    lineAt (ultraHi, 3);
+    lineAt (lowCut, layout::switchLineY[0]);
+    lineAt (highCut, layout::switchLineY[1]);
+    lineAt (ultraLo, layout::switchLineY[2]);
+    lineAt (ultraHi, layout::switchLineY[3]);
+
+    // CABINET'S OWN SWITCH, over the column in the title's row (the owner, 07.11): its cap at the left takes the cabinet out
+    // of the sound, the DI alone, and the name over the slider says OFF; at the right it is back. No words either side —
+    // the row has no room for them beside CABINET and its corner's screw. The slider moved brings it back too (chooseSlot).
+    cabinetOn.nameRoom = 0.0f;
+    cabinetOn.wordRoom = 0.0f;
+    lineAt (cabinetOn, layout::cabinetSwitchY);
+    cabinetOn.setComponentID ("cabinetOn");
 
     // ...each saying what it is in the tag over it while the hand is on it (the owner, 03.11).
     const auto sayOver = [this] (SlideSwitch& sw, juce::String words)
@@ -585,8 +594,18 @@ RedGrooveEditor::RedGrooveEditor (AmpProcessor& p)
     };
     sayOver (lowCut, bass::strHint);
     sayOver (highCut, bass::stylHint);
+    sayOver (cabinetOn, "The cabinet in the sound, or the DI alone");
     bindSwitch (lowCut, params::bassHpf);
     bindSwitch (highCut, params::bassLpf);
+    bindSwitch (cabinetOn, params::cabOn);
+    // ...and CAB / DI with the cabinet out: nothing to share between (the processor's share does nothing then), so it is
+    // held where it stands, dimmed, out of the hand's reach (the owner, 07.11).
+    follow (params::cabOn, [this] (float v)
+    {
+        const bool on = v > 0.5f;
+        diCab.setEnabled (on);
+        diCab.setAlpha (on ? 1.0f : 0.5f);
+    })->sendInitialUpdate();
 
     // U-LO and U-HI: the pack's tone switches (Channels::toneSwitchOf), Ultra Lo and Ultra Hi — each on its tone slot,
     // a position its place in the pack's list. A pack with none has nothing for them to throw, and they are not there.
@@ -898,11 +917,23 @@ void RedGrooveEditor::webExtras (const juce::File& dir, juce::DynamicObject& kit
         auto* m = new Obj();
         m->setProperty ("box", rect (boxOf (midFreq))); m->setProperty ("slot", rect (layout::midFreqSlot));
         m->setProperty ("sprite", "fader-cap"); m->setProperty ("capLength", layout::midFreqCap); m->setProperty ("across", true);
-        m->setProperty ("param", params::eqBellHz (0, 0));
-        auto* map = new Obj();
-        map->setProperty ("kind", "log"); map->setProperty ("minHz", params::bassMidMinHz); map->setProperty ("maxHz", params::bassMidMaxHz);
-        map->setProperty ("travel", "log (hz / minHz) / log (maxHz / minHz), left to right");
-        m->setProperty ("map", map);
+        // MID FREQ as the face binds it (above): on a pack with a frequency knob of its own — the SGT-DI's Freq — that
+        // knob's tone slot, its travel the slot's value 0..1 and its frequency where the pack's positions put it; no
+        // map, there being none of the kinds said here for that. On a pack with none, the standard MIDDLE's frequency
+        // on its logarithmic travel.
+        if (namz::rig::Tone freq; channels.frequencyToneOf (channels.active(), freq))
+        {
+            m->setProperty ("param", channels.frequencyOf (channels.active()));
+            m->setProperty ("map", juce::var());
+        }
+        else
+        {
+            m->setProperty ("param", params::eqBellHz (0, 0));
+            auto* map = new Obj();
+            map->setProperty ("kind", "log"); map->setProperty ("minHz", params::bassMidMinHz); map->setProperty ("maxHz", params::bassMidMaxHz);
+            map->setProperty ("travel", "log (hz / minHz) / log (maxHz / minHz), left to right");
+            m->setProperty ("map", map);
+        }
         m->setProperty ("reading", "hertz");
         o->setProperty ("midFreq", m);
     }
@@ -910,6 +941,7 @@ void RedGrooveEditor::webExtras (const juce::File& dir, juce::DynamicObject& kit
     // THE CUTS' SWITCHES: two positions each, a word over each, the one it stands at lit; the parameter's value is the position.
     {
         struct S { const char* id; const SlideSwitch* sw; const char* left; const char* right; const char* param; };
+        // CABINET's own switch is the app's alone: the page's face has none (the owner, 08.11).
         const S switches[] { { "lowCut", &lowCut, "5 STR", "4 STR", params::bassHpf }, { "highCut", &highCut, "FINGERS", "SLAP", params::bassLpf } };
         juce::Array<juce::var> a;
         for (const auto& w : switches)
@@ -920,6 +952,34 @@ void RedGrooveEditor::webExtras (const juce::File& dir, juce::DynamicObject& kit
             v->setProperty ("wordsY", w.sw->wordsY + box.getY()); v->setProperty ("wordRoom", w.sw->wordRoom);
             v->setProperty ("words", list ({ juce::var (w.left), juce::var (w.right) }));
             v->setProperty ("param", w.param); v->setProperty ("values", list ({ 0, 1 }));
+            a.add (juce::var (v));
+        }
+        // U-LO and U-HI under them (the owner, 08.11: the page shows them as the app does): the pack's tone switches, each
+        // on its tone slot — the parameter per channel, a position its normalised value, as many as the pack's tone has.
+        struct U { const char* id; const SlideSwitch* sw; const char* name; const char* left; const char* right; int which; };
+        const U ultras[] { { "ultraLo", &ultraLo, "U-LO", "-", "+", 0 }, { "ultraHi", &ultraHi, "U-HI", "0", "+", 1 } };
+        for (const auto& u : ultras)
+        {
+            juce::Array<juce::var> perChannel;
+            for (int c = 0; c < channels.lineup().count(); ++c)
+                perChannel.add (juce::var (channels.toneSwitchOf (c, u.which)));
+            const auto id = channels.toneSwitchOf (channels.active(), u.which);
+            namz::rig::Tone tone;
+            if (id.isEmpty() || ! channels.toneSwitchToneOf (channels.active(), u.which, tone))
+                continue;
+            const int positions = juce::jmax (2, (int) tone.positions.size());
+            auto* v = new Obj();
+            const auto box = boxOf (*u.sw);
+            v->setProperty ("id", u.id); v->setProperty ("name", u.name);
+            v->setProperty ("box", rect (box)); v->setProperty ("slot", rect (u.sw->slot + box.getPosition()));
+            v->setProperty ("wordsY", u.sw->wordsY + box.getY()); v->setProperty ("wordRoom", u.sw->wordRoom);
+            v->setProperty ("words", list ({ juce::var (u.left), juce::var (u.right) }));
+            v->setProperty ("param", id); v->setProperty ("paramPerChannel", perChannel);
+            juce::Array<juce::var> values;
+            for (int i = 0; i < positions; ++i)
+                values.add ((double) i / (double) (positions - 1));
+            v->setProperty ("values", values);
+            v->setProperty ("valuesAre", "the parameter's normalised value, a position each, left to right");
             a.add (juce::var (v));
         }
         o->setProperty ("switches", a);
