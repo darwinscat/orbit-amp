@@ -615,12 +615,15 @@ int ORBITAMP_GATE_MAIN()
             check (treeRows (bassTree) == 2 + bassRowsBefore && treeRows (guitarTree) == 1 + guitarRowsBefore,
                    "the SETUP tree of each: the bass's two rows, the guitar's one");
 
+            // The cockpit's cabinets drawn — the guitar's TOP 12 (the owner, 08.11) — no file among them, of either folder.
             auto cockpit = make (products::catpitAmp());
-            const auto& cabinets = channels::Engine::of (*cockpit).channels.cabinets();
-            bool bassless = cabinets.contains (guitarOwn);
+            const auto& line = channels::Engine::of (*cockpit).channels;
+            const auto& cabinets = line.cabinets();
+            bool bassless = line.lineup().drawnCabinets ? cabinets.isEmpty() && line.cabinetSlots() == 12 : cabinets.contains (guitarOwn);
             for (const auto& f : cabinets)
                 bassless = bassless && ! f.isAChildOf (bassIrs);
-            check (bassless, "the cockpit's channels list the player's `IRs` and nothing of `Bass IRs` (" + juce::String (cabinets.size()) + ")");
+            check (bassless, "the cockpit's channels: its cabinets the TOP 12, drawn, and nothing of `Bass IRs` ("
+                                 + juce::String (line.cabinetSlots()) + " slots, " + juce::String (cabinets.size()) + " files)");
 
             // WHAT THE BASS TAKES IN, RENAMES AND REMOVES IS IN `Bass IRs`, and only there: its SETUP tree's drop lands
             // there, and its library's root refuses what lies in `IRs`.
