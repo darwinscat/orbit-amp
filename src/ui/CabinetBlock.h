@@ -39,6 +39,12 @@ public:
     explicit CabinetBlock (AmpProcessor&);
     ~CabinetBlock() override;
 
+    /** The editor's LEFT and RIGHT (the owner, 08.11: to hear cabinets one after another): the one before or after
+        the cabinet that plays, round the list it is in — a file of the player's own among its folder's IRs as the menu
+        lists them, one of the builder's in the twelve, in all of them or in the player's own, a factory IR among the
+        ones the product plays. */
+    void stepCabinet (int by);
+
 private:
     void timerCallback() override;
     void layOutContent (juce::Rectangle<int>) override;

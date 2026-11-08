@@ -494,6 +494,62 @@ void CabinetBlock::showIrMenu (juce::Component* from)
                         });
 }
 
+void CabinetBlock::stepCabinet (int by)
+{
+    const auto choice  = amp.cabChoice();
+    const auto playing = AmpProcessor::cabSynthOf (choice);
+    const auto next    = [by] (int at, size_t count) { const int n = (int) count; return (size_t) (((at + by) % n + n) % n); };
+
+    if (playing.valid)   // one of the builder's: the twelve, all of them, or the player's own — whichever it is in
+    {
+        if (const int at = cabs.dozenOf (playing.state); at >= 0)
+            amp.requestCabSynth (cabs.dozen()[next (at, cabs.dozen().size())].state);
+        else if (const int all = cabs.allOf (playing.state); all >= 0)
+            amp.requestCabSynth (cabs.all()[next (all, cabs.all().size())].state);
+        else
+        {
+            const auto own = cabs.own();
+            for (size_t i = 0; i < own.size(); ++i)
+                if (own[i].state == playing.state)
+                {
+                    amp.requestCabSynth (own[next ((int) i, own.size())].state);
+                    break;
+                }
+        }
+        return;
+    }
+
+    if (choice.isUser())   // a file of the player's own: its folder's IRs, in the order the menu lists them
+    {
+        const auto library = device::IrLibrary::scan (device::IrLibrary::directory (amp.product().irsFolder()));
+        const auto file    = library.file.getChildFile (choice.from);
+        std::vector<juce::File> siblings;
+        const std::function<void (const device::IrLibrary::Node&)> look = [&] (const device::IrLibrary::Node& n)
+        {
+            if (n.file == file.getParentDirectory())
+                for (const auto& c : n.children)
+                    if (! c.folder)
+                        siblings.push_back (c.file);
+            for (const auto& c : n.children)
+                if (c.folder)
+                    look (c);
+        };
+        look (library);
+        if (const auto at = std::find (siblings.begin(), siblings.end(), file); at != siblings.end())
+            amp.chooseCabFile (siblings[next ((int) (at - siblings.begin()), siblings.size())]);
+    }
+    else   // the factory's: the ones this product plays, by their numbers
+    {
+        std::vector<int> plays;
+        for (int i = 0; i < params::cabIrNames.size(); ++i)
+            if (amp.product().playsCabIr (i))
+                plays.push_back (i);
+        if (const auto at = std::find (plays.begin(), plays.end(), choice.factory); at != plays.end())
+            amp.chooseCabFactory (plays[next ((int) (at - plays.begin()), plays.size())]);
+    }
+    refreshIr (false, true);
+}
+
 namespace
 {
     /** The player's own cabinet `state` is — its file — or none: one the same as the dozen's is the dozen's, fixed. */
