@@ -4,6 +4,7 @@
 #pragma once
 
 #include "../Parameters.h"
+#include "../device/Cabinets.h"
 #include "BlockFrame.h"
 #include "CabWindow.h"
 #include "CabinetSlots.h"
@@ -67,6 +68,10 @@ private:
     static constexpr int gap       = 8;
 
     AmpProcessor& amp;
+
+    /** Its instrument's cabinets (device/Cabinets.h): OrbitBass's the bass's, OrbitAmp's the guitar's (the owner, 08.11). */
+    const device::Cabinets& cabs;
+    bool guitar() const noexcept { return bassRow == nullptr; }
 
     /** OrbitBass's own (ui/BassControls.h): DI/CAB's rail at the block's right edge — the cabinet's own HPF and LPF
         left off, the bass's cuts being a stage after DI/CAB. On the bass's chain alone. */

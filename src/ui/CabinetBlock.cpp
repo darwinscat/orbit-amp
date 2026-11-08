@@ -4,7 +4,7 @@
 #include "CabinetBlock.h"
 
 #include "../PluginProcessor.h"
-#include "../device/BassCabinets.h"
+#include "../device/Cabinets.h"
 #include "../device/IrLibrary.h"
 #include "BassControls.h"
 #include "CabWindow.h"
@@ -38,10 +38,14 @@ struct CabinetBlock::BassRow
 };
 
 CabinetBlock::CabinetBlock (AmpProcessor& processor)
-    // The bass's says CAB: what it plays is mostly its own cabinets, drawn, and an IR only when the player brings one.
-    : BlockFrame (processor.product().chain == Chain::bass ? "Cab" : "Cab IR", BlockFrame::Kind::captured), amp (processor)
+    // CAB: what it plays is mostly its own cabinets, drawn, and an IR only when the player brings one — the bass's and,
+    // since 08.11, the guitar's too.
+    : BlockFrame ("Cab", BlockFrame::Kind::captured), amp (processor),
+      cabs (device::Cabinets::of (processor.product().chain == Chain::bass ? device::CabKind::bass : device::CabKind::guitar))
 {
     CabWindow::useOurLook();   // the miniature over the IR, in our theme
+    // The panel draws this amp's builder's boxes — the sketch over the picture, the window (device/CabTables.h).
+    device::drawCabinetsOf (processor.product().chain == Chain::bass ? device::CabKind::bass : device::CabKind::guitar);
     startTimerHz (30);
     attachPower (*amp.apvts.getParameter (params::cabOn));
 
@@ -64,35 +68,36 @@ CabinetBlock::CabinetBlock (AmpProcessor& processor)
         *amp.apvts.getParameter (params::cabIr),
         [this] (float) { refreshIr (false, true); });
 
-    // The guitar's name opens its menu. The bass's only says what plays: its row under the picture chooses — the
-    // dozen on its slider, CABINETS (the dozen by name, the player's own, EDIT… and SAVE AS…), and MY IRS, the player's
-    // own IRs, while there are any (the owner, 06.11).
-    if (bassRow != nullptr)
+    // The name only says what plays: the row under the picture chooses — the twelve on its slider, CABINETS (the twelve
+    // by name, all of the builder's by style and size, the player's own, EDIT… and SAVE AS…), and the IRs — the bass's
+    // MY IRS, the player's own, while there are any (the owner, 06.11); the guitar's IRS, the factory's IRs and the
+    // player's, always (the owner, 08.11: the guitar amps' cabinets as the bass's).
     {
         ir.opens = false;
         factoryIrs.text = "CABINETS";
         factoryIrs.onOpen = [this] { showCabinetsMenu(); };
-        slots.notches = (int) device::BassCabinets::dozen().size();
+        slots.notches = (int) cabs.dozen().size();
         slots.notch = [this]
         {
             const auto playing = AmpProcessor::cabSynthOf (amp.cabChoice());
-            return playing.valid ? device::BassCabinets::dozenOf (playing.state) : -1;
+            return playing.valid ? cabs.dozenOf (playing.state) : -1;
         };
-        slots.onMove  = [this] (int i) { amp.requestCabSynth (device::BassCabinets::dozen()[(size_t) i].state, true); };
-        slots.onLetGo = [this] (int i) { amp.requestCabSynth (device::BassCabinets::dozen()[(size_t) i].state); };
+        slots.onMove  = [this] (int i) { amp.requestCabSynth (cabs.dozen()[(size_t) i].state, true); };
+        slots.onLetGo = [this] (int i) { amp.requestCabSynth (cabs.dozen()[(size_t) i].state); };
         addAndMakeVisible (slots);
-        myIrs.text = "MY IRS";
+        myIrs.text = guitar() ? "IRS" : "MY IRS";
         myIrs.onOpen = [this] { showIrMenu (&myIrs); };
         addAndMakeVisible (factoryIrs);
-        addChildComponent (myIrs);
-        lookAtLibrary();
+        if (guitar())
+            addAndMakeVisible (myIrs);   // the factory's IRs among them: always some
+        else
+        {
+            addChildComponent (myIrs);
+            lookAtLibrary();
+        }
 
         pictureClick.onClick = [this] { editCabinet(); };
         wave.addMouseListener (&pictureClick, false);
-    }
-    else
-    {
-        ir.onOpen = [this] { showIrMenu(); };
     }
 
     // The picture: the IR, the cuts' curve and the trim's handle drawn on it, in the block's colour.
@@ -152,8 +157,7 @@ CabinetBlock::CabinetBlock (AmpProcessor& processor)
     };
 
     addAndMakeVisible (wave);
-    if (bassRow != nullptr)
-        addAndMakeVisible (sketch);   // over the picture
+    addAndMakeVisible (sketch);   // over the picture
 
     // A handle dragged on the picture writes its parameter; the parameter's echo redraws it.
     wave.onHpfChanged  = [this] (bool, float hz) { hpfHzAtt->setValueAsCompleteGesture (hz); };
@@ -197,10 +201,8 @@ CabinetBlock::CabinetBlock (AmpProcessor& processor)
         }
     };
     trimCombo.onOpen = [this] { showTrimMenu(); };
-    if (bassRow == nullptr)
-        addAndMakeVisible (trimCombo);   // the bass trims nothing: its doors stand there
-    else
-        addChildComponent (trimCombo);
+    // The cabinets' doors stand in its row (the bass trims nothing; the guitar's trim is on the picture's right click).
+    addChildComponent (trimCombo);
 
     // The switches, each the truth of its parameter and nothing of its own.
     const char* ids[]    = { params::cabHpfOn, params::cabLpfOn, params::cabPhase };
@@ -266,7 +268,7 @@ void CabinetBlock::refreshIr (bool force, bool keepTrimWord)
     juce::String shown = choice.isUser() ? choice.name : factoryPlays ? juce::String (params::cabIrNames[choice.factory]) : juce::String (noIr);
     if (synth.valid)   // the dozen's by its number, a player's own by its name, else its box and its mics
     {
-        const auto named = device::BassCabinets::nameOf (synth.state);
+        const auto named = cabs.nameOf (synth.state);
         shown = named.isNotEmpty() ? named : CabWindow::labelOf (synth);
     }
     slots.refresh();
@@ -497,11 +499,11 @@ void CabinetBlock::showIrMenu (juce::Component* from)
 namespace
 {
     /** The player's own cabinet `state` is — its file — or none: one the same as the dozen's is the dozen's, fixed. */
-    juce::File ownFileOf (const cabir::State& state)
+    juce::File ownFileOf (const device::Cabinets& cabs, const cabir::State& state)
     {
-        if (device::BassCabinets::dozenOf (state) >= 0 || device::BassCabinets::allOf (state) >= 0)
+        if (cabs.dozenOf (state) >= 0 || cabs.allOf (state) >= 0)
             return {};
-        for (const auto& c : device::BassCabinets::own())
+        for (const auto& c : cabs.own())
             if (c.state == state)
                 return c.file;
         return {};
@@ -514,7 +516,7 @@ void CabinetBlock::editCabinet()
     const auto playing = AmpProcessor::cabSynthOf (amp.cabChoice());
     if (! playing.valid)
         return;
-    if (const auto file = ownFileOf (playing.state); file != juce::File())
+    if (const auto file = ownFileOf (cabs, playing.state); file != juce::File())
         editIn (file);
     else
         newCabinet();
@@ -526,7 +528,7 @@ void CabinetBlock::newCabinet()
     const auto playing = AmpProcessor::cabSynthOf (amp.cabChoice());
     if (! playing.valid)
         return;
-    const auto own = device::BassCabinets::own();
+    const auto own = cabs.own();
     juce::String initial;
     for (int n = (int) own.size() + 1; initial.isEmpty(); ++n)
     {
@@ -536,9 +538,9 @@ void CabinetBlock::newCabinet()
                 initial = {};
     }
     felitronics::appkit::textPrompt ("New cabinet from this one", initial,
-                                     [safe = juce::Component::SafePointer<CabinetBlock> (this), state = playing.state] (juce::String name)
+                                     [safe = juce::Component::SafePointer<CabinetBlock> (this), state = playing.state, &list = cabs] (juce::String name)
                                      {
-                                         const auto file = device::BassCabinets::save (name, state);
+                                         const auto file = list.save (name, state);
                                          if (file == juce::File() || safe == nullptr)
                                              return;
                                          safe->refreshIr (true);
@@ -549,9 +551,9 @@ void CabinetBlock::newCabinet()
 void CabinetBlock::editIn (const juce::File& own)
 {
     // Every change the window keeps is written into the player's own file at once — no SAVE AS… after it.
-    CabWindow::open (amp, *this, [safe = juce::Component::SafePointer<CabinetBlock> (this), own] (const juce::String& from)
+    CabWindow::open (amp, *this, [safe = juce::Component::SafePointer<CabinetBlock> (this), own, &list = cabs] (const juce::String& from)
     {
-        if (const auto synth = AmpProcessor::cabSynthOf (from); synth.valid && device::BassCabinets::keep (own, synth.state)
+        if (const auto synth = AmpProcessor::cabSynthOf (from); synth.valid && list.keep (own, synth.state)
                                                                 && safe != nullptr)
             safe->refreshIr (true);
     });
@@ -563,14 +565,14 @@ void CabinetBlock::showCabinetsMenu()
     // keeps one: EDIT… opens the player's own that plays in the cabinets' window, NEW FROM… copies a factory one first
     // (they are fixed), SAVE AS… keeps what plays as the player's own, by a name; RENAME and DELETE for those kept.
     const auto playing = AmpProcessor::cabSynthOf (amp.cabChoice());
-    const auto& dozen = device::BassCabinets::dozen();
-    const auto& every = device::BassCabinets::all();
-    const auto own = device::BassCabinets::own();
+    const auto& dozen = cabs.dozen();
+    const auto& every = cabs.all();
+    const auto own = cabs.own();
     const auto plays = [&playing] (const cabir::State& s) { return playing.valid && playing.state == s; };
     enum { pickDozen = 1, pickOwn = 100, edit = 300, saveAs = 301, renameOwn = 400, deleteOwn = 600, pickAll = 1000 };
-    const auto named = playing.valid ? device::BassCabinets::nameOf (playing.state) : juce::String();
+    const auto named = playing.valid ? cabs.nameOf (playing.state) : juce::String();
     const auto editWord = ! playing.valid                                ? juce::String ("EDIT...")
-                        : ownFileOf (playing.state) != juce::File()      ? juce::String ("EDIT...")
+                        : ownFileOf (cabs, playing.state) != juce::File()      ? juce::String ("EDIT...")
                         : named.isNotEmpty()                             ? "NEW FROM " + named + "..."
                                                                          : juce::String ("NEW FROM THIS...");
 
@@ -583,13 +585,18 @@ void CabinetBlock::showCabinetsMenu()
     if (! every.empty())
     {
         const auto dot = juce::String::fromUTF8 (" \xc2\xb7 ");
-        const auto shortName = [&dot] (const device::BassCabinets::Cabinet& c)
+        // Without its style's word: the bass's "ROCK · 8x10 STACK", the guitar's "METAL: 4x12 ANVIL".
+        const auto shortName = [&dot] (const device::Cabinets::Cabinet& c)
         {
-            const auto lead = c.style.toUpperCase() + dot;
-            return c.name.startsWithIgnoreCase (lead) ? c.name.substring (lead.length()) : c.name;
+            for (const auto& lead : { c.style.toUpperCase() + dot, c.style.toUpperCase() + ": " })
+                if (c.name.startsWithIgnoreCase (lead))
+                    return c.name.substring (lead.length());
+            return c.name;
         };
         std::vector<std::pair<juce::String, juce::PopupMenu>> styles, sizes;
-        for (const auto* word : { "1x15", "1x12", "2x10", "4x10", "6x10", "8x10", "2x12", "2x15", "4x6", "8x8" })
+        const auto sizeWords = guitar() ? juce::StringArray { "4x12", "2x12", "1x12", "4x10", "2x10", "1x10" }
+                                        : juce::StringArray { "1x15", "1x12", "2x10", "4x10", "6x10", "8x10", "2x12", "2x15", "4x6", "8x8" };
+        for (const auto& word : sizeWords)
             sizes.push_back ({ word, {} });
         const auto into = [] (std::vector<std::pair<juce::String, juce::PopupMenu>>& list, const juce::String& key) -> juce::PopupMenu&
         {
@@ -643,8 +650,8 @@ void CabinetBlock::showCabinetsMenu()
                        if (safe == nullptr || r <= 0)
                            return;
                        auto& self = *safe;
-                       const auto& dozen = device::BassCabinets::dozen();
-                       const auto& every = device::BassCabinets::all();
+                       const auto& dozen = self.cabs.dozen();
+                       const auto& every = self.cabs.all();
                        if (r >= pickDozen && r < pickDozen + (int) dozen.size())
                            self.amp.requestCabSynth (dozen[(size_t) (r - pickDozen)].state);
                        else if (r >= pickAll && r < pickAll + (int) every.size())
@@ -659,7 +666,7 @@ void CabinetBlock::showCabinetsMenu()
                            self.renameCabinet (own[(size_t) (r - renameOwn)].file, own[(size_t) (r - renameOwn)].name);
                        else if (r >= deleteOwn && r < deleteOwn + (int) own.size())
                        {
-                           device::BassCabinets::remove (own[(size_t) (r - deleteOwn)].file);
+                           self.cabs.remove (own[(size_t) (r - deleteOwn)].file);
                            self.refreshIr (true);
                        }
                    });
@@ -670,13 +677,13 @@ void CabinetBlock::saveCabinetAs()
     const auto playing = AmpProcessor::cabSynthOf (amp.cabChoice());
     if (! playing.valid)
         return;
-    const auto named = device::BassCabinets::nameOf (playing.state);
-    const auto initial = named.isNotEmpty() && device::BassCabinets::dozenOf (playing.state) < 0
-                             ? named : "MY CABINET " + juce::String ((int) device::BassCabinets::own().size() + 1);
+    const auto named = cabs.nameOf (playing.state);
+    const auto initial = named.isNotEmpty() && cabs.dozenOf (playing.state) < 0
+                             ? named : "MY CABINET " + juce::String ((int) cabs.own().size() + 1);
     felitronics::appkit::textPrompt ("Save the cabinet as", initial,
-                                     [safe = juce::Component::SafePointer<CabinetBlock> (this), state = playing.state] (juce::String name)
+                                     [safe = juce::Component::SafePointer<CabinetBlock> (this), state = playing.state, &list = cabs] (juce::String name)
                                      {
-                                         if (device::BassCabinets::save (name, state) != juce::File() && safe != nullptr)
+                                         if (list.save (name, state) != juce::File() && safe != nullptr)
                                              safe->refreshIr (true);
                                      });
 }
@@ -684,9 +691,9 @@ void CabinetBlock::saveCabinetAs()
 void CabinetBlock::renameCabinet (const juce::File& file, const juce::String& name)
 {
     felitronics::appkit::textPrompt ("Rename the cabinet", name,
-                                     [safe = juce::Component::SafePointer<CabinetBlock> (this), file] (juce::String renamed)
+                                     [safe = juce::Component::SafePointer<CabinetBlock> (this), file, &list = cabs] (juce::String renamed)
                                      {
-                                         if (device::BassCabinets::rename (file, renamed) && safe != nullptr)
+                                         if (list.rename (file, renamed) && safe != nullptr)
                                              safe->refreshIr (true);
                                      });
 }
@@ -1014,11 +1021,10 @@ void CabinetBlock::layOutContent (juce::Rectangle<int> area)
     trimCombo.setBounds (row.withSizeKeepingCentre (juce::jmin (90, row.getWidth() - 12),
                                                     row.getHeight()));
 
-    // The bass's row where the trim stands: MY IRS at the right while there are any, CABINETS before it, and the dozen's
-    // slider across what is left.
-    if (bassRow != nullptr)
+    // The row where the trim stood: the IRs' door at the right (the bass's MY IRS while there are any), CABINETS before
+    // it, and the twelve's slider across what is left — the bass's edge to edge, the guitar's between its two cuts.
     {
-        auto r = wholeRow;
+        auto r = guitar() ? row.reduced (gap, 0) : wholeRow;
         if (myIrs.isVisible())
         {
             myIrs.setBounds (r.removeFromRight (juce::jmin (r.getWidth(), myIrs.idealWidth())));
@@ -1031,10 +1037,9 @@ void CabinetBlock::layOutContent (juce::Rectangle<int> area)
 
     wave.setBounds (area);
 
-    // The bass's sketch over the whole picture, drawn at its right (CabPicker::paintSketch) — over the time and dB marks
-    // there and the IR's line, the tolex letting them through.
-    if (bassRow != nullptr)
-        sketch.setBounds (area);
+    // The cabinet's sketch over the whole picture, drawn at its right (CabPicker::paintSketch) — over the time and dB
+    // marks there and the IR's line, the tolex letting them through.
+    sketch.setBounds (area);
 }
 
 void CabinetBlock::paintContent (juce::Graphics&) {}
@@ -1047,7 +1052,7 @@ void CabinetBlock::timerCallback()
 {
     refreshIr();   // before the early return: what plays is shown whether or not the block is on
 
-    if (bassRow != nullptr && isShowing() && --libraryLook <= 0)
+    if (! guitar() && isShowing() && --libraryLook <= 0)
     {
         libraryLook = 90;   // three seconds
         lookAtLibrary();
