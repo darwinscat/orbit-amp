@@ -73,7 +73,7 @@ CabinetBlock::CabinetBlock (AmpProcessor& processor)
     // (the owner, 06.11); the bass's name only says what plays. The guitar's (the owner, 08.11: its cabinets as the
     // bass's) keeps its name opening the IRs, the factory's and the player's.
     {
-        ir.opens = ! guitar();   // the guitar's name opens its IRs, as it always did: the block has no room for a door of them
+        ir.opens = guitar();   // the guitar's name opens its IRs, as it always did: the block has no room for a door of them
         if (guitar())
             ir.onOpen = [this] { showIrMenu(); };
         factoryIrs.text = "CABINETS";
