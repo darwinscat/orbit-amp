@@ -648,12 +648,12 @@ void CabinetBlock::showCabinetsMenu()
                        if (safe == nullptr || r <= 0)
                            return;
                        auto& self = *safe;
-                       const auto& dozen = self.cabs.dozen();
-                       const auto& every = self.cabs.all();
-                       if (r >= pickDozen && r < pickDozen + (int) dozen.size())
-                           self.amp.requestCabSynth (dozen[(size_t) (r - pickDozen)].state);
-                       else if (r >= pickAll && r < pickAll + (int) every.size())
-                           self.amp.requestCabSynth (every[(size_t) (r - pickAll)].state);
+                       const auto& twelve = self.cabs.dozen();
+                       const auto& whole = self.cabs.all();
+                       if (r >= pickDozen && r < pickDozen + (int) twelve.size())
+                           self.amp.requestCabSynth (twelve[(size_t) (r - pickDozen)].state);
+                       else if (r >= pickAll && r < pickAll + (int) whole.size())
+                           self.amp.requestCabSynth (whole[(size_t) (r - pickAll)].state);
                        else if (r >= pickOwn && r < pickOwn + (int) own.size())
                            self.amp.requestCabSynth (own[(size_t) (r - pickOwn)].state);
                        else if (r == edit)
