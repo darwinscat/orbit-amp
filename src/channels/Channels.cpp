@@ -5,10 +5,11 @@
 
 #include "Set.h"
 #include "../Parameters.h"
-#include "../device/BassCabinets.h"
+#include "../device/Cabinets.h"
 #include "../device/IrLibrary.h"
 
 #include <BassDozen.h>
+#include <GuitarDozen.h>
 
 #include <algorithm>
 #include <array>
@@ -420,13 +421,27 @@ int Channels::cabinetSlot() const
 
 namespace
 {
-    /** The dozen's slot a preset of it stands at (BassDozen.h), or -1. */
-    int dozenSlot (const char* stem)
+    /** The twelve a preset of them stands among — the bass's dozen (BassDozen.h) or the guitar's TOP 12 (GuitarDozen.h),
+        their stems apart — and its place there, or -1. */
+    struct DozenAt
     {
-        for (int i = 0; i < (int) std::size (bassCabinets); ++i)
-            if (juce::String (bassCabinets[i]) == stem)
-                return i < (int) device::BassCabinets::dozen().size() ? i : -1;
-        return -1;
+        const device::Cabinets* cabs = nullptr;
+        int at = -1;
+    };
+
+    DozenAt dozenSlot (const char* stem)
+    {
+        const auto find = [stem] (const auto& stems, device::CabKind kind) -> DozenAt
+        {
+            const auto& cabs = device::Cabinets::of (kind);
+            for (int i = 0; i < (int) std::size (stems); ++i)
+                if (juce::String (stems[i]) == stem)
+                    return { &cabs, i < (int) cabs.dozen().size() ? i : -1 };
+            return {};
+        };
+        if (const auto bass = find (bassCabinets, device::CabKind::bass); bass.cabs != nullptr)
+            return bass;
+        return find (guitarCabinets, device::CabKind::guitar);
     }
 }
 
@@ -434,8 +449,8 @@ juce::String Channels::slotName (int slot) const
 {
     if (slot < 0 || slot >= cabinetSlots() || line.cabinets[(size_t) slot].preset == nullptr)
         return {};
-    const int at = dozenSlot (line.cabinets[(size_t) slot].preset);
-    return at >= 0 ? device::BassCabinets::dozen()[(size_t) at].name : juce::String();
+    const auto d = dozenSlot (line.cabinets[(size_t) slot].preset);
+    return d.at >= 0 ? d.cabs->dozen()[(size_t) d.at].name : juce::String();
 }
 
 juce::String Channels::slotFrom (int slot) const
@@ -444,8 +459,8 @@ juce::String Channels::slotFrom (int slot) const
         return {};
     if (const auto* preset = line.cabinets[(size_t) slot].preset)   // a preset's: fixed, nothing of the player's over it
     {
-        const int at = dozenSlot (preset);
-        return at >= 0 ? AmpProcessor::cabSynthFrom (device::BassCabinets::dozen()[(size_t) at].state) : juce::String();
+        const auto d = dozenSlot (preset);
+        return d.at >= 0 ? AmpProcessor::cabSynthFrom (d.cabs->dozen()[(size_t) d.at].state) : juce::String();
     }
     if (const auto set = node().getProperty (slotId (slot)).toString(); AmpProcessor::cabSynthOf (set).valid)
         return set;

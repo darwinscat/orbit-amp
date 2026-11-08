@@ -2,6 +2,7 @@
 // Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of OrbitAmp — see LICENSE.
 
 #include "CatpitLineup.h"
+#include "../channels/TopTwelve.h"
 #include "CatpitEditor.h"
 
 #include "../channels/Engine.h"
@@ -17,7 +18,8 @@ const channels::Lineup& lineup()
     // of it, Edge 15, Crunch 12, Hi-Gain 10, as a driven sound sustains and keeps the room full — and Clean
     // with a little delay behind it, Edge with about half as much, the two driven ones with none. FAT is a
     // layer only the two hottest packs carry.
-    static const channels::Lineup cockpit {
+    // Its cabinets the guitar's TOP 12, drawn (channels/TopTwelve.h, the owner, 08.11).
+    static const channels::Lineup cockpit = channels::withTopTwelve ({
         "catpit", "catpit_channel", "red-giant",
         {
             { "Clean",   "x88-ir-normal-bae8",    "Plate",    20.0f, 15.0f, false },
@@ -25,7 +27,7 @@ const channels::Lineup& lineup()
             { "Crunch",  "x88-ir-crunch-2abb",    "Plate",    12.0f, 0.0f,  true  },
             { "Hi-Gain", "x88-ir-overdrive-0344", "Plate",    10.0f, 0.0f,  true  },
         }
-    };
+    });
     return cockpit;
 }
 

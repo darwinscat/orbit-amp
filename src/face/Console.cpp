@@ -351,7 +351,7 @@ Console::Console (AmpProcessor& p, std::unique_ptr<Picture> pic, const Places& w
     cabName.setVisible (places.plates);
     cabName.setBounds (box (places.sliderNames[2]));
 
-    sliders[2]->onMenu = [this] { showCabs(); };
+    sliders[2]->onMenu = [this] { if (channels.lineup().drawnCabinets) showDrawnCabs(); else showCabs(); };
     cabinetsChanged();
 
     for (auto* c : std::initializer_list<juce::Component*> { &inFader, &outFader, &inMeter, &outMeter, &tuner })
@@ -1534,6 +1534,21 @@ void Console::saveCapture()
 /** A RIGHT CLICK ON CAB — the slider, or the name over it — opens the cabinets' window: all of them by
     name, the build's own and the player's apart, and the keys that add one, hand one out, and rename
     or remove one of the player's. */
+void Console::showDrawnCabs()
+{
+    endTapping();
+
+    juce::PopupMenu menu;
+    menu.addSectionHeader ("CABINET");
+    const bool on = channels.cabinetOn();
+    for (int slot = 0; slot < channels.cabinetSlots(); ++slot)
+        addChoice (menu, channels.slotName (slot), on && slot == channels.cabinetSlot(),
+                   [slot] (Console& c) { c.channels.chooseSlot (slot); c.channels.setCabinetOn (true); c.showChannel(); });
+    menu.addSeparator();
+    addChoice (menu, "CABINET OFF", ! on, [] (Console& c) { c.channels.setCabinetOn (! c.channels.cabinetOn()); c.showCab(); });
+    menu.showMenuAsync (juce::PopupMenu::Options().withMousePosition());
+}
+
 void Console::showCabs()
 {
     endTapping();
@@ -1726,7 +1741,9 @@ void Console::showChannel()
 
     // CAB's cap, on the cabinet that is playing. (This is first called while the face is still being
     // built, before the plates exist.)
-    if (const int playing = channels.cabinet(); playing >= 0 && sliders[2] != nullptr)
+    if (channels.lineup().drawnCabinets && sliders[2] != nullptr)
+        sliders[2]->setStep (channels.cabinetSlot(), false);   // drawn: the slot the channel stands at
+    else if (const int playing = channels.cabinet(); playing >= 0 && sliders[2] != nullptr)
         sliders[2]->setStep (playing, false);
     showCab();
 }
@@ -2335,6 +2352,17 @@ void Console::chooseCab (int step)
 void Console::cabinetsChanged()
 {
     auto& cab = *sliders[2];
+    // DRAWN (Lineup::drawnCabinets, the toys' TOP 12): a position a slot, the cabinet kept where it settles, and back in
+    // the sound with it, as the walker's slider does.
+    if (channels.lineup().drawnCabinets)
+    {
+        cab.setSteps (juce::jmax (2, channels.cabinetSlots()));
+        cab.onStep = [this] (int s) { channels.chooseSlot (s); channels.setCabinetOn (true); showCab(); };
+        cab.setEnabled (true);
+        cab.setAlpha (1.0f);
+        showChannel();
+        return;
+    }
     const int count = channels.cabinets().size();
     const bool choice = count >= 2;
 
@@ -2488,6 +2516,11 @@ void Console::filesDropped (const juce::StringArray& files, int, int)
     orders it. */
 void Console::showCab()
 {
+    if (channels.lineup().drawnCabinets)   // the slot's preset by its number, "1: 4x12 ANVIL"
+    {
+        cabName.set ("CAB", ! channels.cabinetOn() ? juce::String ("OFF") : channels.slotName (channels.cabinetSlot()));
+        return;
+    }
     const auto& cabinets = channels.cabinets();
     const int step = sliders[2] != nullptr ? sliders[2]->getStep() : -1;
     cabName.set ("CAB", ! channels.cabinetOn() ? juce::String ("OFF")      // bypassed: see the cabinets' window

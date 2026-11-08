@@ -2,6 +2,7 @@
 // Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of OrbitAmp — see LICENSE.
 
 #include "RedPawLineup.h"
+#include "../channels/TopTwelve.h"
 #include "RedPawSkin.h"
 
 #include "../channels/Engine.h"
@@ -12,9 +13,10 @@ namespace orbitamp::redpaw
 channels::Lineup roverLineup (std::vector<channels::Lineup::Channel> channels)
 {
     jassert (! channels.empty() && channels.size() % 2 == 0 && channels.size() <= (size_t) maxGears * 2);
-    return { "rover", "rover_channel", "red-giant",
-             std::move (channels),
-             true };            // a gear and its TURBO: one memory
+    // Its cabinets the guitar's TOP 12, drawn (channels/TopTwelve.h, the owner, 08.11).
+    return channels::withTopTwelve ({ "rover", "rover_channel", "red-giant",
+                                      std::move (channels),
+                                      true });            // a gear and its TURBO: one memory
 }
 
 int numGears (const channels::Lineup& lineup) noexcept
