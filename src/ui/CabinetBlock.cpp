@@ -623,29 +623,35 @@ void CabinetBlock::editCabinet()
 
 void CabinetBlock::newCabinet()
 {
-    // A copy of what plays, by a name the player gives it — the first number no own one has yet offered — then edited.
+    // A copy of what plays, named at once and edited (the owner, 10.11: no question before the window, RENAME names it
+    // otherwise): the one it copies without its number in the twelve or its style, "2x10 GUTTER COPY 01", the first
+    // number free; one of no name MY CABINET and the first number free.
     const auto playing = AmpProcessor::cabSynthOf (amp.cabChoice());
     if (! playing.valid)
         return;
     const auto own = cabs.own();
-    juce::String initial;
-    for (int n = (int) own.size() + 1; initial.isEmpty(); ++n)
+    const auto taken = [&own] (const juce::String& name)
     {
-        initial = "MY CABINET " + juce::String (n);
-        for (const auto& c : own)
-            if (c.name == initial)
-                initial = {};
+        return std::any_of (own.begin(), own.end(), [&name] (const device::Cabinets::Cabinet& c) { return c.name == name; });
+    };
+    auto from = nameOf (whichPlays (playing.state, own), own);   // "6: 2x10 GUTTER", "ROCK · 8x10 CLASSIC", "TOP 12: 4x12 ANVIL"
+    if (const auto dot = juce::String::fromUTF8 (" \xc2\xb7 "); from.contains (dot))
+        from = from.fromFirstOccurrenceOf (dot, false, false);
+    else if (from.contains (": "))
+        from = from.fromFirstOccurrenceOf (": ", false, false);
+    juce::String name;
+    for (int n = from.isEmpty() ? (int) own.size() + 1 : 1; name.isEmpty(); ++n)
+    {
+        name = from.isEmpty() ? "MY CABINET " + juce::String (n) : from + " COPY " + juce::String (n).paddedLeft ('0', 2);
+        if (taken (name))
+            name = {};
     }
-    felitronics::appkit::textPrompt ("New cabinet from this one", initial,
-                                     [safe = juce::Component::SafePointer<CabinetBlock> (this), state = playing.state, &list = cabs] (juce::String name)
-                                     {
-                                         const auto file = list.save (name, state);
-                                         if (file == juce::File() || safe == nullptr)
-                                             return;
-                                         safe->lastPick = { Pick::own, -1, file };
-                                         safe->refreshIr (true);
-                                         safe->editIn (file);
-                                     });
+    const auto file = cabs.save (name, playing.state);
+    if (file == juce::File())
+        return;
+    lastPick = { Pick::own, -1, file };
+    refreshIr (true);
+    editIn (file);
 }
 
 void CabinetBlock::editIn (const juce::File& own)

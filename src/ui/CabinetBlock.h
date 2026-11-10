@@ -86,7 +86,8 @@ private:
 
     /** OrbitBass's cabinets, drawn (ui/CabPicker.h), in a window over the face (ui/CabWindow.h) — the block is too narrow
         for them beside a delay and a reverb — on the player's own alone (the owner, 06.11): EDIT… on one keeps every
-        change in its file; the dozen's, fixed, and one of no name are edited as a copy, NEW FROM… asking its name first. */
+        change in its file; the dozen's, fixed, and one of no name are edited as a copy, NEW FROM… naming it at once,
+        "2x10 GUTTER COPY 01" (the owner, 10.11). */
     void editCabinet();
     void newCabinet();
     void editIn (const juce::File& own);
