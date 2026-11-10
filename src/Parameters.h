@@ -744,6 +744,11 @@ struct Opening
     // INIT and a double click bring it back here (engineDefault leaves it its declared default).
     float midHz = 400.0f;
 
+    // WHAT THE BOOST ADDS OUT OF THE BOX (boostLevel): the family's +3, AmberPawAmp's 0 (channels::Lineup::boostLevel). A
+    // default, not a hold: the boost's menu moves it, and INIT brings it back here (engineDefault leaves it its declared
+    // default).
+    float boostLevel = boostLevelDefault;
+
     // WHERE ITS PACK'S TONE OPENS: the tone slots where the pack it plays first starts them (device::PackOpening), not
     // where the engine's pack does — a product whose list has no engine pack (the bass's) would have them all at their
     // middle otherwise, a two-way switch thrown.

@@ -220,7 +220,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout (const juce::St
     // The boost's level, heard only while the amp's boost is on — see Parameters.h.
     layout.add (std::make_unique<Float> (juce::ParameterID { boostLevel, 1 }, "Boost Level",
                                          juce::NormalisableRange<float> (boostLevelMin, boostLevelMax, 1.0f),
-                                         boostLevelDefault));
+                                         opening.boostLevel));
 
     // The noise gate. Off out of the box — a gate is a decision about YOUR noise floor, not part
     // of the voicing. The ceiling is -10, NOT OrbitCab's -20: that range was voiced for a

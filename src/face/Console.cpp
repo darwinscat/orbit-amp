@@ -1014,7 +1014,9 @@ void Console::exportForWeb (const juce::File& dir)
         for (const int db : params::boostLevels)
             levels.add (db);
         b->setProperty ("levels", levels);
-        b->setProperty ("default", params::boostLevelDefault);
+        // ...and where this amp's stands out of the box: the family's +3, AmberPawAmp's 0 (params::Opening::boostLevel).
+        const auto* r = dynamic_cast<juce::RangedAudioParameter*> (amp.apvts.getParameter (params::boostLevel));
+        b->setProperty ("default", r != nullptr ? r->convertFrom0to1 (r->getDefaultValue()) : params::boostLevelDefault);
         o->setProperty ("boostLevel", juce::var (b));
     }
 

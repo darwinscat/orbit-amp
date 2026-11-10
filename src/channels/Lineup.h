@@ -93,6 +93,11 @@ struct Lineup
     };
     std::vector<Cabinet> cabinets {};
 
+    /** WHAT TURBO ADDS OUT OF THE BOX (params::boostLevel's default, Engine::opening), where the product says other than
+        the family's +3: AmberPawAmp's 0 (the owner, 10.11). A default, not a hold: TURBO's menu moves it, INIT brings it
+        back here. */
+    std::optional<float> boostLevel {};
+
     int count() const noexcept { return (int) channels.size(); }
 };
 

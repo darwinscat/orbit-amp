@@ -39,6 +39,8 @@ void Engine::opening (const Lineup& lineup, params::Opening& o)
     o.delayMix = first.delayMix;
     if (first.reverbMix.has_value())
         o.reverbMix = *first.reverbMix;
+    if (lineup.boostLevel.has_value())
+        o.boostLevel = *lineup.boostLevel;
 
     // ...and what the lineup holds where it is, said where the Opening has a place for it (Lineup::pinned) — the
     // rest of what it pins is held where the parameter opens anyway.
