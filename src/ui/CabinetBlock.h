@@ -33,6 +33,7 @@ class AmpProcessor;
     baked into the IR off the pump; the picture is the family's IrWaveView, fed the same bytes the
     engine convolves. */
 class CabinetBlock final : public BlockFrame,
+                           public juce::FileDragAndDropTarget,
                            private juce::Timer
 {
 public:
@@ -40,10 +41,20 @@ public:
     ~CabinetBlock() override;
 
     /** The editor's LEFT and RIGHT (the owner, 08.11: to hear cabinets one after another): the one before or after
-        the cabinet that plays, round the list it is in — a file of the player's own among its folder's IRs as the menu
-        lists them, one of the builder's in the twelve, in all of them or in the player's own, a factory IR among the
-        ones the product plays. */
+        the cabinet that plays, round the list it is in. The guitar's one list (the owner, 10.11): the TOP 12, then the
+        player's own IRs as the IR editor lists them. The bass's: a file of the player's own among its folder's IRs as
+        the menu lists them, one of the builder's in the twelve, in all of them or in the player's own, a factory IR
+        among the ones the product plays. */
     void stepCabinet (int by);
+
+    /** OrbitAmp's CAB takes IRs dropped on it (the owner, 10.11): a file, a folder of them or a zip, into the player's
+        own `IRs`, as the IR editor's + does — on the slider and in the editor after the twelve at once, the first of
+        them playing. The bass's takes none. */
+    bool isInterestedInFileDrag (const juce::StringArray&) override;
+    void fileDragEnter (const juce::StringArray&, int, int) override;
+    void fileDragExit (const juce::StringArray&) override;
+    void filesDropped (const juce::StringArray&, int, int) override;
+    void paintOverChildren (juce::Graphics&) override;
 
 private:
     void timerCallback() override;
@@ -142,6 +153,15 @@ private:
     int libraryLook = 0;   // timer ticks to the next look at whether the library holds any IRs
     void lookAtLibrary();
 
+    /** THE GUITAR'S ONE LIST (the owner, 10.11: "в CAB остаются эти 12 и свои IR"): the TOP 12, then every IR of the
+        player's own in the IR editor's order — on the slider, under LEFT and RIGHT and in the menu on the name alike.
+        No CABINETS, no window, none of the forty and none of the shelf: the builder app edits cabinets, and one made
+        there comes here as an IR. `ownIrs` is the library as last looked at (lookAtLibrary). */
+    std::vector<juce::File> ownIrs;
+    int  guitarAt() const;      // the place of the one that plays in that list, -1 for none of it
+    void pickGuitar (int at);
+    bool dropOver = false;      // IRs held over the block
+
     /** OrbitBass: a click on the picture while one of its cabinets plays is EDIT… — the picture is that cabinet's. A drag or a right click is the picture's own. Declared before the picture, so it outlives it. */
     struct PictureClick final : public juce::MouseListener
     {
@@ -189,10 +209,12 @@ public:
         (a gate reads it). */
     const juce::String& shownName() const noexcept { return shownText; }
 
-    /** THE IR MENU, as the block opens it (showIrMenu): the shelf the product plays, a submenu for each of its
-        folders, item `1 + number`; then the player's own IRs out of the product's folder of them, item
-        `firstFile + i` for the file `files[i]`. A product with neither offers a line that says so. A gate reads it. */
+    /** THE IR MENU, as the block opens it (showIrMenu): a bass amp's the shelf it plays, a submenu for each of its
+        folders, item `1 + number`; a guitar amp's the TOP 12 instead, item `firstOfTwelve + i`; then the player's own IRs
+        out of the product's folder of them, item `firstFile + i` for the file `files[i]`. A product with none offers a
+        line that says so. A gate reads it. */
     static juce::PopupMenu irMenu (const AmpProcessor&, std::vector<juce::File>& files);
+    static constexpr int firstOfTwelve = 500;
     static constexpr int firstFile = 1000;
 
     /** What the border says where no cabinet plays: a bass amp with no IR of its own. */

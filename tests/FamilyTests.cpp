@@ -305,9 +305,11 @@ int ORBITAMP_GATE_MAIN()
             }
             // ...a face on RED GIANT's file, which its channels play as an IR of their own (channels::Channels::align).
             const auto fresh = std::make_unique<AmpProcessor> (product);
-            // ...where its cabinets are drawn, the first rendered on the worker and landing on the message thread: waited
-            // for, up to ten seconds, as the bass's gate waits for its dozen's.
-            if (lineup != nullptr && lineup->drawnCabinets)
+            // ...or, where its cabinets are drawn — the toys' TOP 12 (the owner, 08.11), and OrbitAmp's since its CAB is
+            // the twelve and the player's own IRs (the owner, 10.11) — on the TOP 12's first: rendered on the worker and
+            // landing on the message thread, waited for, up to ten seconds, as the bass's gate waits for its dozen's.
+            const bool drawn = (lineup != nullptr && lineup->drawnCabinets) || product.freshCabinet != nullptr;
+            if (drawn)
             {
                 for (int i = 0; i < 200 && ! AmpProcessor::cabSynthOf (fresh->cabChoice()).valid; ++i)
                     juce::MessageManager::getInstance()->runDispatchLoopUntil (50);
@@ -317,8 +319,6 @@ int ORBITAMP_GATE_MAIN()
             const auto redGiant = juce::String::fromUTF8 (catalog::irs[params::cabIrDefault].file).upToLastOccurrenceOf (".", false, false);
             const bool onRedGiant = lineup == nullptr ? ! opens.isUser() && opens.factory == params::cabIrDefault
                                                       : opens.isUser() && opens.name == redGiant;
-            // ...or, where its cabinets are drawn — the toys' TOP 12 (the owner, 08.11) — on the TOP 12's first.
-            const bool drawn = lineup != nullptr && lineup->drawnCabinets;
             const auto synth = AmpProcessor::cabSynthOf (opens);
             const auto& top = device::Cabinets::of (device::CabKind::guitar);
             const bool onTop = drawn && synth.valid && top.dozenOf (synth.state) == 0;

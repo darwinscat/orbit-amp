@@ -3,6 +3,7 @@
 
 #include "PluginEditor.h"
 #include "PluginProcessor.h"
+#include "device/Cabinets.h"
 
 namespace orbitamp
 {
@@ -27,6 +28,14 @@ namespace
     {
         params::addGuitarCompParameters (layout);
     }
+
+    /** THE CABINET A FRESH ONE OPENS ON, and INIT: the guitar's TOP 12's first, drawn — its CAB is the twelve and the
+        player's own IRs (the owner, 10.11), the shelf none of it. A session or a preset keeps what it saved. */
+    juce::String freshCabinet()
+    {
+        const auto& twelve = device::Cabinets::of (device::CabKind::guitar).dozen();
+        return twelve.empty() ? juce::String() : AmpProcessor::cabSynthFrom (twelve.front().state);
+    }
 }
 
 /** ORBITAMP (Product.h): the player of the whole library, in its own face (PluginEditor.h) — and the
@@ -40,6 +49,7 @@ const Product& products::orbitAmp()
         p.addParameters = orbitAmpParameters;
         p.guitarComp    = true;
         p.tunerSwitch   = false;
+        p.freshCabinet  = freshCabinet;
         return p;
     }();
     return orbitAmp;

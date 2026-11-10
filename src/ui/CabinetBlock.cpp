@@ -70,8 +70,8 @@ CabinetBlock::CabinetBlock (AmpProcessor& processor)
 
     // The row under the picture chooses — the twelve on its slider, CABINETS (the twelve by name, all of the builder's by
     // style and size, the player's own, EDIT… and SAVE AS…) — and the bass's MY IRS, the player's own, while there are any
-    // (the owner, 06.11); the bass's name only says what plays. The guitar's (the owner, 08.11: its cabinets as the
-    // bass's) keeps its name opening the IRs, the factory's and the player's.
+    // (the owner, 06.11); the bass's name only says what plays. The guitar's (the owner, 10.11) is its one list on the
+    // slider, the TOP 12 and the player's own IRs after them, and the same list on its name: no CABINETS, no window.
     {
         ir.opens = guitar();   // the guitar's name opens its IRs, as it always did: the block has no room for a door of them
         if (guitar())
@@ -81,15 +81,24 @@ CabinetBlock::CabinetBlock (AmpProcessor& processor)
         slots.notches = (int) cabs.dozen().size();
         slots.notch = [this]
         {
+            if (guitar())
+                return guitarAt();
             const auto playing = AmpProcessor::cabSynthOf (amp.cabChoice());
             if (! playing.valid)
                 return -1;
             const auto which = whichPlays (playing.state, cabs.own());
             return which.list == Pick::dozen ? which.at : -1;
         };
-        slots.onMove  = [this] (int i) { amp.requestCabSynth (cabs.dozen()[(size_t) i].state, true); };
+        // An IR of the player's own is heard where the hand lets go: each one read on the way would stay in the store.
+        slots.onMove  = [this] (int i)
+        {
+            if (i < (int) cabs.dozen().size())
+                amp.requestCabSynth (cabs.dozen()[(size_t) i].state, true);
+        };
         slots.onLetGo = [this] (int i)
         {
+            if (guitar())
+                return pickGuitar (i);
             lastPick = { Pick::dozen, i, {} };
             amp.requestCabSynth (cabs.dozen()[(size_t) i].state);
         };
@@ -102,13 +111,18 @@ CabinetBlock::CabinetBlock (AmpProcessor& processor)
         }
         myIrs.text = "MY IRS";
         myIrs.onOpen = [this] { showIrMenu (&myIrs); };
-        addAndMakeVisible (factoryIrs);
+        if (guitar())
+            addChildComponent (factoryIrs);
+        else
+            addAndMakeVisible (factoryIrs);
         addChildComponent (myIrs);
-        if (! guitar())
-            lookAtLibrary();
+        lookAtLibrary();
 
-        pictureClick.onClick = [this] { editCabinet(); };
-        wave.addMouseListener (&pictureClick, false);
+        if (! guitar())
+        {
+            pictureClick.onClick = [this] { editCabinet(); };
+            wave.addMouseListener (&pictureClick, false);
+        }
     }
 
     // The picture: the IR, the cuts' curve and the trim's handle drawn on it, in the block's colour.
@@ -345,6 +359,23 @@ namespace
 
 void CabinetBlock::lookAtLibrary()
 {
+    // The guitar's: the player's own IRs after the twelve on the slider, as the library stands — looked at now and then,
+    // the player adding them in SETUP, renaming them, moving them about.
+    if (guitar())
+    {
+        std::vector<juce::File> now;
+        for (const auto& f : device::IrLibrary::listed (device::IrLibrary::directory (amp.product().irsFolder())))
+            now.push_back (f);
+        if (now != ownIrs)
+        {
+            ownIrs = std::move (now);
+            slots.notches = (int) (cabs.dozen().size() + ownIrs.size());
+            slots.refresh();
+            slots.repaint();
+        }
+        return;
+    }
+
     // MY IRS stands while the library holds any — looked at now and then, the player adding them in SETUP.
     const bool any = irsBeneath (device::IrLibrary::scan (device::IrLibrary::directory (amp.product().irsFolder()))) > 0;
     if (any != myIrs.isVisible())
@@ -409,6 +440,17 @@ juce::PopupMenu CabinetBlock::irMenu (const AmpProcessor& amp, std::vector<juce:
     // cabinets the product plays: a bass amp's menu holds no guitar cabinet (Product::playsCabIr).
     juce::PopupMenu menu;
 
+    // A GUITAR AMP'S: the TOP 12 in place of the shelf (the owner, 10.11), the one that plays ticked.
+    const bool guitar = amp.product().chain != Chain::bass;
+    if (guitar)
+    {
+        const auto& twelve = device::Cabinets::of (device::CabKind::guitar).dozen();
+        const auto synth = AmpProcessor::cabSynthOf (choice);
+        const int plays = synth.valid ? device::Cabinets::of (device::CabKind::guitar).dozenOf (synth.state) : -1;
+        for (int i = 0; i < (int) twelve.size(); ++i)
+            menu.addItem (itemFor (twelve[(size_t) i].name, firstOfTwelve + i, i == plays));
+    }
+
     struct Folder
     {
         juce::String name;
@@ -419,7 +461,7 @@ juce::PopupMenu CabinetBlock::irMenu (const AmpProcessor& amp, std::vector<juce:
 
     for (const auto& shelf : params::cabShelves)
     {
-        if (! amp.product().playsCabIr (shelf.first))
+        if (guitar || ! amp.product().playsCabIr (shelf.first))
             continue;
 
         const juce::String name (AmpProcessor::cabIrBytes (amp.product(), shelf.first).folder);
@@ -449,7 +491,7 @@ juce::PopupMenu CabinetBlock::irMenu (const AmpProcessor& amp, std::vector<juce:
         // out below it the way SETUP shows it: folders first, each a submenu, then the files. A
         // folder with nothing playable anywhere under it is a shelf with nothing on it, and stays
         // out. A folder holding what plays wears the tick too, so the way to it can be followed.
-        if (! folders.empty())
+        if (menu.getNumItems() > 0)   // the shelf's folders, or the guitar's twelve
             menu.addSeparator();
 
         std::function<bool (juce::PopupMenu&, const device::IrLibrary::Node&)> addTree =
@@ -497,6 +539,8 @@ juce::PopupMenu CabinetBlock::irMenu (const AmpProcessor& amp, std::vector<juce:
 
 void CabinetBlock::showIrMenu (juce::Component* from)
 {
+    if (guitar())
+        lookAtLibrary();   // the slider the same list as the menu, at once
     auto files = std::make_shared<std::vector<juce::File>>();
     auto menu = irMenu (amp, *files);
 
@@ -511,6 +555,10 @@ void CabinetBlock::showIrMenu (juce::Component* from)
                                 if ((size_t) (r - firstFile) < files->size())
                                     safe->amp.chooseCabFile ((*files)[(size_t) (r - firstFile)]);
                             }
+                            else if (r >= firstOfTwelve)
+                            {
+                                return safe->pickGuitar (r - firstOfTwelve);
+                            }
                             else
                             {
                                 safe->amp.chooseCabFactory (r - 1);
@@ -520,8 +568,96 @@ void CabinetBlock::showIrMenu (juce::Component* from)
                         });
 }
 
+int CabinetBlock::guitarAt() const
+{
+    const auto choice = amp.cabChoice();
+    if (const auto playing = AmpProcessor::cabSynthOf (choice); playing.valid)
+    {
+        // One of the twelve, or a cabinet of none of them a session or a preset kept: off the list.
+        const auto which = whichPlays (playing.state, {});
+        return which.list == Pick::dozen ? which.at : -1;
+    }
+    if (choice.isUser())
+    {
+        const auto root = device::IrLibrary::directory (amp.product().irsFolder());
+        for (size_t i = 0; i < ownIrs.size(); ++i)
+            if (ownIrs[i].getRelativePathFrom (root).replaceCharacter ('\\', '/') == choice.from)
+                return (int) (cabs.dozen().size() + i);
+    }
+    return -1;
+}
+
+void CabinetBlock::pickGuitar (int at)
+{
+    const auto& twelve = cabs.dozen();
+    if (at >= 0 && at < (int) twelve.size())
+    {
+        lastPick = { Pick::dozen, at, {} };
+        amp.requestCabSynth (twelve[(size_t) at].state);
+        refreshIr (true);   // one the same as the last changes no sound, and the name must follow all the same
+    }
+    else if (const auto i = (size_t) (at - (int) twelve.size()); at >= 0 && i < ownIrs.size())
+    {
+        amp.chooseCabFile (ownIrs[i]);
+        refreshIr (false, true);
+    }
+}
+
+bool CabinetBlock::isInterestedInFileDrag (const juce::StringArray& files)
+{
+    if (! guitar())
+        return false;
+    for (const auto& f : files)
+        if (device::IrLibrary::looksLikeImport (juce::File (f)))
+            return true;
+    return false;
+}
+
+void CabinetBlock::fileDragEnter (const juce::StringArray&, int, int) { dropOver = true;  repaint(); }
+void CabinetBlock::fileDragExit  (const juce::StringArray&)           { dropOver = false; repaint(); }
+
+void CabinetBlock::filesDropped (const juce::StringArray& files, int, int)
+{
+    dropOver = false;
+    repaint();
+
+    // Into the library's top, as the IR editor's + puts them; the first of them that landed, in the editor's order, plays.
+    const auto root = device::IrLibrary::directory (amp.product().irsFolder());
+    const auto before = device::IrLibrary::listed (root);
+    int landed = 0;
+    for (const auto& f : files)
+        landed += device::IrLibrary::importPath (juce::File (f), root);
+    if (landed == 0)
+        return;
+
+    lookAtLibrary();
+    for (size_t i = 0; i < ownIrs.size(); ++i)
+        if (! before.contains (ownIrs[i]))
+            return pickGuitar ((int) (cabs.dozen().size() + i));
+}
+
+void CabinetBlock::paintOverChildren (juce::Graphics& g)
+{
+    // IRs held over the block: an orange line round it, where they will land.
+    if (! dropOver)
+        return;
+    g.setColour (theme::orange);
+    g.drawRoundedRectangle (getLocalBounds().toFloat().reduced (1.5f), 6.0f, 2.0f);
+}
+
 void CabinetBlock::stepCabinet (int by)
 {
+    if (guitar())   // the one list: past the last of the player's IRs round to the twelve's first, and back
+    {
+        lookAtLibrary();
+        const int count = (int) (cabs.dozen().size() + ownIrs.size());
+        if (count == 0)
+            return;
+        const int at = guitarAt();
+        pickGuitar (at < 0 ? (by > 0 ? 0 : count - 1) : ((at + by) % count + count) % count);
+        return;
+    }
+
     const auto choice  = amp.cabChoice();
     const auto playing = AmpProcessor::cabSynthOf (choice);
     const auto next    = [by] (int at, size_t count) { const int n = (int) count; return (size_t) (((at + by) % n + n) % n); };
@@ -652,7 +788,7 @@ void CabinetBlock::newCabinet()
     {
         return std::any_of (own.begin(), own.end(), [&name] (const device::Cabinets::Cabinet& c) { return c.name == name; });
     };
-    auto from = nameOf (whichPlays (playing.state, own), own);   // "6: 2x10 GUTTER", "ROCK · 8x10 CLASSIC", "TOP 12: 4x12 ANVIL"
+    auto from = nameOf (whichPlays (playing.state, own), own);   // "6: 2x10 GUTTER", "ROCK · 8x10 CLASSIC", "TOP 12: 4x12 ROAR"
     if (const auto dot = juce::String::fromUTF8 (" \xc2\xb7 "); from.contains (dot))
         from = from.fromFirstOccurrenceOf (dot, false, false);
     else if (from.contains (": "))
@@ -1179,14 +1315,9 @@ void CabinetBlock::layOutContent (juce::Rectangle<int> area)
                                                     row.getHeight()));
 
     // The row where the trim stood: the IRs' door at the right (the bass's MY IRS while there are any), CABINETS before
-    // it, and the bass's dozen's slider across what is left, edge to edge; the guitar's two doors centred between its
-    // cuts, its slider on the row above.
-    if (guitar())
-    {
-        const auto r = row.reduced (gap, 0);
-        factoryIrs.setBounds (r.withSizeKeepingCentre (juce::jmin (r.getWidth(), factoryIrs.idealWidth()), r.getHeight()));
-    }
-    else
+    // it, and the bass's dozen's slider across what is left, edge to edge. The guitar's holds its cuts alone, its slider
+    // on the row above.
+    if (! guitar())
     {
         auto r = wholeRow;
         if (myIrs.isVisible())
@@ -1216,7 +1347,7 @@ void CabinetBlock::timerCallback()
 {
     refreshIr();   // before the early return: what plays is shown whether or not the block is on
 
-    if (! guitar() && isShowing() && --libraryLook <= 0)
+    if (isShowing() && --libraryLook <= 0)
     {
         libraryLook = 90;   // three seconds
         lookAtLibrary();

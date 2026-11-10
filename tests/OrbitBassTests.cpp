@@ -601,15 +601,24 @@ int ORBITAMP_GATE_MAIN()
                    "the bass's library lists `Bass IRs` alone, the guitar's `IRs` alone: "
                        + names (device::IrLibrary::listed (bassIrs), bassBefore) + " | " + names (device::IrLibrary::listed (guitarIrs), guitarBefore));
 
+            // OrbitAmp's CAB is the TOP 12 and the player's own IRs (the owner, 10.11): no shelf. It opens on the first of the
+            // twelve, drawn on the worker and landing on the message thread — waited for, as above.
             auto guitar = make (products::orbitAmp());
+            for (int i = 0; i < 200 && ! AmpProcessor::cabSynthOf (guitar->cabChoice()).valid; ++i)
+                juce::MessageManager::getInstance()->runDispatchLoopUntil (50);
             std::vector<juce::File> files;
             const auto items = menuOf (*guitar, files);
-            bool shelfAsBefore = items.size() == params::cabIrNames.size() + 1 + guitarBefore.size();
-            for (int i = 0; i < params::cabIrNames.size() && shelfAsBefore; ++i)
-                shelfAsBefore = items.contains (params::cabIrNames[i] + (i == params::cabIrDefault ? " (ticked)" : ""));
-            check (shelfAsBefore && items.contains ("Guitar own") && files.size() == (size_t) (1 + guitarBefore.size())
+            const auto& twelve = device::Cabinets::of (device::CabKind::guitar).dozen();
+            bool twelveFirst = twelve.size() == 12 && items.size() == (int) twelve.size() + 1 + guitarBefore.size();
+            for (size_t i = 0; i < twelve.size() && twelveFirst; ++i)
+                twelveFirst = items[(int) i] == twelve[i].name + (i == 0 ? " (ticked)" : "");
+            bool noShelf = true;
+            for (int i = 0; i < params::cabIrNames.size(); ++i)
+                noShelf = noShelf && ! items.contains (params::cabIrNames[i]) && ! items.contains (params::cabIrNames[i] + " (ticked)");
+            check (twelveFirst && noShelf && items.contains ("Guitar own") && files.size() == (size_t) (1 + guitarBefore.size())
                        && std::find (files.begin(), files.end(), guitarOwn) != files.end(),
-                   "OrbitAmp's CAB menu: the whole shelf as before, RED GIANT ticked, and of the player's `IRs` alone");
+                   "OrbitAmp's CAB menu: the TOP 12, the first ticked, no shelf, and of the player's `IRs` alone: "
+                       + items.joinIntoString (" | "));
 
             IrTreeView bassTree (bass.irsFolder()), guitarTree (products::orbitAmp().irsFolder());
             check (treeRows (bassTree) == 2 + bassRowsBefore && treeRows (guitarTree) == 1 + guitarRowsBefore,
@@ -902,13 +911,13 @@ int ORBITAMP_GATE_MAIN()
         check (handed, "OrbitAmp's twin is handed OrbitBass's own pack, the SGT-DI (" + juce::String (bassList.size()) + " in the bass's list)");
 
         // The bass plays no cabinet of the shelf (ITS CABINETS): it opens on the first of the player's `Bass IRs`, which
-        // holds RED GIANT's bytes here — what OrbitAmp opens on at the number the bass's `cab_ir` keeps.
+        // holds RED GIANT's bytes here — what OrbitAmp's shelf holds at the number the bass's `cab_ir` keeps.
         const int  ir    = juce::roundToInt (value (*amp, params::cabIr));
         const auto& his  = AmpProcessor::cabIrBytes (quiet (products::orbitAmp()), ir);
         const auto  ours = amp->cabChoice();
         check (his.data != nullptr && his.size > 0 && ours.isUser() && (int) ours.bytes->getSize() == his.size
                    && std::memcmp (his.data, ours.bytes->getData(), (size_t) his.size) == 0,
-               "...and the cabinet OrbitBass opens on, the first of its `Bass IRs` (" + ours.name + "), what OrbitAmp opens on at the same number ("
+               "...and the cabinet OrbitBass opens on, the first of its `Bass IRs` (" + ours.name + "), what OrbitAmp's shelf holds at the same number ("
                    + juce::String (his.size) + " bytes)");
 
         // An OrbitAmp on the same pack, every other parameter as `from`'s, prepared again once it stands so —
@@ -933,6 +942,9 @@ int ORBITAMP_GATE_MAIN()
                             there->setValueNotifyingHost (ranged->getValue());
                             same->pumpDeviceWork();
                         }
+            // ...on the shelf's IR at the bass's number, whose bytes the bass's `Bass IRs` holds: a fresh OrbitAmp opens on
+            // the TOP 12's first (the owner, 10.11), and the shelf is only ever played as asked.
+            same->chooseCabFactory (juce::roundToInt (value (from, params::cabIr)));
 
             juce::StringArray apart;
             for (auto* p : from.getParameters())
