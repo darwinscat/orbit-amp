@@ -125,7 +125,10 @@ CabinetBlock::CabinetBlock (AmpProcessor& processor)
         }
     }
 
-    // The picture: the IR, the cuts' curve and the trim's handle drawn on it, in the block's colour.
+    // The picture: the IR, the cuts' curve and the trim's handle drawn on it, in the block's colour. The guitar's line under
+    // it short and its cabinet the box alone at its right (the owner, 10.11: Sketch::boxOnly).
+    wave.shortMetrics = guitar();
+    sketch.boxOnly = guitar();
     wave.setAccent (theme::orange);
     wave.waveTint = theme::violet;   // the impulse itself in violet — the curve keeps the orange voice
     // The handle exists only in MANUAL — pushToWave keeps this current with the combo's mode.

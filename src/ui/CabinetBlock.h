@@ -183,11 +183,19 @@ private:
     {
         int cab = -1;
         CabPicker::Setup setup;
+        /** OrbitAmp's (the owner, 10.11): the box alone at the picture's right, as tall as the picture, its mics twice the
+            size, a little see-through — its line under the picture short ("100ms 48/24"), at the left, leaving the right
+            free to the floor. */
+        bool boxOnly = false;
         Sketch() { setInterceptsMouseClicks (false, false); setBufferedToImage (true); }
         void paint (juce::Graphics& g) override
         {
-            // Between the picture's time marks along its top and the IR's line along its bottom (IrWaveView's own).
-            CabPicker::paintSketch (g, cab, setup, getLocalBounds().toFloat().withTrimmedTop (14.0f).withTrimmedBottom (24.0f));
+            // Under the picture's time marks along its top; OrbitBass's over the IR's line along its bottom (IrWaveView's own).
+            const auto area = getLocalBounds().toFloat().withTrimmedTop (14.0f);
+            if (boxOnly)
+                CabPicker::paintBoxSketch (g, cab, setup, area.withTrimmedBottom (8.0f));
+            else
+                CabPicker::paintSketch (g, cab, setup, area.withTrimmedBottom (24.0f));
         }
     };
     Sketch sketch;
