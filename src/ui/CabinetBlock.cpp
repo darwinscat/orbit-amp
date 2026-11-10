@@ -94,6 +94,12 @@ CabinetBlock::CabinetBlock (AmpProcessor& processor)
             amp.requestCabSynth (cabs.dozen()[(size_t) i].state);
         };
         addAndMakeVisible (slots);
+        stepBack.by = -1;
+        for (auto* s : { &stepBack, &stepOn })
+        {
+            s->onStep = [this] (int by) { stepCabinet (by); };
+            addAndMakeVisible (*s);
+        }
         myIrs.text = "MY IRS";
         myIrs.onOpen = [this] { showIrMenu (&myIrs); };
         addAndMakeVisible (factoryIrs);
@@ -351,6 +357,18 @@ void CabinetBlock::lookAtLibrary()
 int CabinetBlock::Door::idealWidth() const
 {
     return juce::roundToInt (theme::trackedWidth (text, theme::displayFont (13.0f), 0.06f)) + 18;
+}
+
+void CabinetBlock::Step::paint (juce::Graphics& g)
+{
+    // A small solid triangle pointing its way, dim, orange under the hand.
+    const auto c = getLocalBounds().toFloat().getCentre();
+    const float w = 5.0f, h = 4.5f;
+    juce::Path t;
+    const float d = (float) by * w * 0.5f;
+    t.addTriangle (c.x + d, c.y, c.x - d, c.y - h, c.x - d, c.y + h);
+    g.setColour (isMouseOver() ? theme::orange : theme::txDim);
+    g.fillPath (t);
 }
 
 void CabinetBlock::Door::paint (juce::Graphics& g)
@@ -1115,11 +1133,19 @@ void CabinetBlock::layOutContent (juce::Rectangle<int> area)
     const auto wholeRow = row;   // the bass's doors take it edge to edge: its cuts' seats stand empty
     area.removeFromBottom (gap);
 
+    // The slider with a step at each end of it (the owner, 10.11).
+    const auto placeSlider = [this] (juce::Rectangle<int> r)
+    {
+        stepBack.setBounds (r.removeFromLeft (stepW));
+        stepOn.setBounds (r.removeFromRight (stepW));
+        slots.setBounds (r);
+    };
+
     // The guitar's TOP 12 on a row of its own over the cuts, the block's whole width: between HPF and LPF there is room
     // for the two doors and no slider.
     if (guitar())
     {
-        slots.setBounds (area.removeFromBottom (switchRow).reduced (gap, 0));
+        placeSlider (area.removeFromBottom (switchRow).reduced (gap, 0));
         area.removeFromBottom (gap);
     }
 
@@ -1170,7 +1196,7 @@ void CabinetBlock::layOutContent (juce::Rectangle<int> area)
         }
         factoryIrs.setBounds (r.removeFromRight (juce::jmin (r.getWidth(), factoryIrs.idealWidth())));
         r.removeFromRight (gap);
-        slots.setBounds (r);
+        placeSlider (r);
     }
 
     wave.setBounds (area);

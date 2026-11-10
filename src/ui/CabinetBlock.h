@@ -108,6 +108,20 @@ private:
     Door factoryIrs, myIrs;     // factoryIrs: CABINETS
     CabinetSlots slots;
 
+    /** The slider's two steps (the owner, 10.11): a small triangle at each end of it, the cabinet before and the one
+        after, as LEFT and RIGHT step it (stepCabinet). */
+    struct Step final : public juce::Component
+    {
+        int by = 1;
+        std::function<void (int)> onStep;
+        void paint (juce::Graphics&) override;
+        void mouseDown (const juce::MouseEvent&) override { if (onStep) onStep (by); }
+        void mouseEnter (const juce::MouseEvent&) override { repaint(); }
+        void mouseExit (const juce::MouseEvent&) override { repaint(); }
+    };
+    Step stepBack, stepOn;
+    static constexpr int stepW = 16;
+
     /** WHICH OF THE BUILDER'S PLAYS (the owner, 10.11: two the same were both ticked, and EDIT… of a fresh copy made
         another): the one the hand last picked here — the twelve's, all's or the player's own, by its slot or its file —
         while it still sounds as picked; else the first the same, the twelve's, all's, then the player's own. Its name on
