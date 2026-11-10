@@ -77,7 +77,7 @@ namespace
             const auto state = knownCabinet (text.toStdString());
             if (! state)
                 continue;
-            // "ROCK · 8x10 STACK" or "TOP 12: 4x12 ANVIL" said as "1: 8x10 STACK": its number, not its style (the
+            // "ROCK · 8x10 STACK" or "TOP 12: 4x12 SELFISH GENE" said as "1: 8x10 STACK": its number, not its style (the
             // owner, 06.11).
             const auto own = nameIn (text);
             auto name = own.fromFirstOccurrenceOf (juce::String::fromUTF8 ("\xc2\xb7 "), false, false).trim();

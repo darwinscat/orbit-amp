@@ -37,7 +37,7 @@ public:
     const std::vector<Cabinet>& dozen() const;
 
     /** ALL OF THEM (the owner, 06.11): every factory preset of its builder's and its typical cabinets, by style and
-        number, the typical ones last — each named as its preset is, "ROCK · 8x10 CLASSIC", "TOP 12: 4x12 ANVIL". */
+        number, the typical ones last — each named as its preset is, "ROCK · 8x10 CLASSIC", "TOP 12: 4x12 SELFISH GENE". */
     const std::vector<Cabinet>& all() const;
     int allOf (const cabir::State& state) const;
 

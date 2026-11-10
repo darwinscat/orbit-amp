@@ -2516,7 +2516,7 @@ void Console::filesDropped (const juce::StringArray& files, int, int)
     orders it. */
 void Console::showCab()
 {
-    if (channels.lineup().drawnCabinets)   // the slot's preset by its number, "1: 4x12 ANVIL"
+    if (channels.lineup().drawnCabinets)   // the slot's preset by its number, "1: 4x12 SELFISH GENE"
     {
         cabName.set ("CAB", ! channels.cabinetOn() ? juce::String ("OFF") : channels.slotName (channels.cabinetSlot()));
         return;

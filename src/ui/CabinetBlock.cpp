@@ -788,7 +788,7 @@ void CabinetBlock::newCabinet()
     {
         return std::any_of (own.begin(), own.end(), [&name] (const device::Cabinets::Cabinet& c) { return c.name == name; });
     };
-    auto from = nameOf (whichPlays (playing.state, own), own);   // "6: 2x10 GUTTER", "ROCK · 8x10 CLASSIC", "TOP 12: 4x12 ROAR"
+    auto from = nameOf (whichPlays (playing.state, own), own);   // "6: 2x10 GUTTER", "ROCK · 8x10 CLASSIC", "TOP 12: 4x12 SELFISH GENE"
     if (const auto dot = juce::String::fromUTF8 (" \xc2\xb7 "); from.contains (dot))
         from = from.fromFirstOccurrenceOf (dot, false, false);
     else if (from.contains (": "))

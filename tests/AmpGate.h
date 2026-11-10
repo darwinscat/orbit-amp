@@ -114,8 +114,8 @@ struct Product
 inline const Product& product()
 {
     // The toys' cabinets are the guitar's TOP 12, drawn (channels/TopTwelve.h, the owner, 08.11): every channel opens on
-    // its first, the 4x12 ANVIL, until one is said another.
-    static constexpr const char* topFirst = "top12-01-4x12-anvil";
+    // its first, the 4x12 SELFISH GENE, until one is said another.
+    static constexpr const char* topFirst = "top12-01-4x12-selfish-gene";
     const auto rover = [] (const char* name, std::vector<Channel> channels, const char* gears)
     {
         for (auto& c : channels)
@@ -123,7 +123,7 @@ inline const Product& product()
         return Product { name, "rover", "ROVER_GATE_OWNS_HOME", std::move (channels), gears, {},
                          "all the product's channels' packs are installed",
                          "every channel's tone knobs are its pack's tones, as many as it lists, knob i its tone i",
-                         "...and every one on the TOP 12's first, drawn: the 4x12 ANVIL" };
+                         "...and every one on the TOP 12's first, drawn: the 4x12 SELFISH GENE" };
     };
 
     static const Product products[] {
@@ -146,7 +146,7 @@ inline const Product& product()
           },
           "all four channels' packs are installed",
           "every channel's tone knobs are its pack's three tones, knob i its tone i",
-          "...and all four on the TOP 12's first, drawn: the 4x12 ANVIL" },
+          "...and all four on the TOP 12's first, drawn: the 4x12 SELFISH GENE" },
 
         // On Mars the Friedman IR-X's two channels, each a gear: Ch1 the CRUNCH and Ch2 the HI-GAIN, its
         // TURBO the same pack with the Boost thrown. Both on a plate, Ch2 with no delay.
