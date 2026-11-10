@@ -82,19 +82,17 @@ CabinetBlock::CabinetBlock (AmpProcessor& processor)
         slots.notch = [this]
         {
             if (guitar())
-                return guitarAt();
+            {
+                const int at = guitarAt();
+                return at < (int) cabs.dozen().size() ? at : -1;
+            }
             const auto playing = AmpProcessor::cabSynthOf (amp.cabChoice());
             if (! playing.valid)
                 return -1;
             const auto which = whichPlays (playing.state, cabs.own());
             return which.list == Pick::dozen ? which.at : -1;
         };
-        // An IR of the player's own is heard where the hand lets go: each one read on the way would stay in the store.
-        slots.onMove  = [this] (int i)
-        {
-            if (i < (int) cabs.dozen().size())
-                amp.requestCabSynth (cabs.dozen()[(size_t) i].state, true);
-        };
+        slots.onMove  = [this] (int i) { amp.requestCabSynth (cabs.dozen()[(size_t) i].state, true); };
         slots.onLetGo = [this] (int i)
         {
             if (guitar())
@@ -106,9 +104,19 @@ CabinetBlock::CabinetBlock (AmpProcessor& processor)
         stepBack.by = -1;
         for (auto* s : { &stepBack, &stepOn })
         {
-            s->onStep = [this] (int by) { stepCabinet (by); };
+            s->onStep = [this] (int by) { if (guitar()) stepList (false, by); else stepCabinet (by); };
             addAndMakeVisible (*s);
         }
+
+        // The guitar's own IRs on a slider of their own over the cuts, while there are any (lookAtLibrary). One heard where
+        // the hand lets go: each read on the way would stay in the store.
+        ownSlots.notch  = [this] { const int at = guitarAt() - (int) cabs.dozen().size(); return at >= 0 ? at : -1; };
+        ownSlots.onLetGo = [this] (int i) { pickGuitar ((int) cabs.dozen().size() + i); };
+        ownBack.by = -1;
+        for (auto* s : { &ownBack, &ownOn })
+            s->onStep = [this] (int by) { stepList (true, by); };
+        for (juce::Component* c : { (juce::Component*) &ownSlots, (juce::Component*) &ownBack, (juce::Component*) &ownOn })
+            addChildComponent (*c);
         myIrs.text = "MY IRS";
         myIrs.onOpen = [this] { showIrMenu (&myIrs); };
         if (guitar())
@@ -301,6 +309,7 @@ void CabinetBlock::refreshIr (bool force, bool keepTrimWord)
         shown = named.isNotEmpty() ? named : CabWindow::labelOf (synth);
     }
     slots.refresh();
+    ownSlots.refresh();
     shownText = shown;
     ir.setEntries ({ { shown, 0, false } });
     ir.setSelection (0);
@@ -372,10 +381,16 @@ void CabinetBlock::lookAtLibrary()
         if (now != ownIrs)
         {
             ownIrs = std::move (now);
-            slots.notches = (int) (cabs.dozen().size() + ownIrs.size());
-            slots.split   = ownIrs.empty() ? 0 : (int) cabs.dozen().size();   // the twelve apart from the player's own
-            slots.refresh();
-            slots.repaint();
+            ownSlots.notches = (int) ownIrs.size();
+            ownSlots.refresh();
+            ownSlots.repaint();
+            const bool any = ! ownIrs.empty();
+            if (any != ownSlots.isVisible())
+            {
+                for (juce::Component* c : { (juce::Component*) &ownSlots, (juce::Component*) &ownBack, (juce::Component*) &ownOn })
+                    c->setVisible (any);
+                resized();   // the row over the cuts comes, or goes and gives the picture its height
+            }
         }
         return;
     }
@@ -649,16 +664,25 @@ void CabinetBlock::paintOverChildren (juce::Graphics& g)
     g.drawRoundedRectangle (getLocalBounds().toFloat().reduced (1.5f), 6.0f, 2.0f);
 }
 
+void CabinetBlock::stepList (bool own, int by)
+{
+    // Round the one list, the twelve's or the player's own: from where it plays, or into it from its first (its last, back).
+    lookAtLibrary();
+    const int twelve = (int) cabs.dozen().size();
+    const int count = own ? (int) ownIrs.size() : twelve;
+    if (count == 0)
+        return;
+    const int at = guitarAt();
+    const int here = own ? (at >= twelve ? at - twelve : -1) : (at >= 0 && at < twelve ? at : -1);
+    const int next = here < 0 ? (by > 0 ? 0 : count - 1) : ((here + by) % count + count) % count;
+    pickGuitar ((own ? twelve : 0) + next);
+}
+
 void CabinetBlock::stepCabinet (int by)
 {
-    if (guitar())   // the one list: past the last of the player's IRs round to the twelve's first, and back
+    if (guitar())   // the slider that plays: the player's own while one of them does, else the twelve
     {
-        lookAtLibrary();
-        const int count = (int) (cabs.dozen().size() + ownIrs.size());
-        if (count == 0)
-            return;
-        const int at = guitarAt();
-        pickGuitar (at < 0 ? (by > 0 ? 0 : count - 1) : ((at + by) % count + count) % count);
+        stepList (guitarAt() >= (int) cabs.dozen().size(), by);
         return;
     }
 
@@ -1273,19 +1297,20 @@ void CabinetBlock::layOutContent (juce::Rectangle<int> area)
     const auto wholeRow = row;   // the bass's doors take it edge to edge: its cuts' seats stand empty
     area.removeFromBottom (gap);
 
-    // The slider with a step at each end of it (the owner, 10.11).
-    const auto placeSlider = [this] (juce::Rectangle<int> r)
+    // A slider with a step at each end of it (the owner, 10.11).
+    const auto placeSteps = [] (Step& back, CabinetSlots& slider, Step& on, juce::Rectangle<int> r)
     {
-        stepBack.setBounds (r.removeFromLeft (stepW));
-        stepOn.setBounds (r.removeFromRight (stepW));
-        slots.setBounds (r);
+        back.setBounds (r.removeFromLeft (stepW));
+        on.setBounds (r.removeFromRight (stepW));
+        slider.setBounds (r);
     };
+    const auto placeSlider = [this, placeSteps] (juce::Rectangle<int> r) { placeSteps (stepBack, slots, stepOn, r); };
 
-    // The guitar's TOP 12 on a row of its own over the cuts, the block's whole width: between HPF and LPF there is room
-    // for the two doors and no slider.
-    if (guitar())
+    // The guitar's own IRs on a row of their own over the cuts, the block's whole width, while there are any (the owner,
+    // 10.11): with none, the picture has the row.
+    if (guitar() && ownSlots.isVisible())
     {
-        placeSlider (area.removeFromBottom (switchRow).reduced (gap, 0));
+        placeSteps (ownBack, ownSlots, ownOn, area.removeFromBottom (switchRow).reduced (gap, 0));
         area.removeFromBottom (gap);
     }
 
@@ -1319,9 +1344,11 @@ void CabinetBlock::layOutContent (juce::Rectangle<int> area)
                                                     row.getHeight()));
 
     // The row where the trim stood: the IRs' door at the right (the bass's MY IRS while there are any), CABINETS before
-    // it, and the bass's dozen's slider across what is left, edge to edge. The guitar's holds its cuts alone, its slider
-    // on the row above.
-    if (! guitar())
+    // it, and the bass's dozen's slider across what is left, edge to edge. The guitar's the TOP 12's slider between its
+    // cuts (the owner, 10.11).
+    if (guitar())
+        placeSlider (row.reduced (gap, 0));
+    else
     {
         auto r = wholeRow;
         if (myIrs.isVisible())

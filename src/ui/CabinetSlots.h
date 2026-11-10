@@ -6,7 +6,6 @@
 #include "Theme.h"
 
 #include <functional>
-#include <vector>
 
 namespace orbitamp
 {
@@ -22,11 +21,6 @@ public:
     std::function<int()> notch;                 // the one that plays, -1 for none of them
     std::function<void (int)> onMove, onLetGo;
 
-    /** OrbitAmp's (the owner, 10.11: "на ползунке как-то отдели заводские от остальных"): where the player's own begin,
-        the TOP 12 before them — the track in two halves with a gap between, the twelve on the left half, the player's
-        IRs, however many, on the right. 0 is one list across the whole track, as OrbitBass's dozen. */
-    int split = 0;
-
     /** Asks for the notch again (the block's timer). */
     void refresh()
     {
@@ -40,10 +34,9 @@ public:
 
     void paint (juce::Graphics& g) override
     {
-        g.setColour (theme::hair2);
-        for (const auto& half : halves())
-            g.fillRoundedRectangle (half.withSizeKeepingCentre (half.getWidth(), 2.0f), 1.0f);
         const auto t = track();
+        g.setColour (theme::hair2);
+        g.fillRoundedRectangle (t.withSizeKeepingCentre (t.getWidth(), 2.0f), 1.0f);
         for (int i = 0; i < notches; ++i)   // a notch a cabinet
         {
             g.setColour (i == at() ? theme::orange : theme::txFaint.withAlpha (0.7f));
@@ -84,50 +77,16 @@ private:
 
     juce::Rectangle<float> track() const { return getLocalBounds().toFloat().reduced (6.0f, 0.0f); }
 
-    static constexpr float splitGap = 12.0f;
-    bool isSplit() const noexcept { return split > 0 && split < notches; }
-
-    /** The track, or its two halves with the gap between them. */
-    std::vector<juce::Rectangle<float>> halves() const
-    {
-        auto t = track();
-        if (! isSplit())
-            return { t };
-        const float w = (t.getWidth() - splitGap) * 0.5f;
-        const auto left = t.removeFromLeft (w);
-        return { left, t.withTrimmedLeft (splitGap) };
-    }
-
-    /** Notch `i` of `count` spread over `r`, edge to edge; one alone in its middle. */
-    static float spread (int i, int count, juce::Rectangle<float> r)
-    {
-        return count > 1 ? r.getX() + r.getWidth() * (float) i / (float) (count - 1) : r.getCentreX();
-    }
-
     float xOf (int i) const
     {
-        const auto h = halves();
-        if (! isSplit())
-            return spread (i, notches, h[0]);
-        return i < split ? spread (i, split, h[0]) : spread (i - split, notches - split, h[1]);
-    }
-
-    /** The notch nearest `x`: in the half it is over, the gap's middle between them. */
-    int notchAt (float x) const
-    {
-        const auto h = halves();
-        const auto nearest = [x] (int count, juce::Rectangle<float> r)
-        {
-            return count > 1 ? juce::jlimit (0, count - 1, juce::roundToInt ((x - r.getX()) / r.getWidth() * (float) (count - 1))) : 0;
-        };
-        if (! isSplit())
-            return nearest (notches, h[0]);
-        return x < h[0].getRight() + splitGap * 0.5f ? nearest (split, h[0]) : split + nearest (notches - split, h[1]);
+        const auto t = track();
+        return notches > 1 ? t.getX() + t.getWidth() * (float) i / (float) (notches - 1) : t.getCentreX();
     }
 
     void move (const juce::MouseEvent& e)
     {
-        const int i = notchAt (e.position.x);
+        const auto t = track();
+        const int i = juce::jlimit (0, notches - 1, juce::roundToInt ((e.position.x - t.getX()) / t.getWidth() * (float) (notches - 1)));
         if (i == held)
             return;
         held = i;

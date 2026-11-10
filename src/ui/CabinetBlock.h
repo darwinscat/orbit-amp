@@ -41,8 +41,8 @@ public:
     ~CabinetBlock() override;
 
     /** The editor's LEFT and RIGHT (the owner, 08.11: to hear cabinets one after another): the one before or after
-        the cabinet that plays, round the list it is in. The guitar's one list (the owner, 10.11): the TOP 12, then the
-        player's own IRs as the IR editor lists them. The bass's: a file of the player's own among its folder's IRs as
+        the cabinet that plays, round the list it is in. The guitar's (the owner, 10.11): the slider that plays, the TOP 12
+        or the player's own IRs as the IR editor lists them (stepList). The bass's: a file of the player's own among its folder's IRs as
         the menu lists them, one of the builder's in the twelve, in all of them or in the player's own, a factory IR
         among the ones the product plays. */
     void stepCabinet (int by);
@@ -133,6 +133,13 @@ private:
     Step stepBack, stepOn;
     static constexpr int stepW = 16;
 
+    /** OrbitAmp's two sliders (the owner, 10.11): the TOP 12 on `slots` between the cuts, the player's own IRs on `ownSlots`
+        over them while there are any. The one whose list plays shows its cap; a hand on the other goes there. LEFT and
+        RIGHT step the one that plays, each slider's steps its own (stepList). */
+    CabinetSlots ownSlots;
+    Step ownBack, ownOn;
+    void stepList (bool own, int by);
+
     /** WHICH OF THE BUILDER'S PLAYS (the owner, 10.11: two the same were both ticked, and EDIT… of a fresh copy made
         another): the one the hand last picked here — the twelve's, all's or the player's own, by its slot or its file —
         while it still sounds as picked; else the first the same, the twelve's, all's, then the player's own. Its name on
@@ -153,10 +160,10 @@ private:
     int libraryLook = 0;   // timer ticks to the next look at whether the library holds any IRs
     void lookAtLibrary();
 
-    /** THE GUITAR'S ONE LIST (the owner, 10.11: "в CAB остаются эти 12 и свои IR"): the TOP 12, then every IR of the
-        player's own in the IR editor's order — on the slider, under LEFT and RIGHT and in the menu on the name alike.
-        No CABINETS, no window, none of the forty and none of the shelf: the builder app edits cabinets, and one made
-        there comes here as an IR. `ownIrs` is the library as last looked at (lookAtLibrary). */
+    /** THE GUITAR'S LIST (the owner, 10.11: "в CAB остаются эти 12 и свои IR"): the TOP 12, then every IR of the player's
+        own in the IR editor's order — the twelve on one slider and the player's on another (ownSlots), and both in the
+        menu on the name. No CABINETS, no window, none of the forty and none of the shelf: the builder app edits cabinets,
+        and one made there comes here as an IR. `ownIrs` is the library as last looked at (lookAtLibrary). */
     std::vector<juce::File> ownIrs;
     int  guitarAt() const;      // the place of the one that plays in that list, -1 for none of it
     void pickGuitar (int at);
