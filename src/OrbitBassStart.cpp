@@ -55,12 +55,14 @@ namespace
     }
 
     /** Its own parameters, after the engine's: COMP, BLEND, DI/CAB and its cuts — both cuts IN where its pack has
-        switches of its tone (the owner, 03.11: the cuts' switches give their place to the pack's, the cuts always in).
+        switches of its tone (the owner, 03.11: the cuts' switches give their place to the pack's, the cuts always in),
+        and COMP's MIX at three quarters, as the walker holds it (the owner, 10.11).
         Declared so, a fresh one plays them in with no window open, INIT and a host's reset bring them back in, and the
         face coming up finds them so and moves nothing. */
     void bassParameters (const Product& product, juce::AudioProcessorValueTreeState::ParameterLayout& layout)
     {
         params::Opening opening;
+        opening.compAmount = 0.75f;
         opening.bassLpfOn = opensOnToneSwitches (product);   // the HPF opens in on every bass
         params::addBassParameters (layout, opening);
     }

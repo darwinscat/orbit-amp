@@ -665,11 +665,10 @@ int ORBITAMP_GATE_MAIN()
                "always in — at FINGERS, 4.5 kHz (SLAP at 9.5 kHz)");
         check (value (a, params::cabHpfOn) < 0.5f && value (a, params::cabLpfOn) < 0.5f,
                "the cabinet's own cuts off: its IR plays as it was shot");
-        check (value (a, params::compOn) > 0.5f && juce::approximatelyEqual (value (a, params::compAmount), 0.5f)
+        check (value (a, params::compOn) > 0.5f && juce::approximatelyEqual (value (a, params::compAmount), 0.75f)
                    && juce::roundToInt (value (a, params::compAttack)) == 1 && juce::roundToInt (value (a, params::compRelease)) == 0
                    && juce::roundToInt (value (a, params::compCharacter)) == params::compCharacters.indexOf ("Opto"),
-               "COMP on, BLEND at half, MED attack, AUTO release, OPTO");
-        check (juce::approximatelyEqual (value (a, params::ampBlend), 1.0f) && juce::approximatelyEqual (value (a, params::ampBlendHz), 150.0f)
+               "COMP on, BLEND at three quarters (the owner, 10.11), MED attack, AUTO release, OPTO");        check (juce::approximatelyEqual (value (a, params::ampBlend), 1.0f) && juce::approximatelyEqual (value (a, params::ampBlendHz), 150.0f)
                    && value (a, params::ampBlendInvert) < 0.5f,
                "the AMP's BLEND 100 % (the capture alone), its crossover at 150 Hz, not inverted");
         check (juce::approximatelyEqual (value (a, params::cabMix), 70.0f), "the CAB's MIX 70 %: 30 % DI");
@@ -1303,7 +1302,8 @@ int ORBITAMP_GATE_MAIN()
         }
 
         // EACH CONTROL ONE JOB (the owner, 31.10): the threshold its own (-48..0 dB, -24 by default), the ratio its own
-        // (1.5:1..10:1 since 01.11, 4:1), the knob BLEND (0..1, a half) — the defaults the processor's and the stage's alike.
+        // (1.5:1..10:1 since 01.11, 4:1), the knob BLEND (0..1, three quarters since 10.11) — the defaults the processor's
+        // and the stage's alike.
         struct Curve { double thresholdDb, ratio, uncompressed; };
         const Curve top { BassComp::defaultThresholdDb, BassComp::defaultRatio, 0.0 };
         {
@@ -1311,9 +1311,9 @@ int ORBITAMP_GATE_MAIN()
             auto* rat = amp->apvts.getParameter (params::compRatio);
             check (thr != nullptr && rat != nullptr && thr->getNormalisableRange().start == -48.0f && thr->getNormalisableRange().end == 0.0f
                        && value (*amp, params::compThreshold) == (float) BassComp::defaultThresholdDb && value (*amp, params::compRatio) == (float) BassComp::defaultRatio
-                       && rat->getNormalisableRange().start == 1.5f && rat->getNormalisableRange().end == 10.0f && value (*amp, params::compAmount) == 0.5f
+                       && rat->getNormalisableRange().start == 1.5f && rat->getNormalisableRange().end == 10.0f && juce::approximatelyEqual (value (*amp, params::compAmount), 0.75f)
                        && BassComp::ratioMin == 1.5 && BassComp::ratioMax == 10.0,
-                   "COMP's three: THRESHOLD -48..0 dB at -24, RATIO 1.5:1..10:1 at 4:1 (the parameter's and the stage's), BLEND at half");
+                   "COMP's three: THRESHOLD -48..0 dB at -24, RATIO 1.5:1..10:1 at 4:1 (the parameter's and the stage's), BLEND at three quarters");
         }
 
         // BLEND IS PARALLEL COMPRESSION, SAMPLE-ALIGNED: at half, what comes out is the dry and the all-compressed summed
@@ -5329,7 +5329,7 @@ int ORBITAMP_GATE_MAIN()
                     if (unit->getFont().getHeight() < 13.0f || thr->gripTextHeight < 13.0f || ! blend->hasFaderLook() || fader::textH < 13.0f
                         || CompGraph::textHeight < 13.0f || CompRatioCombo::textHeight < 13.0f)
                         wrong.add ("type under 13 px");
-                    if (thr->gripText() != "-24" || blend->gripText() != "50%")
+                    if (thr->gripText() != "-24" || blend->gripText() != "75%")
                         wrong.add ("the grips read " + thr->gripText() + " and " + blend->gripText());
                     if (thr->typeDecimals < 0)
                         wrong.add ("the threshold's number is not typed");

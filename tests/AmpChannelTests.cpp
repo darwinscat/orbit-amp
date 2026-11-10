@@ -984,7 +984,7 @@ int ORBITAMP_GATE_MAIN()
         const auto holds = [&]
         {
             const auto* character = amp->apvts.getParameter (params::compCharacter);
-            return on (params::compOn) && std::abs (plain (params::compAmount) - 1.0f) < 1.0e-4f && std::abs (plain (params::compRatio) - 4.0f) < 1.0e-3f
+            return on (params::compOn) && std::abs (plain (params::compAmount) - 0.75f) < 1.0e-4f && std::abs (plain (params::compRatio) - 4.0f) < 1.0e-3f
                 && character != nullptr && character->getCurrentValueAsText() == "Opto"
                 && on (params::octavePresent) && on (params::octaveOn)
                 && on (params::filterPresent) && on (params::filterOn)
@@ -992,7 +992,7 @@ int ORBITAMP_GATE_MAIN()
                 && on (params::bassHpfOn) && on (params::bassLpfOn)
                 && ! on (params::delayPresent) && ! on (params::reverbPresent);
         };
-        check (holds(), "INIT gives COMP on, all of the signal through it at 4:1 on OPTO, OCTAVE, ENVELOPE and CHORUS in the strip and on, both cuts on, no delay and no room");
+        check (holds(), "INIT gives COMP on, three quarters of the signal through it at 4:1 on OPTO, OCTAVE, ENVELOPE and CHORUS in the strip and on, both cuts on, no delay and no room");
         // ...and every gear's tone flat: the standard's three at 0 dB, or the pack's dials where their travel is none — the
         // reference each band is flat at (felitronics::rigplayer::travelOf).
         bool flat = true;
