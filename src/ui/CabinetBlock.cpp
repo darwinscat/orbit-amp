@@ -370,6 +370,7 @@ void CabinetBlock::lookAtLibrary()
         {
             ownIrs = std::move (now);
             slots.notches = (int) (cabs.dozen().size() + ownIrs.size());
+            slots.split   = ownIrs.empty() ? 0 : (int) cabs.dozen().size();   // the twelve apart from the player's own
             slots.refresh();
             slots.repaint();
         }
