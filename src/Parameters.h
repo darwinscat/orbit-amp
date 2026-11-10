@@ -319,9 +319,9 @@ enum class StereoMode { mono, stereo, stereoSpace };
 
 /** TEMPORARY — the audition loops, in the order the player offers them. Default is the first.
     The site's demo loops, the same takes under the same names and in its order: a guitar amp's, and a bass amp's own —
-    the bass DI riffs Cab IR Generator plays, under its names (the owner, 06.11).
+    the owner's clean bass takes, the left of each, in place of the DI riffs Cab IR Generator plays (the owner, 10.11).
 
-    The audio is NOT shipped: it is read at run time from the dev machine's private folder (the bass's in its bass/),
+    The audio is NOT shipped: it is read at run time from the dev machine's private folder (the bass's in its bass-clean/),
     and when that folder is absent the player and its menu entry are absent with it. The binary is the same either way —
     presence of the folder is the whole switch. */
 struct DemoLoops
@@ -340,11 +340,11 @@ inline const DemoLoops& demoLoopsOf (bool bass)
                                       "eleven-light-years-4.wav", "deep-space-is-my-home-1.wav", "deep-space-is-my-home-2.wav",
                                       "cats-hard-day.wav", "i-am-projection.wav", "fifth-dimension.wav" },
                                     "IdeaProjects/orbit-amp/.private/loops" };
-    static const DemoLoops bassLoops { { "Eleven Light Years", "Fifth Dimension 1", "Fifth Dimension 2",
-                                         "Deep Space is My Home 1", "Deep Space is My Home 2", "I am Projection" },
-                                       { "eleven-light-years.wav", "fifth-dimension-1.wav", "fifth-dimension-2.wav",
-                                         "deep-space-is-my-home-1.wav", "deep-space-is-my-home-2.wav", "i-am-projection.wav" },
-                                       "IdeaProjects/orbit-amp/.private/loops/bass" };
+    static const DemoLoops bassLoops { { "Eleven Light Years 1", "Eleven Light Years 2", "Fifth Dimension",
+                                         "Deep Space is My Home", "I am Projection" },
+                                       { "eleven-light-years-1.wav", "eleven-light-years-2.wav", "fifth-dimension.wav",
+                                         "deep-space-is-my-home.wav", "i-am-projection.wav" },
+                                       "IdeaProjects/orbit-amp/.private/loops/bass-clean" };
     return bass ? bassLoops : guitar;
 }
 
