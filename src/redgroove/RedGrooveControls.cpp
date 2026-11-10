@@ -44,8 +44,11 @@ void Readout::paint (juce::Graphics& g)
     const float wide = juce::GlyphArrangement::getStringWidth (face::labelFont (em).withExtraKerningFactor (0.04f), words) + 4.0f;
     const juce::Graphics::ScopedSaveState keep (g);
     if (wide > box.getWidth())
-        g.addTransform (juce::AffineTransform::scale (box.getWidth() / wide, 1.0f, box.getCentreX(), box.getCentreY()));
-    writeAsIs (g, ink, words, box.withSizeKeepingCentre (juce::jmax (wide, box.getWidth()), box.getHeight()), em, colour);
+        g.addTransform (juce::AffineTransform::scale (box.getWidth() / wide, 1.0f, fromLeft ? box.getX() : box.getCentreX(), box.getCentreY()));
+    if (fromLeft)
+        writeAsIs (g, ink, words, box.withWidth (wide), em, colour);
+    else
+        writeAsIs (g, ink, words, box.withSizeKeepingCentre (juce::jmax (wide, box.getWidth()), box.getHeight()), em, colour);
 }
 
 //==============================================================================
@@ -312,10 +315,21 @@ void CabinetScreen::refresh()
     if (now != shown)
     {
         shown = now;
+        // "4: 4x10 SHEEN" — the dozen's names come numbered (device::Cabinets) — split where there is a place for the number.
+        auto words = shown;
+        juce::String num;
+        if (number != nullptr && shown.containsChar (':'))
+            if (const auto head = shown.upToFirstOccurrenceOf (": ", false, false); head.isNotEmpty() && head.containsOnly ("0123456789"))
+            {
+                num = head;
+                words = shown.fromFirstOccurrenceOf (": ", false, false);
+            }
+        if (number != nullptr)
+            number->set (num);
         if (label != nullptr)
         {
             label->colour = shown == "OFF" ? ink.at (ink.values, 0.45f) : ink.values;
-            label->set (shown);
+            label->set (words);
         }
         slider.setAlpha (shown == "OFF" ? 0.5f : 1.0f);   // out of the sound, the slider dims with its name
     }

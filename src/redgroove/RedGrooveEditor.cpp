@@ -665,6 +665,18 @@ RedGrooveEditor::RedGrooveEditor (AmpProcessor& p)
     cabinet.setBounds (layout::cabinetControl.toNearestInt());
     cabinet.setComponentID ("cabinet");
     cabinet.label = &readout (layout::cabinetName);     // the name over the slot, on the panel
+    // ...and its number in the panel's title, a word after CABINET in the title's own ink: "CABINET 4" over "4x10 SHEEN"
+    // (the owner, 10.11). CABINET stays printed on the panel; the number has the row up to the switch in it.
+    {
+        const float after = layout::cabinetTitle.x + juce::GlyphArrangement::getStringWidth (
+                                labelFont (stage::px13).withExtraKerningFactor (0.08f), "CABINET ");
+        const float upTo = layout::switchSlotX - 6.0f;
+        auto& n = readout ({ after, layout::panelTitleY - 16.0f, upTo - after, 32.0f });
+        n.colour = titleInk;
+        n.fromLeft = true;
+        n.setComponentID ("cabinetNumber");
+        cabinet.number = &n;
+    }
     cabinet.refresh();
 
     // LEARN — from GATE's menu, or a double click on its lamp — takes the tuner's glass while it runs.
