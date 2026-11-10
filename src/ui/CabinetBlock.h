@@ -106,6 +106,21 @@ private:
     };
     Door factoryIrs, myIrs;     // factoryIrs: CABINETS
     CabinetSlots slots;
+
+    /** WHICH OF THE BUILDER'S PLAYS (the owner, 10.11: two the same were both ticked, and EDIT… of a fresh copy made
+        another): the one the hand last picked here — the twelve's, all's or the player's own, by its slot or its file —
+        while it still sounds as picked; else the first the same, the twelve's, all's, then the player's own. Its name on
+        the border, its tick in CABINETS, its notch on the slider and what EDIT… opens all follow it. */
+    struct Pick
+    {
+        enum List { none, dozen, all, own } list = none;
+        int at = -1;       // its slot in the twelve, in all, or among the player's own as own() lists them
+        juce::File file;   // a player's own: its file
+    };
+    Pick lastPick;
+    Pick whichPlays (const cabir::State&, const std::vector<device::Cabinets::Cabinet>& own) const;
+    juce::String nameOf (const Pick&, const std::vector<device::Cabinets::Cabinet>& own) const;
+
     void showCabinetsMenu();
     void saveCabinetAs();
     void renameCabinet (const juce::File&, const juce::String& name);

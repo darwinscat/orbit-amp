@@ -82,10 +82,17 @@ CabinetBlock::CabinetBlock (AmpProcessor& processor)
         slots.notch = [this]
         {
             const auto playing = AmpProcessor::cabSynthOf (amp.cabChoice());
-            return playing.valid ? cabs.dozenOf (playing.state) : -1;
+            if (! playing.valid)
+                return -1;
+            const auto which = whichPlays (playing.state, cabs.own());
+            return which.list == Pick::dozen ? which.at : -1;
         };
         slots.onMove  = [this] (int i) { amp.requestCabSynth (cabs.dozen()[(size_t) i].state, true); };
-        slots.onLetGo = [this] (int i) { amp.requestCabSynth (cabs.dozen()[(size_t) i].state); };
+        slots.onLetGo = [this] (int i)
+        {
+            lastPick = { Pick::dozen, i, {} };
+            amp.requestCabSynth (cabs.dozen()[(size_t) i].state);
+        };
         addAndMakeVisible (slots);
         myIrs.text = "MY IRS";
         myIrs.onOpen = [this] { showIrMenu (&myIrs); };
@@ -264,9 +271,10 @@ void CabinetBlock::refreshIr (bool force, bool keepTrimWord)
     const auto synth = AmpProcessor::cabSynthOf (choice);
     const bool factoryPlays = ! choice.isUser() && amp.product().playsCabIr (choice.factory);
     juce::String shown = choice.isUser() ? choice.name : factoryPlays ? juce::String (params::cabIrNames[choice.factory]) : juce::String (noIr);
-    if (synth.valid)   // the dozen's by its number, a player's own by its name, else its box and its mics
+    if (synth.valid)   // the dozen's by its number, a player's own by its name, else its box and its mics — the one picked
     {
-        const auto named = cabs.nameOf (synth.state);
+        const auto own = cabs.own();
+        const auto named = nameOf (whichPlays (synth.state, own), own);
         shown = named.isNotEmpty() ? named : CabWindow::labelOf (synth);
     }
     slots.refresh();
@@ -500,22 +508,29 @@ void CabinetBlock::stepCabinet (int by)
     const auto playing = AmpProcessor::cabSynthOf (choice);
     const auto next    = [by] (int at, size_t count) { const int n = (int) count; return (size_t) (((at + by) % n + n) % n); };
 
-    if (playing.valid)   // one of the builder's: the twelve, all of them, or the player's own — whichever it is in
+    if (playing.valid)   // one of the builder's: the twelve, all of them, or the player's own — the list of the one that plays
     {
-        if (const int at = cabs.dozenOf (playing.state); at >= 0)
-            amp.requestCabSynth (cabs.dozen()[next (at, cabs.dozen().size())].state);
-        else if (const int all = cabs.allOf (playing.state); all >= 0)
-            amp.requestCabSynth (cabs.all()[next (all, cabs.all().size())].state);
-        else
+        const auto own = cabs.own();
+        const auto which = whichPlays (playing.state, own);
+        if (which.list == Pick::dozen)
         {
-            const auto own = cabs.own();
-            for (size_t i = 0; i < own.size(); ++i)
-                if (own[i].state == playing.state)
-                {
-                    amp.requestCabSynth (own[next ((int) i, own.size())].state);
-                    break;
-                }
+            const auto i = next (which.at, cabs.dozen().size());
+            lastPick = { Pick::dozen, (int) i, {} };
+            amp.requestCabSynth (cabs.dozen()[i].state);
         }
+        else if (which.list == Pick::all)
+        {
+            const auto i = next (which.at, cabs.all().size());
+            lastPick = { Pick::all, (int) i, {} };
+            amp.requestCabSynth (cabs.all()[i].state);
+        }
+        else if (which.list == Pick::own)
+        {
+            const auto i = next (which.at, own.size());
+            lastPick = { Pick::own, (int) i, own[i].file };
+            amp.requestCabSynth (own[i].state);
+        }
+        refreshIr (true);   // a step to one the same as the last changes no sound, and the name must follow all the same
         return;
     }
 
@@ -550,18 +565,48 @@ void CabinetBlock::stepCabinet (int by)
     refreshIr (false, true);
 }
 
-namespace
+CabinetBlock::Pick CabinetBlock::whichPlays (const cabir::State& state, const std::vector<device::Cabinets::Cabinet>& own) const
 {
-    /** The player's own cabinet `state` is — its file — or none: one the same as the dozen's is the dozen's, fixed. */
-    juce::File ownFileOf (const device::Cabinets& cabs, const cabir::State& state)
+    const auto& twelve = cabs.dozen();
+    const auto& whole = cabs.all();
+    switch (lastPick.list)   // the one picked, while it still sounds as it did
     {
-        if (cabs.dozenOf (state) >= 0 || cabs.allOf (state) >= 0)
-            return {};
-        for (const auto& c : cabs.own())
-            if (c.state == state)
-                return c.file;
-        return {};
+        case Pick::dozen:
+            if (lastPick.at >= 0 && lastPick.at < (int) twelve.size() && twelve[(size_t) lastPick.at].state == state)
+                return lastPick;
+            break;
+        case Pick::all:
+            if (lastPick.at >= 0 && lastPick.at < (int) whole.size() && whole[(size_t) lastPick.at].state == state)
+                return lastPick;
+            break;
+        case Pick::own:   // by its file: its place in the list moves as the player's own are added and renamed
+            for (size_t i = 0; i < own.size(); ++i)
+                if (own[i].file == lastPick.file && own[i].state == state)
+                    return { Pick::own, (int) i, own[i].file };
+            break;
+        case Pick::none:
+            break;
     }
+    if (const int i = cabs.dozenOf (state); i >= 0)
+        return { Pick::dozen, i, {} };
+    if (const int i = cabs.allOf (state); i >= 0)
+        return { Pick::all, i, {} };
+    for (size_t i = 0; i < own.size(); ++i)
+        if (own[i].state == state)
+            return { Pick::own, (int) i, own[i].file };
+    return {};
+}
+
+juce::String CabinetBlock::nameOf (const Pick& p, const std::vector<device::Cabinets::Cabinet>& own) const
+{
+    switch (p.list)
+    {
+        case Pick::dozen: return cabs.dozen()[(size_t) p.at].name;
+        case Pick::all:   return cabs.all()[(size_t) p.at].name;
+        case Pick::own:   return own[(size_t) p.at].name;
+        case Pick::none:  break;
+    }
+    return {};
 }
 
 void CabinetBlock::editCabinet()
@@ -570,8 +615,8 @@ void CabinetBlock::editCabinet()
     const auto playing = AmpProcessor::cabSynthOf (amp.cabChoice());
     if (! playing.valid)
         return;
-    if (const auto file = ownFileOf (cabs, playing.state); file != juce::File())
-        editIn (file);
+    if (const auto which = whichPlays (playing.state, cabs.own()); which.list == Pick::own)
+        editIn (which.file);
     else
         newCabinet();
 }
@@ -597,6 +642,7 @@ void CabinetBlock::newCabinet()
                                          const auto file = list.save (name, state);
                                          if (file == juce::File() || safe == nullptr)
                                              return;
+                                         safe->lastPick = { Pick::own, -1, file };
                                          safe->refreshIr (true);
                                          safe->editIn (file);
                                      });
@@ -622,17 +668,18 @@ void CabinetBlock::showCabinetsMenu()
     const auto& dozen = cabs.dozen();
     const auto& every = cabs.all();
     const auto own = cabs.own();
-    const auto plays = [&playing] (const cabir::State& s) { return playing.valid && playing.state == s; };
+    // One ticked, the one that plays (whichPlays): never every one the same as it.
+    const auto which = playing.valid ? whichPlays (playing.state, own) : Pick {};
+    const auto plays = [&which] (Pick::List list, int i) { return which.list == list && which.at == i; };
     enum { pickDozen = 1, pickOwn = 100, edit = 300, saveAs = 301, renameOwn = 400, deleteOwn = 600, pickAll = 1000 };
-    const auto named = playing.valid ? cabs.nameOf (playing.state) : juce::String();
-    const auto editWord = ! playing.valid                                ? juce::String ("EDIT...")
-                        : ownFileOf (cabs, playing.state) != juce::File()      ? juce::String ("EDIT...")
-                        : named.isNotEmpty()                             ? "NEW FROM " + named + "..."
-                                                                         : juce::String ("NEW FROM THIS...");
+    const auto named = nameOf (which, own);
+    const auto editWord = ! playing.valid || which.list == Pick::own ? juce::String ("EDIT...")
+                        : named.isNotEmpty()                         ? "NEW FROM " + named + "..."
+                                                                     : juce::String ("NEW FROM THIS...");
 
     juce::PopupMenu menu;
     for (int i = 0; i < (int) dozen.size(); ++i)
-        menu.addItem (pickDozen + i, dozen[(size_t) i].name, true, plays (dozen[(size_t) i].state));
+        menu.addItem (pickDozen + i, dozen[(size_t) i].name, true, plays (Pick::dozen, i));
 
     // ALL (the owner, 06.11): the IR packs' 190 — by style, each under its name without the style's word; by size, the
     // sizes in the packs page's order, each named with its style.
@@ -663,7 +710,7 @@ void CabinetBlock::showCabinetsMenu()
         for (int i = 0; i < (int) every.size(); ++i)
         {
             const auto& c = every[(size_t) i];
-            const bool ticked = plays (c.state);
+            const bool ticked = plays (Pick::all, i);
             into (styles, c.style.toUpperCase()).addItem (pickAll + i, shortName (c), true, ticked);
             into (sizes, CabPicker::wordOf (CabPicker::setupOf (c.state).first)).addItem (pickAll + i, c.style.toUpperCase() + dot + shortName (c), true, ticked);
         }
@@ -682,7 +729,7 @@ void CabinetBlock::showCabinetsMenu()
     if (own.empty())
         menu.addItem (-1, "none yet: SAVE AS... keeps the one that plays", false, false);
     for (int i = 0; i < (int) own.size(); ++i)
-        menu.addItem (pickOwn + i, own[(size_t) i].name, true, plays (own[(size_t) i].state));
+        menu.addItem (pickOwn + i, own[(size_t) i].name, true, plays (Pick::own, i));
     menu.addSeparator();
     menu.addItem (edit, editWord, playing.valid, false);
     menu.addItem (saveAs, "SAVE AS...", playing.valid, false);
@@ -706,12 +753,19 @@ void CabinetBlock::showCabinetsMenu()
                        auto& self = *safe;
                        const auto& twelve = self.cabs.dozen();
                        const auto& whole = self.cabs.all();
+                       // A pick is remembered as which one, so a copy the same as a factory one plays as itself.
+                       const auto pick = [&self] (Pick p, const cabir::State& state)
+                       {
+                           self.lastPick = p;
+                           self.amp.requestCabSynth (state);
+                           self.refreshIr (true);
+                       };
                        if (r >= pickDozen && r < pickDozen + (int) twelve.size())
-                           self.amp.requestCabSynth (twelve[(size_t) (r - pickDozen)].state);
+                           pick ({ Pick::dozen, r - pickDozen, {} }, twelve[(size_t) (r - pickDozen)].state);
                        else if (r >= pickAll && r < pickAll + (int) whole.size())
-                           self.amp.requestCabSynth (whole[(size_t) (r - pickAll)].state);
+                           pick ({ Pick::all, r - pickAll, {} }, whole[(size_t) (r - pickAll)].state);
                        else if (r >= pickOwn && r < pickOwn + (int) own.size())
-                           self.amp.requestCabSynth (own[(size_t) (r - pickOwn)].state);
+                           pick ({ Pick::own, r - pickOwn, own[(size_t) (r - pickOwn)].file }, own[(size_t) (r - pickOwn)].state);
                        else if (r == edit)
                            self.editCabinet();
                        else if (r == saveAs)
@@ -737,8 +791,11 @@ void CabinetBlock::saveCabinetAs()
     felitronics::appkit::textPrompt ("Save the cabinet as", initial,
                                      [safe = juce::Component::SafePointer<CabinetBlock> (this), state = playing.state, &list = cabs] (juce::String name)
                                      {
-                                         if (list.save (name, state) != juce::File() && safe != nullptr)
+                                         if (const auto file = list.save (name, state); file != juce::File() && safe != nullptr)
+                                         {
+                                             safe->lastPick = { Pick::own, -1, file };   // what plays is now that one
                                              safe->refreshIr (true);
+                                         }
                                      });
 }
 
@@ -747,8 +804,14 @@ void CabinetBlock::renameCabinet (const juce::File& file, const juce::String& na
     felitronics::appkit::textPrompt ("Rename the cabinet", name,
                                      [safe = juce::Component::SafePointer<CabinetBlock> (this), file, &list = cabs] (juce::String renamed)
                                      {
-                                         if (list.rename (file, renamed) && safe != nullptr)
-                                             safe->refreshIr (true);
+                                         if (! list.rename (file, renamed) || safe == nullptr)
+                                             return;
+                                         // Renamed is a new file: the one picked follows it, by the name it took.
+                                         if (safe->lastPick.list == Pick::own && safe->lastPick.file == file)
+                                             for (const auto& c : list.own())
+                                                 if (c.name == device::Cabinets::cleaned (renamed))
+                                                     safe->lastPick.file = c.file;
+                                         safe->refreshIr (true);
                                      });
 }
 
