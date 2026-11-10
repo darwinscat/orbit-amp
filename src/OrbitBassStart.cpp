@@ -22,8 +22,12 @@ namespace
         them — and their switches ON, so one added plays at once. The gate stays off, as every amp's does. Its cuts are
         its own stage, not the cabinet's (params::bassHpf: the HPF at 5, a low B whole; the LPF at FINGERS), so the
         cabinet's own stay off and its IR plays as it was shot. The pack it opens on is the first of its list, which is
-        its only one (CMakeLists.txt: ORBITBASS_SET). */
-    void bassOpening (const Product&, params::Opening&) {}
+        its only one (CMakeLists.txt: ORBITBASS_SET). MIDDLE's frequency opens at 1 kHz, as the walker's (the owner,
+        10.11) — INIT and a double click on MID FREQ bring it back there. */
+    void bassOpening (const Product&, params::Opening& o)
+    {
+        o.midHz = 1000.0f;
+    }
 
     /** WHETHER THE PACK A FRESH ORBITBASS OPENS ON — the first of its list — HAS SWITCHES OF ITS TONE, the SGT-DI's
         ULTRA LO and ULTRA HI: tones of positions that carry bands (core::CapturedBlock::switchCarriesBands), no sweep.

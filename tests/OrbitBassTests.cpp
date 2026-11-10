@@ -668,7 +668,9 @@ int ORBITAMP_GATE_MAIN()
         check (value (a, params::compOn) > 0.5f && juce::approximatelyEqual (value (a, params::compAmount), 0.75f)
                    && juce::roundToInt (value (a, params::compAttack)) == 1 && juce::roundToInt (value (a, params::compRelease)) == 0
                    && juce::roundToInt (value (a, params::compCharacter)) == params::compCharacters.indexOf ("Opto"),
-               "COMP on, BLEND at three quarters (the owner, 10.11), MED attack, AUTO release, OPTO");        check (juce::approximatelyEqual (value (a, params::ampBlend), 1.0f) && juce::approximatelyEqual (value (a, params::ampBlendHz), 150.0f)
+               "COMP on, BLEND at three quarters (the owner, 10.11), MED attack, AUTO release, OPTO");
+        check (juce::approximatelyEqual (value (a, params::eqBellHz (0, 0).toRawUTF8()), 1000.0f),
+               "MIDDLE's frequency at 1 kHz, as the walker's (the owner, 10.11)");        check (juce::approximatelyEqual (value (a, params::ampBlend), 1.0f) && juce::approximatelyEqual (value (a, params::ampBlendHz), 150.0f)
                    && value (a, params::ampBlendInvert) < 0.5f,
                "the AMP's BLEND 100 % (the capture alone), its crossover at 150 Hz, not inverted");
         check (juce::approximatelyEqual (value (a, params::cabMix), 70.0f), "the CAB's MIX 70 %: 30 % DI");

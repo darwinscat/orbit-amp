@@ -739,8 +739,8 @@ struct Opening
     float compAmount = 0.5f;
     bool  bassLpfOn  = false;
 
-    // WHERE THE AMP'S MIDDLE OPENS: its console's first bell's frequency — 400 Hz on every amp but the one that says
-    // otherwise (RedGrooveBass's MID FREQ, at 1 kHz: the owner, 02.11). A default, not a hold: the player moves it, and
+    // WHERE THE AMP'S MIDDLE OPENS: its console's first bell's frequency — 400 Hz on every amp but the basses, whose MID
+    // FREQ opens at 1 kHz (RedGrooveBass's: the owner, 02.11; OrbitBass's: 10.11). A default, not a hold: the player moves it, and
     // INIT and a double click bring it back here (engineDefault leaves it its declared default).
     float midHz = 400.0f;
 
