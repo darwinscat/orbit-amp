@@ -10,5 +10,6 @@ Amps: all
   turning disc on AmberPawAmp's dial; the note's name stays, the stripes turn green in tune, and dim under a HUM
   label as the needle does. A new note's stripes appear once the strobe has locked on to it — about a quarter of a
   second after the pluck, half a second on a bass's low E — and go as soon as the string is damped, so they never
-  jump about on noise. A quiet note shows as long as the tuner names it, however far off it is. Choose it in SETUP › TUNER › DISPLAY, or in the tuner's right-click menu under Display.
-  The needle stays the default, and is exactly as it was.
+  jump about on noise. A quiet note shows as long as the tuner names it, however far off it is. Choose it in the
+  tuner's right-click menu under Display, or in OrbitAmp's SETUP, TUNER, DISPLAY. The needle stays the default, and
+  is exactly as it was.

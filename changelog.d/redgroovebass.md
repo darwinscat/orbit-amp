@@ -12,4 +12,4 @@ Amps: RedGrooveBass
   drop-A's A0, UNDO, REDO and the A B C D registers, as every amp of the family has them; its presets and settings
   are its own.
 - **The forest answers the bass.** The walker strides in its gear and in time with the host's tempo, and the forest
-  lights with every note — on from the start on this amp (LANDSCAPE › Lit by the bass, in the settings menu).
+  lights with every note — on from the start on this amp (LANDSCAPE, Lit by the bass, in the settings menu).
