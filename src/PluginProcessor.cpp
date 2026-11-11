@@ -850,6 +850,12 @@ bool AmpProcessor::chooseCabFile (const juce::File& file)
 AmpProcessor::~AmpProcessor()
 {
     apvts.state.removeListener (this);
+
+    // A cabinet still being drawn finishes before anything goes: the pool's own destructor waits five seconds and then
+    // kills the thread by force, and a host that closes amps just made — five rendering at once on a slow machine — had
+    // the renderer's own threads left running into freed memory. Waiting takes a render's time at most; the queued ones
+    // are dropped.
+    cabSynthPool.removeAllJobs (true, -1);
 }
 
 AmpProcessor::DrawnCab AmpProcessor::renderDrawn (const cabir::State& state, bool live)
