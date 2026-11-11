@@ -1768,6 +1768,9 @@ gate_in_binary(input-level       tests/InputLevelTests.cpp)
 # The boost's level: while an amp's boost is on — OrbitAmp's BOOST key, the rovers' TURBO, the cockpit's TURBO
 # push — the amp leaves that much louder, ramped, exactly, ahead of the limiter; with it off not at all.
 gate_in_binary(boost-level       tests/BoostLevelTests.cpp)
+# The amp's bypass: the host's, in no state; out, the input as it came in and as late, bit for bit on both planes;
+# back in, what an amp never taken out plays.
+gate_in_binary(bypass            tests/BypassTests.cpp)
 
 # AN AMP'S GATES, the same two for the cockpit and every rover, run as that amp — what tells one amp from
 # another, the gates read in tests/AmpGate.h. Its channels with no window at all — as many as CHANNELS says,

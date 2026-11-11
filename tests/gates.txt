@@ -89,3 +89,6 @@ input-level        orbitamp_gates
 
 # The boost's level: louder by it while each amp's boost is on, ramped and exact, ahead of the limiter; off, bit for bit.
 boost-level        orbitamp_gates
+
+# The amp's bypass: the host's and in no state; out, the input as it came in, as late, bit for bit; back in, the amp.
+bypass             orbitamp_gates

@@ -32,6 +32,7 @@
 #include "worlds/Ear.h"
 
 #include <felitronics/analysis/RollingSpectrumTap.h>
+#include <felitronics/core/DryAligner.h>
 #include <felitronics/chorus/BassChorus.h>
 #include <felitronics/envfilter/EnvelopeFilter.h>
 #include <felitronics/octave/Octaver.h>
@@ -261,6 +262,13 @@ public:
         opened from it was reading back whatever the last host had shrunk it to, and once anything
         shrank it the value stuck. A wanted size and a current size are two different facts. */
     static constexpr float preferredScale = 1.0f;
+
+    /** THE AMP'S BYPASS (the owner, 11.11): the whole amp out, the guitar through as it came in. A parameter of the
+        processor's own and not of the state: a host's bypass is this one (getBypassParameter), and no preset, register,
+        undo or session carries it — a preset recalled never takes the amp out, and a window opens with the amp in. The
+        faces' switch: the power sign on OrbitAmp's footer, the POWERED BY plate in every cockpit. */
+    juce::AudioParameterBool& bypassParameter() noexcept { return *bypass; }
+    juce::AudioProcessorParameter* getBypassParameter() const override { return bypass; }
 
     /** The captured blocks, addressed by number, so the aim, the name pump and the seed can all walk
         them the same way. There is one — the preamp — and the walk stays a walk, so a block that
@@ -1745,6 +1753,13 @@ private:
         so a link asks for its own by name. */
     core::BypassFade         blockFade[params::numChainRows];
     juce::AudioBuffer<float> fadeDry;
+
+    /** The amp's bypass (bypassParameter): the parameter, the processor's (addParameter); the input as it came in, held
+        as late as the amp makes everything else (DryAligner, its planes taken as `bypassIn`); and its crossfade. */
+    juce::AudioParameterBool*     bypass = nullptr;
+    felitronics::core::DryAligner bypassDry;
+    core::BypassFade              bypassFade;
+    int                           bypassIn = 1;
 
     /** One per captured block: the delay a BYPASSED block still has to carry, so the chain does
         not arrive early the moment somebody stands a rate-matching model down. Only runs when the

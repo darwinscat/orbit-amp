@@ -121,6 +121,10 @@ AmpProcessor::AmpProcessor (const Product& product)
                  .currentVersion = ORBITAMP_VERSION,
                  .settings       = [this] { return updateStore->file(); } })
 {
+    // The amp's bypass: the processor's own, in no state (bypassParameter).
+    bypass = new juce::AudioParameterBool (juce::ParameterID { "bypass", 1 }, "Bypass", false);
+    addParameter (bypass);
+
     for (auto& order : blockSpectrumOrder)
         order.store (eqSpectrumOrder);
     for (auto& value : midiControl)
@@ -1519,6 +1523,11 @@ void AmpProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
         blockFade[(size_t) i].prepare (sampleRate);
         blockFade[(size_t) i].snapTo (linkWorks ((params::ChainRow) i));
     }
+
+    // The bypass's dry: room for half a second of the amp's latency, far past any it reports.
+    bypassDry.prepare (2, juce::jmax (1, samplesPerBlock), (int) std::ceil (sampleRate * 0.5) + juce::jmax (1, samplesPerBlock));
+    bypassFade.prepare (sampleRate);
+    bypassFade.snapTo (! bypass->get());
     // The bass's DELAY and REVERB fade on their place in the strip, not on their switch: standing by, they ring out.
     if (ownProduct.chain == Chain::bass)
         for (const auto row : { params::rowDelay, params::rowReverb })
@@ -2408,6 +2417,12 @@ void AmpProcessor::processChunk (juce::AudioBuffer<float>& buffer)
     // playing is a loop you cannot judge anything by.
     demo.fill (buffer);
 
+    // THE BYPASS'S DRY (bypassParameter): the input as it came in — the loop standing in for it included, and nothing of
+    // the amp's on it, not even the hum taken off — held as late as the amp makes everything else, so the two cross over
+    // aligned and a host's compensation holds through it. Taken every block, so it is warm whenever it is asked for.
+    bypassIn = juce::jlimit (1, 2, juce::jmin (buffer.getNumChannels(), getTotalNumInputChannels()));
+    bypassDry.advance (buffer.getArrayOfReadPointers(), bypassIn, buffer.getNumSamples(), getLatencySamples());
+
     // THE HUM COMES OFF BEFORE ANYTHING ELSE TOUCHES THE INPUT — the trim included. Mains hum is in
     // the signal the interface hands over, at the level the interface hands it over at; a stage after
     // the trim would hear a different hum every time the INPUT lever moved, or a preset moved it, and
@@ -3031,6 +3046,28 @@ void AmpProcessor::processChunk (juce::AudioBuffer<float>& buffer)
         // SPACE the copy was made at the seam, and there is nothing left to copy.)
         for (int ch = nchBack; ch < numChannels; ++ch)
             buffer.copyFrom (ch, 0, buffer, 0, 0, numSamples);
+
+        // THE BYPASS: the amp out, the input through as it came in and as late (bypassDry), over BypassFade's fifteen
+        // milliseconds. The amp goes on playing under it — the tuner listening, every stage warm — so coming back is the
+        // fade and nothing else. A mono input goes out on every plane. Before the tuner's MUTE, which silences it too.
+        {
+            const bool works = ! bypass->get();
+            const auto span  = bypassFade.advance (numSamples, works);
+            if (span.moving || ! works)
+            {
+                constexpr int maxPlanes = 8;
+                const int planes = juce::jmin (numChannels, maxPlanes);
+                const float* dry[maxPlanes] {};
+                for (int ch = 0; ch < planes; ++ch)
+                    dry[ch] = bypassDry.delayed (ch < bypassIn ? ch : 0);
+
+                if (span.moving)
+                    core::BypassFade::blend (buffer.getArrayOfWritePointers(), dry, planes, numSamples, span);
+                else
+                    for (int ch = 0; ch < planes; ++ch)
+                        juce::FloatVectorOperations::copy (buffer.getWritePointer (ch), dry[ch], numSamples);
+            }
+        }
 
         // The tuner's MUTE, last of all and before the meter reads — silence at the jack is
         // silence on the rail. Ramped over the block like the trims, so muting mid-note is a fade
