@@ -47,6 +47,11 @@ public:
     /** Where the player's own are kept, in the family's folder, made on first look. */
     juce::File folder() const;
 
+    /** WHAT THE PLAYER SAVED IN THE BUILDER APP (the owner, 11.11): its MY PRESETS, by name — this instrument's builder's,
+        `Documents/Darwin's Cat/Orbit Guitar Cab Builder/Presets` or `Orbit Bass Cab Builder`'s, as the app keeps them —
+        read from the folder each time asked; none where the builder never saved one. */
+    std::vector<Cabinet> builderSaves() const;
+
     /** The twelve's slot that `state` is, or -1. */
     int dozenOf (const cabir::State& state) const;
 
@@ -70,6 +75,9 @@ public:
 private:
     explicit Cabinets (CabKind k) : kind (k) {}
     const CabKind kind;
+
+    /** This instrument's cabinets of the presets' files in `dir`, by name. */
+    std::vector<Cabinet> presetsIn (const juce::File& dir) const;
 };
 
 } // namespace orbitamp::device

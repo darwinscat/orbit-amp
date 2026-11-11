@@ -140,8 +140,22 @@ juce::File Cabinets::folder() const
 
 std::vector<Cabinets::Cabinet> Cabinets::own() const
 {
+    return presetsIn (folder());
+}
+
+std::vector<Cabinets::Cabinet> Cabinets::builderSaves() const
+{
+    // Where the builder app keeps its MY PRESETS (cab-ir-generator's app/MainComponent.cpp, presetFolder).
+    return presetsIn (juce::File::getSpecialLocation (juce::File::userDocumentsDirectory)
+                          .getChildFile ("Darwin's Cat")
+                          .getChildFile (kind == CabKind::guitar ? "Orbit Guitar Cab Builder" : "Orbit Bass Cab Builder")
+                          .getChildFile ("Presets"));
+}
+
+std::vector<Cabinets::Cabinet> Cabinets::presetsIn (const juce::File& dir) const
+{
     std::vector<Cabinet> out;
-    for (const auto& file : folder().findChildFiles (juce::File::findFiles, false, "*.toml"))
+    for (const auto& file : dir.findChildFiles (juce::File::findFiles, false, "*.toml"))
     {
         const auto text = file.loadFileAsString();
         // A file of the other builder's in this folder is not this instrument's cabinet.

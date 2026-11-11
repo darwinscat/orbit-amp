@@ -271,7 +271,7 @@ void CabinetBlock::refreshIr (bool force, bool keepTrimWord)
     juce::String shown = choice.isUser() ? choice.name : factoryPlays ? juce::String (params::cabIrNames[choice.factory]) : juce::String (noIr);
     if (synth.valid)   // the dozen's by its number, a player's own by its name, else its box and its mics — the one picked
     {
-        const auto own = cabs.own();
+        const auto own = savedCabinets();
         const auto named = nameOf (whichPlays (synth.state, own), own);
         shown = named.isNotEmpty() ? named : CabWindow::labelOf (synth);
     }
@@ -365,7 +365,8 @@ void CabinetBlock::Step::paint (juce::Graphics& g)
     g.fillPath (t);
 }
 
-juce::PopupMenu CabinetBlock::irMenu (const AmpProcessor& amp, std::vector<juce::File>& files)
+juce::PopupMenu CabinetBlock::irMenu (const AmpProcessor& amp, std::vector<juce::File>& files,
+                                      std::vector<device::Cabinets::Cabinet>* saves)
 {
     const auto choice  = amp.cabChoice();
     const auto library = device::IrLibrary::scan (device::IrLibrary::directory (amp.product().irsFolder()));
@@ -383,13 +384,67 @@ juce::PopupMenu CabinetBlock::irMenu (const AmpProcessor& amp, std::vector<juce:
     // THE TWELVE (the owner, 10.11; the bass's as the guitar's, 11.11): the TOP 12, or the bass's dozen, in place of the
     // shelf, the one that plays ticked.
     juce::PopupMenu menu;
+    const auto& cabinets = device::Cabinets::of (amp.product().chain == Chain::bass ? device::CabKind::bass : device::CabKind::guitar);
     {
-        const auto& cabinets = device::Cabinets::of (amp.product().chain == Chain::bass ? device::CabKind::bass : device::CabKind::guitar);
         const auto& twelve = cabinets.dozen();
         const auto synth = AmpProcessor::cabSynthOf (choice);
         const int plays = synth.valid ? cabinets.dozenOf (synth.state) : -1;
         for (int i = 0; i < (int) twelve.size(); ++i)
             menu.addItem (itemFor (twelve[(size_t) i].name, firstOfTwelve + i, i == plays));
+    }
+
+    // THE BUILDER'S (the owner, 11.11): its menu as the builder app opens it, but for DEFAULT, SAVE AS... and SHOW MY
+    // PRESETS — its presets by style, by style then name, then MY PRESETS, what the player saved there, while there are
+    // any. None of its typical cabinets, which its menu has not either; unticked, as the app's.
+    {
+        const auto& every = cabinets.all();
+        std::vector<int> order;
+        for (int i = 0; i < (int) every.size(); ++i)
+            if (! every[(size_t) i].style.equalsIgnoreCase ("Typical"))
+                order.push_back (i);
+        std::sort (order.begin(), order.end(), [&every] (int a, int b)
+        {
+            const auto& x = every[(size_t) a];
+            const auto& y = every[(size_t) b];
+            return x.style != y.style ? x.style < y.style : x.name < y.name;
+        });
+
+        juce::PopupMenu builder, group;
+        juce::String style;
+        const auto flush = [&]
+        {
+            if (group.getNumItems() > 0)
+                builder.addSubMenu (style.toUpperCase(), group);
+            group = {};
+        };
+        for (const int i : order)
+        {
+            if (every[(size_t) i].style != style)
+            {
+                flush();
+                style = every[(size_t) i].style;
+            }
+            group.addItem (itemFor (every[(size_t) i].name, firstOfBuilder + i, false));
+        }
+        flush();
+
+        auto mine = cabinets.builderSaves();
+        mine.resize (juce::jmin (mine.size(), (size_t) (firstFile - firstOfSaved)));
+        if (! mine.empty())
+        {
+            builder.addSeparator();
+            builder.addSectionHeader ("MY PRESETS");
+            for (size_t i = 0; i < mine.size(); ++i)
+                builder.addItem (itemFor (mine[i].name, firstOfSaved + (int) i, false));
+        }
+        if (saves != nullptr)
+            *saves = std::move (mine);
+
+        if (builder.getNumItems() > 0)
+        {
+            menu.addSeparator();
+            menu.addSubMenu ("BUILDER", builder);
+        }
     }
 
     // The player's files are numbered from firstFile, in the order the tree lists them.
@@ -446,10 +501,11 @@ void CabinetBlock::showIrMenu()
 {
     lookAtLibrary();   // the slider the same list as the menu, at once
     auto files = std::make_shared<std::vector<juce::File>>();
-    auto menu = irMenu (amp, *files);
+    auto saves = std::make_shared<std::vector<device::Cabinets::Cabinet>>();
+    auto menu = irMenu (amp, *files, saves.get());
 
     onfirst::show (menu, this, juce::PopupMenu::Options().withTargetComponent (&ir),
-                        [safe = juce::Component::SafePointer<CabinetBlock> (this), files] (int r)
+                        [safe = juce::Component::SafePointer<CabinetBlock> (this), files, saves] (int r)
                         {
                             if (safe == nullptr || r <= 0)
                                 return;
@@ -459,6 +515,16 @@ void CabinetBlock::showIrMenu()
                                 if ((size_t) (r - firstFile) < files->size())
                                     safe->amp.chooseCabFile ((*files)[(size_t) (r - firstFile)]);
                                 safe->refreshIr (false, true);
+                            }
+                            else if (r >= firstOfSaved)
+                            {
+                                if (const auto i = (size_t) (r - firstOfSaved); i < saves->size())
+                                    safe->pickCabinet ({ Pick::own, -1, (*saves)[i].file }, (*saves)[i].state);
+                            }
+                            else if (r >= firstOfBuilder)
+                            {
+                                if (const auto i = (size_t) (r - firstOfBuilder); i < safe->cabs.all().size())
+                                    safe->pickCabinet ({ Pick::all, (int) i, {} }, safe->cabs.all()[i].state);
                             }
                             else if (r >= firstOfTwelve)
                                 safe->pickAt (r - firstOfTwelve);
@@ -482,6 +548,13 @@ int CabinetBlock::listAt() const
                 return (int) (cabs.dozen().size() + i);
     }
     return -1;
+}
+
+void CabinetBlock::pickCabinet (const Pick& p, const cabir::State& state)
+{
+    lastPick = p;
+    amp.requestCabSynth (state);
+    refreshIr (true);   // one the same as the last changes no sound, and the name must follow all the same
 }
 
 void CabinetBlock::pickAt (int at)
@@ -558,6 +631,14 @@ void CabinetBlock::stepCabinet (int by)
 {
     // The slider that plays: the player's own while one of them does, else the twelve.
     stepList (listAt() >= (int) cabs.dozen().size(), by);
+}
+
+std::vector<device::Cabinets::Cabinet> CabinetBlock::savedCabinets() const
+{
+    auto saved = cabs.own();
+    for (auto& c : cabs.builderSaves())
+        saved.push_back (std::move (c));
+    return saved;
 }
 
 CabinetBlock::Pick CabinetBlock::whichPlays (const cabir::State& state, const std::vector<device::Cabinets::Cabinet>& own) const

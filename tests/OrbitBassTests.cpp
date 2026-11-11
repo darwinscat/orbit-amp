@@ -417,9 +417,26 @@ int ORBITAMP_GATE_MAIN()
             juce::StringArray items;
             const auto menu = CabinetBlock::irMenu (a, files);
             for (juce::PopupMenu::MenuItemIterator it (menu, true); it.next();)
-                if (const auto& item = it.getItem(); ! item.isSectionHeader && ! item.isSeparator && item.subMenu == nullptr)
+                if (const auto& item = it.getItem(); ! item.isSectionHeader && ! item.isSeparator && item.subMenu == nullptr
+                                                         && (item.itemID < CabinetBlock::firstOfBuilder || item.itemID >= CabinetBlock::firstFile))
                     items.add (item.text + (item.isEnabled ? "" : " (off)") + (item.isTicked ? " (ticked)" : ""));
             return items;
+        };
+        // ...ITS BUILDER (the owner, 11.11): the builder app's menu — each style's submenu and how many it holds, then MY
+        // PRESETS and their names.
+        const auto builderOf = [] (const AmpProcessor& a)
+        {
+            std::vector<juce::File> files;
+            const auto menu = CabinetBlock::irMenu (a, files);
+            juce::StringArray said;
+            for (juce::PopupMenu::MenuItemIterator it (menu, false); it.next();)
+                if (const auto& item = it.getItem(); item.text == "BUILDER" && item.subMenu != nullptr)
+                    for (juce::PopupMenu::MenuItemIterator in (*item.subMenu, false); in.next();)
+                        if (const auto& b = in.getItem(); b.subMenu != nullptr)
+                            said.add (b.text + " " + juce::String (b.subMenu->getNumItems()));
+                        else if (! b.isSeparator)
+                            said.add (b.text);
+            return said.joinIntoString (", ");
         };
         // ...ITS TOP THE BASS'S DOZEN (the owner, 11.11: OrbitBass's CAB as OrbitAmp's), the one at `ticked` ticked.
         const auto dozenItems = [] (int ticked)
@@ -479,6 +496,23 @@ int ORBITAMP_GATE_MAIN()
             const auto items = menuOf (*fresh, files);
             check (items.size() == 12 && items.joinIntoString (", ") == dozenItems (0) && files.empty(),
                    "...its IR menu the dozen, the first ticked, no cabinet of the shelf and none of the player's: " + items.joinIntoString (", "));
+
+            // BUILDER: the bass builder's forty by style, and MY PRESETS while the app keeps any of the bass's — a guitar's
+            // in its folder is none.
+            check (builderOf (*fresh) == "BLUES 10, METAL 10, PUNK 10, ROCK 10",
+                   "...and BUILDER, the bass builder's presets by style, no MY PRESETS while it keeps none: " + builderOf (*fresh));
+            const auto saves = juce::File::getSpecialLocation (juce::File::userDocumentsDirectory)
+                                   .getChildFile ("Darwin's Cat/Orbit Bass Cab Builder/Presets");
+            const auto mine = saves.getChildFile ("Mine.toml"), guitars = saves.getChildFile ("Guitars.toml");
+            const auto& selfish = device::Cabinets::of (device::CabKind::guitar).dozen().front();
+            check (saves.createDirectory()
+                       && mine.replaceWithText ("name = \"MY STACK\"\n\n" + juce::String (cabir::toToml (stack.state)))
+                       && guitars.replaceWithText ("name = \"NOT A BASS\"\n\n" + juce::String (cabir::toToml (selfish.state))),
+                   "a preset of the bass builder's own and a guitar's in its MY PRESETS");
+            check (builderOf (*fresh) == "BLUES 10, METAL 10, PUNK 10, ROCK 10, MY PRESETS, MY STACK",
+                   "...BUILDER's MY PRESETS the bass's alone: " + builderOf (*fresh));
+            mine.deleteFile();
+            guitars.deleteFile();
 
             // A SESSION ON NO CABINET — a fresh one's, its cabinet taken off every state in it — keeps none: no IR loads,
             // and the cabinet's share is silent: at the CAB's MIX 70 % the DI's 30 % alone.

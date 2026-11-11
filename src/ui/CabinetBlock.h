@@ -117,8 +117,9 @@ private:
     void stepList (bool own, int by);
 
     /** WHICH OF THE BUILDER'S PLAYS (the owner, 10.11: two the same were both ticked): the one the hand last picked here
-        while it still sounds as picked; else the first the same, the twelve's, all's, then the player's own cabinets — a
-        session or a preset may keep any of them. Its name on the border and its notch on the slider follow it. */
+        while it still sounds as picked; else the first the same, the twelve's, all's, then the player's own cabinets
+        (savedCabinets) — the menu's BUILDER picks any of them, and a session or a preset may keep any. Its name on the
+        border and its notch on the slider follow it. */
     struct Pick
     {
         enum List { none, dozen, all, own } list = none;
@@ -126,6 +127,10 @@ private:
         juce::File file;   // a player's own: its file
     };
     Pick lastPick;
+    void pickCabinet (const Pick&, const cabir::State&);
+    /** The player's own cabinets, by file: the ones kept in `Guitar Cabinets` (`Bass Cabinets`), then the builder app's
+        MY PRESETS (device::Cabinets::builderSaves). */
+    std::vector<device::Cabinets::Cabinet> savedCabinets() const;
     Pick whichPlays (const cabir::State&, const std::vector<device::Cabinets::Cabinet>& own) const;
     juce::String nameOf (const Pick&, const std::vector<device::Cabinets::Cabinet>& own) const;
 
@@ -186,10 +191,15 @@ public:
     const juce::String& shownName() const noexcept { return shownText; }
 
     /** THE IR MENU, as the block opens it (showIrMenu): the product's twelve — the guitar's TOP 12, the bass's dozen —
-        item `firstOfTwelve + i`; then the player's own IRs out of the product's folder of them, item `firstFile + i` for
-        the file `files[i]`. A gate reads it. */
-    static juce::PopupMenu irMenu (const AmpProcessor&, std::vector<juce::File>& files);
+        item `firstOfTwelve + i`; BUILDER, its builder app's menu (the owner, 11.11): its presets by style, item
+        `firstOfBuilder + i` for device::Cabinets::all()[i], and MY PRESETS, item `firstOfSaved + i` for `saves[i]`; then
+        the player's own IRs out of the product's folder of them, item `firstFile + i` for the file `files[i]`. A gate
+        reads it. */
+    static juce::PopupMenu irMenu (const AmpProcessor&, std::vector<juce::File>& files,
+                                   std::vector<device::Cabinets::Cabinet>* saves = nullptr);
     static constexpr int firstOfTwelve = 500;
+    static constexpr int firstOfBuilder = 600;
+    static constexpr int firstOfSaved = 800;
     static constexpr int firstFile = 1000;
 
     /** What the border says where no cabinet plays: a bass amp with no IR of its own. */
