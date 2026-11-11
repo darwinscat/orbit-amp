@@ -310,7 +310,7 @@ FetchContent_MakeAvailable(felitronics_guitar_core)
 # the modules transitively. This is also where the faceplate render kit MOVES once it settles
 # here (see CLAUDE.md — build it here first, move it later).
 # ----------------------------------------------------------------------------
-set(ORBITAMP_APPKIT_TAG "v0.22.0" CACHE STRING "felitronics-appkit release tag (fetched when no local checkout)")
+set(ORBITAMP_APPKIT_TAG "v0.23.0" CACHE STRING "felitronics-appkit release tag (fetched when no local checkout)")
 set(ORBITAMP_APPKIT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../felitronics-appkit"
     CACHE PATH "Local felitronics-appkit checkout (used if present); else the pinned release is fetched")
 if(ORBITAMP_APPKIT_DIR AND EXISTS "${ORBITAMP_APPKIT_DIR}/CMakeLists.txt")
@@ -336,7 +336,7 @@ FetchContent_MakeAvailable(felitronics_appkit)
 # miniature the CAB block draws (cabir::panel, JUCE views in our theme — CabWindow::useOurLook), and the
 # table they read (CABIR_CABINETS). The same code is the cabinets' own app and web page.
 # ----------------------------------------------------------------------------
-set(ORBITAMP_CABIR_TAG "v0.2.0" CACHE STRING "cab-ir-generator release tag (fetched when no local checkout)")
+set(ORBITAMP_CABIR_TAG "v0.4.0" CACHE STRING "cab-ir-generator release tag (fetched when no local checkout)")
 set(ORBITAMP_CABIR_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../cab-ir-generator"
     CACHE PATH "Local cab-ir-generator checkout (used if present); else the ref is fetched")
 if(ORBITAMP_CABIR_DIR AND EXISTS "${ORBITAMP_CABIR_DIR}/CMakeLists.txt")
