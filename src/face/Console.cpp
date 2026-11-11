@@ -2223,7 +2223,12 @@ void Console::mouseDown (const juce::MouseEvent& e)
     if (e.originalComponent == &stage && pictureRightClicked (at))
         return;
     if (cabName.getBounds().contains (at))
-        showCabs();
+    {
+        if (channels.lineup().drawnCabinets)   // the twelve and CABINET OFF, as on CAB itself: no window (Lineup::drawnCabinets)
+            showDrawnCabs();
+        else
+            showCabs();
+    }
     else if (inMeter.getBounds().contains (at))
         showInputMenu();
     else if (outMeter.getBounds().contains (at))
