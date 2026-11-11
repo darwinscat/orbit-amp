@@ -421,6 +421,15 @@ int ORBITAMP_GATE_MAIN()
                     items.add (item.text + (item.isEnabled ? "" : " (off)") + (item.isTicked ? " (ticked)" : ""));
             return items;
         };
+        // ...ITS TOP THE BASS'S DOZEN (the owner, 11.11: OrbitBass's CAB as OrbitAmp's), the one at `ticked` ticked.
+        const auto dozenItems = [] (int ticked)
+        {
+            juce::StringArray items;
+            const auto& dozen = device::Cabinets::of (device::CabKind::bass).dozen();
+            for (size_t i = 0; i < dozen.size(); ++i)
+                items.add (dozen[i].name + ((int) i == ticked ? " (ticked)" : ""));
+            return items.joinIntoString (", ");
+        };
 
         // A FRESH ONE OPENS ON THE BASS'S DOZEN'S FIRST, 1: 8x10 STACK, drawn (the owner, 06.11) — never on no cabinet and
         // never on a guitar's: rendered on the worker the first time in a process and landing on the message thread, no
@@ -468,8 +477,8 @@ int ORBITAMP_GATE_MAIN()
 
             std::vector<juce::File> files;
             const auto items = menuOf (*fresh, files);
-            check (items.joinIntoString (", ") == "No IRs yet (off)" && files.empty(),
-                   "...its IR menu no cabinet of the shelf, a line that says there is none of the player's: " + items.joinIntoString (", "));
+            check (items.size() == 12 && items.joinIntoString (", ") == dozenItems (0) && files.empty(),
+                   "...its IR menu the dozen, the first ticked, no cabinet of the shelf and none of the player's: " + items.joinIntoString (", "));
 
             // A SESSION ON NO CABINET — a fresh one's, its cabinet taken off every state in it — keeps none: no IR loads,
             // and the cabinet's share is silent: at the CAB's MIX 70 % the DI's 30 % alone.
@@ -532,8 +541,10 @@ int ORBITAMP_GATE_MAIN()
 
             std::vector<juce::File> files;
             const auto items = menuOf (*fresh, files);
-            check (items.joinIntoString (", ") == "Fixture 1 (ticked), Fixture 2" && files.size() == 2 && files[0] == first && files[1] == second,
-                   "...its CAB menu the two of `Bass IRs`, the first ticked, and nothing of the shelf's or of `IRs`: " + items.joinIntoString (", "));
+            check (items.joinIntoString (", ") == dozenItems (-1) + ", Fixture 1 (ticked), Fixture 2" && files.size() == 2
+                       && files[0] == first && files[1] == second,
+                   "...its CAB menu the dozen, then the two of `Bass IRs`, the first ticked, and nothing of the shelf's or of `IRs`: "
+                       + items.joinIntoString (", "));
 
             // A HOST'S LANE over the shelf's numbers lets the player's pick go, and plays the bass's own again.
             check (fresh->chooseCabFile (second) && fresh->cabChoice().name == "Fixture 2", "...a pick of the second plays it");

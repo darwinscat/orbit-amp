@@ -41,15 +41,13 @@ public:
     ~CabinetBlock() override;
 
     /** The editor's LEFT and RIGHT (the owner, 08.11: to hear cabinets one after another): the one before or after
-        the cabinet that plays, round the list it is in. The guitar's (the owner, 10.11): the slider that plays, the TOP 12
-        or the player's own IRs as the IR editor lists them (stepList). The bass's: a file of the player's own among its folder's IRs as
-        the menu lists them, one of the builder's in the twelve, in all of them or in the player's own, a factory IR
-        among the ones the product plays. */
+        the cabinet that plays, round the list it is in — the slider that plays (the owner, 10.11), the twelve or the
+        player's own IRs as the IR editor lists them (stepList). */
     void stepCabinet (int by);
 
-    /** OrbitAmp's CAB takes IRs dropped on it (the owner, 10.11): a file, a folder of them or a zip, into the player's
-        own `IRs`, as the IR editor's + does — on the slider and in the editor after the twelve at once, the first of
-        them playing. The bass's takes none. */
+    /** The CAB takes IRs dropped on it (the owner, 10.11; OrbitBass's too, 11.11): a file, a folder of them or a zip,
+        into the player's own `IRs` (the bass's `Bass IRs`), as the IR editor's + does — on the slider and in the editor
+        after the twelve at once, the first of them playing. */
     bool isInterestedInFileDrag (const juce::StringArray&) override;
     void fileDragEnter (const juce::StringArray&, int, int) override;
     void fileDragExit (const juce::StringArray&) override;
@@ -70,10 +68,8 @@ private:
         milliseconds across the swap. The timer never asks: what it finds is a recall. */
     void refreshIr (bool force = false, bool keepTrimWord = false);
 
-    /** The IR list: the shelf as one submenu per cabinet, each opening on a line that says what
-        its IRs are; below them, when the library holds any of the player's own, the library as its
-        folder tree. Opened from the block's name — the bass's from its MY IRS under the picture (`from`). */
-    void showIrMenu (juce::Component* from = nullptr);
+    /** The IR list (irMenu), opened from the block's name. */
+    void showIrMenu();
 
     juce::String shownIr;   // CabChoice::identity + "|" + name of what the face last showed
     juce::String shownText; // ...and the name it showed for it (shownName)
@@ -95,28 +91,8 @@ private:
     struct BassRow;
     std::unique_ptr<BassRow> bassRow;
 
-    /** OrbitBass's cabinets, drawn (ui/CabPicker.h), in a window over the face (ui/CabWindow.h) — the block is too narrow
-        for them beside a delay and a reverb — on the player's own alone (the owner, 06.11): EDIT… on one keeps every
-        change in its file; the dozen's, fixed, and one of no name are edited as a copy, NEW FROM… naming it at once,
-        "2x10 GUTTER COPY 01" (the owner, 10.11). */
-    void editCabinet();
-    void newCabinet();
-    void editIn (const juce::File& own);
-
-    /** OrbitBass's row under the picture, where the guitar's trim stands (the owner, 06.11): the bass's dozen on a slider
-        (CabinetSlots), CABINETS — the dozen by name, the player's own, EDIT… and SAVE AS… — and MY IRS (the player's
-        own IRs, while the library holds any); the door whose cabinet plays in the block's orange. The name on the
-        border says what plays: the dozen's by its number, "7: 1x15 THUMP", a player's own by its name. */
-    struct Door final : public juce::Component
-    {
-        juce::String text;
-        bool lit = false;
-        std::function<void()> onOpen;
-        int idealWidth() const;
-        void paint (juce::Graphics&) override;
-        void mouseDown (const juce::MouseEvent&) override { if (onOpen) onOpen(); }
-    };
-    Door factoryIrs, myIrs;     // factoryIrs: CABINETS
+    /** The twelve on a slider (CabinetSlots), in the row where the guitar's trim stood. The name on the border says what
+        plays: the twelve's by its number, "7: 1x15 THUMP", a player's own IR by its name. */
     CabinetSlots slots;
 
     /** The slider's two steps (the owner, 10.11): a small triangle at each end of it, the cabinet before and the one
@@ -133,17 +109,16 @@ private:
     Step stepBack, stepOn;
     static constexpr int stepW = 16;
 
-    /** OrbitAmp's two sliders (the owner, 10.11): the TOP 12 on `slots` between the cuts, the player's own IRs on `ownSlots`
-        over them while there are any. The one whose list plays shows its cap; a hand on the other goes there. LEFT and
+    /** Two sliders (the owner, 10.11; OrbitBass's as OrbitAmp's, 11.11): the twelve on `slots` — the guitar's between its
+        cuts — the player's own IRs on `ownSlots` over them while there are any. The one whose list plays shows its cap; a hand on the other goes there. LEFT and
         RIGHT step the one that plays, each slider's steps its own (stepList). */
     CabinetSlots ownSlots;
     Step ownBack, ownOn;
     void stepList (bool own, int by);
 
-    /** WHICH OF THE BUILDER'S PLAYS (the owner, 10.11: two the same were both ticked, and EDIT… of a fresh copy made
-        another): the one the hand last picked here — the twelve's, all's or the player's own, by its slot or its file —
-        while it still sounds as picked; else the first the same, the twelve's, all's, then the player's own. Its name on
-        the border, its tick in CABINETS, its notch on the slider and what EDIT… opens all follow it. */
+    /** WHICH OF THE BUILDER'S PLAYS (the owner, 10.11: two the same were both ticked): the one the hand last picked here
+        while it still sounds as picked; else the first the same, the twelve's, all's, then the player's own cabinets — a
+        session or a preset may keep any of them. Its name on the border and its notch on the slider follow it. */
     struct Pick
     {
         enum List { none, dozen, all, own } list = none;
@@ -154,45 +129,31 @@ private:
     Pick whichPlays (const cabir::State&, const std::vector<device::Cabinets::Cabinet>& own) const;
     juce::String nameOf (const Pick&, const std::vector<device::Cabinets::Cabinet>& own) const;
 
-    void showCabinetsMenu();
-    void saveCabinetAs();
-    void renameCabinet (const juce::File&, const juce::String& name);
     int libraryLook = 0;   // timer ticks to the next look at whether the library holds any IRs
     void lookAtLibrary();
 
-    /** THE GUITAR'S LIST (the owner, 10.11: "в CAB остаются эти 12 и свои IR"): the TOP 12, then every IR of the player's
-        own in the IR editor's order — the twelve on one slider and the player's on another (ownSlots), and both in the
-        menu on the name. No CABINETS, no window, none of the forty and none of the shelf: the builder app edits cabinets,
-        and one made there comes here as an IR. `ownIrs` is the library as last looked at (lookAtLibrary). */
+    /** THE LIST (the owner, 10.11: "в CAB остаются эти 12 и свои IR"; the bass's as the guitar's, 11.11): the twelve, then
+        every IR of the player's own in the IR editor's order — the twelve on one slider and the player's on another
+        (ownSlots), and both in the menu on the name. No CABINETS, no window, none of the builder's others and none of the
+        shelf: the builder app edits cabinets, and one made there comes here as an IR. `ownIrs` is the library as last
+        looked at (lookAtLibrary). */
     std::vector<juce::File> ownIrs;
-    int  guitarAt() const;      // the place of the one that plays in that list, -1 for none of it
-    void pickGuitar (int at);
+    int  listAt() const;        // the place of the one that plays in that list, -1 for none of it
+    void pickAt (int at);
     bool dropOver = false;      // IRs held over the block
-
-    /** OrbitBass: a click on the picture while one of its cabinets plays is EDIT… — the picture is that cabinet's. A drag or a right click is the picture's own. Declared before the picture, so it outlives it. */
-    struct PictureClick final : public juce::MouseListener
-    {
-        std::function<void()> onClick;
-        void mouseUp (const juce::MouseEvent& e) override
-        {
-            if (onClick != nullptr && e.mouseWasClicked() && ! e.mods.isPopupMenu())
-                onClick();
-        }
-    };
-    PictureClick pictureClick;
 
     VoicingSelector ir;
     felitronics::appkit::IrWaveView wave;
 
-    /** OrbitBass: the cabinet that plays and its mics, small, over the picture's right — where a bass cabinet's IR is only
-        its tail (CabPicker::paintSketch). Clicks go through it to the picture; none while an IR of the player's own plays. */
+    /** The cabinet that plays, over the picture's right — where a cabinet's IR is only its tail. Clicks go through it to
+        the picture; none while an IR of the player's own plays. */
     struct Sketch final : public juce::Component
     {
         int cab = -1;
         CabPicker::Setup setup;
-        /** OrbitAmp's (the owner, 10.11): the box alone at the picture's right, as tall as the picture, its mics twice the
-            size, a little see-through — its line under the picture short ("100ms 48/24"), at the left, leaving the right
-            free to the floor. */
+        /** The box alone at the picture's right, as tall as the picture, its mics twice the size, a little see-through (the
+            owner, 10.11; OrbitBass's too, 11.11) — its line under the picture short ("100ms 48/24"), at the left, leaving
+            the right free to the floor. Else the box and its mics small (CabPicker::paintSketch). */
         bool boxOnly = false;
         Sketch() { setInterceptsMouseClicks (false, false); setBufferedToImage (true); }
         void paint (juce::Graphics& g) override
@@ -224,10 +185,9 @@ public:
         (a gate reads it). */
     const juce::String& shownName() const noexcept { return shownText; }
 
-    /** THE IR MENU, as the block opens it (showIrMenu): a bass amp's the shelf it plays, a submenu for each of its
-        folders, item `1 + number`; a guitar amp's the TOP 12 instead, item `firstOfTwelve + i`; then the player's own IRs
-        out of the product's folder of them, item `firstFile + i` for the file `files[i]`. A product with none offers a
-        line that says so. A gate reads it. */
+    /** THE IR MENU, as the block opens it (showIrMenu): the product's twelve — the guitar's TOP 12, the bass's dozen —
+        item `firstOfTwelve + i`; then the player's own IRs out of the product's folder of them, item `firstFile + i` for
+        the file `files[i]`. A gate reads it. */
     static juce::PopupMenu irMenu (const AmpProcessor&, std::vector<juce::File>& files);
     static constexpr int firstOfTwelve = 500;
     static constexpr int firstFile = 1000;
