@@ -9,7 +9,8 @@
                 "serial_number": "21SGD2V7522000062", "designed_in": "United States",
                 "made_in": "China" },
       "tone_type": "edge", "voicing": "od",
-      "input_db": -4.0,
+      "input_db": -20.0,
+      "output_db": -3.0,
       "controls": [
         { "name": "Voice", "role": "generic", "values": ["SVT", "B15"] },
         { "name": "Grit", "role": "gain", "sweep": 300,

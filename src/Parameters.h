@@ -319,9 +319,9 @@ enum class StereoMode { mono, stereo, stereoSpace };
 
 /** TEMPORARY — the audition loops, in the order the player offers them. Default is the first.
     The site's demo loops, the same takes under the same names and in its order: a guitar amp's, and a bass amp's own —
-    the bass DI riffs Cab IR Generator plays, under its names (the owner, 06.11).
+    the owner's clean bass takes, the left of each, in place of the DI riffs Cab IR Generator plays (the owner, 10.11).
 
-    The audio is NOT shipped: it is read at run time from the dev machine's private folder (the bass's in its bass/),
+    The audio is NOT shipped: it is read at run time from the dev machine's private folder (the bass's in its bass-clean/),
     and when that folder is absent the player and its menu entry are absent with it. The binary is the same either way —
     presence of the folder is the whole switch. */
 struct DemoLoops
@@ -340,11 +340,11 @@ inline const DemoLoops& demoLoopsOf (bool bass)
                                       "eleven-light-years-4.wav", "deep-space-is-my-home-1.wav", "deep-space-is-my-home-2.wav",
                                       "cats-hard-day.wav", "i-am-projection.wav", "fifth-dimension.wav" },
                                     "IdeaProjects/orbit-amp/.private/loops" };
-    static const DemoLoops bassLoops { { "Eleven Light Years", "Fifth Dimension 1", "Fifth Dimension 2",
-                                         "Deep Space is My Home 1", "Deep Space is My Home 2", "I am Projection" },
-                                       { "eleven-light-years.wav", "fifth-dimension-1.wav", "fifth-dimension-2.wav",
-                                         "deep-space-is-my-home-1.wav", "deep-space-is-my-home-2.wav", "i-am-projection.wav" },
-                                       "IdeaProjects/orbit-amp/.private/loops/bass" };
+    static const DemoLoops bassLoops { { "Eleven Light Years 1", "Eleven Light Years 2", "Fifth Dimension",
+                                         "Deep Space is My Home", "I am Projection" },
+                                       { "eleven-light-years-1.wav", "eleven-light-years-2.wav", "fifth-dimension.wav",
+                                         "deep-space-is-my-home.wav", "i-am-projection.wav" },
+                                       "IdeaProjects/orbit-amp/.private/loops/bass-clean" };
     return bass ? bassLoops : guitar;
 }
 
@@ -731,17 +731,23 @@ struct Opening
     bool  delayOn  = true;
     bool  reverbOn = true;
 
-    // THE BASS'S OWN, where a product opens them elsewhere than the engine: all of the signal through COMP, and the LPF
-    // on — the walker's held (channels::Lineup::pinned, which channels::Engine::opening reads into these), OrbitBass's LPF
-    // where its pack has switches of its tone (OrbitBassStart.cpp). Declared by addBassParameters, which the product hands
-    // this Opening; engineDefault leaves them their declared defaults.
+    // THE BASS'S OWN, where a product opens them elsewhere than the engine: three quarters of the signal through COMP on
+    // both basses (the owner, 10.11), and the LPF on — the walker's held (channels::Lineup::pinned, which
+    // channels::Engine::opening reads into these), OrbitBass's opening there and its LPF where its pack has switches of
+    // its tone (OrbitBassStart.cpp). Declared by addBassParameters, which the product hands this Opening; engineDefault
+    // leaves them their declared defaults.
     float compAmount = 0.5f;
     bool  bassLpfOn  = false;
 
-    // WHERE THE AMP'S MIDDLE OPENS: its console's first bell's frequency — 400 Hz on every amp but the one that says
-    // otherwise (RedGrooveBass's MID FREQ, at 1 kHz: the owner, 02.11). A default, not a hold: the player moves it, and
+    // WHERE THE AMP'S MIDDLE OPENS: its console's first bell's frequency — 400 Hz on every amp but the basses, whose MID
+    // FREQ opens at 1 kHz (RedGrooveBass's: the owner, 02.11; OrbitBass's: 10.11). A default, not a hold: the player moves it, and
     // INIT and a double click bring it back here (engineDefault leaves it its declared default).
     float midHz = 400.0f;
+
+    // WHAT THE BOOST ADDS OUT OF THE BOX (boostLevel): the family's +3, AmberPawAmp's 0 (channels::Lineup::boostLevel). A
+    // default, not a hold: the boost's menu moves it, and INIT brings it back here (engineDefault leaves it its declared
+    // default).
+    float boostLevel = boostLevelDefault;
 
     // WHERE ITS PACK'S TONE OPENS: the tone slots where the pack it plays first starts them (device::PackOpening), not
     // where the engine's pack does — a product whose list has no engine pack (the bass's) would have them all at their

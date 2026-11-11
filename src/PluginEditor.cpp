@@ -408,6 +408,23 @@ bool AmpEditor::keyPressed (const juce::KeyPress& key)
             }
             return true;
         }
+
+        // A B C D, or 1 2 3 4: the registers, as their buttons switch them (the owner, 08.11: to hear one against
+        // another) — Ф И С В under a Russian layout, the same keys.
+        static constexpr juce::juce_wchar latin[] { 'A', 'B', 'C', 'D' }, cyrillic[] { 0x0424, 0x0418, 0x0421, 0x0412 };
+        for (int i = 0; i < 4 && i < amp.history.numRegisters(); ++i)
+            if (letter == latin[i] || letter == cyrillic[i] || key.getKeyCode() == '1' + i)
+            {
+                amp.history.switchTo (i);
+                return true;
+            }
+
+        // LEFT and RIGHT: the cabinet before or after the one that plays.
+        if (key.getKeyCode() == juce::KeyPress::leftKey || key.getKeyCode() == juce::KeyPress::rightKey)
+        {
+            faceplate.stepCabinet (key.getKeyCode() == juce::KeyPress::leftKey ? -1 : 1);
+            return true;
+        }
     }
 
     return false;

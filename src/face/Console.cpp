@@ -351,7 +351,7 @@ Console::Console (AmpProcessor& p, std::unique_ptr<Picture> pic, const Places& w
     cabName.setVisible (places.plates);
     cabName.setBounds (box (places.sliderNames[2]));
 
-    sliders[2]->onMenu = [this] { showCabs(); };
+    sliders[2]->onMenu = [this] { if (channels.lineup().drawnCabinets) showDrawnCabs(); else showCabs(); };
     cabinetsChanged();
 
     for (auto* c : std::initializer_list<juce::Component*> { &inFader, &outFader, &inMeter, &outMeter, &tuner })
@@ -1014,7 +1014,9 @@ void Console::exportForWeb (const juce::File& dir)
         for (const int db : params::boostLevels)
             levels.add (db);
         b->setProperty ("levels", levels);
-        b->setProperty ("default", params::boostLevelDefault);
+        // ...and where this amp's stands out of the box: the family's +3, AmberPawAmp's 0 (params::Opening::boostLevel).
+        const auto* r = dynamic_cast<juce::RangedAudioParameter*> (amp.apvts.getParameter (params::boostLevel));
+        b->setProperty ("default", r != nullptr ? r->convertFrom0to1 (r->getDefaultValue()) : params::boostLevelDefault);
         o->setProperty ("boostLevel", juce::var (b));
     }
 
@@ -1534,6 +1536,21 @@ void Console::saveCapture()
 /** A RIGHT CLICK ON CAB — the slider, or the name over it — opens the cabinets' window: all of them by
     name, the build's own and the player's apart, and the keys that add one, hand one out, and rename
     or remove one of the player's. */
+void Console::showDrawnCabs()
+{
+    endTapping();
+
+    juce::PopupMenu menu;
+    menu.addSectionHeader ("CABINET");
+    const bool on = channels.cabinetOn();
+    for (int slot = 0; slot < channels.cabinetSlots(); ++slot)
+        addChoice (menu, channels.slotName (slot), on && slot == channels.cabinetSlot(),
+                   [slot] (Console& c) { c.channels.chooseSlot (slot); c.channels.setCabinetOn (true); c.showChannel(); });
+    menu.addSeparator();
+    addChoice (menu, "CABINET OFF", ! on, [] (Console& c) { c.channels.setCabinetOn (! c.channels.cabinetOn()); c.showCab(); });
+    menu.showMenuAsync (juce::PopupMenu::Options().withMousePosition());
+}
+
 void Console::showCabs()
 {
     endTapping();
@@ -1645,12 +1662,14 @@ void Console::playMidi()
     if (driveTo >= 0)   along (params::preampGain, (float) driveTo / 127.0f);
 
     // A tone knob's middle is where the pack was captured, and 0..127 has no middle: 64 is given it, and
-    // each half of the controller's travel is spread over its own half of the knob's. The three tone
-    // controllers are the first three knobs, whatever the pack calls its tones; a knob the pack has not
-    // names no parameter (Channels::toneOf), and its controller turns nothing.
+    // each half of the controller's travel is spread over its own half of the knob's. Each tone controller
+    // turns the knob of its NAME (Channels::toneNamed) wherever the pack lists it; a pack with no such
+    // tone gives that controller nothing to turn.
+    constexpr Channels::Band bands[] { Channels::Band::bass, Channels::Band::middle, Channels::Band::treble };
     for (int t = 0; t < (int) std::size (toneTo); ++t)
         if (const int v = toneTo[(size_t) t]; v >= 0)
-            along (channels.toneId (t), v <= 64 ? 0.5f * (float) v / 64.0f : 0.5f + 0.5f * (float) (v - 64) / 63.0f);
+            if (const int knob = channels.toneNamed (channels.active(), bands[t]); knob >= 0)
+                along (channels.toneId (knob), v <= 64 ? 0.5f * (float) v / 64.0f : 0.5f + 0.5f * (float) (v - 64) / 63.0f);
 }
 
 /** THE LOAD, ITEMISED — OrbitAmp's window, in the face's colours. Its words are already the face's:
@@ -1726,7 +1745,9 @@ void Console::showChannel()
 
     // CAB's cap, on the cabinet that is playing. (This is first called while the face is still being
     // built, before the plates exist.)
-    if (const int playing = channels.cabinet(); playing >= 0 && sliders[2] != nullptr)
+    if (channels.lineup().drawnCabinets && sliders[2] != nullptr)
+        sliders[2]->setStep (channels.cabinetSlot(), false);   // drawn: the slot the channel stands at
+    else if (const int playing = channels.cabinet(); playing >= 0 && sliders[2] != nullptr)
         sliders[2]->setStep (playing, false);
     showCab();
 }
@@ -2202,7 +2223,12 @@ void Console::mouseDown (const juce::MouseEvent& e)
     if (e.originalComponent == &stage && pictureRightClicked (at))
         return;
     if (cabName.getBounds().contains (at))
-        showCabs();
+    {
+        if (channels.lineup().drawnCabinets)   // the twelve and CABINET OFF, as on CAB itself: no window (Lineup::drawnCabinets)
+            showDrawnCabs();
+        else
+            showCabs();
+    }
     else if (inMeter.getBounds().contains (at))
         showInputMenu();
     else if (outMeter.getBounds().contains (at))
@@ -2335,6 +2361,17 @@ void Console::chooseCab (int step)
 void Console::cabinetsChanged()
 {
     auto& cab = *sliders[2];
+    // DRAWN (Lineup::drawnCabinets, the toys' TOP 12): a position a slot, the cabinet kept where it settles, and back in
+    // the sound with it, as the walker's slider does.
+    if (channels.lineup().drawnCabinets)
+    {
+        cab.setSteps (juce::jmax (2, channels.cabinetSlots()));
+        cab.onStep = [this] (int s) { channels.chooseSlot (s); channels.setCabinetOn (true); showCab(); };
+        cab.setEnabled (true);
+        cab.setAlpha (1.0f);
+        showChannel();
+        return;
+    }
     const int count = channels.cabinets().size();
     const bool choice = count >= 2;
 
@@ -2488,6 +2525,11 @@ void Console::filesDropped (const juce::StringArray& files, int, int)
     orders it. */
 void Console::showCab()
 {
+    if (channels.lineup().drawnCabinets)   // the slot's preset by its number, "1: 4x12 SELFISH GENE"
+    {
+        cabName.set ("CAB", ! channels.cabinetOn() ? juce::String ("OFF") : channels.slotName (channels.cabinetSlot()));
+        return;
+    }
     const auto& cabinets = channels.cabinets();
     const int step = sliders[2] != nullptr ? sliders[2]->getStep() : -1;
     cabName.set ("CAB", ! channels.cabinetOn() ? juce::String ("OFF")      // bypassed: see the cabinets' window

@@ -417,9 +417,35 @@ int ORBITAMP_GATE_MAIN()
             juce::StringArray items;
             const auto menu = CabinetBlock::irMenu (a, files);
             for (juce::PopupMenu::MenuItemIterator it (menu, true); it.next();)
-                if (const auto& item = it.getItem(); ! item.isSectionHeader && ! item.isSeparator && item.subMenu == nullptr)
+                if (const auto& item = it.getItem(); ! item.isSectionHeader && ! item.isSeparator && item.subMenu == nullptr
+                                                         && (item.itemID < CabinetBlock::firstOfBuilder || item.itemID >= CabinetBlock::firstFile))
                     items.add (item.text + (item.isEnabled ? "" : " (off)") + (item.isTicked ? " (ticked)" : ""));
             return items;
+        };
+        // ...ITS BUILDER (the owner, 11.11): the builder app's menu — each style's submenu and how many it holds, then MY
+        // PRESETS and their names.
+        const auto builderOf = [] (const AmpProcessor& a)
+        {
+            std::vector<juce::File> files;
+            const auto menu = CabinetBlock::irMenu (a, files);
+            juce::StringArray said;
+            for (juce::PopupMenu::MenuItemIterator it (menu, false); it.next();)
+                if (const auto& item = it.getItem(); item.text == "BUILDER" && item.subMenu != nullptr)
+                    for (juce::PopupMenu::MenuItemIterator in (*item.subMenu, false); in.next();)
+                        if (const auto& b = in.getItem(); b.subMenu != nullptr)
+                            said.add (b.text + " " + juce::String (b.subMenu->getNumItems()));
+                        else if (! b.isSeparator)
+                            said.add (b.text);
+            return said.joinIntoString (", ");
+        };
+        // ...ITS TOP THE BASS'S DOZEN (the owner, 11.11: OrbitBass's CAB as OrbitAmp's), the one at `ticked` ticked.
+        const auto dozenItems = [] (int ticked)
+        {
+            juce::StringArray items;
+            const auto& dozen = device::Cabinets::of (device::CabKind::bass).dozen();
+            for (size_t i = 0; i < dozen.size(); ++i)
+                items.add (dozen[i].name + ((int) i == ticked ? " (ticked)" : ""));
+            return items.joinIntoString (", ");
         };
 
         // A FRESH ONE OPENS ON THE BASS'S DOZEN'S FIRST, 1: 8x10 STACK, drawn (the owner, 06.11) — never on no cabinet and
@@ -468,8 +494,25 @@ int ORBITAMP_GATE_MAIN()
 
             std::vector<juce::File> files;
             const auto items = menuOf (*fresh, files);
-            check (items.joinIntoString (", ") == "No IRs yet (off)" && files.empty(),
-                   "...its IR menu no cabinet of the shelf, a line that says there is none of the player's: " + items.joinIntoString (", "));
+            check (items.size() == 12 && items.joinIntoString (", ") == dozenItems (0) && files.empty(),
+                   "...its IR menu the dozen, the first ticked, no cabinet of the shelf and none of the player's: " + items.joinIntoString (", "));
+
+            // BUILDER: the bass builder's forty by style, and MY PRESETS while the app keeps any of the bass's — a guitar's
+            // in its folder is none.
+            check (builderOf (*fresh) == "BLUES 10, METAL 10, PUNK 10, ROCK 10",
+                   "...and BUILDER, the bass builder's presets by style, no MY PRESETS while it keeps none: " + builderOf (*fresh));
+            const auto saves = juce::File::getSpecialLocation (juce::File::userDocumentsDirectory)
+                                   .getChildFile ("Darwin's Cat/Orbit Bass Cab Builder/Presets");
+            const auto mine = saves.getChildFile ("Mine.toml"), guitars = saves.getChildFile ("Guitars.toml");
+            const auto& selfish = device::Cabinets::of (device::CabKind::guitar).dozen().front();
+            check (saves.createDirectory()
+                       && mine.replaceWithText ("name = \"MY STACK\"\n\n" + juce::String (cabir::toToml (stack.state)))
+                       && guitars.replaceWithText ("name = \"NOT A BASS\"\n\n" + juce::String (cabir::toToml (selfish.state))),
+                   "a preset of the bass builder's own and a guitar's in its MY PRESETS");
+            check (builderOf (*fresh) == "BLUES 10, METAL 10, PUNK 10, ROCK 10, MY PRESETS, MY STACK",
+                   "...BUILDER's MY PRESETS the bass's alone: " + builderOf (*fresh));
+            mine.deleteFile();
+            guitars.deleteFile();
 
             // A SESSION ON NO CABINET — a fresh one's, its cabinet taken off every state in it — keeps none: no IR loads,
             // and the cabinet's share is silent: at the CAB's MIX 70 % the DI's 30 % alone.
@@ -532,8 +575,10 @@ int ORBITAMP_GATE_MAIN()
 
             std::vector<juce::File> files;
             const auto items = menuOf (*fresh, files);
-            check (items.joinIntoString (", ") == "Fixture 1 (ticked), Fixture 2" && files.size() == 2 && files[0] == first && files[1] == second,
-                   "...its CAB menu the two of `Bass IRs`, the first ticked, and nothing of the shelf's or of `IRs`: " + items.joinIntoString (", "));
+            check (items.joinIntoString (", ") == dozenItems (-1) + ", Fixture 1 (ticked), Fixture 2" && files.size() == 2
+                       && files[0] == first && files[1] == second,
+                   "...its CAB menu the dozen, then the two of `Bass IRs`, the first ticked, and nothing of the shelf's or of `IRs`: "
+                       + items.joinIntoString (", "));
 
             // A HOST'S LANE over the shelf's numbers lets the player's pick go, and plays the bass's own again.
             check (fresh->chooseCabFile (second) && fresh->cabChoice().name == "Fixture 2", "...a pick of the second plays it");
@@ -601,26 +646,38 @@ int ORBITAMP_GATE_MAIN()
                    "the bass's library lists `Bass IRs` alone, the guitar's `IRs` alone: "
                        + names (device::IrLibrary::listed (bassIrs), bassBefore) + " | " + names (device::IrLibrary::listed (guitarIrs), guitarBefore));
 
+            // OrbitAmp's CAB is the TOP 12 and the player's own IRs (the owner, 10.11): no shelf. It opens on the first of the
+            // twelve, drawn on the worker and landing on the message thread — waited for, as above.
             auto guitar = make (products::orbitAmp());
+            for (int i = 0; i < 200 && ! AmpProcessor::cabSynthOf (guitar->cabChoice()).valid; ++i)
+                juce::MessageManager::getInstance()->runDispatchLoopUntil (50);
             std::vector<juce::File> files;
             const auto items = menuOf (*guitar, files);
-            bool shelfAsBefore = items.size() == params::cabIrNames.size() + 1 + guitarBefore.size();
-            for (int i = 0; i < params::cabIrNames.size() && shelfAsBefore; ++i)
-                shelfAsBefore = items.contains (params::cabIrNames[i] + (i == params::cabIrDefault ? " (ticked)" : ""));
-            check (shelfAsBefore && items.contains ("Guitar own") && files.size() == (size_t) (1 + guitarBefore.size())
+            const auto& twelve = device::Cabinets::of (device::CabKind::guitar).dozen();
+            bool twelveFirst = twelve.size() == 12 && items.size() == (int) twelve.size() + 1 + guitarBefore.size();
+            for (size_t i = 0; i < twelve.size() && twelveFirst; ++i)
+                twelveFirst = items[(int) i] == twelve[i].name + (i == 0 ? " (ticked)" : "");
+            bool noShelf = true;
+            for (int i = 0; i < params::cabIrNames.size(); ++i)
+                noShelf = noShelf && ! items.contains (params::cabIrNames[i]) && ! items.contains (params::cabIrNames[i] + " (ticked)");
+            check (twelveFirst && noShelf && items.contains ("Guitar own") && files.size() == (size_t) (1 + guitarBefore.size())
                        && std::find (files.begin(), files.end(), guitarOwn) != files.end(),
-                   "OrbitAmp's CAB menu: the whole shelf as before, RED GIANT ticked, and of the player's `IRs` alone");
+                   "OrbitAmp's CAB menu: the TOP 12, the first ticked, no shelf, and of the player's `IRs` alone: "
+                       + items.joinIntoString (" | "));
 
             IrTreeView bassTree (bass.irsFolder()), guitarTree (products::orbitAmp().irsFolder());
             check (treeRows (bassTree) == 2 + bassRowsBefore && treeRows (guitarTree) == 1 + guitarRowsBefore,
                    "the SETUP tree of each: the bass's two rows, the guitar's one");
 
+            // The cockpit's cabinets drawn — the guitar's TOP 12 (the owner, 08.11) — no file among them, of either folder.
             auto cockpit = make (products::catpitAmp());
-            const auto& cabinets = channels::Engine::of (*cockpit).channels.cabinets();
-            bool bassless = cabinets.contains (guitarOwn);
+            const auto& line = channels::Engine::of (*cockpit).channels;
+            const auto& cabinets = line.cabinets();
+            bool bassless = line.lineup().drawnCabinets ? cabinets.isEmpty() && line.cabinetSlots() == 12 : cabinets.contains (guitarOwn);
             for (const auto& f : cabinets)
                 bassless = bassless && ! f.isAChildOf (bassIrs);
-            check (bassless, "the cockpit's channels list the player's `IRs` and nothing of `Bass IRs` (" + juce::String (cabinets.size()) + ")");
+            check (bassless, "the cockpit's channels: its cabinets the TOP 12, drawn, and nothing of `Bass IRs` ("
+                                 + juce::String (line.cabinetSlots()) + " slots, " + juce::String (cabinets.size()) + " files)");
 
             // WHAT THE BASS TAKES IN, RENAMES AND REMOVES IS IN `Bass IRs`, and only there: its SETUP tree's drop lands
             // there, and its library's root refuses what lies in `IRs`.
@@ -662,11 +719,12 @@ int ORBITAMP_GATE_MAIN()
                "always in — at FINGERS, 4.5 kHz (SLAP at 9.5 kHz)");
         check (value (a, params::cabHpfOn) < 0.5f && value (a, params::cabLpfOn) < 0.5f,
                "the cabinet's own cuts off: its IR plays as it was shot");
-        check (value (a, params::compOn) > 0.5f && juce::approximatelyEqual (value (a, params::compAmount), 0.5f)
+        check (value (a, params::compOn) > 0.5f && juce::approximatelyEqual (value (a, params::compAmount), 0.75f)
                    && juce::roundToInt (value (a, params::compAttack)) == 1 && juce::roundToInt (value (a, params::compRelease)) == 0
                    && juce::roundToInt (value (a, params::compCharacter)) == params::compCharacters.indexOf ("Opto"),
-               "COMP on, BLEND at half, MED attack, AUTO release, OPTO");
-        check (juce::approximatelyEqual (value (a, params::ampBlend), 1.0f) && juce::approximatelyEqual (value (a, params::ampBlendHz), 150.0f)
+               "COMP on, BLEND at three quarters (the owner, 10.11), MED attack, AUTO release, OPTO");
+        check (juce::approximatelyEqual (value (a, params::eqBellHz (0, 0).toRawUTF8()), 1000.0f),
+               "MIDDLE's frequency at 1 kHz, as the walker's (the owner, 10.11)");        check (juce::approximatelyEqual (value (a, params::ampBlend), 1.0f) && juce::approximatelyEqual (value (a, params::ampBlendHz), 150.0f)
                    && value (a, params::ampBlendInvert) < 0.5f,
                "the AMP's BLEND 100 % (the capture alone), its crossover at 150 Hz, not inverted");
         check (juce::approximatelyEqual (value (a, params::cabMix), 70.0f), "the CAB's MIX 70 %: 30 % DI");
@@ -898,13 +956,13 @@ int ORBITAMP_GATE_MAIN()
         check (handed, "OrbitAmp's twin is handed OrbitBass's own pack, the SGT-DI (" + juce::String (bassList.size()) + " in the bass's list)");
 
         // The bass plays no cabinet of the shelf (ITS CABINETS): it opens on the first of the player's `Bass IRs`, which
-        // holds RED GIANT's bytes here — what OrbitAmp opens on at the number the bass's `cab_ir` keeps.
+        // holds RED GIANT's bytes here — what OrbitAmp's shelf holds at the number the bass's `cab_ir` keeps.
         const int  ir    = juce::roundToInt (value (*amp, params::cabIr));
         const auto& his  = AmpProcessor::cabIrBytes (quiet (products::orbitAmp()), ir);
         const auto  ours = amp->cabChoice();
         check (his.data != nullptr && his.size > 0 && ours.isUser() && (int) ours.bytes->getSize() == his.size
                    && std::memcmp (his.data, ours.bytes->getData(), (size_t) his.size) == 0,
-               "...and the cabinet OrbitBass opens on, the first of its `Bass IRs` (" + ours.name + "), what OrbitAmp opens on at the same number ("
+               "...and the cabinet OrbitBass opens on, the first of its `Bass IRs` (" + ours.name + "), what OrbitAmp's shelf holds at the same number ("
                    + juce::String (his.size) + " bytes)");
 
         // An OrbitAmp on the same pack, every other parameter as `from`'s, prepared again once it stands so —
@@ -929,6 +987,9 @@ int ORBITAMP_GATE_MAIN()
                             there->setValueNotifyingHost (ranged->getValue());
                             same->pumpDeviceWork();
                         }
+            // ...on the shelf's IR at the bass's number, whose bytes the bass's `Bass IRs` holds: a fresh OrbitAmp opens on
+            // the TOP 12's first (the owner, 10.11), and the shelf is only ever played as asked.
+            same->chooseCabFactory (juce::roundToInt (value (from, params::cabIr)));
 
             juce::StringArray apart;
             for (auto* p : from.getParameters())
@@ -1300,7 +1361,8 @@ int ORBITAMP_GATE_MAIN()
         }
 
         // EACH CONTROL ONE JOB (the owner, 31.10): the threshold its own (-48..0 dB, -24 by default), the ratio its own
-        // (1.5:1..10:1 since 01.11, 4:1), the knob BLEND (0..1, a half) — the defaults the processor's and the stage's alike.
+        // (1.5:1..10:1 since 01.11, 4:1), the knob BLEND (0..1, three quarters since 10.11) — the defaults the processor's
+        // and the stage's alike.
         struct Curve { double thresholdDb, ratio, uncompressed; };
         const Curve top { BassComp::defaultThresholdDb, BassComp::defaultRatio, 0.0 };
         {
@@ -1308,9 +1370,9 @@ int ORBITAMP_GATE_MAIN()
             auto* rat = amp->apvts.getParameter (params::compRatio);
             check (thr != nullptr && rat != nullptr && thr->getNormalisableRange().start == -48.0f && thr->getNormalisableRange().end == 0.0f
                        && value (*amp, params::compThreshold) == (float) BassComp::defaultThresholdDb && value (*amp, params::compRatio) == (float) BassComp::defaultRatio
-                       && rat->getNormalisableRange().start == 1.5f && rat->getNormalisableRange().end == 10.0f && value (*amp, params::compAmount) == 0.5f
+                       && rat->getNormalisableRange().start == 1.5f && rat->getNormalisableRange().end == 10.0f && juce::approximatelyEqual (value (*amp, params::compAmount), 0.75f)
                        && BassComp::ratioMin == 1.5 && BassComp::ratioMax == 10.0,
-                   "COMP's three: THRESHOLD -48..0 dB at -24, RATIO 1.5:1..10:1 at 4:1 (the parameter's and the stage's), BLEND at half");
+                   "COMP's three: THRESHOLD -48..0 dB at -24, RATIO 1.5:1..10:1 at 4:1 (the parameter's and the stage's), BLEND at three quarters");
         }
 
         // BLEND IS PARALLEL COMPRESSION, SAMPLE-ALIGNED: at half, what comes out is the dry and the all-compressed summed
@@ -5326,7 +5388,7 @@ int ORBITAMP_GATE_MAIN()
                     if (unit->getFont().getHeight() < 13.0f || thr->gripTextHeight < 13.0f || ! blend->hasFaderLook() || fader::textH < 13.0f
                         || CompGraph::textHeight < 13.0f || CompRatioCombo::textHeight < 13.0f)
                         wrong.add ("type under 13 px");
-                    if (thr->gripText() != "-24" || blend->gripText() != "50%")
+                    if (thr->gripText() != "-24" || blend->gripText() != "75%")
                         wrong.add ("the grips read " + thr->gripText() + " and " + blend->gripText());
                     if (thr->typeDecimals < 0)
                         wrong.add ("the threshold's number is not typed");

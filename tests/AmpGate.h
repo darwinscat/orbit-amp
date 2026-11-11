@@ -113,12 +113,17 @@ struct Product
 /** THE PRODUCTS, each as its gate knows it. */
 inline const Product& product()
 {
+    // The toys' cabinets are the guitar's TOP 12, drawn (channels/TopTwelve.h, the owner, 08.11): every channel opens on
+    // its first, the 4x12 SELFISH GENE, until one is said another.
+    static constexpr const char* topFirst = "top12-01-4x12-selfish-gene";
     const auto rover = [] (const char* name, std::vector<Channel> channels, const char* gears)
     {
+        for (auto& c : channels)
+            c.cabinet = topFirst;
         return Product { name, "rover", "ROVER_GATE_OWNS_HOME", std::move (channels), gears, {},
                          "all the product's channels' packs are installed",
                          "every channel's tone knobs are its pack's tones, as many as it lists, knob i its tone i",
-                         "...and every one on the build's RED GIANT" };
+                         "...and every one on the TOP 12's first, drawn: the 4x12 SELFISH GENE" };
     };
 
     static const Product products[] {
@@ -128,10 +133,10 @@ inline const Product& product()
         // Each pack is captures shot at several hours of the gear's own knob, and DRIVE stands on them.
         { "CatpitAmp", "cockpit", "CATPIT_GATE_OWNS_HOME",
           {
-              { "x88-ir-normal-bae8",    "", "Plate",    20.0f, 15.0f, "after INIT the first channel stands on a plate, with a little delay" },
-              { "x88-ir-altered-c14c",   "", "Plate",    15.0f, 8.0f,  "...and so does the second, with half the delay" },
-              { "x88-ir-crunch-2abb",    "", "Plate",    12.0f, 0.0f,  "...the third on a plate too, and no delay" },
-              { "x88-ir-overdrive-0344", "", "Plate",    10.0f, 0.0f,  "...the fourth the same, and none either" },
+              { "x88-ir-normal-bae8",    "", "Plate",    20.0f, 15.0f, "after INIT the first channel stands on a plate, with a little delay", topFirst },
+              { "x88-ir-altered-c14c",   "", "Plate",    15.0f, 8.0f,  "...and so does the second, with half the delay", topFirst },
+              { "x88-ir-crunch-2abb",    "", "Plate",    12.0f, 0.0f,  "...the third on a plate too, and no delay", topFirst },
+              { "x88-ir-overdrive-0344", "", "Plate",    10.0f, 0.0f,  "...the fourth the same, and none either", topFirst },
           },
           nullptr,
           {
@@ -141,7 +146,7 @@ inline const Product& product()
           },
           "all four channels' packs are installed",
           "every channel's tone knobs are its pack's three tones, knob i its tone i",
-          "...and all four on the build's RED GIANT" },
+          "...and all four on the TOP 12's first, drawn: the 4x12 SELFISH GENE" },
 
         // On Mars the Friedman IR-X's two channels, each a gear: Ch1 the CRUNCH and Ch2 the HI-GAIN, its
         // TURBO the same pack with the Boost thrown. Both on a plate, Ch2 with no delay.

@@ -19,6 +19,7 @@
 #include "PluginProcessor.h"
 #include "core/BypassWire.h"
 
+#include "device/Cabinets.h"
 #include "device/FactoryShelf.h"
 
 // OrbitAmp's first start (OrbitAmpStart.cpp) is NOT made from here: it would gather IRs in the machine's
@@ -1181,12 +1182,14 @@ int main()
         report ("...and RED GIANT in Darwin's Cat's own, the Orange's",
                 juce::String (orbitamp::AmpProcessor::cabIrBytes (gateAmp(), orbitamp::params::cabIrDefault).folder) == "Orange PPC212V");
 
-        // The default is a NUMBER, and a number names a cabinet only while the list stands still.
+        // The default is a NUMBER, and a number names a cabinet only while the list stands still: the shelf's, for a
+        // session that keeps none of its own. A fresh one opens on the TOP 12's first, drawn (the owner, 10.11: OrbitAmp's
+        // CAB is the twelve and the player's own IRs) — named by its state at once, its bytes rendered on the worker.
         const auto fresh = std::make_unique<orbitamp::AmpProcessor> (gateAmp());
-        const auto opens = fresh->cabChoice();
-        report ("...and a fresh instance opens on RED GIANT",
-                ! opens.isUser() && orbitamp::params::cabIrNames[opens.factory] == "RED GIANT",
-                orbitamp::params::cabIrNames[opens.factory]);
+        const auto drawn = orbitamp::AmpProcessor::cabSynthOf (fresh->apvts.state.getProperty (orbitamp::params::cabIrUserFrom).toString());
+        const auto& top = orbitamp::device::Cabinets::of (orbitamp::device::CabKind::guitar);
+        report ("...and a fresh instance opens on the TOP 12's first, drawn",
+                drawn.valid && top.dozenOf (drawn.state) == 0, drawn.valid ? top.nameOf (drawn.state) : juce::String ("none"));
 
         // A SESSION OF BEFORE, when every amp opened on DARK MATTER (AmpProcessor::takeFormerCabinet):
         // the same session as a build of then saved it — no note of its opening cabinet on any state —
@@ -1273,6 +1276,7 @@ int main()
         const auto a = std::make_unique<orbitamp::AmpProcessor> (gateAmp());
         a->inlineLoads = true;
         a->prepareToPlay (sampleRate, blockSize);
+        a->chooseCabFactory (orbitamp::params::cabIrDefault);   // on the shelf: a fresh one opens on an IR of its own, drawn
 
         report ("a file that is not audio is not chosen",   ! a->chooseCabFile (notAudio) && ! a->cabChoice().isUser());
         report ("an IR longer than a cabinet is not chosen",  ! a->chooseCabFile (tooLong) && ! a->cabChoice().isUser());

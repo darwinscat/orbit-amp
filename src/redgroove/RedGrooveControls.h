@@ -18,8 +18,9 @@ namespace orbitamp::redgroove
 void writeAsIs (juce::Graphics&, const face::Ink&, const juce::String& words, juce::Rectangle<float> area, float em,
                 juce::Colour);
 
-/** A READING UNDER A CONTROL: what the control is set to, in words in their own case (writeAsIs), centred in its box.
-    Its owner says the words; it takes no click. Words wider than the box are squeezed into it, not cut. */
+/** A READING UNDER A CONTROL: what the control is set to, in words in their own case (writeAsIs), centred in its box —
+    or from its left edge (fromLeft), as a word that follows another. Its owner says the words; it takes no click. Words
+    wider than the box are squeezed into it, not cut. */
 class Readout final : public juce::Component
 {
 public:
@@ -27,6 +28,7 @@ public:
 
     void set (const juce::String& words);
     juce::Colour colour;
+    bool fromLeft = false;
 
     void paint (juce::Graphics&) override;
 
@@ -143,6 +145,7 @@ public:
 
     std::function<juce::String()> name;
     Readout* label = nullptr;                   // where the name is written
+    Readout* number = nullptr;                  // where a numbered name's number goes ("4: 4x10 SHEEN"); the label then has the rest
     std::function<int()> notch;                 // the one the cabinet that plays stands at; -1 for none of them
     int notches = 6;
     std::function<void (int)> onMove, onLetGo;

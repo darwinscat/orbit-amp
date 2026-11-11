@@ -7,6 +7,254 @@ Up to 0.7.0 this book was OrbitAmp's alone. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [0.10.0] — 2026-11-11 — a new TOP 12 in every amp, OrbitAmp's CAB on two sliders and its COMP, a strobe for the tuner
+
+### Every amp
+
+#### Added
+- **A strobe for the tuner, as an option.** The tuner can show a note as a real phase strobe instead of its needle:
+  the sound is held against the exact frequency of the note being tuned, and the stripes move by the difference —
+  still when the string is in tune, drifting right when it is sharp and left when it is flat, readable to a tenth of a
+  cent. Three bands — the fundamental, its octave and two octaves — so a partial that runs sharp drifts against the
+  fundamental where you can see it. The note it holds to does not flip while a string sits between two names. It
+  stands where the needle stood: bands of stripes in OrbitAmp's strip, the cockpit's screen and the rovers' strip, a
+  turning disc on AmberPawAmp's dial; the note's name stays, the stripes turn green in tune, and dim under a HUM
+  label as the needle does. A new note's stripes appear once the strobe has locked on to it — about a quarter of a
+  second after the pluck, half a second on a bass's low E — and go as soon as the string is damped, so they never
+  jump about on noise. A quiet note shows as long as the tuner names it, however far off it is. Choose it in the
+  tuner's right-click menu under Display, or in OrbitAmp's SETUP, TUNER, DISPLAY. The needle stays the default, and
+  is exactly as it was.
+
+#### Changed
+- **A preset or a session says which amp wrote it**, and whether a guitar amp or a bass amp. A guitar amp leaves a
+  Darwin's Cat Bass amp's alone: picked from the presets, it says Not loaded, and a session of one is not taken. Every
+  preset and session saved before plays as it always did.
+- **A 50 Hz high-pass at every amp's input**, always on, ahead of the gate and the amp (and of OrbitAmp's COMP):
+  rumble, a thump on the strings and DC reach none of them. A low E loses half a decibel.
+- **Linux: installing adds the amps' data to its folder** instead of putting a new folder in its place, so Darwin's
+  Cat Bass, installed beside the amps, keeps its own files there.
+- **The tuner names mains hum for what it is.** A cable humming with nobody playing used to read as a note — 50 Hz as
+  G1 +35, 60 Hz as B1 -49, for as long as it hummed. Now, when the reading stands on a mains line (50 or 60 Hz, or their
+  2nd to 4th harmonics, within a few cents) and its level has held, the tuner writes **HUM 50** or **HUM 60** where the
+  note's name stands, and dims the needle. Nothing is hidden: the needle still shows what it hears, and whenever the
+  tuner is not sure, it shows the note as before. A string reads its note while it rings, however it is plucked or
+  re-plucked, even when the tuner is opened after the pluck or the hum has just gone. Opened onto steady hum, the tuner
+  says HUM within a second; onto hum that swings, or hum barely above the hiss, within a few. Hum that comes in with a
+  thump, or comes back when a hand leaves the strings, reads as a note for about a second before HUM (a couple of
+  seconds if it swings); after a passage played over hum, the label comes back only once the last notes have died well
+  under it — up to five seconds later on a guitar, up to about ten on a bass. A note held perfectly flat by a sustainer
+  or a compressor ahead of the amp (falling less than 0.1 dB a second), standing on a mains line, reads HUM about a
+  second after the pluck.
+
+#### Dependencies
+- **felitronics-guitar-core v0.8.0, with namz v5.0.0**: packs of the new format load and play. A MIDDLE can have
+  its own FREQ knob, and each capture can carry how late it answers and whether it turns the signal over. Every pack
+  of the old format plays as before, and the new format alone changes nothing in how the twelve packs of the set
+  sound.
+- **cab-ir-generator v0.4.0**, Orbit Guitar Cab Builder's and Orbit Bass Cab Builder's: the TOP 12 and the builder's
+  presets, drawn live by its synthesis.
+- **felitronics-appkit v0.23.0**: the CAB picture's short line.
+- **felitronics-core v0.62.0**: the bass amps' octave, envelope filter and chorus, which no guitar amp plays, and an IR
+  resampled to another rate comes out the same on every x86-64 build. The guitar amps sound as they did.
+
+### OrbitAmp
+
+#### Added
+- **COMP, a compressor before the AMP.** It stays out of the strip until you add it: the checklist under the gear, at
+  the strip's end, lists it IN THE STRIP, and ticked it comes in after GATE, in the chain and on the panel, the window
+  widening to hold it. Its threshold is a rail at its left, -48 to 0 dB, the same line on its picture; its ratio a list
+  over the IN and OUT square, 1.5:1 to 10:1; and MIX, at its right, how much of the guitar goes through it. It opens at
+  -24 dB, 4:1 and half the guitar, and gives back by itself the level it squeezes away. Its character is on the block's
+  border: SMOOTH, PUNCHY, OPTO, which it opens on, FET and SQUASH. A right click opens its menu: ON, ATTACK, RELEASE and
+  RESET. In STEREO each side is squeezed on its own.
+- **Keys to hear one sound against another.** While OrbitAmp's window has the keyboard, A, B, C and D, or 1, 2, 3 and
+  4, switch the registers as their buttons do (the same keys on a Russian layout), and LEFT and RIGHT step the
+  cabinet that plays to the one before or after it. Only without a modifier, and a field being typed in keeps its
+  keys.
+
+#### Changed
+- **The CAB plays the guitar's TOP 12 and your own IRs.** The TOP 12 are twelve cabinets of Orbit Guitar Cab Builder,
+  drawn live by the builder's own synthesis: 4x12 SELFISH GENE, 4x12 ANCESTOR'S TALE, 4x12 GREEN MARS, 4x12 MOONBOW,
+  4x12 NEPTUNE'S ARCS, 2x12 RED SPOT, 1x12 TIKTAALIK, 1x10 BEAGLE 2, 4x12 TITAN LAKES, 4x12 KUIPER BELT, 4x12 QUANTUM
+  LEAP and 4x12 SUPERSTRING. The block's border names the one that plays by its number, "1: 4x12 SELFISH GENE", or
+  your IR by its name. The twelve stand on a slider of twelve notches between HPF and LPF; your own IRs, in
+  `Darwin's Cat/IRs`, have a slider of their own on a row above it, there only while the folder holds any. The slider
+  whose list plays shows its cap, and a small triangle at each end of a slider steps one back or on, as LEFT and RIGHT
+  do on the keyboard for the slider that plays.
+- **The name on the border opens the whole list**: ON, the twelve, then BUILDER, with Orbit Guitar Cab Builder's
+  presets by style (BLUES, METAL, PUNK, ROCK and TOP 12) and, once you have saved some in the builder app, its MY
+  PRESETS; then your own IRs, folders first, as SETUP shows them.
+- **IRs dropped on the CAB play.** A file, a folder of them or a zip, dropped on the block, goes into your IRs, comes
+  onto the second slider at once, and the first of them plays.
+- **The picture** says the IR's length, rate and bits in a short line, "100ms 48/24", and shows the drawn cabinet's
+  box at its right, as tall as the picture, with its mics. The trim has left the row under the picture: it is on the
+  picture's right click, where it also was.
+- **A fresh OrbitAmp and INIT open on 1: 4x12 SELFISH GENE**, where they opened on RED GIANT. A session or a preset
+  keeps the cabinet it saved.
+- **The EQ is picked with the picture.** Where the pack brings a tone of its own, the AMP picture's right-click menu
+  lists the curve twice: EQ RIG, the pack's own tone knobs, and EQ, our four bands, LO, L MID, H MID and HI. A pick
+  shows the curve and plays that tone, and the picture's name at its top left says which plays. The button that stood
+  on the curve, DEVICE TONE or UNIVERSAL EQ, is gone; a right click on the curve opens the same menu, with RESET at
+  its foot while the curve is shown.
+- **Every menu a block opens starts with ON**: a right click on the block, the AMP's device list, the CAB's list,
+  DELAY's time. ON is ticked while the block is on, ruled off from the rest, and a pick switches the block as its arrow
+  in the strip does. GATE's and LIMIT's menus open with it too, in place of the OFF that stood under their headers.
+- **GATE's OFF is the foot of its rail**, with no zone of its own: the scale runs the rail's whole travel, the hand
+  pushed to the foot parks the gate, reading OFF, with its threshold kept, and lifted off it the gate is on from
+  -80 dB up. ON in its menu does the same.
+- **The tuner's MUTE is in its right-click menu**, beside Display (Needle or Strobe); the MUTE pill beside the cents
+  is gone. While the amp is muted, a crossed-out speaker blinks at the left of the tuner's scale.
+- **The Victory V4's three packs leave quieter**: the Copper by 6 dB, the Sheriff by 3 and the Kraken by 6. The Copper
+  now leaves 1 dB under its capture, the Sheriff 6 dB under, the Kraken at its capture's own level, where 0.9.0 had
+  them 5 dB over, 3 dB under and 6 dB over. A session or a preset on one of them plays quieter by as much.
+
+#### Removed
+- **The factory IRs are no longer in the CAB's list**: the Orange PPC212V's ten, RED GIANT and DARK MATTER among them,
+  and the 21 third-party IRs. A session or a preset that plays one of them still plays it, under its name.
+
+#### Fixed
+- **A click on an empty spot of the EQ curve goes on to the next picture**, as on every other picture; the walk round
+  the pictures used to stop there.
+- **The REVERB picture draws the tail only where the room sounds**: nothing over the pre-delay's silence or after the
+  tail has died, and from its loudest point on the line never rises again, so the noisy end no longer throws long
+  spikes down to the floor.
+
+### CatpitAmp
+
+#### Added
+- **The sky answers the guitar.** Each attack brightens the stars and the nebulae glow, and a softer light stays while
+  the guitar sounds. It answers the hand, not the loudness — a held note is no flash. Off until it is asked for — STARS,
+  Lit by the guitar, in the settings menu; off, the sky is the one it always was.
+
+#### Changed
+- **The cabinets are the guitar's TOP 12, drawn.** Twelve cabinets of Orbit Guitar Cab Builder, drawn live by its own
+  synthesis, take the place of the Orange PPC212V's ten IRs. CAB has a position for each, and its plate names the
+  one that plays by its number, "1: 4x12 SELFISH GENE". A right click on CAB lists the twelve and CABINET OFF, which
+  takes the cabinet out for every channel and back. Each channel keeps the cabinet it was left on, and opens on
+  1: 4x12 SELFISH GENE until you move it; a session or a preset of an earlier release opens every channel there.
+- **Full screen is the face alone.** In the standalone, full screen (WINDOW, Full screen in the settings menu, or
+  Cmd+Ctrl+F on a Mac and F11 elsewhere) hides the window's title bar and its Options button; both come back with the
+  window.
+
+#### Removed
+- **The cabinets' window, and IRs of your own.** No window with ADD, SAVE, RENAME, REMOVE and BYPASS, and no IR
+  dropped on the face: these amps play the twelve and no file. Your own IRs stay in `Darwin's Cat/IRs`, where
+  OrbitAmp plays them.
+
+#### Fixed
+- **Opening the face writes no automation.** Every time the face opened, it set the amp's chain up again and told the
+  host of each parameter it set, even one already where it stood, so a host writing automation recorded points
+  nobody made. Now the host hears only of a parameter that moves.
+
+### RedPawAmp
+
+#### Added
+- **The view answers the guitar.** Each attack lights the plains: the sun's halo in the dust swells, and a beacon on
+  every old machine's mast flashes. It answers the hand, not the loudness — a note out of silence is a full flash,
+  one picked into a ringing chord a smaller one, a held note none — with a soft light while the guitar sounds. Off
+  until it is asked for — LANDSCAPE, Lit by the guitar, in the settings menu; off, the view is the one it always was.
+
+#### Changed
+- **The cabinets are the guitar's TOP 12, drawn.** Twelve cabinets of Orbit Guitar Cab Builder, drawn live by its own
+  synthesis, take the place of the Orange PPC212V's ten IRs. CAB has a position for each, and its plate names the
+  one that plays by its number, "1: 4x12 SELFISH GENE". A right click on CAB lists the twelve and CABINET OFF, which
+  takes the cabinet out for every channel and back. Each channel keeps the cabinet it was left on, and opens on
+  1: 4x12 SELFISH GENE until you move it; a session or a preset of an earlier release opens every channel there.
+- **Full screen is the face alone.** In the standalone, full screen (WINDOW, Full screen in the settings menu, or
+  Cmd+Ctrl+F on a Mac and F11 elsewhere) hides the window's title bar and its Options button; both come back with the
+  window.
+
+#### Removed
+- **The cabinets' window, and IRs of your own.** No window with ADD, SAVE, RENAME, REMOVE and BYPASS, and no IR
+  dropped on the face: these amps play the twelve and no file. Your own IRs stay in `Darwin's Cat/IRs`, where
+  OrbitAmp plays them.
+
+#### Fixed
+- **Opening the face writes no automation.** Every time the face opened, it set the amp's chain up again and told the
+  host of each parameter it set, even one already where it stood, so a host writing automation recorded points
+  nobody made. Now the host hears only of a parameter that moves.
+
+### FrostPawAmp
+
+#### Added
+- **The view answers the guitar.** Each attack flashes the lamps at the tips of the steel, their light seen kilometres
+  off, Jupiter's aurora glows about its poles and along its limb, and the falling snow glints. It answers the hand,
+  not the loudness — a note out of silence is a full flash, a held note none. Off until it is asked for — LANDSCAPE,
+  Lit by the guitar, in the settings menu; off, the view is the one it always was.
+
+#### Changed
+- **The cabinets are the guitar's TOP 12, drawn.** Twelve cabinets of Orbit Guitar Cab Builder, drawn live by its own
+  synthesis, take the place of the Orange PPC212V's ten IRs. CAB has a position for each, and its plate names the
+  one that plays by its number, "1: 4x12 SELFISH GENE". A right click on CAB lists the twelve and CABINET OFF, which
+  takes the cabinet out for every channel and back. Each channel keeps the cabinet it was left on, and opens on
+  1: 4x12 SELFISH GENE until you move it; a session or a preset of an earlier release opens every channel there.
+- **Full screen is the face alone.** In the standalone, full screen (WINDOW, Full screen in the settings menu, or
+  Cmd+Ctrl+F on a Mac and F11 elsewhere) hides the window's title bar and its Options button; both come back with the
+  window.
+
+#### Removed
+- **The cabinets' window, and IRs of your own.** No window with ADD, SAVE, RENAME, REMOVE and BYPASS, and no IR
+  dropped on the face: these amps play the twelve and no file. Your own IRs stay in `Darwin's Cat/IRs`, where
+  OrbitAmp plays them.
+
+#### Fixed
+- **Opening the face writes no automation.** Every time the face opened, it set the amp's chain up again and told the
+  host of each parameter it set, even one already where it stood, so a host writing automation recorded points
+  nobody made. Now the host hears only of a parameter that moves.
+
+### AmberPawAmp
+
+#### Added
+- **The view answers the guitar.** Each attack flares the searchlights and lights the buoys' lamps between their own
+  blinks, and a hard one — a loud chord out of quiet — strikes a bolt to the sea in the storm. Off until it is asked for —
+  LANDSCAPE, Lit by the guitar, in the settings menu; off, the view is the one it always was.
+
+#### Changed
+- **The cabinets are the guitar's TOP 12, drawn.** Twelve cabinets of Orbit Guitar Cab Builder, drawn live by its own
+  synthesis, take the place of the Orange PPC212V's ten IRs. CAB has a position for each, and its plate names the
+  one that plays by its number, "1: 4x12 SELFISH GENE". A right click on CAB lists the twelve and CABINET OFF, which
+  takes the cabinet out for every channel and back. Each channel keeps the cabinet it was left on, and opens on
+  1: 4x12 SELFISH GENE until you move it; a session or a preset of an earlier release opens every channel there.
+- **Full screen is the face alone.** In the standalone, full screen (WINDOW, Full screen in the settings menu, or
+  Cmd+Ctrl+F on a Mac and F11 elsewhere) hides the window's title bar and its Options button; both come back with the
+  window.
+- **TURBO adds no level out of the box.** The V4's Boost is loud enough on its own, so a fresh AmberPawAmp, INIT and a
+  host's reset leave the boost's level at 0 dB, where every other amp of the family keeps +3. A right click on TURBO
+  still offers -3, 0, +3, +6 and +9 dB, and a session or a preset keeps the level it saved.
+- **The Victory V4's three packs leave quieter**: the Copper by 6 dB, the Sheriff by 3 and the Kraken by 6. The Copper
+  now leaves 1 dB under its capture, the Sheriff 6 dB under, the Kraken at its capture's own level, where 0.9.0 had
+  them 5 dB over, 3 dB under and 6 dB over. A session or a preset on one of them plays quieter by as much.
+
+#### Removed
+- **The cabinets' window, and IRs of your own.** No window with ADD, SAVE, RENAME, REMOVE and BYPASS, and no IR
+  dropped on the face: these amps play the twelve and no file. Your own IRs stay in `Darwin's Cat/IRs`, where
+  OrbitAmp plays them.
+
+#### Fixed
+- **Opening the face writes no automation.** Every time the face opened, it set the amp's chain up again and told the
+  host of each parameter it set, even one already where it stood, so a host writing automation recorded points
+  nobody made. Now the host hears only of a parameter that moves.
+
+## [0.9.1] — 2026-11-01 — MIDI CC 24, 25 and 26 find BASS, MIDDLE and TREBLE by name
+
+### FrostPawAmp
+
+#### Fixed
+- **MIDI CC 24, 25 and 26 turn BASS, MIDDLE and TREBLE, as the MIDI list says, on every channel.** They used to
+  turn the first three tone knobs in order, so on a channel whose knobs run otherwise they missed: on FrostPawAmp's
+  CLEAN CC 25 turned TREBLE and CC 26 nothing; on AmberPawAmp's CLEAN CC 24 turned TONE and BASS had no controller.
+  Now each finds its knob by name; a channel without that knob (CLEAN's MIDDLE on FrostPawAmp) leaves the controller
+  turning nothing.
+
+### AmberPawAmp
+
+#### Fixed
+- **MIDI CC 24, 25 and 26 turn BASS, MIDDLE and TREBLE, as the MIDI list says, on every channel.** They used to
+  turn the first three tone knobs in order, so on a channel whose knobs run otherwise they missed: on FrostPawAmp's
+  CLEAN CC 25 turned TREBLE and CC 26 nothing; on AmberPawAmp's CLEAN CC 24 turned TONE and BASS had no controller.
+  Now each finds its knob by name; a channel without that knob (CLEAN's MIDDLE on FrostPawAmp) leaves the controller
+  turning nothing.
+
 ## [0.9.0] — 2026-10-24 — OrbitAmp's new face, FrostPawAmp and AmberPawAmp join, one plug-in per format, the packs at their measured levels
 
 ### Every amp

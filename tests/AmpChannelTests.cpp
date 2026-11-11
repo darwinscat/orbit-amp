@@ -194,6 +194,28 @@ int ORBITAMP_GATE_MAIN()
         check (found, product.tones);
     }
 
+    // THE MIDI TONE CONTROLLERS FIND THEIR KNOBS BY NAME (Channels::toneNamed), as midi.txt lists them —
+    // 24 the Bass, 25 the Middle or Mid, 26 the Treble — wherever the pack puts them: on the Copper its
+    // fourth, third and second knobs; on the ReVolt's Clean the Middle is no knob at all.
+    {
+        using Band = channels::Channels::Band;
+        const auto placesOf = [] (const juce::String& capture) -> std::array<int, 3>
+        {
+            if (capture.startsWith ("v4-copper"))    return { 3, 2, 1 };
+            if (capture.startsWith ("revolt-clean")) return { 0, -1, 1 };
+            return { 0, 1, 2 };
+        };
+        bool named = true;
+        for (int c = 0; c < channels.count(); ++c)
+        {
+            const auto want = placesOf (channels.lineup().channels[(size_t) c].capture);
+            named = named && channels.toneNamed (c, Band::bass)   == want[0]
+                          && channels.toneNamed (c, Band::middle) == want[1]
+                          && channels.toneNamed (c, Band::treble) == want[2];
+        }
+        check (named, "CC 24, 25, 26 turn the Bass, Middle and Treble knobs by name, wherever the pack lists them");
+    }
+
     // GEARS OF TWO, where the product's channels go in pairs, as far as it goes, TURBO the second of
     // each, and the pair one memory (Lineup::pairs): one channel of a pack with the Boost held off, then
     // on — on Mars the IR-X's CRUNCH Ch1 and HI-GAIN Ch2; on the ice moon the ReVolt's CLEAN, CRUNCH and
@@ -984,7 +1006,7 @@ int ORBITAMP_GATE_MAIN()
         const auto holds = [&]
         {
             const auto* character = amp->apvts.getParameter (params::compCharacter);
-            return on (params::compOn) && std::abs (plain (params::compAmount) - 1.0f) < 1.0e-4f && std::abs (plain (params::compRatio) - 4.0f) < 1.0e-3f
+            return on (params::compOn) && std::abs (plain (params::compAmount) - 0.75f) < 1.0e-4f && std::abs (plain (params::compRatio) - 4.0f) < 1.0e-3f
                 && character != nullptr && character->getCurrentValueAsText() == "Opto"
                 && on (params::octavePresent) && on (params::octaveOn)
                 && on (params::filterPresent) && on (params::filterOn)
@@ -992,7 +1014,7 @@ int ORBITAMP_GATE_MAIN()
                 && on (params::bassHpfOn) && on (params::bassLpfOn)
                 && ! on (params::delayPresent) && ! on (params::reverbPresent);
         };
-        check (holds(), "INIT gives COMP on, all of the signal through it at 4:1 on OPTO, OCTAVE, ENVELOPE and CHORUS in the strip and on, both cuts on, no delay and no room");
+        check (holds(), "INIT gives COMP on, three quarters of the signal through it at 4:1 on OPTO, OCTAVE, ENVELOPE and CHORUS in the strip and on, both cuts on, no delay and no room");
         // ...and every gear's tone flat: the standard's three at 0 dB, or the pack's dials where their travel is none — the
         // reference each band is flat at (felitronics::rigplayer::travelOf).
         bool flat = true;

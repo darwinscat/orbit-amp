@@ -60,7 +60,7 @@ struct Lineup
 
     /** WHAT THE PRODUCT HOLDS WHERE IT IS, whatever a record, a preset, an INIT or a host left it at: each of
         these parameters set to its value every time the chain is set up (Engine::setUpChain) — the walker's
-        COMP on, all of the signal through it at 4:1 on OPTO, its effects in the strip and on, its cuts on,
+        COMP on, three quarters of the signal through it at 4:1 on OPTO, its effects in the strip and on, its cuts on,
         no delay and no room. */
     struct Pin
     {
@@ -92,6 +92,11 @@ struct Lineup
         const char* preset = nullptr;
     };
     std::vector<Cabinet> cabinets {};
+
+    /** WHAT TURBO ADDS OUT OF THE BOX (params::boostLevel's default, Engine::opening), where the product says other than
+        the family's +3: AmberPawAmp's 0 (the owner, 10.11). A default, not a hold: TURBO's menu moves it, INIT brings it
+        back here. */
+    std::optional<float> boostLevel {};
 
     int count() const noexcept { return (int) channels.size(); }
 };

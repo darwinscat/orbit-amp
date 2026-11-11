@@ -27,17 +27,23 @@ constexpr const char* name = "AmberPawAmp";
     Boost: the same pack, the gear holding the switch off and its TURBO on (Lineup::Channel::held). What
     each opens on: all three on a plate, the cleaner the wetter — the Copper 20 % of it, the Sheriff 15,
     the Kraken 10 — and the Copper with 15 % of delay, the Sheriff with about half as much, the Kraken with
-    none; the Kraken the hot one. */
+    none; the Kraken the hot one. TURBO adds nothing to the level out of the box (the owner, 10.11): the V4's Boost
+    is loud enough on its own. */
 const channels::Lineup& titanLineup()
 {
-    static const channels::Lineup heli = roverLineup ({
-        { "Clean",          "v4-copper-4ae0",      "Plate",    20.0f, 15.0f, false, { "Boost", "off" } },
-        { "Clean Turbo",    "v4-copper-4ae0",      "Plate",    30.0f, 30.0f, false, { "Boost", "on"  } },
-        { "Crunch",         "v4-sheriff-ch1-82ab", "Plate",    15.0f, 8.0f,  false, { "Boost", "off" } },
-        { "Crunch Turbo",   "v4-sheriff-ch1-82ab", "Plate",    30.0f, 30.0f, false, { "Boost", "on"  } },
-        { "Hi-Gain",        "v4-kraken-ch1-f7fc",  "Plate",    10.0f, 0.0f,  true,  { "Boost", "off" } },
-        { "Hi-Gain Turbo",  "v4-kraken-ch1-f7fc",  "Plate",    30.0f, 0.0f,  true,  { "Boost", "on"  } },
-    });
+    static const channels::Lineup heli = []
+    {
+        auto line = roverLineup ({
+            { "Clean",          "v4-copper-4ae0",      "Plate",    20.0f, 15.0f, false, { "Boost", "off" } },
+            { "Clean Turbo",    "v4-copper-4ae0",      "Plate",    30.0f, 30.0f, false, { "Boost", "on"  } },
+            { "Crunch",         "v4-sheriff-ch1-82ab", "Plate",    15.0f, 8.0f,  false, { "Boost", "off" } },
+            { "Crunch Turbo",   "v4-sheriff-ch1-82ab", "Plate",    30.0f, 30.0f, false, { "Boost", "on"  } },
+            { "Hi-Gain",        "v4-kraken-ch1-f7fc",  "Plate",    10.0f, 0.0f,  true,  { "Boost", "off" } },
+            { "Hi-Gain Turbo",  "v4-kraken-ch1-f7fc",  "Plate",    30.0f, 0.0f,  true,  { "Boost", "on"  } },
+        });
+        line.boostLevel = 0.0f;
+        return line;
+    }();
     return heli;
 }
 

@@ -260,16 +260,19 @@ int ORBITAMP_GATE_MAIN()
     const juce::ScopedJuceInitialiser_GUI juce;
     std::printf ("The boost's level\n");
 
-    // EVERY AMP HAS IT: -3 to +9 dB, +3 out of the box.
+    // EVERY AMP HAS IT: -3 to +9 dB, +3 out of the box — AmberPawAmp's at 0 (the owner, 10.11) — and INIT puts it back there.
     for (const auto* each : { &orbitAmp(), &catpitAmp(), &redPawAmp(), &frostPawAmp(), &amberPawAmp() })
     {
         auto a = make (*each);
+        const float opens = each == &amberPawAmp() ? 0.0f : 3.0f;
         auto* p = dynamic_cast<juce::RangedAudioParameter*> (a->apvts.getParameter (params::boostLevel));
-        check (p != nullptr && juce::exactlyEqual (p->convertFrom0to1 (p->getDefaultValue()), 3.0f)
+        check (p != nullptr && juce::exactlyEqual (p->convertFrom0to1 (p->getDefaultValue()), opens)
                    && juce::exactlyEqual (p->getNormalisableRange().start, -3.0f)
                    && juce::exactlyEqual (p->getNormalisableRange().end, 9.0f)
-                   && juce::exactlyEqual (param (*a, params::boostLevel), 3.0f),
-               juce::String (each->name) + " has the boost's level, -3 to +9 dB, at +3 out of the box");
+                   && juce::exactlyEqual (param (*a, params::boostLevel), opens)
+                   && juce::exactlyEqual (params::engineDefault (*p, 0), p->getDefaultValue()),
+               juce::String (each->name) + " has the boost's level, -3 to +9 dB, at " + (opens > 0.0f ? "+3" : "0")
+                   + " out of the box and after INIT");
     }
 
     // ORBITAMP: the boost is the pack's own switch, the BOOST key.

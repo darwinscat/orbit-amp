@@ -512,6 +512,10 @@ protected:
     /** THE CABINETS' WINDOW (Cabs.h), as a right click on CAB opens it — for a face whose cabinet is chosen its own way. */
     void showCabs();
 
+    /** DRAWN CABINETS (Lineup::drawnCabinets, the toys' TOP 12): no window — CAB's right click lists the twelve by name,
+        the one that plays ticked, and CABINET OFF, the cabinet out of the sound and back (the owner, 08.11). */
+    void showDrawnCabs();
+
     /** A KEY OF THE SIX THE FACE TAKES FOR ITSELF, under a name of its own: the console neither lights it
         nor answers it from then on — what it does and whether it is lit are the face's. */
     void claimKey (int key, const juce::String& name);

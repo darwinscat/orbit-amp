@@ -46,7 +46,8 @@ const channels::Lineup& lineup()
     // MIDDLE's frequency, COMP's threshold, OCTAVE, ENVELOPE, CHORUS and DI/CAB. The instrument and the hand are the
     // player's on every gear: 5 STR / 4 STR and FINGERS / SLAP are kept by no channel.
     //
-    // WHAT THE WALKER HOLDS WHERE IT IS: COMP on, all of the signal through it, at 4:1 on OPTO — its knob is the
+    // WHAT THE WALKER HOLDS WHERE IT IS: COMP on, three quarters of the signal through it (the owner, 10.11), at 4:1 on
+    // OPTO — its knob is the
     // threshold alone; OCTAVE, ENVELOPE and CHORUS in the strip and on — their sliders are their amounts, 0 the
     // dry; both cuts on — the switches choose between their positions; no delay and no room in the strip.
     static const channels::Lineup walker {
@@ -63,7 +64,7 @@ const channels::Lineup& lineup()
         },
         {
             { params::compOn,        1.0f },
-            { params::compAmount,    1.0f },
+            { params::compAmount,    0.75f },
             { params::compRatio,     4.0f },
             { params::compCharacter, (float) params::compCharacters.indexOf ("Opto") },
             { params::octavePresent, 1.0f }, { params::octaveOn, 1.0f },

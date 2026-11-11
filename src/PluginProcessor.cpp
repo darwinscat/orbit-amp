@@ -12,7 +12,8 @@
 #include <cstring>
 #include <map>
 #include <mutex>
-#include <panel/Panel.h>   // cabir::knownState: a cabinet of a box the table knows, or none
+#include <panel/Panel.h>
+#include "device/CabTables.h"   // whose cabinet a state is, its table, and the state known against its own builder
 #include <synth/CabSynth.h>
 #include <BinaryData.h>
 #include "device/FactoryShelf.h"
@@ -849,11 +850,18 @@ bool AmpProcessor::chooseCabFile (const juce::File& file)
 AmpProcessor::~AmpProcessor()
 {
     apvts.state.removeListener (this);
+
+    // A cabinet still being drawn finishes before anything goes: the pool's own destructor waits five seconds and then
+    // kills the thread by force, and a host that closes amps just made — five rendering at once on a slow machine — had
+    // the renderer's own threads left running into freed memory. Waiting takes a render's time at most; the queued ones
+    // are dropped.
+    cabSynthPool.removeAllJobs (true, -1);
 }
 
 AmpProcessor::DrawnCab AmpProcessor::renderDrawn (const cabir::State& state, bool live)
 {
-    static const auto table = cabir::synth::parseTable (std::string (BinaryData::cabinets_txt, (size_t) BinaryData::cabinets_txtSize));
+    // The bass's table or the guitar's, as the box says whose cabinet this is (device/CabTables.h).
+    const auto& table = device::tableOf (device::kindOf (state.box));
     // The mic that did not move kept, the one that did rendered at half the size while the hand is on it.
     if (cabRenderer == nullptr)
         cabRenderer = std::make_unique<cabir::synth::PairRenderer>();
@@ -1038,7 +1046,7 @@ AmpProcessor::CabSynthChoice AmpProcessor::cabSynthOf (const CabChoice& choice)
 
 AmpProcessor::CabSynthChoice AmpProcessor::cabSynthOf (const juce::String& from)
 {
-    if (const auto state = cabir::knownState (from.toStdString()))
+    if (const auto state = device::knownCabinet (from.toStdString()))
         return { *state, true };
     return {};
 }

@@ -74,6 +74,9 @@ public:
     /** Escape's errand: put a thrown-open picture back. One Escape folds one picture. */
     bool foldPicture() { return preamp.foldPicture(); }
 
+    /** LEFT and RIGHT's errand: the cabinet before or after the one that plays (CabinetBlock::stepCabinet). */
+    void stepCabinet (int by) { cabinet.stepCabinet (by); }
+
     /** Whether any block of a row still stands: 0 is the preamp's, 1 the chain's tail. */
     bool rowPopulated (int row) const
     {

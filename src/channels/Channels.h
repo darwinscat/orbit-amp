@@ -49,8 +49,9 @@ public:
         of the pack's list (rig.json's `chain[].tone[]`), under that tone's name — the X88-IR's Bass,
         Middle, Treble; the V4 Copper's Tone, Treble, Middle, Bass, Bass cut; the ReVolt's Clean Bass and
         Treble, its Crunch Bass, Mid, Treble — and the engine plays each list's controls by their places
-        in it (params::preampMeasured), so knob i turns place i. No knob is matched to a tone by its name:
-        a face shows as many knobs as the playing pack has tones, each labelled with its tone's name
+        in it (params::preampMeasured), so knob i turns place i. No knob is matched to a tone by its name
+        (a MIDI tone controller alone finds its knob so — toneNamed, below): a face shows as many knobs
+        as the playing pack has tones, each labelled with its tone's name
         (face::Console lays them out). At most maxTones, the places the engine has; a pack's tones past
         them have no knob. toneOf is empty for a knob past the pack's list, and for every knob of a
         channel whose pack is not installed; toneId is the parameter a knob turns on the channel that
@@ -78,6 +79,14 @@ public:
         pack's list or where the console is not the bass's. */
     juce::String toneSwitchOf (int channel, int which) const;
     bool toneSwitchToneOf (int channel, int which, namz::rig::Tone& out) const;
+
+    /** THE KNOB A MIDI TONE CONTROLLER TURNS — the one place a tone is found by its NAME, so the MIDI list
+        (`midi.txt`: 24 BASS, 25 MIDDLE, 26 TREBLE) is true on every pack whatever order it lists them in:
+        the knob whose tone is called Bass, Middle (or Mid), Treble, case aside. -1 where the channel's pack
+        has no tone of that name — the Copper's Tone and Bass cut, the Sheriff's Bright have no controller,
+        and on the ReVolt's Clean CC 25 turns nothing. */
+    enum class Band { bass, middle, treble };
+    int toneNamed (int channel, Band) const;
 
     /** THE PACK'S SWITCHES: its controls that pick a capture and are not the gain dial, in the order the
         pack lists them — the IR-X Ch1's Boost and three-way Bright, the Ch2's Tight/Fat and Boost; most

@@ -28,6 +28,7 @@
 #include "PluginProcessor.h"
 #include "channels/Engine.h"
 #include "catpit/CatpitLineup.h"
+#include "device/Cabinets.h"
 #include "device/DeviceLibrary.h"
 #include "device/FactorySet.h"
 #include "device/FactoryShelf.h"
@@ -304,18 +305,33 @@ int ORBITAMP_GATE_MAIN()
             }
             // ...a face on RED GIANT's file, which its channels play as an IR of their own (channels::Channels::align).
             const auto fresh = std::make_unique<AmpProcessor> (product);
+            // ...or, where its cabinets are drawn — the toys' TOP 12 (the owner, 08.11), and OrbitAmp's since its CAB is
+            // the twelve and the player's own IRs (the owner, 10.11) — on the TOP 12's first: rendered on the worker and
+            // landing on the message thread, waited for, up to ten seconds, as the bass's gate waits for its dozen's.
+            const bool drawn = (lineup != nullptr && lineup->drawnCabinets) || product.freshCabinet != nullptr;
+            if (drawn)
+            {
+                for (int i = 0; i < 200 && ! AmpProcessor::cabSynthOf (fresh->cabChoice()).valid; ++i)
+                    juce::MessageManager::getInstance()->runDispatchLoopUntil (50);
+                fresh->pumpDeviceWork();
+            }
             const auto opens = fresh->cabChoice();
             const auto redGiant = juce::String::fromUTF8 (catalog::irs[params::cabIrDefault].file).upToLastOccurrenceOf (".", false, false);
             const bool onRedGiant = lineup == nullptr ? ! opens.isUser() && opens.factory == params::cabIrDefault
                                                       : opens.isUser() && opens.name == redGiant;
+            const auto synth = AmpProcessor::cabSynthOf (opens);
+            const auto& top = device::Cabinets::of (device::CabKind::guitar);
+            const bool onTop = drawn && synth.valid && top.dozenOf (synth.state) == 0;
             const juce::String before = juce::String (product.name) == "OrbitAmp"
                 ? "0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30"
                 : "21,22,23,24,25,26,27,28,29,30";
-            check (product.chain == Chain::guitar && held.joinIntoString (",") == before && everyNumberPlays && onRedGiant
+            check (product.chain == Chain::guitar && held.joinIntoString (",") == before && everyNumberPlays && (drawn ? onTop : onRedGiant)
                        && juce::String (product.irsFolder()) == "IRs",
                    juce::String (product.name) + " plays the shelf it played before (places " + held.joinIntoString (",")
-                       + "), every number a cabinet, opens on RED GIANT (" + (opens.isUser() ? opens.name : params::cabIrNames[opens.factory])
-                       + "), and keeps the player's IRs in `IRs`");
+                       + "), every number a cabinet, "
+                       + (drawn ? "opens on the TOP 12's first, drawn (" + (synth.valid ? top.nameOf (synth.state) : juce::String ("none")) + ")"
+                                : "opens on RED GIANT (" + (opens.isUser() ? opens.name : params::cabIrNames[opens.factory]) + ")")
+                       + ", and keeps the player's IRs in `IRs`");
         }
 
         // ...THE BASS AMPS, OrbitBass and the walker alike: none of the shelf, whatever the number; their player's IRs in
