@@ -659,6 +659,21 @@ std::vector<namz::rig::Tone> Channels::packTonesOf (int channel) const
     return out;
 }
 
+int Channels::toneNamed (int channel, Band band) const
+{
+    const auto names = toneNamesOf (channel);
+    for (int t = 0; t < names.size(); ++t)
+    {
+        const auto& name = names[t];
+        const bool is = band == Band::bass   ? name.equalsIgnoreCase ("Bass")
+                      : band == Band::middle ? name.equalsIgnoreCase ("Middle") || name.equalsIgnoreCase ("Mid")
+                                             : name.equalsIgnoreCase ("Treble");
+        if (is)
+            return t;
+    }
+    return -1;
+}
+
 juce::String Channels::toneOf (int channel, int knob) const
 {
     // Knob i is the pack's tone i: there while its list goes that far. On the bass, the pack's i-th dial — or, on a

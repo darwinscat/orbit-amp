@@ -1662,12 +1662,14 @@ void Console::playMidi()
     if (driveTo >= 0)   along (params::preampGain, (float) driveTo / 127.0f);
 
     // A tone knob's middle is where the pack was captured, and 0..127 has no middle: 64 is given it, and
-    // each half of the controller's travel is spread over its own half of the knob's. The three tone
-    // controllers are the first three knobs, whatever the pack calls its tones; a knob the pack has not
-    // names no parameter (Channels::toneOf), and its controller turns nothing.
+    // each half of the controller's travel is spread over its own half of the knob's. Each tone controller
+    // turns the knob of its NAME (Channels::toneNamed) wherever the pack lists it; a pack with no such
+    // tone gives that controller nothing to turn.
+    constexpr Channels::Band bands[] { Channels::Band::bass, Channels::Band::middle, Channels::Band::treble };
     for (int t = 0; t < (int) std::size (toneTo); ++t)
         if (const int v = toneTo[(size_t) t]; v >= 0)
-            along (channels.toneId (t), v <= 64 ? 0.5f * (float) v / 64.0f : 0.5f + 0.5f * (float) (v - 64) / 63.0f);
+            if (const int knob = channels.toneNamed (channels.active(), bands[t]); knob >= 0)
+                along (channels.toneId (knob), v <= 64 ? 0.5f * (float) v / 64.0f : 0.5f + 0.5f * (float) (v - 64) / 63.0f);
 }
 
 /** THE LOAD, ITEMISED — OrbitAmp's window, in the face's colours. Its words are already the face's:
