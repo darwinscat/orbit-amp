@@ -23,7 +23,7 @@ set(CMAKE_OSX_DEPLOYMENT_TARGET "11.0" CACHE STRING "The oldest macOS the binari
 # Darwin's Cat Amps, under one tag, vX.Y.Z — and this is its number: every amp shows it, stamps its bundles
 # with it and compares the family's releases against it (add_amp). The release refuses a tag that says
 # another (installer/version.sh, which reads it from this line).
-project(OrbitAmp VERSION 0.10.0 LANGUAGES C CXX)
+project(OrbitAmp VERSION 0.10.1 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -89,8 +89,8 @@ include(FetchContent)
 # deliberately.
 #
 # CLAP format via the MIT clap-juce-extensions wrapper (native CLAP is slated for JUCE 9).
-# Pinned like JUCE — the same commit OrbitCab ships. Upstream stopped tagging in 2022, so a
-# commit hash is their de-facto release channel.
+# Pinned like JUCE, by commit: upstream stopped tagging in 2022, so a commit hash is their de-facto
+# release channel.
 #
 # BOTH ARE PATCHED, so that one binary holds several plug-ins: the family's VST3 and CLAP hold every
 # amp of the release, each under the ids its own bundle always had (THE FAMILY'S PLUG-INS, below).
@@ -99,10 +99,10 @@ include(FetchContent)
 # still saves the clone: the local tree, when it is the pin, is COPIED into this build and the copy
 # patched — another project's tree is never written to.
 # ----------------------------------------------------------------------------
-set(ORBITAMP_JUCE_TAG "8.0.16-security" CACHE STRING "JUCE git tag to build against")
+set(ORBITAMP_JUCE_TAG "8.0.17-security" CACHE STRING "JUCE git tag to build against")
 set(ORBITAMP_JUCE_DIR "$ENV{HOME}/IdeaProjects/orbit-capture/app/tests/build/_deps/juce-src"
     CACHE PATH "Local JUCE source tree (copied and patched if it is the pinned version); else the pin is fetched")
-set(ORBITAMP_CLAP_EXT_TAG "51a9359315298de632cf44e9d7524940868441e6" CACHE STRING "clap-juce-extensions git commit to build against")
+set(ORBITAMP_CLAP_EXT_TAG "6bde108329ff9fc24404b79b8b397261a75cf6a8" CACHE STRING "clap-juce-extensions git commit to build against")
 include(cmake/PatchedWrappers.cmake)
 
 # ----------------------------------------------------------------------------

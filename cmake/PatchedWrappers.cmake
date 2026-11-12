@@ -12,9 +12,8 @@
 # family's VST3 carry its name at all: JUCE's VST3 post-build steps hand the bundle's path to the shell
 # unquoted, and the apostrophe in "Darwin's Cat Amps" breaks them wherever that shell is /bin/sh.
 #
-# And one bug fix for every CLAP, whether it holds a list or not: the wrapper loads a state without asking
-# the host to read the parameters' values again (clap-juce-extensions-state-rescan.patch, explained at its
-# head), so a host showed a session's knobs where they were before it opened.
+# The CLAP wrapper loads a state and asks the host to read the parameters' values again since its 6bde108
+# (free-audio/clap-juce-extensions#194) — what our own patch for it did until then, now upstream and gone from here.
 #
 # Included once the pins are set — ORBITAMP_JUCE_TAG, ORBITAMP_JUCE_DIR, ORBITAMP_CLAP_EXT_TAG — it declares
 # `juce` and `clap-juce-extensions`, patched, and makes them available.
@@ -32,7 +31,6 @@ include(FetchContent)
 set(ORBITAMP_JUCE_PATCH "${CMAKE_CURRENT_LIST_DIR}/patches/juce-several-plugins.patch")
 set(ORBITAMP_JUCE_QUOTING_PATCH "${CMAKE_CURRENT_LIST_DIR}/patches/juce-vst3-post-build-quoting.patch")
 set(ORBITAMP_CLAP_EXT_PATCH "${CMAKE_CURRENT_LIST_DIR}/patches/clap-juce-extensions-several-plugins.patch")
-set(ORBITAMP_CLAP_EXT_RESCAN_PATCH "${CMAKE_CURRENT_LIST_DIR}/patches/clap-juce-extensions-state-rescan.patch")
 set(_orbitamp_apply_patch "${CMAKE_CURRENT_LIST_DIR}/ApplyPatch.cmake")
 
 # The patch step: ApplyPatch.cmake, run in the dependency's source tree. The patch's hash is one of its
@@ -74,9 +72,8 @@ FetchContent_MakeAvailable(juce)
 
 # clap-juce-extensions — the pinned commit, patched.
 _orbitamp_patch_step(_orbitamp_clap_ext_patch "${ORBITAMP_CLAP_EXT_PATCH}")
-_orbitamp_patch_step(_orbitamp_clap_ext_rescan_patch "${ORBITAMP_CLAP_EXT_RESCAN_PATCH}")
 FetchContent_Declare(clap-juce-extensions
     GIT_REPOSITORY https://github.com/free-audio/clap-juce-extensions.git
     GIT_TAG        ${ORBITAMP_CLAP_EXT_TAG}
-    PATCH_COMMAND  ${_orbitamp_clap_ext_patch} COMMAND ${_orbitamp_clap_ext_rescan_patch})
+    PATCH_COMMAND  ${_orbitamp_clap_ext_patch})
 FetchContent_MakeAvailable(clap-juce-extensions)

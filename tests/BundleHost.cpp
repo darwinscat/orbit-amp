@@ -718,9 +718,12 @@ void checkAu (const juce::File& bundle, const juce::StringArray& amps, const std
     juce::AudioUnitPluginFormat format;
     std::vector<Live> family;
 
-    for (const auto& amp : amps)
+    for (int i = 0; i < count; ++i)
     {
-        const auto identifier = "AudioUnit:Effects/aufx," + juce::String (shippedOf (amp)->auSubtype) + ",Dcat";
+        // By the code the bundle gives it, as registered above: an amp that joined after 0.8.0 has no own AU of before.
+        const auto& amp = amps[i];
+        const auto entry = (CFDictionaryRef) CFArrayGetValueAtIndex (components, i);
+        const auto identifier = "AudioUnit:Effects/aufx," + plistValue (entry, "subtype") + ",Dcat";
         juce::OwnedArray<juce::PluginDescription> types;
         format.findAllTypesForFile (types, identifier);
 
