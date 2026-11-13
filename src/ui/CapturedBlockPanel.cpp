@@ -367,7 +367,7 @@ void CapturedBlockPanel::openTheater()
     setPictureShown (false);
 
     theater->setBounds (juce::Desktop::getInstance().getDisplays()
-                            .getPrimaryDisplay()->totalArea);
+                            .getPrimaryDisplay()->logicalBounds.toNearestInt());
     theater->addToDesktop (juce::ComponentPeer::windowHasDropShadow);
     theater->setVisible (true);
     juce::Desktop::getInstance().setKioskModeComponent (theater.get(), false);

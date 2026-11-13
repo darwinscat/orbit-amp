@@ -103,7 +103,7 @@ AmpEditor::AmpEditor (AmpProcessor& p)
 
         // The whole display: the zoom from its height (or from its width, on a display narrower than
         // the design), the width then as much of the display as the range allows.
-        const auto area = display->userArea;
+        const auto area = display->userBounds.toNearestInt();
         const float fit = juce::jlimit (AmpProcessor::minScale, AmpProcessor::maxScale,
                                         juce::jmin ((float) area.getWidth() / (float) minBaseWidth,
                                                     (float) (area.getHeight() - titleBarAllowance)
@@ -258,7 +258,7 @@ AmpEditor::AmpEditor (AmpProcessor& p)
 
     if (const auto* display = juce::Desktop::getInstance().getDisplays().getPrimaryDisplay())
     {
-        const auto area = display->userArea;
+        const auto area = display->userBounds.toNearestInt();
         const float fits = juce::jmin ((float) area.getWidth()  / (float) minBaseWidth,
                                        (float) (area.getHeight() - titleBarAllowance) / (float) baseHeight());
         s = juce::jlimit (AmpProcessor::minScale, s, fits);
