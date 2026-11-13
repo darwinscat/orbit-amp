@@ -202,7 +202,7 @@ void Chrome::showPresetMenu()
                                                   .withMessage (n + "\n\nThis preset is another amp's: "
                                                                 + (amp.product().chain == Chain::bass ? juce::String ("a guitar amp's.")
                                                                                                       : juce::String ("a bass amp's.")))
-                                                  .withButton ("OK"),
+                                                  .withButton ("OK", 1),
                                               nullptr);
                 return;
             }

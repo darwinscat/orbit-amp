@@ -72,7 +72,7 @@ namespace
                                           .withIconType (juce::MessageBoxIconType::WarningIcon)
                                           .withTitle ("Not saved")
                                           .withMessage (file.getFullPathName())
-                                          .withButton ("OK"),
+                                          .withButton ("OK", 1),
                                       nullptr);
     }
 
@@ -2435,7 +2435,7 @@ void Console::renameCab()
                                               .withIconType (juce::MessageBoxIconType::WarningIcon)
                                               .withTitle ("Not renamed")
                                               .withMessage (name + "\n\nThere is a cabinet of that name already, or the file would not move.")
-                                              .withButton ("OK"),
+                                              .withButton ("OK", 1),
                                           nullptr);
     });
 }
@@ -2490,7 +2490,7 @@ void Console::addCabinets (const juce::StringArray& paths)
                                           .withMessage (added.refused.joinIntoString ("\n")
                                                         + "\n\nA cabinet is kept inside the session it plays in, and an IR over "
                                                         + juce::String (device::EmbeddedIrs::maxBytes / (1024 * 1024)) + " MB does not fit.")
-                                          .withButton ("OK"),
+                                          .withButton ("OK", 1),
                                       nullptr);
 }
 
@@ -2773,7 +2773,7 @@ void Console::showPresetMenu()
                                                                       .withIconType (juce::MessageBoxIconType::WarningIcon)
                                                                       .withTitle ("Not loaded")
                                                                       .withMessage (name + "\n\nThis preset is another amp's, or no preset at all.")
-                                                                      .withButton ("OK"),
+                                                                      .withButton ("OK", 1),
                                                                   nullptr);
                             }
                             else if (picked == itemSave && onDisk)      safe->presets.save (current);
