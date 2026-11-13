@@ -705,7 +705,8 @@ RedGrooveEditor::RedGrooveEditor (AmpProcessor& p)
     view->setHearing ([&a = amp] { return a.takePlay(); });            // the forest answers the bass (WalkerDrive::hear)...
     view->setLit ([&a = amp] { return a.viewLit(); });                   // ...unless the player said not to (prefs::viewLit)
     view->setTempo ([&a = amp] { return (double) a.hostTempoBpm(); });   // the footfalls on the host's beat; standalone its own
-    gl.setOpenGLVersionRequired (juce::OpenGLContext::openGL3_2);
+    gl.setPreferredVersion ({ 3, 2 });
+    gl.setPreferredProfile (juce::OpenGLProfile::core);
     gl.setRenderer (this);
     gl.setComponentPaintingEnabled (true);
     gl.setContinuousRepainting (false);     // the view asks for each frame, at its own pace

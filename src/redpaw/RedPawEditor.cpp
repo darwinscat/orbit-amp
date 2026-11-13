@@ -1082,7 +1082,8 @@ RedPawEditor::RedPawEditor (AmpProcessor& p)
     view->setHost (&gl);
     view->setHearing ([&a = amp] { return a.takePlay(); });   // the world lights by the guitar (worlds/Play.h)
     view->setLit ([&a = amp] { return a.viewLit(); });          // ...where the player asked for it (prefs::viewLit)
-    gl.setOpenGLVersionRequired (juce::OpenGLContext::openGL3_2);
+    gl.setPreferredVersion ({ 3, 2 });
+    gl.setPreferredProfile (juce::OpenGLProfile::core);
     gl.setRenderer (this);
     gl.setComponentPaintingEnabled (true);
     gl.setContinuousRepainting (false);     // the view asks for each frame, at its own pace
