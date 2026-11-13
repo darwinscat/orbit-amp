@@ -2450,10 +2450,12 @@ void Console::removeCab()
         return;
 
     const auto file = channels.cabinets()[playing];
-    juce::AlertWindow::showAsync (juce::MessageBoxOptions::makeOptionsOkCancel (juce::MessageBoxIconType::QuestionIcon,
-                                                                                "Remove the cabinet?",
-                                                                                Channels::cabinetName (file) + "\n\nIts file goes to the Trash.",
-                                                                                "Remove", "Cancel"),
+    juce::AlertWindow::showAsync (juce::MessageBoxOptions()
+                                      .withIconType (juce::MessageBoxIconType::QuestionIcon)
+                                      .withTitle ("Remove the cabinet?")
+                                      .withMessage (Channels::cabinetName (file) + "\n\nIts file goes to the Trash.")
+                                      .withButton (juce::MessageBoxButtonOptions { "Remove", 1 }.setPreferredAction())
+                                      .withButton (juce::MessageBoxButtonOptions { "Cancel", 0 }.setRole (juce::MessageBoxButtonRole::cancel)),
                                   [safe = juce::Component::SafePointer<Console> (this), file] (int answer)
     {
         if (safe == nullptr || answer != 1)
@@ -2784,10 +2786,13 @@ void Console::showPresetMenu()
                             {
                                 // A file gone is gone — undo does not bring it back — so this one asks.
                                 juce::AlertWindow::showAsync (
-                                    juce::MessageBoxOptions::makeOptionsOkCancel (juce::MessageBoxIconType::QuestionIcon,
-                                                                                  "Delete preset",
-                                                                                  "Delete \"" + current + "\"? Its file is removed for good.",
-                                                                                  "Delete", "Cancel", safe.getComponent()),
+                                    juce::MessageBoxOptions()
+                                        .withIconType (juce::MessageBoxIconType::QuestionIcon)
+                                        .withTitle ("Delete preset")
+                                        .withMessage ("Delete \"" + current + "\"? Its file is removed for good.")
+                                        .withButton (juce::MessageBoxButtonOptions { "Delete", 1 }.setPreferredAction())
+                                        .withButton (juce::MessageBoxButtonOptions { "Cancel", 0 }.setRole (juce::MessageBoxButtonRole::cancel))
+                                        .withAssociatedComponent (safe.getComponent()),
                                     [safe] (int answer)
                                     {
                                         if (safe != nullptr && answer == 1)
