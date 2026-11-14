@@ -1773,6 +1773,69 @@ int main()
             report ("...nor when the cabinet it returns to is longer", ghost < 1.0e-6, juce::String (ghost, 8) + " peak");
         }
 
+        // A LONG CABINET HANDED OVER WHILE IT RESTS HAS LANDED WHEN IT RETURNS. From core v0.65.0 the
+        // convolver spreads the last stage of an IR longer than 67584 taps (1.41 s at 48 kHz), and such
+        // a swap starts its 50 ms fade one 2048-sample hop after the pickup. Run in on 50 ms of silence
+        // alone, the swap was still in flight when the cabinet came back, and its first blocks played
+        // the rest of the fade from the cabinet before. The oracle is a cabinet that only ever held the
+        // long one, drained the same way.
+        {
+            juce::MemoryBlock longWav;   // 4.5 s, ending near -45 dB: nothing of it is cut as silence
+            {
+                juce::AudioBuffer<float> ir (1, (int) std::lround (4.5 * sampleRate));
+                for (int i = 0; i < ir.getNumSamples(); ++i)
+                {
+                    const double t = (double) i / sampleRate, w = 2.0 * juce::MathConstants<double>::pi * t;
+                    ir.setSample (0, i, (float) (std::exp (-t) * (0.5 * std::cos (97.0 * w) + 0.3 * std::sin (1300.0 * w))));
+                }
+                juce::WavAudioFormat wav;
+                std::unique_ptr<juce::OutputStream> stream = std::make_unique<juce::MemoryOutputStream> (longWav, false);
+                if (auto writer = wav.createWriterFor (stream, juce::AudioFormatWriterOptions{}
+                                                                   .withSampleRate (sampleRate)
+                                                                   .withNumChannels (1)
+                                                                   .withBitsPerSample (24)))
+                    writer->writeFromAudioSampleBuffer (ir, 0, ir.getNumSamples());
+            }
+
+            const auto returning = [&] (bool handedOverResting)
+            {
+                orbitamp::core::CabinetIr cab;
+                cab.prepare (sampleRate, bs, 2);
+                if (handedOverResting)
+                    cab.load (shelfIr.data, (size_t) shelfIr.size);
+                else
+                    cab.load (longWav.getData(), longWav.getSize());
+                blocks (cab, 200, true, true);                              // sounding: every stage warm
+                blocks (cab, (int) ((orbitamp::core::CabinetIr::maxSeconds + 1.0) * sampleRate / bs), false, false);
+                if (handedOverResting)
+                    cab.load (longWav.getData(), longWav.getSize());        // the long one, while it rests
+                blocks (cab, 200, false, false);
+                std::vector<float> out;                                     // back in the path: an impulse
+                juce::AudioBuffer<float> buf (2, bs);
+                for (int k = 0; k < 40; ++k)
+                {
+                    buf.clear();
+                    if (k == 0)
+                        buf.setSample (0, 0, 1.0f), buf.setSample (1, 0, 1.0f);
+                    cab.process (buf.getArrayOfWritePointers(), 2, bs, true);
+                    for (int i = 0; i < bs; ++i)
+                        out.push_back (buf.getSample (0, i));
+                }
+                return out;
+            };
+
+            const auto got = returning (true), want = returning (false);
+            double err = 0.0, ref = 0.0;
+            for (size_t i = 0; i < want.size(); ++i)
+            {
+                err = std::max (err, (double) std::abs (got[i] - want[i]));
+                ref = std::max (ref, (double) std::abs (want[i]));
+            }
+            report ("...and a long one handed over while it rests has landed when it returns",
+                    ref > 1.0e-3 && err < 1.0e-5 * ref,
+                    juce::String (err, 8) + " off a " + juce::String (ref, 4) + " peak");
+        }
+
         // THE TOP OCTAVE AT ANOTHER RATE is the cabinet's, not the resampler's. It filled in what lies
         // before an IR's first sample from the samples it had, and a cabinet starts on its loudest
         // edge: a broadband floor 12 to 26 dB over the cabinet from 16 kHz up. Read as the band's level
