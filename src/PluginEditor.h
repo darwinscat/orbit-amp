@@ -42,6 +42,7 @@ public:
     /** The limiter's whole console. */
     void showLimiterMenu (juce::Point<int> screenPos);
     void showInputMenu (juce::Point<int> screenPos);
+    static constexpr int inputItem = 1000;   // the input menu's IN lines answer from here, past the hum's
     void showTunerMenu (juce::Point<int> screenPos);
 
     /** THE GUARDS' MENUS as their blocks open them — ON first, ruled off (the owner, 01.11: every menu) — and what a

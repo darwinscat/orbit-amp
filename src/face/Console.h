@@ -446,8 +446,10 @@ private:
     void settleOnSettings();
     void chooseDriveSteps (bool steps);
 
-    void showInputMenu();           // the INPUT column: the hum
+    void showInputMenu();           // the INPUT column: which input, and the hum
     void addHumLines (juce::PopupMenu&);    // the hum's switch and its modes, as every menu has them
+    bool addInputLines (juce::PopupMenu&, bool headed);   // which input the amp plays; false, and nothing added, where there is one
+    juce::String inputState() const;                       // ...and where it stands, as a title says it
 
     // THE HUM'S QUICK A/B: H flips it between OFF and the mode OFF bypasses (prefs::humFlip), and the
     // name tag over INPUT says for a moment which it is now. G does the same for the gate's On — the

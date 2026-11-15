@@ -59,8 +59,7 @@ AmpEditor::AmpEditor (AmpProcessor& p)
     gateConsole.offersReset = amp.product().chain == Chain::bass;   // RESET at the foot of every menu (the owner, 01.11)
     faceplate.gateBlock().onMenu  = [this] (juce::Point<int> pos) { amp.gateWorked.store (false);    gateConsole.showMenu (pos, gateOnAt()); };
     faceplate.limitBlock().onMenu = [this] (juce::Point<int> pos) { amp.limiterWorked.store (false); showLimiterMenu (pos); };
-    if constexpr (features::hum)   // the input column's menu is HUM's in the build that has it (Features.h)
-        inColumn.onMenu = [this] (juce::Point<int> pos) { showInputMenu (pos); };
+    inColumn.onMenu = [this] (juce::Point<int> pos) { showInputMenu (pos); };   // which input, and HUM where the build has it
     addAndMakeVisible (tunerStrip);
     tunerStrip.isMuted = [&p] { return p.apvts.getRawParameterValue (params::tunerMute)->load() > 0.5f; };
     tunerStrip.onMenu  = [this] (juce::Point<int> pos) { showTunerMenu (pos); };
@@ -585,40 +584,62 @@ juce::PopupMenu AmpEditor::gateMenu() { return gateConsole.menu (gateOnAt()); }
 
 void AmpEditor::pickGate (int item) { gateConsole.pick (item, gateOnAt()); }
 
-/** A RIGHT CLICK ON THE INPUT COLUMN: the hum the input carries, and what to take off it. It is the
-    machine's, not the sound's (prefs::hum) — a preset neither carries it nor moves it, undo steps over
-    it, and every window and engine of this product follow it from their next look and their next
-    block. AUTO's line says what it decided, once it has. */
+/** A RIGHT CLICK ON THE INPUT COLUMN: which of the interface's inputs the amp plays, and the hum the input carries
+    and what to take off it. Both are the machine's, not the sound's (params::InputSource, prefs::hum) — a preset
+    neither carries them nor moves them, and undo steps over them; the input is the session's, the hum every window
+    and engine of this product follow from their next look and their next block. AUTO's line says what it decided,
+    once it has. With one input and no HUM in the build (Features.h) there is nothing to open. */
 void AmpEditor::showInputMenu (juce::Point<int> screenPos)
 {
-    // The switch, then the modes (ui/HumMenu.h), in this menu's capitals.
-    const int  heard = amp.humHeard();
-    const auto lines = prefs::humMenu (amp.product(), heard, humLearner.isLearning());
-
     juce::PopupMenu m;
-    m.addSectionHeader ("HUM  " + prefs::humState (amp.product(), heard).toUpperCase());
-    for (size_t i = 0; i < lines.size(); ++i)
-        m.addItem ((int) i + 1, lines[i].text.toUpperCase(), true, lines[i].ticked);
 
-    // How hard it works — TEMPORARY, for tuning by ear (ui/HumTuning.h): each a submenu, its value in
-    // its title; knob k's values answer as 100 (k + 1) + their index.
-    const auto knobs = prefs::humtune::knobs (amp.product());
-    for (size_t k = 0; k < knobs.size(); ++k)
+    // WHICH INPUT: Left, Right, L+R, where the bus has two — greyed in STEREO, which plays both, each through its own
+    // amp. They answer as inputItem + their index.
+    const bool inputs = amp.getTotalNumInputChannels() >= 2;
+    if (inputs)
     {
-        juce::PopupMenu values;
-        for (int i = 0; i < knobs[k].count; ++i)
-            values.addItem (100 * ((int) k + 1) + i, knobs[k].say (knobs[k].values[i]).toUpperCase(), true,
-                            juce::exactlyEqual (knobs[k].values[i], knobs[k].now));
-        m.addSubMenu ((juce::String (knobs[k].name) + "  " + knobs[k].say (knobs[k].now)).toUpperCase(), values);
+        const bool chooses = amp.choosesInput();
+        m.addSectionHeader (chooses ? juce::String ("IN") : juce::String ("IN  BOTH, IN STEREO"));
+        for (int i = 0; i < params::inputSources.size(); ++i)
+            m.addItem (inputItem + i, params::inputLine (i).toUpperCase(), chooses, chooses && (int) amp.inputSource() == i);
     }
 
-    // The answer reaches this window only to start the hum's LEARN, and through a SafePointer: a window
-    // closed under the open menu is left alone.
+    // The switch, then the modes (ui/HumMenu.h), in this menu's capitals — while the build has HUM.
+    const int  heard = amp.humHeard();
+    const auto lines = prefs::humMenu (amp.product(), heard, humLearner.isLearning());
+    const auto knobs = prefs::humtune::knobs (amp.product());
+    if constexpr (features::hum)
+    {
+        m.addSectionHeader ("HUM  " + prefs::humState (amp.product(), heard).toUpperCase());
+        for (size_t i = 0; i < lines.size(); ++i)
+            m.addItem ((int) i + 1, lines[i].text.toUpperCase(), true, lines[i].ticked);
+
+        // How hard it works — TEMPORARY, for tuning by ear (ui/HumTuning.h): each a submenu, its value in
+        // its title; knob k's values answer as 100 (k + 1) + their index.
+        for (size_t k = 0; k < knobs.size(); ++k)
+        {
+            juce::PopupMenu values;
+            for (int i = 0; i < knobs[k].count; ++i)
+                values.addItem (100 * ((int) k + 1) + i, knobs[k].say (knobs[k].values[i]).toUpperCase(), true,
+                                juce::exactlyEqual (knobs[k].values[i], knobs[k].now));
+            m.addSubMenu ((juce::String (knobs[k].name) + "  " + knobs[k].say (knobs[k].now)).toUpperCase(), values);
+        }
+    }
+    else if (! inputs)
+        return;
+
+    // The answer reaches this window only to choose the input and to start the hum's LEARN, and through a
+    // SafePointer: a window closed under the open menu is left alone.
     m.showMenuAsync (juce::PopupMenu::Options()
                          .withTargetScreenArea ({ screenPos.x, screenPos.y, 1, 1 }),
                      [safe = juce::Component::SafePointer<AmpEditor> (this), lines, knobs, &product = amp.product()] (int r)
                      {
-                         if (r > 0 && r <= (int) lines.size() && lines[(size_t) r - 1].isLearn)
+                         if (r >= inputItem && r < inputItem + params::inputSources.size())
+                         {
+                             if (safe != nullptr)
+                                 safe->amp.setInputSource ((params::InputSource) (r - inputItem));
+                         }
+                         else if (r > 0 && r <= (int) lines.size() && lines[(size_t) r - 1].isLearn)
                          {
                              if (safe != nullptr)
                              {
