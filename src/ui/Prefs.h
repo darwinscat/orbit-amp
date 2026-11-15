@@ -4,6 +4,7 @@
 #pragma once
 
 #include "../Product.h"
+#include "../UserFolders.h"
 #include "../core/TunerPoly.h"
 
 #include <felitronics/appkit/SettingsStore.h>
@@ -17,11 +18,12 @@ namespace orbitamp::prefs
     these and the compare registers do not flip them: they are about this machine and this player,
     so they live in the product's settings store — one small JSON beside its Devices folder, shared
     by every instance of the product, locked against two of them writing at once. One for each product
-    in a process (PerProduct): two amps in one host each keep their own. */
+    in a process (PerProduct): two amps in one host each keep their own. In the player's application data
+    (UserFolders.h), where appkit's store would put it on its own. */
 inline const felitronics::appkit::SettingsStore& store (const Product& p)
 {
     static PerProduct<const felitronics::appkit::SettingsStore> stores;
-    return stores.of (p.name, [&p] { return felitronics::appkit::SettingsStore ("Darwin's Cat", p.name); });
+    return stores.of (p.name, [&p] { return felitronics::appkit::SettingsStore ("Darwin's Cat", p.name, userAppData()); });
 }
 
 /** The update badge's own store — `update.settings`, beside the settings.json above.

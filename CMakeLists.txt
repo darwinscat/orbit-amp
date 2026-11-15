@@ -2417,6 +2417,9 @@ foreach(line IN LISTS _gate_lines)
         continue()
     endif()
     add_dependencies(Family_Gates ${target})
+    # A GATE'S HOME IS ITS OWN on Windows too: there the player's folders are read from the home tools/run-gates.sh
+    # names (src/UserFolders.h), as on a Mac and on Linux they are from HOME. No amp is built so.
+    target_compile_definitions(${target} PRIVATE ORBITAMP_GATE_OWN_HOME=1)
     # A GATE'S STACK IS THE ONE IT HAS ON A MAC AND ON LINUX, 8 MB: Windows gives a program 1 MB, and the gates keep
     # what they test on the stack — the tuner's strobe tests some 4 MB there (MSVC's /analyze) — so the tuner and
     # the chain gates died on MSVC's runners of a stack overflow (0xC00000FD), the chain before its first line.

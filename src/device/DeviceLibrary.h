@@ -4,6 +4,7 @@
 #pragma once
 
 #include "FactorySet.h"
+#include "../UserFolders.h"
 
 #include <namz.h>
 #include <namz_rig.h>
@@ -92,17 +93,10 @@ public:
     }
 
     /** The FAMILY's folder, `Darwin's Cat`: every product's own folder is in it, and the set they share.
-        JUCE's userApplicationDataDirectory is ~/Library on macOS, not ~/Library/Application Support —
-        without this the folder lands one level too high and nothing a user drops in is ever found. */
+        In the player's application data (UserFolders.h), on the Mac ~/Library/Application Support. */
     static juce::File familyRoot()
     {
-        auto dir = juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory);
-
-       #if JUCE_MAC
-        dir = dir.getChildFile ("Application Support");
-       #endif
-
-        return dir.getChildFile ("Darwin's Cat");
+        return userAppData().getChildFile ("Darwin's Cat");
     }
 
     /** The PRODUCT's folder, by its name: two faces of one engine each keep the devices the PLAYER adds,

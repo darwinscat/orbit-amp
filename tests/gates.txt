@@ -15,9 +15,8 @@
 #
 # Every gate runs in a home of its own, made empty for it (tools/run-gates.sh), so a gate that writes
 # where a player's amp would — the family's Factory folder, the player's IRs — writes into that home,
-# never the runner's or the machine's owner's. (On Windows the home is the runner's own profile: Windows
-# finds AppData without asking the environment. The workflows run the gates only on hosted runners,
-# which are thrown away after the job.)
+# never the runner's or the machine's owner's. On Windows, which finds AppData without asking the
+# environment, a gate reads the player's folders from that home too (src/UserFolders.h).
 
 # OrbitAmp's own — the engine every amp plays.
 captured           orbitamp_gates

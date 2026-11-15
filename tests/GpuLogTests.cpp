@@ -9,11 +9,12 @@
 //   - lines written from several threads at once each land whole;
 //   - past its cap a log keeps its newest half, from a whole line, and the newest line is the last.
 //
-// Into the family's log it writes two lines and nothing else — in the home run-gates.sh made for it, which on
-// Windows is the runner's own profile — and it takes nothing out of it: the threads and the caps are tried on
-// logs of its own in the temporary folder. main() returns 0 when every check held.
+// Into the family's log it writes two lines and nothing else — in the home run-gates.sh made for it — and it
+// takes nothing out of it: the threads and the caps are tried on logs of its own in the temporary folder.
+// main() returns 0 when every check held.
 
 #include "GateMain.h"
+#include "UserFolders.h"
 #include "shaders/GpuLog.h"
 
 #include <cstdio>
@@ -88,13 +89,16 @@ int ORBITAMP_GATE_MAIN()
     // WHERE: beside every product's settings folder, in this run's own home.
     const auto log = gpulog::file();
     std::printf ("      %s\n", log.getFullPathName().toRawUTF8());
-    auto root = juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory);
-   #if JUCE_MAC
-    root = root.getChildFile ("Application Support");
-   #endif
-    check (log == root.getChildFile ("Darwin's Cat").getChildFile ("gpu.log"),
+    check (log == userAppData().getChildFile ("Darwin's Cat").getChildFile ("gpu.log"),
            "the log is gpu.log in Darwin's Cat's folder, where the products' settings folders are");
-    check (log.isAChildOf (juce::File::getSpecialLocation (juce::File::userHomeDirectory)), "...in the home this run was given");
+    // The home run-gates.sh gave this run: HOME, and on Windows, which finds AppData without asking HOME,
+    // ORBITAMP_GATE_HOME (src/UserFolders.h).
+   #if JUCE_WINDOWS
+    const juce::File given (juce::SystemStats::getEnvironmentVariable ("ORBITAMP_GATE_HOME", {}));
+   #else
+    const juce::File given (juce::SystemStats::getEnvironmentVariable ("HOME", {}));
+   #endif
+    check (given != juce::File() && log.isAChildOf (given), "...in the home this run was given");
     const int before = linesOf (log).size();
 
     // A REFUSAL, as a windscreen whose world will not build writes it.

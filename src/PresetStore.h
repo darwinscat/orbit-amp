@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include "UserFolders.h"
+
 #include <juce_data_structures/juce_data_structures.h>
 
 namespace orbitamp
@@ -24,17 +26,11 @@ public:
     PresetStore (juce::String product, juce::String extension)
         : productName (std::move (product)), fileExtension (std::move (extension)) {}
 
-    /** Made if it is not there yet. JUCE's userApplicationDataDirectory is ~/Library on the Mac, not
-        ~/Library/Application Support — without the step down, presets would land one level too high. */
+    /** Made if it is not there yet. In the player's application data (UserFolders.h), on the Mac
+        ~/Library/Application Support. */
     juce::File directory() const
     {
-        auto dir = juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory);
-
-       #if JUCE_MAC
-        dir = dir.getChildFile ("Application Support");
-       #endif
-
-        dir = dir.getChildFile ("Darwin's Cat").getChildFile (productName).getChildFile ("Presets");
+        auto dir = userAppData().getChildFile ("Darwin's Cat").getChildFile (productName).getChildFile ("Presets");
         if (! dir.isDirectory())
             dir.createDirectory();
         return dir;
