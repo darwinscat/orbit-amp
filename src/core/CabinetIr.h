@@ -324,11 +324,14 @@ private:
              + (int) spare.size() + 1;
     }
 
-    /** How long a handover takes to land: the convolver's 50 ms crossfade, from the block that picks
-        it up. */
+    /** How long a handover takes to land, from the block that picks it up: what the convolver says its
+        worst swap takes (its 50 ms crossfade, plus a 2048-sample hop when it spreads a long IR's last
+        stage, core v0.65.0), and a block. It was the 50 ms alone; a spread swap then stayed in flight
+        once the silence stopped, and the cabinet that came back into the path played the rest of its
+        fade. */
     int landingSamples() const noexcept
     {
-        return juce::roundToInt (0.05 * hostRate) + (int) spare.size() + 1;
+        return conv.maxSwapSamples() + (int) spare.size() + 1;
     }
 
     /** One block of silence through the convolver, and its answer thrown away. */

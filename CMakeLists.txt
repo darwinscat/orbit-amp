@@ -159,7 +159,20 @@ include(cmake/PatchedWrappers.cmake)
 # v0.62.0 brings the bass amps' own: octave (Octaver), envfilter (EnvelopeFilter) and chorus (BassChorus) —
 # OrbitBass's and RedGrooveBass's OCTAVE, ENVELOPE and CHORUS (src/core/OctaveTap.h, FilterTap.h, ChorusTap.h),
 # which until then built from an unreleased branch of the core alone.
-set(ORBITAMP_FCORE_TAG "v0.62.0" CACHE STRING "felitronics-core release tag (fetched when no local checkout)")
+#
+# v0.63.0 takes in, JUCE-free, classes that were born here — the cabinet (cabinet::CabinetIr), BypassFade, the
+# bass's compressor, cuts and EqLink — and adds nothing to what this graph links: our own copies still play.
+# v0.64.0 sizes the cabinet convolver's memory to the IR it holds instead of its 5 s cap, bit for bit the same
+# sound. v0.65.0 spreads the convolver's last stage over a hop for an IR longer than 67584 taps (1.41 s at
+# 48 kHz, 0.70 s at 96 kHz): such a cabinet plays within float noise of before (1e-7 of the peak), and its swap
+# starts its 50 ms fade one 2048-sample hop after the pickup — which the cabinet, waiting a fixed 50 ms for a
+# handover made while it rests, has to ask the convolver about (CabConvolver::maxSwapSamples). v0.66.0 gives
+# TapeDelay up to four playback heads; the default layout, the one the echo plays, is the one head as before,
+# byte for byte. v0.66.1 leaves the echo's audio byte for byte as it was and makes what TapeDelay reports follow
+# the knobs: tailSeconds() counts no echoes at a REPEATS of 0 (the plug-in's tail), and after reset()/prepare()
+# shownTimeMs()/shownOffsetMs() show where the next block puts the heads (the DELAY picture). v0.67.0 gates
+# RtStreams (the recorder's and the audition's streams), which nothing here uses.
+set(ORBITAMP_FCORE_TAG "v0.67.0" CACHE STRING "felitronics-core release tag (fetched when no local checkout)")
 
 set(ORBITAMP_FCORE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../felitronics-core"
     CACHE PATH "Local felitronics-core checkout (used if present); else the pinned release is fetched")
