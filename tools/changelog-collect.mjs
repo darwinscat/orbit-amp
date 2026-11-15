@@ -16,8 +16,9 @@
 // / … sections with their bullets. The release has a part for every amp at once, `### Every amp`, and one
 // for each amp of the family (installer/family.ini), in that file's order; in each part, each section
 // gathers that section from every fragment about it, in fragment order, and the sections go in Keep a
-// Changelog's order, with Dependencies last. A fragment about several amps is said in each one's part;
-// its Dependencies, what the tree is built from, are every amp's and go to `Every amp` whatever it names.
+// Changelog's order, with Dependencies last. A fragment about several amps is said in each one's part,
+// and one that names every amp the release carries is `Every amp`'s, said once; its Dependencies, what the
+// tree is built from, are every amp's and go to `Every amp` whatever it names.
 // Anything in a fragment ABOVE its first section is prose for the top of its part — of the release, for
 // `Amps: all` — and `release.md`, when there is one, goes first of all and needs no `Amps:` line.
 //
@@ -135,6 +136,8 @@ for (const f of files)
             }
             audience = named.filter(a => family.includes(a));
             if (audience.length === 0) { waiting.push(`${f}  (${named.join(', ')})`); continue; }
+            // Every amp the release carries, named one by one, is every amp: said once, not once in each part.
+            if (family.every(a => audience.includes(a))) audience = [EVERY];
         }
     }
 

@@ -20,7 +20,8 @@ gives them:
     Amps: OrbitAmp                — one amp: its own part
     Amps: CatpitAmp, RedPawAmp    — several: said in each one's part
 
-A note that tells different amps different things is two fragments. Its `### Dependencies` go to `Every amp`
+A fragment that names every amp the release carries, one by one, is `Every amp`'s and is said once, as
+`Amps: all` is. A note that tells different amps different things is two fragments. Its `### Dependencies` go to `Every amp`
 whatever the line names — what the tree is built from is every amp's. A fragment about amps the release
 does not carry (none of them in `installer/family.ini` yet) waits in `changelog.d/` for the release that
 does. A fragment without the line, or naming an amp the tree does not build, stops the tool.
