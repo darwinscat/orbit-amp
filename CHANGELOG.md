@@ -9,43 +9,7 @@ Up to 0.7.0 this book was OrbitAmp's alone. The format follows
 
 ## [0.10.1] — 2026-11-12 — JUCE's security release
 
-### OrbitAmp
-
-#### Fixed
-- **Safer with the files it opens.** Built on JUCE 8.0.17, its security release: a WAV with a broken header no longer
-  crashes the amp, a zip can no longer write outside its folder, and a preset or a session nested too deep is refused
-  rather than run.
-- **CLAP hosts.** A latency that changes while the plug-in starts is reported to the host, a project's transport is
-  read right across split blocks, and the plug-in's text reaches the host whole.
-
-### CatpitAmp
-
-#### Fixed
-- **Safer with the files it opens.** Built on JUCE 8.0.17, its security release: a WAV with a broken header no longer
-  crashes the amp, a zip can no longer write outside its folder, and a preset or a session nested too deep is refused
-  rather than run.
-- **CLAP hosts.** A latency that changes while the plug-in starts is reported to the host, a project's transport is
-  read right across split blocks, and the plug-in's text reaches the host whole.
-
-### RedPawAmp
-
-#### Fixed
-- **Safer with the files it opens.** Built on JUCE 8.0.17, its security release: a WAV with a broken header no longer
-  crashes the amp, a zip can no longer write outside its folder, and a preset or a session nested too deep is refused
-  rather than run.
-- **CLAP hosts.** A latency that changes while the plug-in starts is reported to the host, a project's transport is
-  read right across split blocks, and the plug-in's text reaches the host whole.
-
-### FrostPawAmp
-
-#### Fixed
-- **Safer with the files it opens.** Built on JUCE 8.0.17, its security release: a WAV with a broken header no longer
-  crashes the amp, a zip can no longer write outside its folder, and a preset or a session nested too deep is refused
-  rather than run.
-- **CLAP hosts.** A latency that changes while the plug-in starts is reported to the host, a project's transport is
-  read right across split blocks, and the plug-in's text reaches the host whole.
-
-### AmberPawAmp
+### Every amp
 
 #### Fixed
 - **Safer with the files it opens.** Built on JUCE 8.0.17, its security release: a WAV with a broken header no longer
