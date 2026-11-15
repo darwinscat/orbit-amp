@@ -13,12 +13,13 @@
 //
 // A fragment opens with the line `Amps: all` or `Amps: OrbitAmp, CatpitAmp` — the amps it is about, by
 // the names CMakeLists.txt's add_amp() gives them — and then has `### Added` / `### Changed` / `### Fixed`
-// / … sections with their bullets. The release has a part for every amp at once, `### Every amp`, and one
-// for each amp of the family (installer/family.ini), in that file's order; in each part, each section
-// gathers that section from every fragment about it, in fragment order, and the sections go in Keep a
-// Changelog's order, with Dependencies last. A fragment about several amps is said in each one's part,
-// and one that names every amp the release carries is `Every amp`'s, said once; its Dependencies, what the
-// tree is built from, are every amp's and go to `Every amp` whatever it names.
+// / … sections with their bullets. The release has a part for every amp at once, `### Every amp`, one for
+// each few amps fragments name together (`### CatpitAmp and RedPawAmp`), and one for each amp of the family
+// (installer/family.ini), in that file's order; in each part, each section gathers that section from every
+// fragment about it, in fragment order, and the sections go in Keep a Changelog's order, with Dependencies
+// last. A change is said once: a fragment about several amps goes to the part under their names, and one
+// that names every amp the release carries is `Every amp`'s; its Dependencies, what the tree is built from,
+// are every amp's and go to `Every amp` whatever it names.
 // Anything in a fragment ABOVE its first section is prose for the top of its part — of the release, for
 // `Amps: all` — and `release.md`, when there is one, goes first of all and needs no `Amps:` line.
 //
@@ -106,6 +107,12 @@ if (files.length === 0) { console.error('changelog.d/ holds no fragments'); proc
 
 // Each part of the release — every amp at once, then each amp of the family — with its prose and sections.
 const parts   = new Map([EVERY, ...family].map(p => [p, { prose: [], sections: new Map() }]));
+const together = new Map();   // the parts of a few amps, by their name: the amps they are about
+const joint   = (amps) => {
+    const name = amps.slice(0, -1).join(', ') + ' and ' + amps[amps.length - 1];
+    if (! parts.has(name)) { parts.set(name, { prose: [], sections: new Map() }); together.set(name, amps); }
+    return name;
+};
 const top     = [];   // release.md
 const folded  = [];   // the fragments this release takes
 const waiting = [];   // ...and the ones it leaves for a later one
@@ -136,8 +143,11 @@ for (const f of files)
             }
             audience = named.filter(a => family.includes(a));
             if (audience.length === 0) { waiting.push(`${f}  (${named.join(', ')})`); continue; }
-            // Every amp the release carries, named one by one, is every amp: said once, not once in each part.
-            if (family.every(a => audience.includes(a))) audience = [EVERY];
+            // Said once: every amp the release carries, named one by one, is every amp, and a few of them
+            // are the part under their names, in the family's order.
+            audience = family.filter(a => audience.includes(a));
+            if (audience.length === family.length) audience = [EVERY];
+            else if (audience.length > 1) audience = [joint(audience)];
         }
     }
 
@@ -171,10 +181,14 @@ if (wrong.length)
     process.exit(1);
 }
 
-// The release-wide prose stands above every part; each amp's own heads its part.
+// The release-wide prose stands above every part; each amp's own heads its part. Every amp first, then what a
+// few share — more of them first, then in the family's order — then each amp.
 const everyProse = parts.get(EVERY).prose;
 parts.get(EVERY).prose = [];
-const rendered = [...parts]
+const fewFirst = [...together].sort(([, a], [, b]) => (b.length - a.length)
+    || a.map(x => String(family.indexOf(x)).padStart(3, '0')).join().localeCompare(b.map(x => String(family.indexOf(x)).padStart(3, '0')).join()));
+const ordered  = [EVERY, ...fewFirst.map(([name]) => name), ...family].map(name => [name, parts.get(name)]);
+const rendered = ordered
     .filter(([, p]) => p.prose.length || p.sections.size)
     .map(([name, p]) => [
         `### ${name}`,
