@@ -1,6 +1,6 @@
 # Felitronics Amps
 
-<p align="center"><img src="docs/readme/amps.jpg" alt="Felitronics Amps: CatpitAmp, RedPawAmp, FrostPawAmp and AmberPawAmp, a starship's cockpit, Mars, the ice of Europa and Titan" width="880"></p>
+<p align="center"><img src="docs/readme/amps.jpg" alt="Felitronics Amps: CatpitAmp, RedPawAmp, FrostPawAmp, AmberPawAmp and RedGrooveBass, a starship's cockpit, Mars, the ice of Europa, Titan and the mushroom forest of Teegarden b" width="880"></p>
 
 Free, open-source guitar and bass amp plugins, ready to play. VST3, AU and CLAP plugins and a standalone app for
 Windows, macOS and Linux. This repository builds them all: OrbitAmp, CatpitAmp, RedPawAmp,
