@@ -168,8 +168,11 @@ include(cmake/PatchedWrappers.cmake)
 # starts its 50 ms fade one 2048-sample hop after the pickup — which the cabinet, waiting a fixed 50 ms for a
 # handover made while it rests, has to ask the convolver about (CabConvolver::maxSwapSamples). v0.66.0 gives
 # TapeDelay up to four playback heads; the default layout, the one the echo plays, is the one head as before,
-# byte for byte.
-set(ORBITAMP_FCORE_TAG "v0.66.0" CACHE STRING "felitronics-core release tag (fetched when no local checkout)")
+# byte for byte. v0.66.1 leaves the echo's audio byte for byte as it was and makes what TapeDelay reports follow
+# the knobs: tailSeconds() counts no echoes at a REPEATS of 0 (the plug-in's tail), and after reset()/prepare()
+# shownTimeMs()/shownOffsetMs() show where the next block puts the heads (the DELAY picture). v0.67.0 gates
+# RtStreams (the recorder's and the audition's streams), which nothing here uses.
+set(ORBITAMP_FCORE_TAG "v0.67.0" CACHE STRING "felitronics-core release tag (fetched when no local checkout)")
 
 set(ORBITAMP_FCORE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../felitronics-core"
     CACHE PATH "Local felitronics-core checkout (used if present); else the pinned release is fetched")
