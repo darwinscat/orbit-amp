@@ -2,7 +2,8 @@
 # Changelog
 
 All notable changes to **Darwin's Cat Amps** — the amps released together from this repository, under
-one version — are documented here: each release with a part for every amp at once and one for each amp.
+one version — are documented here: each release with a part for every amp at once, one for what a few of
+them share, under their names, and one for each amp. A change is said once.
 Up to 0.7.0 this book was OrbitAmp's alone. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project uses
 [Semantic Versioning](https://semver.org/).
@@ -68,6 +69,35 @@ Up to 0.7.0 this book was OrbitAmp's alone. The format follows
 - **felitronics-core v0.62.0**: the bass amps' octave, envelope filter and chorus, which no guitar amp plays, and an IR
   resampled to another rate comes out the same on every x86-64 build. The guitar amps sound as they did.
 
+### CatpitAmp, RedPawAmp, FrostPawAmp and AmberPawAmp
+
+#### Changed
+- **The cabinets are the guitar's TOP 12, drawn.** Twelve cabinets of Orbit Guitar Cab Builder, drawn live by its own
+  synthesis, take the place of the Orange PPC212V's ten IRs. CAB has a position for each, and its plate names the
+  one that plays by its number, "1: 4x12 SELFISH GENE". A right click on CAB lists the twelve and CABINET OFF, which
+  takes the cabinet out for every channel and back. Each channel keeps the cabinet it was left on, and opens on
+  1: 4x12 SELFISH GENE until you move it; a session or a preset of an earlier release opens every channel there.
+- **Full screen is the face alone.** In the standalone, full screen (WINDOW, Full screen in the settings menu, or
+  Cmd+Ctrl+F on a Mac and F11 elsewhere) hides the window's title bar and its Options button; both come back with the
+  window.
+
+#### Removed
+- **The cabinets' window, and IRs of your own.** No window with ADD, SAVE, RENAME, REMOVE and BYPASS, and no IR
+  dropped on the face: these amps play the twelve and no file. Your own IRs stay in `Darwin's Cat/IRs`, where
+  OrbitAmp plays them.
+
+#### Fixed
+- **Opening the face writes no automation.** Every time the face opened, it set the amp's chain up again and told the
+  host of each parameter it set, even one already where it stood, so a host writing automation recorded points
+  nobody made. Now the host hears only of a parameter that moves.
+
+### OrbitAmp and AmberPawAmp
+
+#### Changed
+- **The Victory V4's three packs leave quieter**: the Copper by 6 dB, the Sheriff by 3 and the Kraken by 6. The Copper
+  now leaves 1 dB under its capture, the Sheriff 6 dB under, the Kraken at its capture's own level, where 0.9.0 had
+  them 5 dB over, 3 dB under and 6 dB over. A session or a preset on one of them plays quieter by as much.
+
 ### OrbitAmp
 
 #### Added
@@ -115,9 +145,6 @@ Up to 0.7.0 this book was OrbitAmp's alone. The format follows
   -80 dB up. ON in its menu does the same.
 - **The tuner's MUTE is in its right-click menu**, beside Display (Needle or Strobe); the MUTE pill beside the cents
   is gone. While the amp is muted, a crossed-out speaker blinks at the left of the tuner's scale.
-- **The Victory V4's three packs leave quieter**: the Copper by 6 dB, the Sheriff by 3 and the Kraken by 6. The Copper
-  now leaves 1 dB under its capture, the Sheriff 6 dB under, the Kraken at its capture's own level, where 0.9.0 had
-  them 5 dB over, 3 dB under and 6 dB over. A session or a preset on one of them plays quieter by as much.
 
 #### Removed
 - **The factory IRs are no longer in the CAB's list**: the Orange PPC212V's ten, RED GIANT and DARK MATTER among them,
@@ -137,26 +164,6 @@ Up to 0.7.0 this book was OrbitAmp's alone. The format follows
   the guitar sounds. It answers the hand, not the loudness — a held note is no flash. Off until it is asked for — STARS,
   Lit by the guitar, in the settings menu; off, the sky is the one it always was.
 
-#### Changed
-- **The cabinets are the guitar's TOP 12, drawn.** Twelve cabinets of Orbit Guitar Cab Builder, drawn live by its own
-  synthesis, take the place of the Orange PPC212V's ten IRs. CAB has a position for each, and its plate names the
-  one that plays by its number, "1: 4x12 SELFISH GENE". A right click on CAB lists the twelve and CABINET OFF, which
-  takes the cabinet out for every channel and back. Each channel keeps the cabinet it was left on, and opens on
-  1: 4x12 SELFISH GENE until you move it; a session or a preset of an earlier release opens every channel there.
-- **Full screen is the face alone.** In the standalone, full screen (WINDOW, Full screen in the settings menu, or
-  Cmd+Ctrl+F on a Mac and F11 elsewhere) hides the window's title bar and its Options button; both come back with the
-  window.
-
-#### Removed
-- **The cabinets' window, and IRs of your own.** No window with ADD, SAVE, RENAME, REMOVE and BYPASS, and no IR
-  dropped on the face: these amps play the twelve and no file. Your own IRs stay in `Darwin's Cat/IRs`, where
-  OrbitAmp plays them.
-
-#### Fixed
-- **Opening the face writes no automation.** Every time the face opened, it set the amp's chain up again and told the
-  host of each parameter it set, even one already where it stood, so a host writing automation recorded points
-  nobody made. Now the host hears only of a parameter that moves.
-
 ### RedPawAmp
 
 #### Added
@@ -164,26 +171,6 @@ Up to 0.7.0 this book was OrbitAmp's alone. The format follows
   every old machine's mast flashes. It answers the hand, not the loudness — a note out of silence is a full flash,
   one picked into a ringing chord a smaller one, a held note none — with a soft light while the guitar sounds. Off
   until it is asked for — LANDSCAPE, Lit by the guitar, in the settings menu; off, the view is the one it always was.
-
-#### Changed
-- **The cabinets are the guitar's TOP 12, drawn.** Twelve cabinets of Orbit Guitar Cab Builder, drawn live by its own
-  synthesis, take the place of the Orange PPC212V's ten IRs. CAB has a position for each, and its plate names the
-  one that plays by its number, "1: 4x12 SELFISH GENE". A right click on CAB lists the twelve and CABINET OFF, which
-  takes the cabinet out for every channel and back. Each channel keeps the cabinet it was left on, and opens on
-  1: 4x12 SELFISH GENE until you move it; a session or a preset of an earlier release opens every channel there.
-- **Full screen is the face alone.** In the standalone, full screen (WINDOW, Full screen in the settings menu, or
-  Cmd+Ctrl+F on a Mac and F11 elsewhere) hides the window's title bar and its Options button; both come back with the
-  window.
-
-#### Removed
-- **The cabinets' window, and IRs of your own.** No window with ADD, SAVE, RENAME, REMOVE and BYPASS, and no IR
-  dropped on the face: these amps play the twelve and no file. Your own IRs stay in `Darwin's Cat/IRs`, where
-  OrbitAmp plays them.
-
-#### Fixed
-- **Opening the face writes no automation.** Every time the face opened, it set the amp's chain up again and told the
-  host of each parameter it set, even one already where it stood, so a host writing automation recorded points
-  nobody made. Now the host hears only of a parameter that moves.
 
 ### FrostPawAmp
 
@@ -193,26 +180,6 @@ Up to 0.7.0 this book was OrbitAmp's alone. The format follows
   not the loudness — a note out of silence is a full flash, a held note none. Off until it is asked for — LANDSCAPE,
   Lit by the guitar, in the settings menu; off, the view is the one it always was.
 
-#### Changed
-- **The cabinets are the guitar's TOP 12, drawn.** Twelve cabinets of Orbit Guitar Cab Builder, drawn live by its own
-  synthesis, take the place of the Orange PPC212V's ten IRs. CAB has a position for each, and its plate names the
-  one that plays by its number, "1: 4x12 SELFISH GENE". A right click on CAB lists the twelve and CABINET OFF, which
-  takes the cabinet out for every channel and back. Each channel keeps the cabinet it was left on, and opens on
-  1: 4x12 SELFISH GENE until you move it; a session or a preset of an earlier release opens every channel there.
-- **Full screen is the face alone.** In the standalone, full screen (WINDOW, Full screen in the settings menu, or
-  Cmd+Ctrl+F on a Mac and F11 elsewhere) hides the window's title bar and its Options button; both come back with the
-  window.
-
-#### Removed
-- **The cabinets' window, and IRs of your own.** No window with ADD, SAVE, RENAME, REMOVE and BYPASS, and no IR
-  dropped on the face: these amps play the twelve and no file. Your own IRs stay in `Darwin's Cat/IRs`, where
-  OrbitAmp plays them.
-
-#### Fixed
-- **Opening the face writes no automation.** Every time the face opened, it set the amp's chain up again and told the
-  host of each parameter it set, even one already where it stood, so a host writing automation recorded points
-  nobody made. Now the host hears only of a parameter that moves.
-
 ### AmberPawAmp
 
 #### Added
@@ -221,43 +188,13 @@ Up to 0.7.0 this book was OrbitAmp's alone. The format follows
   LANDSCAPE, Lit by the guitar, in the settings menu; off, the view is the one it always was.
 
 #### Changed
-- **The cabinets are the guitar's TOP 12, drawn.** Twelve cabinets of Orbit Guitar Cab Builder, drawn live by its own
-  synthesis, take the place of the Orange PPC212V's ten IRs. CAB has a position for each, and its plate names the
-  one that plays by its number, "1: 4x12 SELFISH GENE". A right click on CAB lists the twelve and CABINET OFF, which
-  takes the cabinet out for every channel and back. Each channel keeps the cabinet it was left on, and opens on
-  1: 4x12 SELFISH GENE until you move it; a session or a preset of an earlier release opens every channel there.
-- **Full screen is the face alone.** In the standalone, full screen (WINDOW, Full screen in the settings menu, or
-  Cmd+Ctrl+F on a Mac and F11 elsewhere) hides the window's title bar and its Options button; both come back with the
-  window.
 - **TURBO adds no level out of the box.** The V4's Boost is loud enough on its own, so a fresh AmberPawAmp, INIT and a
   host's reset leave the boost's level at 0 dB, where every other amp of the family keeps +3. A right click on TURBO
   still offers -3, 0, +3, +6 and +9 dB, and a session or a preset keeps the level it saved.
-- **The Victory V4's three packs leave quieter**: the Copper by 6 dB, the Sheriff by 3 and the Kraken by 6. The Copper
-  now leaves 1 dB under its capture, the Sheriff 6 dB under, the Kraken at its capture's own level, where 0.9.0 had
-  them 5 dB over, 3 dB under and 6 dB over. A session or a preset on one of them plays quieter by as much.
-
-#### Removed
-- **The cabinets' window, and IRs of your own.** No window with ADD, SAVE, RENAME, REMOVE and BYPASS, and no IR
-  dropped on the face: these amps play the twelve and no file. Your own IRs stay in `Darwin's Cat/IRs`, where
-  OrbitAmp plays them.
-
-#### Fixed
-- **Opening the face writes no automation.** Every time the face opened, it set the amp's chain up again and told the
-  host of each parameter it set, even one already where it stood, so a host writing automation recorded points
-  nobody made. Now the host hears only of a parameter that moves.
 
 ## [0.9.1] — 2026-11-01 — MIDI CC 24, 25 and 26 find BASS, MIDDLE and TREBLE by name
 
-### FrostPawAmp
-
-#### Fixed
-- **MIDI CC 24, 25 and 26 turn BASS, MIDDLE and TREBLE, as the MIDI list says, on every channel.** They used to
-  turn the first three tone knobs in order, so on a channel whose knobs run otherwise they missed: on FrostPawAmp's
-  CLEAN CC 25 turned TREBLE and CC 26 nothing; on AmberPawAmp's CLEAN CC 24 turned TONE and BASS had no controller.
-  Now each finds its knob by name; a channel without that knob (CLEAN's MIDDLE on FrostPawAmp) leaves the controller
-  turning nothing.
-
-### AmberPawAmp
+### FrostPawAmp and AmberPawAmp
 
 #### Fixed
 - **MIDI CC 24, 25 and 26 turn BASS, MIDDLE and TREBLE, as the MIDI list says, on every channel.** They used to
@@ -377,6 +314,80 @@ Up to 0.7.0 this book was OrbitAmp's alone. The format follows
   a mono input takes half the memory.
 - **felitronics-core v0.61.2**: the delay's and the room's input fades over 5 ms when it stops or starts (above).
 
+### CatpitAmp, RedPawAmp and FrostPawAmp
+
+#### Changed
+- Every channel opens on the PLATE reverb, the clean ones and the driven ones alike, where they opened on a
+  hall, a plate or an ambience each. Each channel still keeps its own room and its own share of it: pick
+  another on one channel and the others stay where they are.
+- The cleaner a channel, the more reverb it opens with, and the more driven, the less — a driven sound
+  sustains and keeps the room full. The cockpit's CLEAN 20 %, EDGE 15, CRUNCH 12 and HI-GAIN 10, where all
+  four had 30; the rovers' CLEAN 20, CRUNCH 15 and HI-GAIN 10, where all had 15. A channel still keeps the
+  share it is turned to.
+- **POWERED BY DARWIN'S CAT** stands beside the cat, as it does on AmberPawAmp.
+
+#### Fixed
+- **A window that crashed on a computer with no graphics driver.** In a virtual machine, a Remote Desktop
+  session or on a build server, Windows hands a window the system's own OpenGL, which runs no shaders; the
+  cockpit's sky and the rovers' and the helicopter's view called it all the same, and the plug-in crashed as
+  its window opened. There they now take the CPU's picture, as they do where a shader will not build, and say
+  so in the family's log.
+
+### OrbitAmp and CatpitAmp
+
+#### Changed
+- **The boost of a device with no Boost switch of its own — the X88-IR's four — plays its capture two
+  positions up the GAIN dial** from where DRIVE stands, the knob staying where it is: 7:00 plays 9:00, 9:00
+  plays 11:00. Past the top capture each position the dial has not got drives it 3 dB harder instead —
+  16:00 plays 17:00 3 dB harder, 17:00 plays it 6 dB harder — and in SMOOTH the same measure between the
+  captures, 16:30 playing 17:00 4.5 dB harder. The capture crossfades the way a turn of DRIVE does, and the
+  push glides in. OrbitAmp's BOOST key is there on the X88-IR now, and the cockpit's TURBO is this boost;
+  each channel keeps it.
+
+### OrbitAmp and RedPawAmp
+
+#### Changed
+- **The Friedman IR-X Ch1's Bright** is named as the box has it: off in the middle of the toggle, and two
+  levels on, 1 and 2 — OFF, 1, 2, in that order, where it was BRIGHT 1, CENTER, BRIGHT 2. A channel on the
+  Ch1 that the hand has not been on opens with Bright off, as the box's first position; RedPawAmp's CRUNCH
+  among them. Oleh's export of 22.10.
+- A switch whose positions are only numbers, or off or on, says what it switches. By the rovers' keys its
+  name stands once over them and each key's position under it: BRIGHT over OFF · 1 · 2. The AMP's switch
+  writes the name before the position it is at: BRIGHT 1. A position with a word of its own is written as it
+  was: TIGHT · FAT.
+
+### CatpitAmp and RedPawAmp
+
+#### Added
+- **When the view out of the window cannot start on your graphics card, the amp now writes down why.** The
+  windscreen falls back to the 1993 landscape and the cockpit's sky to its stars on their own, as before;
+  now each time it happens a line goes into `gpu.log` in Darwin's Cat's folder — on the Mac
+  `~/Library/Application Support/Darwin's Cat/gpu.log`, on Windows `%APPDATA%\Darwin's Cat\gpu.log`, on Linux
+  `~/.config/Darwin's Cat/gpu.log` — with the date and time, the amp, the format and the host it was loaded
+  in, the graphics card's own name for itself, and the reason in its driver's words. Send it to us with a
+  report. The file stays small: past 256 KB it keeps only its newest half.
+
+#### Changed
+- **The tone knobs are the capture's own** — as many as the playing channel's capture has, in its order
+  and under its own names, each on a socket of its own; another channel with another count of them lays
+  the row out again. Where there are more than the panel holds at full size, the knobs shrink to fit.
+- **The keys right of HPF and LPF are the capture's switches** — one for each switch the channel lets the
+  hand throw, as many as there are, in a frame of their own. The dimmed FAT, BRIGHT, DEPTH and PRESENCE,
+  which waited for layers no capture carries, are gone.
+
+### CatpitAmp and FrostPawAmp
+
+#### Changed
+- The second channel with a delay behind it opens with about half as much — 8 % where it was 15 %: the
+  cockpit's EDGE, FrostPawAmp's and AmberPawAmp's CRUNCH. The first keeps 15 %, the driven ones none.
+
+### RedPawAmp and FrostPawAmp
+
+#### Changed
+- The gear lever's slot ends at the first gear: with PARK gone, RedPawAmp's and FrostPawAmp's slots are cut
+  short at the top, as far over the first gear as they run under the last, and AmberPawAmp's tick over its
+  first gear, where PARK stood, is painted over.
+
 ### OrbitAmp
 
 #### Added
@@ -412,21 +423,6 @@ Up to 0.7.0 this book was OrbitAmp's alone. The format follows
   every serial it was recorded from when there is more than one, and no SLOT column. A click on a row opens
   the box's card, with its photograph.
 - **The Friedman IR-X opens on its Channel 2** the first time it is picked.
-- **The Friedman IR-X Ch1's Bright** is named as the box has it: off in the middle of the toggle, and two
-  levels on, 1 and 2 — OFF, 1, 2, in that order, where it was BRIGHT 1, CENTER, BRIGHT 2. A channel on the
-  Ch1 that the hand has not been on opens with Bright off, as the box's first position; RedPawAmp's CRUNCH
-  among them. Oleh's export of 22.10.
-- A switch whose positions are only numbers, or off or on, says what it switches. By the rovers' keys its
-  name stands once over them and each key's position under it: BRIGHT over OFF · 1 · 2. The AMP's switch
-  writes the name before the position it is at: BRIGHT 1. A position with a word of its own is written as it
-  was: TIGHT · FAT.
-- **The boost of a device with no Boost switch of its own — the X88-IR's four — plays its capture two
-  positions up the GAIN dial** from where DRIVE stands, the knob staying where it is: 7:00 plays 9:00, 9:00
-  plays 11:00. Past the top capture each position the dial has not got drives it 3 dB harder instead —
-  16:00 plays 17:00 3 dB harder, 17:00 plays it 6 dB harder — and in SMOOTH the same measure between the
-  captures, 16:30 playing 17:00 4.5 dB harder. The capture crossfades the way a turn of DRIVE does, and the
-  push glides in. OrbitAmp's BOOST key is there on the X88-IR now, and the cockpit's TURBO is this boost;
-  each channel keeps it.
 - **DELAY and PLATE: MIX is a fader** the block's whole height at its left, with its number under it. The
   other knobs stand in a row at the right, each with its number, and the picture fills what is left under
   them.
@@ -460,96 +456,23 @@ Up to 0.7.0 this book was OrbitAmp's alone. The format follows
 
 ### CatpitAmp
 
-#### Added
-- **When the view out of the window cannot start on your graphics card, the amp now writes down why.** The
-  windscreen falls back to the 1993 landscape and the cockpit's sky to its stars on their own, as before;
-  now each time it happens a line goes into `gpu.log` in Darwin's Cat's folder — on the Mac
-  `~/Library/Application Support/Darwin's Cat/gpu.log`, on Windows `%APPDATA%\Darwin's Cat\gpu.log`, on Linux
-  `~/.config/Darwin's Cat/gpu.log` — with the date and time, the amp, the format and the host it was loaded
-  in, the graphics card's own name for itself, and the reason in its driver's words. Send it to us with a
-  report. The file stays small: past 256 KB it keeps only its newest half.
-
 #### Changed
 - **The cat lights up under your hand.** Point at it and it glows softly from behind, violet, like frosted
   glass with a lamp coming up under it. Click it, as before, to open the amp's page.
 - **HPF and LPF are keys again, not long pills.** The two filter keys under the tone knobs are close to
   square now, as tall as before, and stand evenly spaced in the row instead of stretched across it — the
   same chrome key with the filter's sign cut into it.
-- **The tone knobs are the capture's own** — as many as the playing channel's capture has, in its order
-  and under its own names, each on a socket of its own; another channel with another count of them lays
-  the row out again. Where there are more than the panel holds at full size, the knobs shrink to fit.
-- **The keys right of HPF and LPF are the capture's switches** — one for each switch the channel lets the
-  hand throw, as many as there are, in a frame of their own. The dimmed FAT, BRIGHT, DEPTH and PRESENCE,
-  which waited for layers no capture carries, are gone.
-- Every channel opens on the PLATE reverb, the clean ones and the driven ones alike, where they opened on a
-  hall, a plate or an ambience each. Each channel still keeps its own room and its own share of it: pick
-  another on one channel and the others stay where they are.
-- The second channel with a delay behind it opens with about half as much — 8 % where it was 15 %: the
-  cockpit's EDGE, FrostPawAmp's and AmberPawAmp's CRUNCH. The first keeps 15 %, the driven ones none.
-- The cleaner a channel, the more reverb it opens with, and the more driven, the less — a driven sound
-  sustains and keeps the room full. The cockpit's CLEAN 20 %, EDGE 15, CRUNCH 12 and HI-GAIN 10, where all
-  four had 30; the rovers' CLEAN 20, CRUNCH 15 and HI-GAIN 10, where all had 15. A channel still keeps the
-  share it is turned to.
-- **The boost of a device with no Boost switch of its own — the X88-IR's four — plays its capture two
-  positions up the GAIN dial** from where DRIVE stands, the knob staying where it is: 7:00 plays 9:00, 9:00
-  plays 11:00. Past the top capture each position the dial has not got drives it 3 dB harder instead —
-  16:00 plays 17:00 3 dB harder, 17:00 plays it 6 dB harder — and in SMOOTH the same measure between the
-  captures, 16:30 playing 17:00 4.5 dB harder. The capture crossfades the way a turn of DRIVE does, and the
-  push glides in. OrbitAmp's BOOST key is there on the X88-IR now, and the cockpit's TURBO is this boost;
-  each channel keeps it.
 - **TURBO no longer pushes the AMP's input by a set amount** — how hard it pushed is gone from its
   right-click menu and its settings; the X88-IR's dial decides now. The menu keeps how much louder the amp
   leaves while TURBO is on.
-- **POWERED BY DARWIN'S CAT** stands beside the cat, as it does on AmberPawAmp.
-
-#### Fixed
-- **A window that crashed on a computer with no graphics driver.** In a virtual machine, a Remote Desktop
-  session or on a build server, Windows hands a window the system's own OpenGL, which runs no shaders; the
-  cockpit's sky and the rovers' and the helicopter's view called it all the same, and the plug-in crashed as
-  its window opened. There they now take the CPU's picture, as they do where a shader will not build, and say
-  so in the family's log.
 
 ### RedPawAmp
-
-#### Added
-- **When the view out of the window cannot start on your graphics card, the amp now writes down why.** The
-  windscreen falls back to the 1993 landscape and the cockpit's sky to its stars on their own, as before;
-  now each time it happens a line goes into `gpu.log` in Darwin's Cat's folder — on the Mac
-  `~/Library/Application Support/Darwin's Cat/gpu.log`, on Windows `%APPDATA%\Darwin's Cat\gpu.log`, on Linux
-  `~/.config/Darwin's Cat/gpu.log` — with the date and time, the amp, the format and the host it was loaded
-  in, the graphics card's own name for itself, and the reason in its driver's words. Send it to us with a
-  report. The file stays small: past 256 KB it keeps only its newest half.
 
 #### Changed
 - **The cat lights up under your hand.** Point at it and it glows softly from behind, Mars-orange, like
   frosted glass with a lamp coming up under it. Click it, as before, to open the amp's page.
 - **The cat stands straight on the dashboard.** The painted hexagon plate under the windscreen is gone, and
   the cat is cut straight into the metal there, larger, in a ginger close to the plains outside.
-- **The tone knobs are the capture's own** — as many as the playing channel's capture has, in its order
-  and under its own names, each on a socket of its own; another channel with another count of them lays
-  the row out again. Where there are more than the panel holds at full size, the knobs shrink to fit.
-- **The keys right of HPF and LPF are the capture's switches** — one for each switch the channel lets the
-  hand throw, as many as there are, in a frame of their own. The dimmed FAT, BRIGHT, DEPTH and PRESENCE,
-  which waited for layers no capture carries, are gone.
-- Every channel opens on the PLATE reverb, the clean ones and the driven ones alike, where they opened on a
-  hall, a plate or an ambience each. Each channel still keeps its own room and its own share of it: pick
-  another on one channel and the others stay where they are.
-- **The Friedman IR-X Ch1's Bright** is named as the box has it: off in the middle of the toggle, and two
-  levels on, 1 and 2 — OFF, 1, 2, in that order, where it was BRIGHT 1, CENTER, BRIGHT 2. A channel on the
-  Ch1 that the hand has not been on opens with Bright off, as the box's first position; RedPawAmp's CRUNCH
-  among them. Oleh's export of 22.10.
-- The gear lever's slot ends at the first gear: with PARK gone, RedPawAmp's and FrostPawAmp's slots are cut
-  short at the top, as far over the first gear as they run under the last, and AmberPawAmp's tick over its
-  first gear, where PARK stood, is painted over.
-- A switch whose positions are only numbers, or off or on, says what it switches. By the rovers' keys its
-  name stands once over them and each key's position under it: BRIGHT over OFF · 1 · 2. The AMP's switch
-  writes the name before the position it is at: BRIGHT 1. A position with a word of its own is written as it
-  was: TIGHT · FAT.
-- The cleaner a channel, the more reverb it opens with, and the more driven, the less — a driven sound
-  sustains and keeps the room full. The cockpit's CLEAN 20 %, EDGE 15, CRUNCH 12 and HI-GAIN 10, where all
-  four had 30; the rovers' CLEAN 20, CRUNCH 15 and HI-GAIN 10, where all had 15. A channel still keeps the
-  share it is turned to.
-- **POWERED BY DARWIN'S CAT** stands beside the cat, as it does on AmberPawAmp.
 
 #### Removed
 - **PARK.** The gear lever's places are its gears and nothing more: CRUNCH at the top, where a fresh
@@ -563,11 +486,6 @@ Up to 0.7.0 this book was OrbitAmp's alone. The format follows
   opened read a little past the end of its height texture, and where nothing lay after it the host stopped
   (Cubase, switching between plug-ins). The slopes at one column of the texture were wrong too; they are right
   now.
-- **A window that crashed on a computer with no graphics driver.** In a virtual machine, a Remote Desktop
-  session or on a build server, Windows hands a window the system's own OpenGL, which runs no shaders; the
-  cockpit's sky and the rovers' and the helicopter's view called it all the same, and the plug-in crashed as
-  its window opened. There they now take the CPU's picture, as they do where a shader will not build, and say
-  so in the family's log.
 
 ### FrostPawAmp
 
@@ -593,27 +511,7 @@ in the family's release beside them.
   Victory V4's Copper, Sheriff and Kraken are in OrbitAmp's AMP menu from the release that carries this amp.
 
 #### Changed
-- Every channel opens on the PLATE reverb, the clean ones and the driven ones alike, where they opened on a
-  hall, a plate or an ambience each. Each channel still keeps its own room and its own share of it: pick
-  another on one channel and the others stay where they are.
 - **The cat stands straight on the dashboard**, flat, in a neutral white, where the painted hexagon plate was.
-- The gear lever's slot ends at the first gear: with PARK gone, RedPawAmp's and FrostPawAmp's slots are cut
-  short at the top, as far over the first gear as they run under the last, and AmberPawAmp's tick over its
-  first gear, where PARK stood, is painted over.
-- The second channel with a delay behind it opens with about half as much — 8 % where it was 15 %: the
-  cockpit's EDGE, FrostPawAmp's and AmberPawAmp's CRUNCH. The first keeps 15 %, the driven ones none.
-- The cleaner a channel, the more reverb it opens with, and the more driven, the less — a driven sound
-  sustains and keeps the room full. The cockpit's CLEAN 20 %, EDGE 15, CRUNCH 12 and HI-GAIN 10, where all
-  four had 30; the rovers' CLEAN 20, CRUNCH 15 and HI-GAIN 10, where all had 15. A channel still keeps the
-  share it is turned to.
-- **POWERED BY DARWIN'S CAT** stands beside the cat, as it does on AmberPawAmp.
-
-#### Fixed
-- **A window that crashed on a computer with no graphics driver.** In a virtual machine, a Remote Desktop
-  session or on a build server, Windows hands a window the system's own OpenGL, which runs no shaders; the
-  cockpit's sky and the rovers' and the helicopter's view called it all the same, and the plug-in crashed as
-  its window opened. There they now take the CPU's picture, as they do where a shader will not build, and say
-  so in the family's log.
 
 ### AmberPawAmp
 
@@ -727,7 +625,7 @@ engine. It comes in the family's release beside them.
 - `felitronics-core` **v0.59.0 → v0.60.0**: the first release with `felitronics::dehum`, the hum canceller HUM
   is built on.
 
-### OrbitAmp
+### OrbitAmp and CatpitAmp
 
 #### Added
 - **HUM — mains hum taken off the input** (OrbitAmp and CatpitAmp). Before the input trim, the 50 or 60 Hz hum
@@ -748,6 +646,32 @@ engine. It comes in the family's release beside them.
 - Known limits: a note held longer than 3 s with a partial on a mains harmonic can leave a short ring after it
   stops. The plain case is the A string on 50 Hz mains, 5 × 110 = 11 × 50. A soft attack right after a note can
   leave one too.
+
+### CatpitAmp and RedPawAmp
+
+#### Added
+- **CatpitAmp, RedPawAmp**: LEARN in GATE's menu — OrbitAmp's own measurement: three seconds
+  of quiet, and the gate's threshold set the hysteresis above the loudest of them, the gate switched on.
+  While it listens, the face's own screen shows it — CatpitAmp's tuner glass, the rovers' nav screen:
+  LEARN — STAY QUIET, the level growing across, the threshold it would set dashed; then the threshold
+  set, CANCELLED or NOTHING HEARD for two seconds, and the screen as it was. A click on the screen
+  meanwhile cancels it, and so does anything that moves the gate — a preset, an undo, a register, its
+  fader.
+
+#### Changed
+- **CatpitAmp and RedPawAmp carry their pictures finished.** Each used to correct
+  its panel picture every time it opened — the cockpit its windshield, its tone sockets and its TURBO frame,
+  a rover its rims, its lever's notches and its corner plates, each the lamps it lights itself. That is now
+  done once, in the tree, and the products carry the result as lossless WebP. What a player sees is the
+  same, pixel for pixel, and each product is smaller — by 4 to 8 MB on a Mac.
+- **Every amp but OrbitAmp is lighter** — by 5.7 MB in each format on the Mac, where the binary holds an Apple
+  Silicon half and an Intel one, and by 2.8 MB elsewhere. CatpitAmp and the rovers carry the Orange PPC212V's
+  ten cabinets, the ones they list and play, and no longer the 21 third-party IRs that only OrbitAmp lists. A
+  host that moves their Cabinet IR parameter to one of those 21 gets DARK MATTER, the cabinet they open on.
+
+### OrbitAmp
+
+#### Added
 - **Ten cabinet IRs of our own: the Orange PPC212V**, the cabinets CatpitAmp plays — DARK MATTER, ION
   CAVITY, EVENT HORIZON, CORONAL FLARE, BROWN DWARF, ACCRETION GAP, DUST CLOUD, BLUE SHIFT, RED GIANT and
   PULSAR BEAM. Darwin's Cat shot them on one 2x12, each IR a mix of three microphones at once: an SM57,
@@ -796,42 +720,6 @@ engine. It comes in the family's release beside them.
   -40 at its head, the limiter from -3 dB to -0.1. Dim while its block is off; a double click puts it back
   where it opens, a right click is that block's menu, and while it is held a tag says where it stands.
   The lamps and the words over them light and open their menus as before.
-- **CatpitAmp, RedPawAmp**: LEARN in GATE's menu — OrbitAmp's own measurement: three seconds
-  of quiet, and the gate's threshold set the hysteresis above the loudest of them, the gate switched on.
-  While it listens, the face's own screen shows it — CatpitAmp's tuner glass, the rovers' nav screen:
-  LEARN — STAY QUIET, the level growing across, the threshold it would set dashed; then the threshold
-  set, CANCELLED or NOTHING HEARD for two seconds, and the screen as it was. A click on the screen
-  meanwhile cancels it, and so does anything that moves the gate — a preset, an undo, a register, its
-  fader.
-- **HUM — mains hum taken off the input** (OrbitAmp and CatpitAmp). Before the input trim, the 50 or 60 Hz hum
-  and its harmonics are cancelled by a comb of notches that follows the mains. The notches are 0.5 Hz wide while
-  you play, so a note beside a harmonic is barely touched, and 3 Hz wide while the strings are quiet, so the hum
-  is learned fast. The ring a note leaves in a notch is put back when the note stops, so a palm-muted chug no
-  longer drags an after-ring behind it.
-- **Off / 50 / 60 / Auto**, a machine setting shared by every window. Auto listens and decides 50 or 60 Hz by
-  itself in the first quiet second, and its line says "listening" until then. On a machine that never chose,
-  HUM starts Off and its first On is Auto. Off is a bypass: the stage keeps learning, and the way back is instant.
-  It listens only to the inputs the chain plays, so a hissing unused input does not hold Auto back.
-- **Where**: CatpitAmp has it in the INPUT lever's menu and in the settings menu's INPUT section, OrbitAmp in its
-  input column. The **H** key flips HUM between Off and the last mode, and on the cockpit a tag says which.
-- **LEARN** heads every HUM menu: mute the strings, press it, and the stage learns the hum in a couple of
-  seconds and shows its verdict. The gate's LEARN stays the gate's own.
-- Machine settings for tuning by ear: the notch width while playing (0.25–4 Hz), the width while quiet
-  (1–6 Hz) and how high it reaches (1.2–6.4 kHz, 2 kHz by default).
-- Known limits: a note held longer than 3 s with a partial on a mains harmonic can leave a short ring after it
-  stops. The plain case is the A string on 50 Hz mains, 5 × 110 = 11 × 50. A soft attack right after a note can
-  leave one too.
-
-#### Changed
-- **CatpitAmp and RedPawAmp carry their pictures finished.** Each used to correct
-  its panel picture every time it opened — the cockpit its windshield, its tone sockets and its TURBO frame,
-  a rover its rims, its lever's notches and its corner plates, each the lamps it lights itself. That is now
-  done once, in the tree, and the products carry the result as lossless WebP. What a player sees is the
-  same, pixel for pixel, and each product is smaller — by 4 to 8 MB on a Mac.
-- **Every amp but OrbitAmp is lighter** — by 5.7 MB in each format on the Mac, where the binary holds an Apple
-  Silicon half and an Intel one, and by 2.8 MB elsewhere. CatpitAmp and the rovers carry the Orange PPC212V's
-  ten cabinets, the ones they list and play, and no longer the 21 third-party IRs that only OrbitAmp lists. A
-  host that moves their Cabinet IR parameter to one of those 21 gets DARK MATTER, the cabinet they open on.
 
 ### RedPawAmp
 
@@ -839,13 +727,6 @@ This tree now builds a third product beside OrbitAmp and CatpitAmp: RedPawAmp, t
 over the same engine. It comes in the family's release beside them.
 
 #### Added
-- **CatpitAmp, RedPawAmp**: LEARN in GATE's menu — OrbitAmp's own measurement: three seconds
-  of quiet, and the gate's threshold set the hysteresis above the loudest of them, the gate switched on.
-  While it listens, the face's own screen shows it — CatpitAmp's tuner glass, the rovers' nav screen:
-  LEARN — STAY QUIET, the level growing across, the threshold it would set dashed; then the threshold
-  set, CANCELLED or NOTHING HEARD for two seconds, and the screen as it was. A click on the screen
-  meanwhile cancels it, and so does anything that moves the gate — a preset, an undo, a register, its
-  fader.
 - **RedPawAmp** — four channels, picked as two gears and TURBO: the gear lever's CRUNCH and HI-GAIN, and
   TURBO over either. Each gear's own switches are on the keys right of HPF and LPF, under their own names,
   the position the switch stands at lit: CRUNCH's BRIGHT 1, CENTER and BRIGHT 2, HI-GAIN's TIGHT and FAT.
@@ -867,17 +748,6 @@ over the same engine. It comes in the family's release beside them.
 - Everything else the cockpit has, on the dashboard: DRIVE and the three tone knobs, the six keys, undo,
   redo and the four registers on the roof's toggles, REVERB, DELAY and CAB, the INPUT and OUTPUT columns
   with their lamps, GATE and LIMITER, the tuner on the nav screen, presets, the cabinets' window, MIDI.
-
-#### Changed
-- **CatpitAmp and RedPawAmp carry their pictures finished.** Each used to correct
-  its panel picture every time it opened — the cockpit its windshield, its tone sockets and its TURBO frame,
-  a rover its rims, its lever's notches and its corner plates, each the lamps it lights itself. That is now
-  done once, in the tree, and the products carry the result as lossless WebP. What a player sees is the
-  same, pixel for pixel, and each product is smaller — by 4 to 8 MB on a Mac.
-- **Every amp but OrbitAmp is lighter** — by 5.7 MB in each format on the Mac, where the binary holds an Apple
-  Silicon half and an Intel one, and by 2.8 MB elsewhere. CatpitAmp and the rovers carry the Orange PPC212V's
-  ten cabinets, the ones they list and play, and no longer the 21 third-party IRs that only OrbitAmp lists. A
-  host that moves their Cabinet IR parameter to one of those 21 gets DARK MATTER, the cabinet they open on.
 
 ## [0.7.0] — 2026-09-13 — your own cabinets, and a plugin that does not go quiet
 
