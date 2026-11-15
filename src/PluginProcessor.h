@@ -342,6 +342,23 @@ public:
     static constexpr const char* stampProduct = "product";
     static constexpr const char* stampChain   = "chain";
 
+    /** THE INPUT THE AMP PLAYS (params::InputSource) — the session's, in its envelope beside the stamp, and nothing
+        else's: a preset, a register and INIT are trees inside the envelope and never touch it. A fresh instance plays
+        the left, as every amp did before there was a choice. Set on the message thread; the audio thread crosses over
+        to it in 20 ms (chooseInput). */
+    params::InputSource inputSource() const noexcept
+    {
+        return static_cast<params::InputSource> (inputChoice.load (std::memory_order_relaxed));
+    }
+
+    void setInputSource (params::InputSource);
+
+    /** Whether there is a second input to choose from: the bus is two channels wide, and the chain plays one signal of
+        them (not STEREO, where each plays through its own amp). */
+    bool choosesInput() const;
+
+    static constexpr const char* sessionInput = "input";
+
     /** The other half: a tree read from disk gives its embedded IRs to the store and comes back a
         plain state, before anything applies it. Message thread only. */
     void takeEmbeddedIrs (juce::ValueTree& tree) { cabIrEmbeds.unpack (tree); }
@@ -1485,6 +1502,10 @@ private:
     std::atomic<float>* tunerMuteParam     = nullptr;
     float lastMuteGain = 1.0f;   // the tuner mute's ramp, per block
     std::atomic<float>* stereoModeParam    = nullptr;
+    std::atomic<int> inputChoice { (int) params::InputSource::left };   // see inputSource
+    float inputGainL = 1.0f, inputGainR = 0.0f;   // the audio thread's crossover toward inputChoice's two gains
+    float inputStep  = 1.0f / 960.0f;             // ...a step a sample, 20 ms from one end to the other
+    void chooseInput (juce::AudioBuffer<float>&) noexcept;
     float histWorst   = 0.0f;
     int   histSamples = 0;
     std::atomic<float>* limiterCeilParam   = nullptr;

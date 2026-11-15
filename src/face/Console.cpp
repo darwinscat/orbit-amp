@@ -1310,24 +1310,52 @@ void Console::addChoice (juce::PopupMenu& menu, const juce::String& text, bool t
     menu.addItem (item);
 }
 
-/** A RIGHT CLICK ON THE INPUT COLUMN — the lever, or the meter beside it: the hum the input carries — the
-    machine's, the four modes here as flat items, AUTO's line naming what it decided once it has. With HUM
-    off in the build (Features.h) the column has no menu of its own, and a right click on it is one on the
-    face, as anywhere else that has none: the face's menu — whose INPUT is DRIVE's — rather than a lever
-    that jumps. */
+/** Where the input stands, as a title says it: the one the amp plays, or both in STEREO. */
+juce::String Console::inputState() const
+{
+    return amp.choosesInput() ? params::inputSources[(int) amp.inputSource()] : juce::String ("both, in Stereo");
+}
+
+/** WHICH INPUT THE AMP PLAYS (params::InputSource): Left, Right, L+R — the interface's, kept by the session, no
+    preset's, and no step of undo. Not offered where the bus has one input; in STEREO both play, each through its
+    own amp, and the lines stand greyed. */
+bool Console::addInputLines (juce::PopupMenu& menu, bool headed)
+{
+    if (amp.getTotalNumInputChannels() < 2)
+        return false;
+
+    const bool chooses = amp.choosesInput();
+    const int  now     = (int) amp.inputSource();
+    if (headed)
+        menu.addSectionHeader ("IN  " + inputState());
+    for (int i = 0; i < params::inputSources.size(); ++i)
+        addChoice (menu, params::inputLine (i), chooses && now == i,
+                   [i] (Console& e) { e.amp.setInputSource ((params::InputSource) i); }, chooses);
+    return true;
+}
+
+/** A RIGHT CLICK ON THE INPUT COLUMN — the lever, or the meter beside it: which input the amp plays, and the hum
+    the input carries — the machine's, the four modes here as flat items, AUTO's line naming what it decided once
+    it has. Where there is neither — one input, and HUM off in the build (Features.h) — the column has no menu of
+    its own, and a right click on it is one on the face, as anywhere else that has none: the face's menu — whose
+    INPUT is DRIVE's — rather than a lever that jumps. */
 void Console::showInputMenu()
 {
     endTapping();
 
-    if constexpr (! features::hum)
+    juce::PopupMenu menu;
+    const bool inputs = addInputLines (menu, true);
+
+    if constexpr (features::hum)
+    {
+        menu.addSectionHeader ("HUM");
+        addHumLines (menu);
+    }
+    else if (! inputs)
     {
         showSettingsMenu();
         return;
     }
-
-    juce::PopupMenu menu;
-    menu.addSectionHeader ("HUM");
-    addHumLines (menu);
 
     menu.showMenuAsync (juce::PopupMenu::Options().withMousePosition());
 }
@@ -2288,6 +2316,10 @@ void Console::showSettingsMenu()
     // How DRIVE goes between the pack's captures, and the hum the input carries. How much louder TURBO
     // is, is TURBO's own menu's (showBoostMenu).
     menu.addSectionHeader ("INPUT");
+
+    // Which of the interface's inputs the amp plays (addInputLines), where the bus has two.
+    if (juce::PopupMenu in; addInputLines (in, false))
+        menu.addSubMenu ("IN  " + inputState(), in);
 
     juce::PopupMenu way;
     for (int i = 0; i < driveWays.size(); ++i)

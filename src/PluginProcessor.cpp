@@ -12,6 +12,8 @@
 #include <cstring>
 #include <map>
 #include <mutex>
+#include <tuple>
+#include <utility>
 #include <panel/Panel.h>
 #include "device/CabTables.h"   // whose cabinet a state is, its table, and the state known against its own builder
 #include <synth/CabSynth.h>
@@ -64,6 +66,15 @@ static_assert ((int) StageVerdict::Learned      == core::HumLearnLink::learned
 
 namespace
 {
+    /** An input's two shares of channel 0, where the chain plays one signal (params::InputSource): the left (1, 0), the
+        right (0, 1), the two at half each. */
+    std::pair<float, float> sharesOf (params::InputSource s) noexcept
+    {
+        return s == params::InputSource::right ? std::make_pair (0.0f, 1.0f)
+             : s == params::InputSource::both  ? std::make_pair (0.5f, 0.5f)
+                                               : std::make_pair (1.0f, 0.0f);
+    }
+
     /** The engine's parameters, and after them whatever the product adds of its own — each declaring,
         as its default, where a fresh instance of the product stands in that environment (params::Opening). */
     juce::AudioProcessorValueTreeState::ParameterLayout layout (const Product& product, params::StereoMode environment)
@@ -308,6 +319,7 @@ juce::MemoryBlock AmpProcessor::buildSavedState()
     auto workspace = history.toTree();
     embedCabIrs (workspace);   // the player's own IRs travel with the session, whole
     stamp (workspace);         // ...and whose session it is
+    workspace.setProperty (sessionInput, params::inputWords[(int) inputSource()], nullptr);   // ...and which input it plays
 
     if (auto xml = workspace.createXml())
         copyXmlToBinary (*xml, out);
@@ -413,6 +425,11 @@ void AmpProcessor::setStateInformation (const void* data, int sizeInBytes)
     // ...nor is another chain's: a guitar amp's session on the bass, or the bass's on a guitar amp (stamp, belongs).
     if (! belongs (tree))
         return;
+
+    // The input the session played, where it says one (buildSavedState): an atomic, so from whatever thread the host
+    // restores on. A session written before there was a choice leaves the instance on its own.
+    if (const auto word = params::inputWords.indexOf (tree.getProperty (sessionInput).toString()); word >= 0)
+        inputChoice.store (word, std::memory_order_relaxed);
 
     // The session just handed over IS the session now, whether or not the message thread has
     // applied it yet: a host that restores and saves back to back from a worker thread must get
@@ -1348,6 +1365,10 @@ void AmpProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     // it — a bypassed +24 dB would open playback at nearly sixteen times.
     lastTrimGain = linkWorks (params::rowIn)  ? juce::Decibels::decibelsToGain (inTrimParam->load())  : 1.0f;
     lastOutGain  = linkWorks (params::rowOut) ? juce::Decibels::decibelsToGain (outTrimParam->load()) : 1.0f;
+
+    // The input's crossover (chooseInput): 20 ms the whole way at this rate, and playback opens on the choice.
+    inputStep = (float) (1.0 / juce::jmax (1.0, 0.02 * sampleRate));
+    std::tie (inputGainL, inputGainR) = sharesOf (inputSource());
     {
         limiterReady = limiter.prepare (sampleRate, block, juce::jmax (2, channels), core::door::config());
         limiterLatency.store (limiterReady ? limiter.latencySamples() : 0);
@@ -2064,6 +2085,54 @@ void AmpProcessor::processorLayoutsChanged()
     }
 }
 
+void AmpProcessor::setInputSource (params::InputSource source)
+{
+    if (inputChoice.exchange ((int) source, std::memory_order_relaxed) == (int) source)
+        return;
+
+    // Not a parameter, so nothing tells the session it moved but this: the saved copy is written again on the next
+    // tick (refreshSavedState), and the host is told its project has changed.
+    stateDirty.store (true, std::memory_order_relaxed);
+    updateHostDisplay (ChangeDetails().withNonParameterStateChanged (true));
+}
+
+bool AmpProcessor::choosesInput() const
+{
+    const bool twoAmps = ownProduct.chain != Chain::bass
+                      && juce::roundToInt (stereoModeParam->load()) == (int) params::StereoMode::stereo;
+    return getTotalNumInputChannels() >= 2 && ! twoAmps;
+}
+
+void AmpProcessor::chooseInput (juce::AudioBuffer<float>& buffer) noexcept
+{
+    // A choice crosses over a step a sample, so one input fades into the other rather than jumping.
+    const auto [wantL, wantR] = sharesOf (inputSource());
+
+    // With one input, or in STEREO, there is nothing to choose, and the crossover stands where it is asked to.
+    if (buffer.getNumChannels() < 2 || ! choosesInput())
+    {
+        inputGainL = wantL;
+        inputGainR = wantR;
+        return;
+    }
+
+    // THE LEFT AS IT COMES, untouched — bit for bit what every amp played before there was a choice.
+    if (inputGainL == 1.0f && inputGainR == 0.0f && wantL == 1.0f && wantR == 0.0f)
+        return;
+
+    float* left = buffer.getWritePointer (0);
+    const float* right = buffer.getReadPointer (1);
+    float gl = inputGainL, gr = inputGainR;
+    for (int i = 0; i < buffer.getNumSamples(); ++i)
+    {
+        gl = gl < wantL ? juce::jmin (wantL, gl + inputStep) : juce::jmax (wantL, gl - inputStep);
+        gr = gr < wantR ? juce::jmin (wantR, gr + inputStep) : juce::jmax (wantR, gr - inputStep);
+        left[i] = gl * left[i] + gr * right[i];
+    }
+    inputGainL = gl;
+    inputGainR = gr;
+}
+
 void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi)
 {
     // The two things the engine listens for in MIDI: a Program Change and a controller's value
@@ -2329,6 +2398,11 @@ void AmpProcessor::processChunk (juce::AudioBuffer<float>& buffer)
     // Clear any output channel the host gave us beyond what the input carries.
     for (auto ch = getTotalNumInputChannels(); ch < getTotalNumOutputChannels(); ++ch)
         buffer.clear (ch, 0, buffer.getNumSamples());
+
+    // WHICH INPUT THE AMP PLAYS (params::InputSource), into channel 0 — the one the chain plays outside STEREO, the
+    // hum's ear, the tuner's and the gate's key with it. First, so everything after hears the input chosen; and
+    // before the demo, which stands in for the guitar whichever input it is in.
+    chooseInput (buffer);
 
     // The demo replaces the input rather than mixing into it: a loop you can hear over your own
     // playing is a loop you cannot judge anything by.

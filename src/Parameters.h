@@ -317,6 +317,23 @@ inline constexpr const char* stereoMode = "stereo_mode";
 inline const juce::StringArray stereoModes { "Mono", "Stereo", "Stereo Space" };
 enum class StereoMode { mono, stereo, stereoSpace };
 
+/** WHICH OF THE INTERFACE'S TWO INPUTS THE AMP PLAYS, where the chain plays one signal — MONO, STEREO SPACE, and every
+    bass: the left as it comes, the right in its place, or the two at half each. A DI on one input and a cabinet's mic
+    on the other, and the guitar is played from either without a cable moved; the two together comb, as any DI and
+    mic summed do. In STEREO both are played, each through its own amp, and this says nothing.
+
+    It is set to the interface, not to a sound: not a parameter — a host would automate it and a preset or a register
+    would carry it — but the session's (AmpProcessor::setInputSource), written in its envelope by word, `inputWords`. */
+inline const juce::StringArray inputSources { "Left", "Right", "L+R" };
+inline const juce::StringArray inputWords   { "left", "right", "both" };
+enum class InputSource { left, right, both };
+
+/** Each as a menu's line says it: L+R with what it does to a DI and a mic. */
+inline juce::String inputLine (int i)
+{
+    return inputSources[i] + (i == (int) InputSource::both ? ", combs a DI with a mic" : "");
+}
+
 /** TEMPORARY — the audition loops, in the order the player offers them. Default is the first.
     The site's demo loops, the same takes under the same names and in its order: a guitar amp's, and a bass amp's own —
     the owner's clean bass takes, the left of each, in place of the DI riffs Cab IR Generator plays (the owner, 10.11).
