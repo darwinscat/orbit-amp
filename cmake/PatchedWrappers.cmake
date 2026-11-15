@@ -10,7 +10,10 @@
 # sitting behind that macro. So the standalones and a plug-in built alone build as they always did, from
 # the patched trees. A third, small patch lets the
 # family's VST3 carry its name at all: JUCE's VST3 post-build steps hand the bundle's path to the shell
-# unquoted, and the apostrophe in "Darwin's Cat Amps" breaks them wherever that shell is /bin/sh.
+# unquoted, and the apostrophe in "Darwin's Cat Amps" breaks them wherever that shell is /bin/sh. A fourth
+# lets a standalone's window come on a first launch on the Mac: JUCE 9's CoreAudio holds an input's opening
+# until macOS's microphone question is answered, and the standalone opens its device before its window
+# (juce-standalone-microphone.patch).
 #
 # The CLAP wrapper loads a state and asks the host to read the parameters' values again since its 6bde108
 # (free-audio/clap-juce-extensions#194) — what our own patch for it did until then, now upstream and gone from here.
@@ -30,6 +33,7 @@ include(FetchContent)
 
 set(ORBITAMP_JUCE_PATCH "${CMAKE_CURRENT_LIST_DIR}/patches/juce-several-plugins.patch")
 set(ORBITAMP_JUCE_QUOTING_PATCH "${CMAKE_CURRENT_LIST_DIR}/patches/juce-vst3-post-build-quoting.patch")
+set(ORBITAMP_JUCE_MIC_PATCH "${CMAKE_CURRENT_LIST_DIR}/patches/juce-standalone-microphone.patch")
 set(ORBITAMP_CLAP_EXT_PATCH "${CMAKE_CURRENT_LIST_DIR}/patches/clap-juce-extensions-several-plugins.patch")
 set(_orbitamp_apply_patch "${CMAKE_CURRENT_LIST_DIR}/ApplyPatch.cmake")
 
@@ -55,18 +59,21 @@ endif()
 
 _orbitamp_patch_step(_orbitamp_juce_patch "${ORBITAMP_JUCE_PATCH}")
 _orbitamp_patch_step(_orbitamp_juce_quoting_patch "${ORBITAMP_JUCE_QUOTING_PATCH}")
+_orbitamp_patch_step(_orbitamp_juce_mic_patch "${ORBITAMP_JUCE_MIC_PATCH}")
 if(_orbitamp_juce_have AND _orbitamp_juce_have STREQUAL _orbitamp_juce_want)
     message(STATUS "JUCE: a patched copy of the local source — ${ORBITAMP_JUCE_DIR}")
     FetchContent_Declare(juce
         URL            "${ORBITAMP_JUCE_DIR}"
-        PATCH_COMMAND  ${_orbitamp_juce_patch} COMMAND ${_orbitamp_juce_quoting_patch})
+        PATCH_COMMAND  ${_orbitamp_juce_patch} COMMAND ${_orbitamp_juce_quoting_patch}
+                       COMMAND ${_orbitamp_juce_mic_patch})
 else()
     message(STATUS "JUCE: fetching ${ORBITAMP_JUCE_TAG} from GitHub, patched")
     FetchContent_Declare(juce
         GIT_REPOSITORY https://github.com/juce-framework/JUCE.git
         GIT_TAG        ${ORBITAMP_JUCE_TAG}
         GIT_SHALLOW    TRUE
-        PATCH_COMMAND  ${_orbitamp_juce_patch} COMMAND ${_orbitamp_juce_quoting_patch})
+        PATCH_COMMAND  ${_orbitamp_juce_patch} COMMAND ${_orbitamp_juce_quoting_patch}
+                       COMMAND ${_orbitamp_juce_mic_patch})
 endif()
 FetchContent_MakeAvailable(juce)
 

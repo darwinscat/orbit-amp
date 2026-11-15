@@ -1,0 +1,111 @@
+THE MICROPHONE ASKED BEFORE THE INPUT OPENS, in JUCE's standalone on macOS. Applied by cmake/PatchedWrappers.cmake to
+the pinned JUCE (ORBITAMP_JUCE_TAG, 9.0.5) after the other two; git apply reads from the first "diff --git" line on,
+so this text is not part of the patch.
+
+JUCE 9's CoreAudio opens an input through AudioDeviceCreateIOProcIDWithBlock, which waits until the player has
+answered macOS's microphone question. The standalone opens its device in StandalonePluginHolder's constructor, before
+its window is made, and JUCE's RuntimePermissions say "not required" on every system but Android. So on a first
+launch no window comes until the question is answered, and the app looks hung. JUCE 8 opened the input without
+waiting, and the window came first.
+
+With this patch RuntimePermissions answer for the microphone on macOS from AVFoundation, which juce_core now links:
+isGranted only once the player has said yes, and request asks macOS (the first time only, without blocking) and
+calls back on the main thread. The holder's branch for that, used on Android alone until now, then lets the window
+come first and opens the device on the answer. On the Mac it opens the input whatever the answer, as JUCE 8 did (a
+refused microphone reads silence), so a player who said no keeps the same device setup. Every other permission,
+every other system, and a microphone allowed or refused before run exactly as they did.
+
+diff --git a/modules/juce_audio_plugin_client/Standalone/juce_StandaloneFilterWindow.h b/modules/juce_audio_plugin_client/Standalone/juce_StandaloneFilterWindow.h
+index fce7851..e7e5bb9 100644
+--- a/modules/juce_audio_plugin_client/Standalone/juce_StandaloneFilterWindow.h
++++ b/modules/juce_audio_plugin_client/Standalone/juce_StandaloneFilterWindow.h
+@@ -111,7 +111,15 @@ public:
+         if (audioInputRequired && RuntimePermissions::isRequired (RuntimePermissions::recordAudio)
+             && ! RuntimePermissions::isGranted (RuntimePermissions::recordAudio))
+             RuntimePermissions::request (RuntimePermissions::recordAudio,
+-                                         [this, preferredDefaultDeviceName] (bool granted) { init (granted, preferredDefaultDeviceName); });
++                                         [this, preferredDefaultDeviceName] ([[maybe_unused]] bool granted)
++                                         {
++                                            #if JUCE_MAC
++                                             // The input opens whatever the answer: a refused microphone reads silence.
++                                             init (true, preferredDefaultDeviceName);
++                                            #else
++                                             init (granted, preferredDefaultDeviceName);
++                                            #endif
++                                         });
+         else
+             init (audioInputRequired, preferredDefaultDeviceName);
+     }
+diff --git a/modules/juce_core/juce_core.h b/modules/juce_core/juce_core.h
+index 7e69478..2c627ac 100644
+--- a/modules/juce_core/juce_core.h
++++ b/modules/juce_core/juce_core.h
+@@ -52,7 +52,7 @@
+   minimumCppStandard: 17
+ 
+   dependencies:
+-  OSXFrameworks:      Cocoa Foundation IOKit Security
++  OSXFrameworks:      Cocoa Foundation IOKit Security AVFoundation
+   iOSFrameworks:      Foundation
+   linuxLibs:          rt dl pthread
+ 
+diff --git a/modules/juce_core/misc/juce_RuntimePermissions.cpp b/modules/juce_core/misc/juce_RuntimePermissions.cpp
+index 1fb7cff..d6241e8 100644
+--- a/modules/juce_core/misc/juce_RuntimePermissions.cpp
++++ b/modules/juce_core/misc/juce_RuntimePermissions.cpp
+@@ -32,10 +32,54 @@
+   ==============================================================================
+ */
+ 
++#if JUCE_MAC
++ #import <AVFoundation/AVFoundation.h>
++#endif
++
+ namespace juce
+ {
+ 
+-#if ! JUCE_ANDROID  // We currently don't request runtime permissions on any other platform
++#if JUCE_MAC  // The microphone: macOS asks the player once, and an input opened before the answer waits for it.
++
++static AVAuthorizationStatus microphoneStatus()
++{
++    return [AVCaptureDevice authorizationStatusForMediaType: AVMediaTypeAudio];
++}
++
++bool RuntimePermissions::isRequired (PermissionID permission)
++{
++    return permission == recordAudio;
++}
++
++bool RuntimePermissions::isGranted (PermissionID permission)
++{
++    return permission != recordAudio || microphoneStatus() == AVAuthorizationStatusAuthorized;
++}
++
++void RuntimePermissions::request (PermissionID permission, Callback callback)
++{
++    if (permission != recordAudio)
++    {
++        callback (true);
++        return;
++    }
++
++    const auto status = microphoneStatus();
++
++    if (status != AVAuthorizationStatusNotDetermined)   // answered before: macOS will not ask again
++    {
++        callback (status == AVAuthorizationStatusAuthorized);
++        return;
++    }
++
++    [AVCaptureDevice requestAccessForMediaType: AVMediaTypeAudio
++                             completionHandler: ^(BOOL granted)
++                             {
++                                 dispatch_async (dispatch_get_main_queue(), ^{ callback (granted == YES); });
++                             }];
++}
++
++#elif ! JUCE_ANDROID  // We currently don't request runtime permissions on any other platform
+                     // than Android, so this file contains a dummy implementation for those.
+                     // This may change in the future.
+ 
