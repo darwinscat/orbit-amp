@@ -3056,6 +3056,93 @@ int main()
         set (amp, orbitamp::params::stereoMode, (float) orbitamp::params::StereoMode::mono);
     }
 
+    // THE INPUT THE AMP PLAYS (params::InputSource). A guitar in one input and nothing in the other: LEFT plays the
+    // left, RIGHT puts the right in its place — the same guitar from the other input sounds the same, and the empty
+    // input is not heard — and L+R the two at half each, so one guitar in both plays as it does from either. In
+    // STEREO both inputs play, each through its own amp, and the choice says nothing. With the reverb and the delay
+    // out, so nothing of one run rings into the next.
+    {
+        using orbitamp::params::InputSource;
+        const float reverbWas = amp.apvts.getRawParameterValue (orbitamp::params::reverbOn)->load();
+        const float delayWas  = amp.apvts.getRawParameterValue (orbitamp::params::delayOn)->load();
+        set (amp, orbitamp::params::reverbOn, 0.0f);
+        set (amp, orbitamp::params::delayOn, 0.0f);
+        set (amp, orbitamp::params::limiterOn, 0.0f);
+
+        // The guitar in the left, the right or both; channel 0 of the output, after the crossover has settled.
+        const auto playedFrom = [&] (InputSource source, bool inLeft, bool inRight, orbitamp::params::StereoMode mode)
+        {
+            set (amp, orbitamp::params::stereoMode, (float) mode);
+            amp.setInputSource (source);
+            juce::AudioBuffer<float> buf (2, blockSize);
+            juce::MidiBuffer midi;
+            std::vector<float> out;
+            int phase = 0;
+            for (int block = 0; block < 60; ++block)
+            {
+                for (int i = 0; i < blockSize; ++i, ++phase)
+                {
+                    const float s = 0.25f * (float) std::sin (2.0 * juce::MathConstants<double>::pi * 220.0 * phase / sampleRate);
+                    buf.setSample (0, i, inLeft ? s : 0.0f);
+                    buf.setSample (1, i, inRight ? s : 0.0f);
+                }
+                amp.processBlock (buf, midi);
+                amp.pumpDeviceWork();
+                if (block >= 30)
+                    for (int i = 0; i < blockSize; ++i)
+                        out.push_back (buf.getSample (0, i));
+            }
+            return out;
+        };
+
+        // ...and first what still rings of the checks before: a room stood down rings OUT (below), for seconds.
+        {
+            juce::AudioBuffer<float> quiet (2, blockSize);
+            juce::MidiBuffer midi;
+            for (int block = 0; block < 400; ++block)
+            {
+                quiet.clear();
+                amp.processBlock (quiet, midi);
+            }
+        }
+
+        const auto mono = orbitamp::params::StereoMode::mono;
+        const auto fromLeft   = playedFrom (InputSource::left,  true,  false, mono);
+        const auto emptyRight = playedFrom (InputSource::right, true,  false, mono);
+        const auto fromRight  = playedFrom (InputSource::right, false, true,  mono);
+        const auto emptyLeft  = playedFrom (InputSource::left,  false, true,  mono);
+        const auto inBoth     = playedFrom (InputSource::both,  true,  true,  mono);
+        const auto twoAmps    = playedFrom (InputSource::right, true,  false, orbitamp::params::StereoMode::stereo);
+
+        const auto db = [] (const std::vector<float>& x) { return juce::String (juce::Decibels::gainToDecibels (rms (x), -120.0), 1) + " dB"; };
+        std::printf ("\ninput: left %s, right empty %s, right %s, left empty %s, both %s, stereo %s\n",
+                     db (fromLeft).toRawUTF8(), db (emptyRight).toRawUTF8(), db (fromRight).toRawUTF8(),
+                     db (emptyLeft).toRawUTF8(), db (inBoth).toRawUTF8(), db (twoAmps).toRawUTF8());
+
+        report ("LEFT plays the guitar in the left input", rms (fromLeft) > 1.0e-3, db (fromLeft));
+        report ("RIGHT plays it from the right as from the left",
+                differencePercent (fromLeft, fromRight) < 0.01, juce::String (differencePercent (fromLeft, fromRight), 3) + "% apart");
+        report ("...and neither hears the input it did not choose",
+                rms (emptyRight) < 1.0e-5 && rms (emptyLeft) < 1.0e-5, db (emptyRight) + ", " + db (emptyLeft));
+        report ("L+R plays one guitar in both as it does from either",
+                differencePercent (fromLeft, inBoth) < 0.01, juce::String (differencePercent (fromLeft, inBoth), 3) + "% apart");
+        report ("in STEREO both inputs play, whatever the choice says", rms (twoAmps) > 1.0e-3, db (twoAmps));
+
+        // The session's: a reopened session plays the input it was saved on; a preset holds none of it.
+        amp.setInputSource (InputSource::right);
+        juce::MemoryBlock session;
+        amp.getStateInformation (session);
+        const auto reopened = std::make_unique<orbitamp::AmpProcessor> (gateAmp());
+        reopened->setStateInformation (session.getData(), (int) session.getSize());
+        report ("a session keeps the input it plays", reopened->inputSource() == InputSource::right);
+        report ("...and a preset holds none of it", ! amp.presetForSaving().hasProperty (orbitamp::AmpProcessor::sessionInput));
+
+        amp.setInputSource (InputSource::left);
+        set (amp, orbitamp::params::stereoMode, (float) mono);
+        set (amp, orbitamp::params::reverbOn, reverbWas);
+        set (amp, orbitamp::params::delayOn, delayWas);
+    }
+
     // STANDBY IS THE INSERT'S BYPASS. Stand the room down and it stops taking new signal, but what
     // is already ringing rings OUT — it is not chopped. Measured in STEREO SPACE, where the room is
     // the only thing that can tell the two channels apart: right after the switch they still
