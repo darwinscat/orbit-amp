@@ -382,9 +382,8 @@ int ORBITAMP_GATE_MAIN()
         const auto bassIrs   = device::IrLibrary::directory (bass.irsFolder());
         const auto guitarIrs = device::IrLibrary::directory (products::orbitAmp().irsFolder());
 
-        // ...and what the two hold before this gate puts anything there. On a Mac and on Linux the home is the gate's own,
-        // and both are empty. Windows finds AppData without asking the environment, so there every gate before this one
-        // wrote into the same folders (tools/run-gates.sh): what this gate adds is told from what it found.
+        // ...and both empty before this gate puts anything there: the home is the gate's own on every system, Windows too
+        // (src/UserFolders.h).
         const auto bassBefore   = device::IrLibrary::listed (bassIrs);
         const auto guitarBefore = device::IrLibrary::listed (guitarIrs);
         const auto treeRows = [] (IrTreeView& view)
@@ -395,22 +394,11 @@ int ORBITAMP_GATE_MAIN()
                     return t->getRootItem()->getNumSubItems();
             return -1;
         };
-        int bassRowsBefore = 0, guitarRowsBefore = 0;
-        if (! bassBefore.isEmpty())   { IrTreeView v (bass.irsFolder());                 bassRowsBefore   = treeRows (v); }
-        if (! guitarBefore.isEmpty()) { IrTreeView v (products::orbitAmp().irsFolder()); guitarRowsBefore = treeRows (v); }
-        bool inTheirOwn = true;
-        for (const auto& f : bassBefore)   inTheirOwn = inTheirOwn && f.isAChildOf (bassIrs);
-        for (const auto& f : guitarBefore) inTheirOwn = inTheirOwn && f.isAChildOf (guitarIrs);
-       #if JUCE_WINDOWS
-        const bool foundAsItShould = inTheirOwn;
-       #else
-        const bool foundAsItShould = bassBefore.isEmpty() && guitarBefore.isEmpty();
-       #endif
         check (redGiant.data != nullptr && bassIrs == device::DeviceLibrary::familyRoot().getChildFile ("Bass IRs")
-                   && guitarIrs == device::DeviceLibrary::familyRoot().getChildFile ("IRs") && foundAsItShould,
-               "the bass's own IRs in `Bass IRs`, the guitar's in `IRs`, side by side in the family's folder, empty yet but for "
-                   "what the gates before this one left on Windows (" + juce::String (bassBefore.size()) + " and "
-                   + juce::String (guitarBefore.size()) + ")");
+                   && guitarIrs == device::DeviceLibrary::familyRoot().getChildFile ("IRs")
+                   && bassBefore.isEmpty() && guitarBefore.isEmpty(),
+               "the bass's own IRs in `Bass IRs`, the guitar's in `IRs`, side by side in the family's folder, empty yet ("
+                   + juce::String (bassBefore.size()) + " and " + juce::String (guitarBefore.size()) + ")");
 
         const auto menuOf = [] (const AmpProcessor& a, std::vector<juce::File>& files)
         {
@@ -501,7 +489,7 @@ int ORBITAMP_GATE_MAIN()
             // in its folder is none.
             check (builderOf (*fresh) == "BLUES 10, METAL 10, PUNK 10, ROCK 10",
                    "...and BUILDER, the bass builder's presets by style, no MY PRESETS while it keeps none: " + builderOf (*fresh));
-            const auto saves = juce::File::getSpecialLocation (juce::File::userDocumentsDirectory)
+            const auto saves = userFolder (juce::File::userDocumentsDirectory)
                                    .getChildFile ("Darwin's Cat/Orbit Bass Cab Builder/Presets");
             const auto mine = saves.getChildFile ("Mine.toml"), guitars = saves.getChildFile ("Guitars.toml");
             const auto& selfish = device::Cabinets::of (device::CabKind::guitar).dozen().front();
@@ -633,18 +621,17 @@ int ORBITAMP_GATE_MAIN()
         // EACH LISTS ITS OWN AND NONE OF THE OTHER'S: the library, the CAB menu, the SETUP tree, a face's channels.
         {
             // What this gate put there, by its path from the family's folder written with `/` on every system.
-            const auto names = [] (const juce::Array<juce::File>& fs, const juce::Array<juce::File>& before)
+            const auto names = [] (const juce::Array<juce::File>& fs)
             {
                 juce::StringArray n;
                 for (const auto& f : fs)
-                    if (! before.contains (f))
-                        n.add (f.getRelativePathFrom (device::DeviceLibrary::familyRoot()).replaceCharacter ('\\', '/'));
+                    n.add (f.getRelativePathFrom (device::DeviceLibrary::familyRoot()).replaceCharacter ('\\', '/'));
                 return n.joinIntoString (", ");
             };
-            check (names (device::IrLibrary::listed (bassIrs), bassBefore) == "Bass IRs/Fixture 1.wav, Bass IRs/Fixture 2.wav"
-                       && names (device::IrLibrary::listed (guitarIrs), guitarBefore) == "IRs/Guitar own.wav",
+            check (names (device::IrLibrary::listed (bassIrs)) == "Bass IRs/Fixture 1.wav, Bass IRs/Fixture 2.wav"
+                       && names (device::IrLibrary::listed (guitarIrs)) == "IRs/Guitar own.wav",
                    "the bass's library lists `Bass IRs` alone, the guitar's `IRs` alone: "
-                       + names (device::IrLibrary::listed (bassIrs), bassBefore) + " | " + names (device::IrLibrary::listed (guitarIrs), guitarBefore));
+                       + names (device::IrLibrary::listed (bassIrs)) + " | " + names (device::IrLibrary::listed (guitarIrs)));
 
             // OrbitAmp's CAB is the TOP 12 and the player's own IRs (the owner, 10.11): no shelf. It opens on the first of the
             // twelve, drawn on the worker and landing on the message thread — waited for, as above.
@@ -654,19 +641,19 @@ int ORBITAMP_GATE_MAIN()
             std::vector<juce::File> files;
             const auto items = menuOf (*guitar, files);
             const auto& twelve = device::Cabinets::of (device::CabKind::guitar).dozen();
-            bool twelveFirst = twelve.size() == 12 && items.size() == (int) twelve.size() + 1 + guitarBefore.size();
+            bool twelveFirst = twelve.size() == 12 && items.size() == (int) twelve.size() + 1;
             for (size_t i = 0; i < twelve.size() && twelveFirst; ++i)
                 twelveFirst = items[(int) i] == twelve[i].name + (i == 0 ? " (ticked)" : "");
             bool noShelf = true;
             for (int i = 0; i < params::cabIrNames.size(); ++i)
                 noShelf = noShelf && ! items.contains (params::cabIrNames[i]) && ! items.contains (params::cabIrNames[i] + " (ticked)");
-            check (twelveFirst && noShelf && items.contains ("Guitar own") && files.size() == (size_t) (1 + guitarBefore.size())
+            check (twelveFirst && noShelf && items.contains ("Guitar own") && files.size() == 1
                        && std::find (files.begin(), files.end(), guitarOwn) != files.end(),
                    "OrbitAmp's CAB menu: the TOP 12, the first ticked, no shelf, and of the player's `IRs` alone: "
                        + items.joinIntoString (" | "));
 
             IrTreeView bassTree (bass.irsFolder()), guitarTree (products::orbitAmp().irsFolder());
-            check (treeRows (bassTree) == 2 + bassRowsBefore && treeRows (guitarTree) == 1 + guitarRowsBefore,
+            check (treeRows (bassTree) == 2 && treeRows (guitarTree) == 1,
                    "the SETUP tree of each: the bass's two rows, the guitar's one");
 
             // The cockpit's cabinets drawn — the guitar's TOP 12 (the owner, 08.11) — no file among them, of either folder.

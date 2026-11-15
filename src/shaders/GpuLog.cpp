@@ -3,6 +3,8 @@
 
 #include "GpuLog.h"
 
+#include "../UserFolders.h"
+
 #include <mutex>
 
 namespace orbitamp::gpulog
@@ -50,14 +52,8 @@ namespace
 juce::File file()
 {
     // Where prefs::store keeps every product's settings (felitronics::appkit::SettingsStore), one step up:
-    // JUCE's user application data, which on the Mac is bare ~/Library.
-    auto dir = juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory);
-
-   #if JUCE_MAC
-    dir = dir.getChildFile ("Application Support");
-   #endif
-
-    return dir.getChildFile ("Darwin's Cat").getChildFile ("gpu.log");
+    // the player's application data (UserFolders.h).
+    return userAppData().getChildFile ("Darwin's Cat").getChildFile ("gpu.log");
 }
 
 juce::String line (const juce::String& who, const std::string& driver, const std::string& why)

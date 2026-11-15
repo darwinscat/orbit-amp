@@ -146,7 +146,7 @@ std::vector<Cabinets::Cabinet> Cabinets::own() const
 std::vector<Cabinets::Cabinet> Cabinets::builderSaves() const
 {
     // Where the builder app keeps its MY PRESETS (cab-ir-generator's app/MainComponent.cpp, presetFolder).
-    return presetsIn (juce::File::getSpecialLocation (juce::File::userDocumentsDirectory)
+    return presetsIn (userFolder (juce::File::userDocumentsDirectory)
                           .getChildFile ("Darwin's Cat")
                           .getChildFile (kind == CabKind::guitar ? "Orbit Guitar Cab Builder" : "Orbit Bass Cab Builder")
                           .getChildFile ("Presets"));

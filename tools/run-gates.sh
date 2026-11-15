@@ -10,9 +10,9 @@
 # CFFIXED_USER_HOME, which is where Foundation looks. A gate plays an amp starting for the first time, and
 # an amp starting lays its set out in the family's Factory folder and gathers IRs into the family's IRs
 # folder; in the runner's own home, or on the machine of whoever runs the release, that would be his.
-# The XDG_* folders are let go for the same reason: a Linux runner points them into its own home. (Windows
-# finds AppData without asking the environment, so there a gate writes into the runner's own profile —
-# the workflows run the gates there only on hosted runners, which are thrown away after the job.)
+# The XDG_* folders are let go for the same reason: a Linux runner points them into its own home. Windows
+# finds AppData and Documents without asking the environment, so there the home is named once more, as
+# ORBITAMP_GATE_HOME, and a gate reads the player's folders from it (src/UserFolders.h).
 #
 # Every gate runs, red or green, and the run fails at the end if any was red: the ones after the first red
 # have something to say too.
@@ -79,6 +79,7 @@ run_gate() {   # run_gate <name> <binary> [VAR=value ...]
     cd "$home"
     unset XDG_CONFIG_HOME XDG_DATA_HOME XDG_CACHE_HOME XDG_STATE_HOME
     export HOME="$home" CFFIXED_USER_HOME="$home"
+    if $windows; then export ORBITAMP_GATE_HOME="$(cygpath -m "$home")"; fi
     for kv in "$@"; do export "${kv?}"; done
     exec "$bin"
   ) > "$log" 2>&1 || code=$?
