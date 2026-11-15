@@ -58,7 +58,8 @@ Windscreen::Windscreen (std::unique_ptr<Drive> drive)
     setOpaque (true);
     setWantsKeyboardFocus (true);
     setMouseCursor (juce::MouseCursor::DraggingHandCursor);
-    gl.setOpenGLVersionRequired (juce::OpenGLContext::openGL3_2);
+    gl.setPreferredVersion ({ 3, 2 });
+    gl.setPreferredProfile (juce::OpenGLProfile::core);
     gl.setRenderer (this);
     gl.setComponentPaintingEnabled (false);
     gl.setContinuousRepainting (false);     // the pulse asks for each frame, on every platform: see tick()

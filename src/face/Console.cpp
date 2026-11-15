@@ -72,7 +72,7 @@ namespace
                                           .withIconType (juce::MessageBoxIconType::WarningIcon)
                                           .withTitle ("Not saved")
                                           .withMessage (file.getFullPathName())
-                                          .withButton ("OK"),
+                                          .withButton ("OK", 1),
                                       nullptr);
     }
 
@@ -2435,7 +2435,7 @@ void Console::renameCab()
                                               .withIconType (juce::MessageBoxIconType::WarningIcon)
                                               .withTitle ("Not renamed")
                                               .withMessage (name + "\n\nThere is a cabinet of that name already, or the file would not move.")
-                                              .withButton ("OK"),
+                                              .withButton ("OK", 1),
                                           nullptr);
     });
 }
@@ -2450,10 +2450,12 @@ void Console::removeCab()
         return;
 
     const auto file = channels.cabinets()[playing];
-    juce::AlertWindow::showAsync (juce::MessageBoxOptions::makeOptionsOkCancel (juce::MessageBoxIconType::QuestionIcon,
-                                                                                "Remove the cabinet?",
-                                                                                Channels::cabinetName (file) + "\n\nIts file goes to the Trash.",
-                                                                                "Remove", "Cancel"),
+    juce::AlertWindow::showAsync (juce::MessageBoxOptions()
+                                      .withIconType (juce::MessageBoxIconType::QuestionIcon)
+                                      .withTitle ("Remove the cabinet?")
+                                      .withMessage (Channels::cabinetName (file) + "\n\nIts file goes to the Trash.")
+                                      .withButton (juce::MessageBoxButtonOptions { "Remove", 1 }.setPreferredAction())
+                                      .withButton (juce::MessageBoxButtonOptions { "Cancel", 0 }.setRole (juce::MessageBoxButtonRole::cancel)),
                                   [safe = juce::Component::SafePointer<Console> (this), file] (int answer)
     {
         if (safe == nullptr || answer != 1)
@@ -2490,7 +2492,7 @@ void Console::addCabinets (const juce::StringArray& paths)
                                           .withMessage (added.refused.joinIntoString ("\n")
                                                         + "\n\nA cabinet is kept inside the session it plays in, and an IR over "
                                                         + juce::String (device::EmbeddedIrs::maxBytes / (1024 * 1024)) + " MB does not fit.")
-                                          .withButton ("OK"),
+                                          .withButton ("OK", 1),
                                       nullptr);
 }
 
@@ -2773,7 +2775,7 @@ void Console::showPresetMenu()
                                                                       .withIconType (juce::MessageBoxIconType::WarningIcon)
                                                                       .withTitle ("Not loaded")
                                                                       .withMessage (name + "\n\nThis preset is another amp's, or no preset at all.")
-                                                                      .withButton ("OK"),
+                                                                      .withButton ("OK", 1),
                                                                   nullptr);
                             }
                             else if (picked == itemSave && onDisk)      safe->presets.save (current);
@@ -2784,10 +2786,13 @@ void Console::showPresetMenu()
                             {
                                 // A file gone is gone — undo does not bring it back — so this one asks.
                                 juce::AlertWindow::showAsync (
-                                    juce::MessageBoxOptions::makeOptionsOkCancel (juce::MessageBoxIconType::QuestionIcon,
-                                                                                  "Delete preset",
-                                                                                  "Delete \"" + current + "\"? Its file is removed for good.",
-                                                                                  "Delete", "Cancel", safe.getComponent()),
+                                    juce::MessageBoxOptions()
+                                        .withIconType (juce::MessageBoxIconType::QuestionIcon)
+                                        .withTitle ("Delete preset")
+                                        .withMessage ("Delete \"" + current + "\"? Its file is removed for good.")
+                                        .withButton (juce::MessageBoxButtonOptions { "Delete", 1 }.setPreferredAction())
+                                        .withButton (juce::MessageBoxButtonOptions { "Cancel", 0 }.setRole (juce::MessageBoxButtonRole::cancel))
+                                        .withAssociatedComponent (safe.getComponent()),
                                     [safe] (int answer)
                                     {
                                         if (safe != nullptr && answer == 1)

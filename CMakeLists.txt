@@ -99,7 +99,7 @@ include(FetchContent)
 # still saves the clone: the local tree, when it is the pin, is COPIED into this build and the copy
 # patched — another project's tree is never written to.
 # ----------------------------------------------------------------------------
-set(ORBITAMP_JUCE_TAG "8.0.17-security" CACHE STRING "JUCE git tag to build against")
+set(ORBITAMP_JUCE_TAG "9.0.5" CACHE STRING "JUCE git tag to build against")
 set(ORBITAMP_JUCE_DIR "$ENV{HOME}/IdeaProjects/orbit-capture/app/tests/build/_deps/juce-src"
     CACHE PATH "Local JUCE source tree (copied and patched if it is the pinned version); else the pin is fetched")
 set(ORBITAMP_CLAP_EXT_TAG "6bde108329ff9fc24404b79b8b397261a75cf6a8" CACHE STRING "clap-juce-extensions git commit to build against")
@@ -349,7 +349,9 @@ FetchContent_MakeAvailable(felitronics_appkit)
 # miniature the CAB block draws (cabir::panel, JUCE views in our theme — CabWindow::useOurLook), and the
 # table they read (CABIR_CABINETS). The same code is the cabinets' own app and web page.
 # ----------------------------------------------------------------------------
-set(ORBITAMP_CABIR_TAG "v0.4.0" CACHE STRING "cab-ir-generator release tag (fetched when no local checkout)")
+# Pinned by commit until its next release: its main, the panel reading SVG the JUCE 9 way. A commit is no
+# branch or tag, so the clone is a full one (GIT_SHALLOW takes a ref name only).
+set(ORBITAMP_CABIR_TAG "8013fffca54ff8c1c524f0b7ba5fc47b71dddd63" CACHE STRING "cab-ir-generator release tag or commit (fetched when no local checkout)")
 set(ORBITAMP_CABIR_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../cab-ir-generator"
     CACHE PATH "Local cab-ir-generator checkout (used if present); else the ref is fetched")
 if(ORBITAMP_CABIR_DIR AND EXISTS "${ORBITAMP_CABIR_DIR}/CMakeLists.txt")
@@ -359,8 +361,7 @@ else()
     message(STATUS "cab-ir-generator: fetching ${ORBITAMP_CABIR_TAG} from GitHub")
     FetchContent_Declare(cab_ir_generator
         GIT_REPOSITORY https://github.com/darwinscat/cab-ir-generator.git
-        GIT_TAG        ${ORBITAMP_CABIR_TAG}
-        GIT_SHALLOW    TRUE)
+        GIT_TAG        ${ORBITAMP_CABIR_TAG})
 endif()
 FetchContent_MakeAvailable(cab_ir_generator)
 
