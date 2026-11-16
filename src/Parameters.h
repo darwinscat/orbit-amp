@@ -756,6 +756,13 @@ struct Opening
     float compAmount = 0.5f;
     bool  bassLpfOn  = false;
 
+    // ...and what the bass's strip holds where a product holds it otherwise than the walker and OrbitBass: UnderwaterBass's
+    // COMP off, its ENVELOPE out of the strip and its room in it (the owner, 16.11: its effects are OCTAVE, CHORUS and
+    // REVERB) — the parameters declaring it, so a fresh instance stands where the lineup holds it.
+    bool  compOn        = true;
+    bool  filterPresent = true;
+    bool  reverbPresent = false;
+
     // WHERE THE AMP'S MIDDLE OPENS: its console's first bell's frequency — 400 Hz on every amp but the basses, whose MID
     // FREQ opens at 1 kHz (RedGrooveBass's: the owner, 02.11; OrbitBass's: 10.11). A default, not a hold: the player moves it, and
     // INIT and a double click bring it back here (engineDefault leaves it its declared default).

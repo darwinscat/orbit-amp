@@ -46,8 +46,11 @@ void Engine::opening (const Lineup& lineup, params::Opening& o)
     // rest of what it pins is held where the parameter opens anyway.
     for (const auto& pin : lineup.pinned)
     {
-        if (pin.param == params::compAmount) o.compAmount = pin.value;
-        if (pin.param == params::bassLpfOn)  o.bassLpfOn  = pin.value > 0.5f;
+        if (pin.param == params::compAmount)    o.compAmount    = pin.value;
+        if (pin.param == params::bassLpfOn)     o.bassLpfOn     = pin.value > 0.5f;
+        if (pin.param == params::compOn)        o.compOn        = pin.value > 0.5f;
+        if (pin.param == params::filterPresent) o.filterPresent = pin.value > 0.5f;
+        if (pin.param == params::reverbPresent) o.reverbPresent = pin.value > 0.5f;
     }
 }
 
