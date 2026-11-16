@@ -1421,7 +1421,7 @@ endif()
 # bathyscaphe's atlas as WebP made from the renders in resources/underwater/source (resources/underwater/README.txt
 # says how: lossy colour, the alpha lossless and exact, the sea layer at half size), and the atlas's table,
 # sprites.txt, as plain text. Not built into any binary: the installer lays them out once, in the factory folder's
-# Faces/UnderwaterBass, and they are read from there at run time (src/face/Renders.h, UNDERWATER_ART_DIR), decoded
+# Faces/DeepGrooveBass, and they are read from there at run time (src/face/Renders.h, UNDERWATER_ART_DIR), decoded
 # with libwebp.
 set(UNDERWATER_ART_SOURCES src/underwater/view/UnderwaterArt.cpp)
 
