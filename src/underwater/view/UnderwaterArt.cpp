@@ -28,7 +28,7 @@ UnderwaterGl::Picture decodeWebp (const void* data, size_t size)
 
 namespace
 {
-    constexpr const char* product = "UnderwaterBass";
+    constexpr const char* product = "DeepGrooveBass";
     constexpr const char* folderVariable = "UNDERWATER_ART_DIR";
 
     /** A picture's file, read and decoded when it is asked for; none when it is not there. */
