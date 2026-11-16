@@ -3,12 +3,12 @@
 
 in vec3 aPos; in vec3 aNrm;
 uniform mat4 uViewProj;
-uniform ivec2 uRockBase; uniform int uRockW, uRockM; uniform float uRockCell, uRockProb; uniform vec2 uRockSize;
+in ivec2 aCell;     // the cell: the window's cells that can hold one, as the view lists them
+uniform int uRockM; uniform float uRockCell, uRockProb; uniform vec2 uRockSize;
 uniform float uTall;      // 0: a boulder; 1: a spire, stretched up
 out vec3 vN; out vec3 vRel; out vec3 vPos; out float vTint; out float vLocalY;
 void main() {
-  int ii = gl_InstanceID;
-  ivec2 cij = ivec2 (ii % uRockW, ii / uRockW) + uRockBase;
+  ivec2 cij = aCell;
   ivec2 c = (cij + uRockM * 8) % uRockM;
   float r0 = hcell (c, 11u);
   int variant = (hcell (c, 19u) < 0.5) ? 0 : 1;

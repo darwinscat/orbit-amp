@@ -32,29 +32,18 @@ namespace
     constexpr int N = 160;                  // the floor lattice: 240 m square, snapped to the world
     constexpr double cellSize = 1.5;
     constexpr double zNear = 0.3, zFar = 600.0;
-    struct Field { double cell; int w; double prob, smin, smax; };
-    constexpr Field rocks { 3.0, 36, 0.16, 0.25, 1.3 }, spires { 14.0, 16, 0.22, 2.5, 7.0 };
-    constexpr double wormCell = 1.1;
-    constexpr int wormW = 56;
-    // The flora: kind, the cell and window, how much of a meadow's cells are taken, the height range in metres.
-    struct FloraKind { int kind; double cell; int w; double density, smin, smax; };
-    constexpr std::array<FloraKind, 5> floraKinds { {
-        { 0, 2.2, 36, 0.50, 0.4,  1.1 },    // fan
-        { 1, 2.6, 30, 0.40, 0.5,  1.3 },    // bush
-        { 2, 1.6, 40, 0.55, 0.35, 0.9 },    // anemone
-        { 3, 1.0, 56, 0.40, 1.2,  3.0 },    // kelp
-        { 4, 0.7, 64, 0.50, 0.15, 0.4 },    // polyp
-    } };
+    // The things on the floor (UnderwaterWorld::fieldSpecs): a window of w x w cells, shifted ahead by 0.3 of it.
+    constexpr double fieldShift = 0.3, floraFar = 70.0;
     constexpr int snowCount = 2200, siltCount = 2800, bubbleCount = 650;
     constexpr double cau1 = 2.1, cau2 = 1.44, cauW = 18.9;
 
     // The attributes' locations, shared by every program that reads them. aPos is 0 (gpu::program binds it there);
     // the floor's lattice, the only attribute of its program, takes 0 too.
     constexpr GLuint locPos = 0, locGrid = 0, locNrm = 1, locCol = 2, locUV = 3, locFlag = 4, locTSI = 5,
-                     locScale = 6, locPhase = 7, locAxis = 8, locAlpha = 9, locGlow = 10, locTend = 11;
+                     locScale = 6, locPhase = 7, locAxis = 8, locAlpha = 9, locGlow = 10, locTend = 11, locCell = 12;
     const std::vector<gpu::Attribute> attributes {
         { "aGrid", locGrid }, { "aNrm", locNrm }, { "aCol", locCol }, { "aUV", locUV }, { "aFlag", locFlag }, { "aTSI", locTSI },
-        { "aScale", locScale }, { "aPhase", locPhase }, { "aAxis", locAxis }, { "aAlpha", locAlpha }, { "aGlow", locGlow }, { "aTend", locTend } };
+        { "aScale", locScale }, { "aPhase", locPhase }, { "aAxis", locAxis }, { "aAlpha", locAlpha }, { "aGlow", locGlow }, { "aTend", locTend }, { "aCell", locCell } };
 
     /** JS's Math.round of a positive size: halves up. */
     inline int jsRoundInt (double x) noexcept { return (int) Js::round (x); }
@@ -72,6 +61,51 @@ namespace
                                                    + (double) a[(size_t) (8 + r)] * b[(size_t) (c * 4 + 2)] + (double) a[(size_t) (12 + r)] * b[(size_t) (c * 4 + 3)]);
         return o;
     }
+
+    /** WHAT THE VIEW CAN SHOW: the frustum's planes from the view-projection's rows, normalised, in the frame's
+        coordinates (relative to the camera's cell) — and while the panel's covered band is laid into the depth, its
+        top as one more. Whatever lies wholly outside one of them shows nothing. */
+    struct Frustum
+    {
+        std::array<std::array<double, 4>, 7> planes {};
+        int count = 0;
+        Frustum (const std::array<float, 16>& VP, double coverTop)
+        {
+            const auto add = [this, &VP] (int k, double sign, double ndc)
+            {
+                auto& q = planes[(size_t) count++];
+                for (size_t c = 0; c < 4; ++c)
+                    q[c] = sign * ((double) VP[c * 4 + (size_t) k] - ndc * (double) VP[c * 4 + 3]);
+                const double n = std::sqrt (q[0] * q[0] + q[1] * q[1] + q[2] * q[2]);
+                for (auto& v : q) v /= n;
+            };
+            for (int k = 0; k < 3; ++k) { add (k, 1, -1); add (k, -1, 1); }
+            if (coverTop > -1)
+                add (1, 1, coverTop);
+        }
+        /** Whether a ball can show. */
+        bool sees (double x, double y, double z, double reach) const noexcept
+        {
+            for (int i = 0; i < count; ++i)
+            {
+                const auto& q = planes[(size_t) i];
+                if (q[0] * x + q[1] * y + q[2] * z + q[3] < -reach)
+                    return false;
+            }
+            return true;
+        }
+        /** Whether a box can show: its corner furthest along each plane. */
+        bool sees (double x0, double x1, double y0, double y1, double z0, double z1) const noexcept
+        {
+            for (int i = 0; i < count; ++i)
+            {
+                const auto& q = planes[(size_t) i];
+                if (q[0] * (q[0] > 0 ? x1 : x0) + q[1] * (q[1] > 0 ? y1 : y0) + q[2] * (q[2] > 0 ? z1 : z0) + q[3] < -0.05)
+                    return false;
+            }
+            return true;
+        }
+    };
 
     // The light: from above, slanted; the shafts' plane basis is perpendicular to it.
     struct Light { V3 dir, a, b; };
@@ -172,6 +206,7 @@ bool UnderwaterGl::create()
     makeTextures();
     makeArt();
     makeBuffers();
+    floorRange = world.floorRange();
 
     // The frame timer: a timer query where the driver has one. Asked once; an error means no.
     while (glGetError() != GL_NO_ERROR) {}
@@ -198,11 +233,16 @@ void UnderwaterGl::destroy()
     const auto del = [] (std::uint32_t& id, void (*f) (GLsizei, const GLuint*)) { if (id != 0) f (1, &id); id = 0; };
     for (auto& f : floraMesh) { del (f.vbo, glDeleteBuffers); del (f.ibo, glDeleteBuffers); del (f.vao, glDeleteVertexArrays); f.count = 0; }
     del (vboGrid, glDeleteBuffers); del (iboFloor, glDeleteBuffers); del (vaoFloor, glDeleteVertexArrays);
+    del (iboCoarse, glDeleteBuffers); del (vaoFloorCoarse, glDeleteVertexArrays);
     del (vboRock, glDeleteBuffers); del (vaoRock, glDeleteVertexArrays);
     del (vboWorm, glDeleteBuffers); del (iboWorm, glDeleteBuffers); del (vaoWorm, glDeleteVertexArrays);
     del (vboJelly, glDeleteBuffers); del (vboBell, glDeleteBuffers); del (iboBell, glDeleteBuffers); del (vaoBell, glDeleteVertexArrays);
     del (vboTend, glDeleteBuffers); del (iboTend, glDeleteBuffers); del (vaoTendril, glDeleteVertexArrays);
     del (vaoEmpty, glDeleteVertexArrays); del (vboEmpty, glDeleteBuffers);
+    del (vboCells, glDeleteBuffers);
+    windows = {};
+    cellRuns = {};
+    coverTop = -1.0;
     del (vboCover, glDeleteBuffers); del (vaoCover, glDeleteVertexArrays); coverVertices = 0;
     for (auto* t : { &texHeight, &texDetail, &texCaustic, &texDash, &texSea, &texAtlas, &texMask, &fboColour, &fboDepth, &fboPostColour })
         del (*t, glDeleteTextures);
@@ -315,6 +355,17 @@ void UnderwaterGl::makeMask (const Picture& dash)
             x = e;
         }
     coverVertices = (int) v.size() / 2;
+    // The rows covered from the bottom up across the whole stage: under their top the view shows nothing.
+    int fullFrom = mask.height;
+    while (fullFrom > 0)
+    {
+        bool full = true;
+        for (int x = 0; x < mask.width && full; ++x)
+            full = mask.at (x, fullFrom - 1) == W::PanelMask::covered;
+        if (! full) break;
+        --fullFrom;
+    }
+    coverTop = fullFrom < mask.height ? 1 - std::min ((double) fullFrom * block, (double) mask.pictureHeight) / mask.pictureHeight * 2 : -1.0;
     if (coverVertices > 0)
     {
         glGenVertexArrays (1, &vaoCover);
@@ -365,7 +416,44 @@ void UnderwaterGl::makeBuffers()
         glBindBuffer (GL_ELEMENT_ARRAY_BUFFER, iboFloor);
         glBufferData (GL_ELEMENT_ARRAY_BUFFER, (GLsizeiptr) (idx.size() * sizeof (std::uint32_t)), idx.data(), GL_STATIC_DRAW);
         glBindVertexArray (0);
+        // The coarse lattice over the same vertices: 2 x 2 cells a cell, split along the same diagonal, row by row.
+        constexpr int nb = N / 2;
+        std::vector<std::uint32_t> coarse ((size_t) (nb * nb * 6));
+        for (int j = 0; j < nb; ++j)
+            for (int i = 0; i < nb; ++i)
+            {
+                const auto o = (size_t) ((j * nb + i) * 6);
+                const auto v = (std::uint32_t) (2 * j * (N + 1) + 2 * i), up = (std::uint32_t) (2 * (N + 1));
+                coarse[o] = v; coarse[o + 1] = v + 2; coarse[o + 2] = v + up + 2;
+                coarse[o + 3] = v; coarse[o + 4] = v + up + 2; coarse[o + 5] = v + up;
+            }
+        glGenVertexArrays (1, &vaoFloorCoarse);
+        glBindVertexArray (vaoFloorCoarse);
+        glBindBuffer (GL_ARRAY_BUFFER, vboGrid);
+        glEnableVertexAttribArray (locGrid); glVertexAttribPointer (locGrid, 2, GL_FLOAT, GL_FALSE, 0, nullptr);
+        glGenBuffers (1, &iboCoarse);
+        glBindBuffer (GL_ELEMENT_ARRAY_BUFFER, iboCoarse);
+        glBufferData (GL_ELEMENT_ARRAY_BUFFER, (GLsizeiptr) (coarse.size() * sizeof (std::uint32_t)), coarse.data(), GL_STATIC_DRAW);
+        glBindVertexArray (0);
     }
+
+    // The cells of the things on the floor, an instance each: a buffer for the lot, each field's run of it pointed at
+    // as it is drawn.
+    glGenBuffers (1, &vboCells);
+    glBindBuffer (GL_ARRAY_BUFFER, vboCells);
+    {
+        size_t most = 0;
+        for (const auto& F : W::fieldSpecs) most += (size_t) (F.w * F.w);
+        cellData.reserve (most * 2);
+        glBufferData (GL_ARRAY_BUFFER, (GLsizeiptr) (most * 2 * sizeof (std::int32_t)), nullptr, GL_DYNAMIC_DRAW);
+    }
+    const auto cellAttribute = [this]
+    {
+        glBindBuffer (GL_ARRAY_BUFFER, vboCells);
+        glEnableVertexAttribArray (locCell);
+        glVertexAttribIPointer (locCell, 2, GL_INT, 0, nullptr);
+        glVertexAttribDivisor (locCell, 1);
+    };
 
     // The rocks: two lumpy variants in one buffer.
     {
@@ -379,6 +467,7 @@ void UnderwaterGl::makeBuffers()
         glBufferData (GL_ARRAY_BUFFER, (GLsizeiptr) (v.size() * sizeof (float)), v.data(), GL_STATIC_DRAW);
         glEnableVertexAttribArray (locPos); glVertexAttribPointer (locPos, 3, GL_FLOAT, GL_FALSE, 24, offset (0));
         glEnableVertexAttribArray (locNrm); glVertexAttribPointer (locNrm, 3, GL_FLOAT, GL_FALSE, 24, offset (12));
+        cellAttribute();
         glBindVertexArray (0);
     }
 
@@ -398,9 +487,10 @@ void UnderwaterGl::makeBuffers()
     };
 
     // The worms: one tube.
-    wormIndices = mesh (W::tubeMesh (6, 9), vaoWorm, vboWorm, iboWorm, []
+    wormIndices = mesh (W::tubeMesh (6, 9), vaoWorm, vboWorm, iboWorm, [&]
     {
         glEnableVertexAttribArray (locPos); glVertexAttribPointer (locPos, 3, GL_FLOAT, GL_FALSE, 0, nullptr);
+        cellAttribute();
     });
     glBindVertexArray (0);
 
@@ -409,7 +499,7 @@ void UnderwaterGl::makeBuffers()
     for (size_t k = 0; k < floraMeshes.size(); ++k)
     {
         auto& f = floraMesh[k];
-        f.count = mesh (floraMeshes[k], f.vao, f.vbo, f.ibo, []
+        f.count = mesh (floraMeshes[k], f.vao, f.vbo, f.ibo, [&]
         {
             for (const auto& [loc, size, at] : { std::array<int, 3> { (int) locPos, 3, 0 }, { (int) locNrm, 3, 12 }, { (int) locCol, 3, 24 },
                                                  { (int) locUV, 2, 36 }, { (int) locFlag, 1, 44 } })
@@ -417,6 +507,7 @@ void UnderwaterGl::makeBuffers()
                 glEnableVertexAttribArray ((GLuint) loc);
                 glVertexAttribPointer ((GLuint) loc, size, GL_FLOAT, GL_FALSE, 48, offset (at));
             }
+            cellAttribute();
         });
         glBindVertexArray (0);
     }
@@ -677,53 +768,77 @@ void UnderwaterGl::drawScene (int rw, int rh, int cw, int ch)
         set2 (p, "uHitT", std::min (s.hitT, 1e4), s.hitS);
     };
 
-    // The jellyfish moved, and those that can be seen packed in their order (far to near), each with its fade: one
-    // wholly outside the view — the frustum's planes from VP's rows, its reach round it — draws nothing, nor one
-    // faded out. Uploaded before the scene's pass begins, into a buffer let go of first, so nothing waits for the GPU.
-    world.updateJellies (s.dt);
-    int jellyDrawn = 0;
-    {
-        std::array<std::array<double, 4>, 6> planes {};
-        for (int k = 0; k < 3; ++k)
-            for (int c = 0; c < 4; ++c)
-            {
-                planes[(size_t) (2 * k)][(size_t) c] = (double) VP[(size_t) (c * 4 + 3)] + VP[(size_t) (c * 4 + k)];
-                planes[(size_t) (2 * k + 1)][(size_t) c] = (double) VP[(size_t) (c * 4 + 3)] - VP[(size_t) (c * 4 + k)];
-            }
-        const auto seen = [&planes] (const float* p, double reach)
-        {
-            for (const auto& q : planes)
-                if (q[0] * p[0] + q[1] * p[1] + q[2] * p[2] + q[3] < -reach * std::sqrt (q[0] * q[0] + q[1] * q[1] + q[2] * q[2]))
-                    return false;
-            return true;
-        };
-        for (const auto& j : world.jellies())
-        {
-            const float alpha = W::Quality::thinned (j.id) ? (float) (1 - quality.thin) : 1.0f;
-            float* o = jellyData.data() + (size_t) jellyDrawn * 16;
-            o[0] = (float) (camRel[0] + j.rel[0]); o[1] = (float) (camRel[1] + j.rel[1]); o[2] = (float) (camRel[2] + j.rel[2]);
-            if (alpha <= 0.0f || ! seen (o, W::jellyReach (j)))
-                continue;
-            o[3] = (float) j.scale;
-            o[4] = (float) j.col[0]; o[5] = (float) j.col[1]; o[6] = (float) j.col[2];
-            o[7] = (float) std::fmod (j.phase, 2 * pi);
-            o[8] = (float) j.outAxis[0]; o[9] = (float) j.outAxis[1]; o[10] = (float) j.outAxis[2];
-            o[11] = alpha;
-            o[12] = (float) j.glow[0]; o[13] = (float) j.glow[1]; o[14] = (float) j.glow[2];
-            o[15] = (float) j.tend;
-            ++jellyDrawn;
-        }
-        glBindBuffer (GL_ARRAY_BUFFER, vboJelly);
-        glBufferData (GL_ARRAY_BUFFER, (GLsizeiptr) (jellyData.size() * sizeof (float)), nullptr, GL_DYNAMIC_DRAW);
-        if (jellyDrawn > 0)
-            glBufferSubData (GL_ARRAY_BUFFER, 0, (GLsizeiptr) ((size_t) jellyDrawn * 16 * sizeof (float)), jellyData.data());
-        glBindBuffer (GL_ARRAY_BUFFER, 0);
-    }
-
     // What the cabin's panel covers is never seen: while it is drawn, laid into the depth at its nearest before
     // anything, so nothing of the scene is shaded under it, and skipped by the post pass.
     const bool masked = drawsCabin() && maskHolds (rw, rh);
     const bool postLow = quality.level >= 1 && fboPost != 0;
+    // What can show: what lies in the view, and over the panel's covered band while it is laid into the depth.
+    const Frustum view (VP, masked ? coverTop : -1.0);
+
+    // The jellyfish moved, and those that can be seen packed in their order (far to near), each with its fade: one
+    // wholly outside what can show, its reach round it, draws nothing, nor one faded out.
+    world.updateJellies (s.dt);
+    int jellyDrawn = 0;
+    for (const auto& j : world.jellies())
+    {
+        const float alpha = W::Quality::thinned (j.id) ? (float) (1 - quality.thin) : 1.0f;
+        float* o = jellyData.data() + (size_t) jellyDrawn * 16;
+        o[0] = (float) (camRel[0] + j.rel[0]); o[1] = (float) (camRel[1] + j.rel[1]); o[2] = (float) (camRel[2] + j.rel[2]);
+        if (alpha <= 0.0f || ! view.sees (o[0], o[1], o[2], W::jellyReach (j)))
+            continue;
+        o[3] = (float) j.scale;
+        o[4] = (float) j.col[0]; o[5] = (float) j.col[1]; o[6] = (float) j.col[2];
+        o[7] = (float) std::fmod (j.phase, 2 * pi);
+        o[8] = (float) j.outAxis[0]; o[9] = (float) j.outAxis[1]; o[10] = (float) j.outAxis[2];
+        o[11] = alpha;
+        o[12] = (float) j.glow[0]; o[13] = (float) j.glow[1]; o[14] = (float) j.glow[2];
+        o[15] = (float) j.tend;
+        ++jellyDrawn;
+    }
+
+    // The things on the floor: of each field's window the cells that can hold one (the world's FieldWindow) whose
+    // thing, at its largest, can show, in the window's order — and of the flora none beyond where the shader drops it,
+    // of the half that thins out at the foot none where it has shrunk away.
+    const double thinGone = quality.gone (40.0);
+    cellData.clear();
+    for (int id = 0; id < W::numFields; ++id)
+    {
+        const auto& F = W::fieldSpecs[(size_t) id];
+        const double shift = F.w * F.cell * fieldShift;
+        const int bx = (int) (std::floor ((s.x + fx * shift) / F.cell) - F.w / 2), bz = (int) (std::floor ((s.z + fz * shift) / F.cell) - F.w / 2);
+        auto& win = windows[(size_t) id];
+        win.update (world, id, bx, bz);
+        const auto reach = W::fieldReach (id);
+        const double far = id >= W::fanField ? floraFar + 0.01 : 1e30, gone = thinGone + 0.01;
+        const int first = (int) cellData.size() / 2;
+        for (const auto& c : win.cells())
+        {
+            const double dx = c.cx - s.x, dz = c.cz - s.z, x = c.cx - ccx, z = c.cz - ccz;
+            if ((c.thins && dx * dx + dz * dz > gone * gone) || dx * dx + dz * dz > far * far
+                || ! view.sees (x - reach.across, x + reach.across, c.lo - reach.down, c.hi + reach.up, z - reach.across, z + reach.across))
+                continue;
+            cellData.push_back (c.x); cellData.push_back (c.z);
+        }
+        cellRuns[(size_t) id] = { first, (int) cellData.size() / 2 - first };
+    }
+
+    // Both uploaded before the scene's pass begins, each into a buffer let go of first, so nothing waits for the GPU.
+    glBindBuffer (GL_ARRAY_BUFFER, vboJelly);
+    glBufferData (GL_ARRAY_BUFFER, (GLsizeiptr) (jellyData.size() * sizeof (float)), nullptr, GL_DYNAMIC_DRAW);
+    if (jellyDrawn > 0)
+        glBufferSubData (GL_ARRAY_BUFFER, 0, (GLsizeiptr) ((size_t) jellyDrawn * 16 * sizeof (float)), jellyData.data());
+    glBindBuffer (GL_ARRAY_BUFFER, vboCells);
+    glBufferData (GL_ARRAY_BUFFER, (GLsizeiptr) (cellData.capacity() * sizeof (std::int32_t)), nullptr, GL_DYNAMIC_DRAW);
+    if (! cellData.empty())
+        glBufferSubData (GL_ARRAY_BUFFER, 0, (GLsizeiptr) (cellData.size() * sizeof (std::int32_t)), cellData.data());
+    glBindBuffer (GL_ARRAY_BUFFER, 0);
+    // A field's run of the cells, pointed at for its draw.
+    const auto pointCells = [this] (int first)
+    {
+        glBindBuffer (GL_ARRAY_BUFFER, vboCells);
+        glVertexAttribIPointer (locCell, 2, GL_INT, 0, offset (first * 2 * (int) sizeof (std::int32_t)));
+        glBindBuffer (GL_ARRAY_BUFFER, 0);
+    };
 
     glBindFramebuffer (GL_FRAMEBUFFER, fbo);
     glViewport (0, 0, rw, rh);
@@ -742,61 +857,183 @@ void UnderwaterGl::drawScene (int rw, int rh, int cw, int ch)
     glActiveTexture (GL_TEXTURE1); glBindTexture (GL_TEXTURE_2D, texDetail);
     glActiveTexture (GL_TEXTURE2); glBindTexture (GL_TEXTURE_2D, texCaustic);
 
-    // The floor.
+    // The floor: of its lattice's rows the runs of cells that can show (in blocks of eight, the floor's whole range of
+    // heights over them), in the lattice's order. At the foot, where the odd vertices have slid onto the even ones
+    // (beyond quality.gone (45)), the blocks of 2 x 2 cells are drawn as the coarse lattice's cells instead.
+    const auto drawRuns = [] (std::uint32_t vao, const std::vector<int>& firsts, const std::vector<int>& counts, std::vector<const void*>& offsets)
     {
-        glUseProgram (floor.id); glBindVertexArray (vaoFloor);
+        if (firsts.empty())
+            return;
+        glBindVertexArray (vao);
+        offsets.clear();
+        for (const int f : firsts)
+            offsets.push_back (offset (f * (int) sizeof (std::uint32_t)));
+       #if ! defined (__EMSCRIPTEN__)
+        if (gpu::loaded (glMultiDrawElements))
+        {
+            glMultiDrawElements (GL_TRIANGLES, counts.data(), GL_UNSIGNED_INT, offsets.data(), (GLsizei) firsts.size());
+            return;
+        }
+       #endif
+        for (size_t k = 0; k < firsts.size(); ++k)
+            glDrawElements (GL_TRIANGLES, counts[k], GL_UNSIGNED_INT, offsets[k]);
+    };
+    // A run added to a list, joined to the last where it follows it within `join` indices (drawn through, as it was).
+    const auto addRun = [] (std::vector<int>& firsts, std::vector<int>& counts, int first, int count, int join)
+    {
+        if (! firsts.empty() && first - (firsts.back() + counts.back()) <= join)
+            counts.back() = first + count - firsts.back();
+        else
+        {
+            firsts.push_back (first);
+            counts.push_back (count);
+        }
+    };
+    const auto drawFloor = [&]
+    {
+        glUseProgram (floor.id);
         setCommon (floor); setLight (floor);
         glUniform1i (floor.uniform ("uDetail"), 1);
         set2 (floor, "uDetOff0", det0x, det0z); set2 (floor, "uDetOff1", det1x, det1z);
-        const double half = N / 2 * cellSize;
-        const double ox = std::floor ((s.x + fx * 0.35 * half) / cellSize) * cellSize - half, oz = std::floor ((s.z + fz * 0.35 * half) / cellSize) * cellSize - half;
+        // Not on the web: there each run is a draw of its own.
+        const bool lod = ! gpu::web && quality.thin > 0;
+        const double half = N / 2 * cellSize, step = lod ? 2 * cellSize : cellSize;     // coarse: snapped to its cells
+        const double ox = std::floor ((s.x + fx * 0.35 * half) / step) * step - half, oz = std::floor ((s.z + fz * 0.35 * half) / step) * step - half;
         set2 (floor, "uLvlOrigin", ox - ccx, oz - ccz);
         set1 (floor, "uCellSize", cellSize);
-        glDrawElements (GL_TRIANGLES, floorIndices, GL_UNSIGNED_INT, nullptr);
-    }
+        const double morphed = lod ? quality.gone (45.0) : 1e6;
+        set2 (floor, "uMorph", morphed - (lod ? 15 : 1), morphed);
+        const double lx = ox - ccx, lz = oz - ccz;
+        floorFirsts.clear(); floorCounts.clear(); coarseFirsts.clear(); coarseCounts.clear();
+        if (! lod)
+        {
+            constexpr int block = 8, joinCells = 24;
+            for (int j = 0; j < N; ++j)
+            {
+                const double z0 = lz + j * cellSize, z1 = z0 + cellSize;
+                int b0 = -1, b1 = -1;
+                for (int b = 0; b < N / block; ++b)
+                    if (view.sees (lx + b * block * cellSize, lx + (b + 1) * block * cellSize, floorRange[0], floorRange[1], z0, z1))
+                    {
+                        if (b0 < 0) b0 = b;
+                        b1 = b;
+                    }
+                if (b0 >= 0)
+                    addRun (floorFirsts, floorCounts, (j * N + b0 * block) * 6, (b1 - b0 + 1) * block * 6, joinCells * 6);
+            }
+           #if defined (__EMSCRIPTEN__)
+            constexpr size_t mostDraws = 8;     // each draw a call into the browser: the runs with the shortest gaps joined
+            while (floorFirsts.size() > mostDraws)
+            {
+                size_t at = 1;
+                for (size_t k = 2; k < floorFirsts.size(); ++k)
+                    if (floorFirsts[k] - (floorFirsts[k - 1] + floorCounts[k - 1]) < floorFirsts[at] - (floorFirsts[at - 1] + floorCounts[at - 1]))
+                        at = k;
+                floorCounts[at - 1] = floorFirsts[at] + floorCounts[at] - floorFirsts[at - 1];
+                floorFirsts.erase (floorFirsts.begin() + (std::ptrdiff_t) at);
+                floorCounts.erase (floorCounts.begin() + (std::ptrdiff_t) at);
+            }
+           #endif
+        }
+        else
+        {
+            // By blocks of 2 x 2 cells (no vertex slides out of its block): coarse where every vertex has slid, else
+            // fine; each row of blocks a run of each at most, never one drawn over the other.
+            constexpr int nb = N / 2;
+            const double coarseFrom = morphed + 0.01;
+            for (int J = 0; J < nb; ++J)
+            {
+                const double z0 = lz + 2 * J * cellSize, z1 = z0 + 2 * cellSize;
+                const double dz = std::max ({ 0.0, z0 - camFrac[1], camFrac[1] - z1 });
+                std::array<int, 2> run { -1, -1 };
+                bool runCoarse = false;
+                const auto close = [&]
+                {
+                    if (run[0] < 0)
+                        return;
+                    if (runCoarse)
+                        addRun (coarseFirsts, coarseCounts, (J * nb + run[0]) * 6, (run[1] - run[0] + 1) * 6, 0);
+                    else
+                        for (int r = 0; r < 2; ++r)
+                            addRun (floorFirsts, floorCounts, ((2 * J + r) * N + 2 * run[0]) * 6, (run[1] - run[0] + 1) * 12, 0);
+                    run = { -1, -1 };
+                };
+                for (int I = 0; I < nb; ++I)
+                {
+                    const double x0 = lx + 2 * I * cellSize, x1 = x0 + 2 * cellSize;
+                    if (! view.sees (x0, x1, floorRange[0], floorRange[1], z0, z1))
+                    {
+                        close();
+                        continue;
+                    }
+                    const double dx = std::max ({ 0.0, x0 - camFrac[0], camFrac[0] - x1 });
+                    const bool coarse = dx * dx + dz * dz >= coarseFrom * coarseFrom;
+                    if (run[0] >= 0 && coarse != runCoarse)
+                        close();
+                    if (run[0] < 0) { run[0] = I; runCoarse = coarse; }
+                    run[1] = I;
+                }
+                close();
+            }
+        }
+        drawRuns (vaoFloor, floorFirsts, floorCounts, floorOffsets);
+        drawRuns (vaoFloorCoarse, coarseFirsts, coarseCounts, floorOffsets);
+    };
+    // Below the top rung the floor is drawn after what stands on it: what they hide of it is not shaded.
+    if (quality.level == 0)
+        drawFloor();
     // The rocks and the spires.
     {
         glUseProgram (rock.id); glBindVertexArray (vaoRock);
         setCommon (rock); setLight (rock);
-        for (const auto& [R, tall] : { std::pair<Field, double> { rocks, 0.0 }, { spires, 1.0 } })
+        for (const int id : { W::rockField, W::spireField })
         {
-            const double shift = R.w * R.cell * 0.3;
-            const int bx = (int) (std::floor ((s.x + fx * shift) / R.cell) - R.w / 2), bz = (int) (std::floor ((s.z + fz * shift) / R.cell) - R.w / 2);
-            glUniform2i (rock.uniform ("uRockBase"), bx, bz); glUniform1i (rock.uniform ("uRockW"), R.w);
+            const auto& R = W::fieldSpecs[(size_t) id];
+            const auto [first, count] = cellRuns[(size_t) id];
+            if (count == 0)
+                continue;
             glUniform1i (rock.uniform ("uRockM"), jsRoundInt (W::worldPeriod / R.cell));
             set1 (rock, "uRockCell", R.cell); set1 (rock, "uRockProb", R.prob); set2 (rock, "uRockSize", R.smin, R.smax);
-            set1 (rock, "uTall", tall);
-            glDrawArraysInstanced (GL_TRIANGLES, 0, 480, R.w * R.w);
+            set1 (rock, "uTall", id == W::spireField ? 1.0 : 0.0);
+            pointCells (first);
+            glDrawArraysInstanced (GL_TRIANGLES, 0, 480, count);
         }
     }
     // The worms.
+    if (const auto [first, count] = cellRuns[W::wormField]; count > 0)
     {
+        const auto& F = W::fieldSpecs[W::wormField];
         glUseProgram (worm.id); glBindVertexArray (vaoWorm);
         setCommon (worm); setLight (worm);
-        const double shift = wormW * wormCell * 0.3;
-        const int bx = (int) (std::floor ((s.x + fx * shift) / wormCell) - wormW / 2), bz = (int) (std::floor ((s.z + fz * shift) / wormCell) - wormW / 2);
-        glUniform2i (worm.uniform ("uWormBase"), bx, bz); glUniform1i (worm.uniform ("uWormW"), wormW);
-        glUniform1i (worm.uniform ("uWormM"), jsRoundInt (W::worldPeriod / wormCell));
-        set1 (worm, "uWormCell", wormCell);
-        glDrawElementsInstanced (GL_TRIANGLES, wormIndices, GL_UNSIGNED_SHORT, nullptr, wormW * wormW);
+        glUniform1i (worm.uniform ("uWormM"), jsRoundInt (W::worldPeriod / F.cell));
+        set2 (worm, "uThin", thinGone - 15, thinGone);
+        set1 (worm, "uWormCell", F.cell);
+        pointCells (first);
+        glDrawElementsInstanced (GL_TRIANGLES, wormIndices, GL_UNSIGNED_SHORT, nullptr, count);
     }
     // The flora: five instanced kinds in their meadows.
     {
         glUseProgram (flora.id);
         setCommon (flora); setLight (flora);
         set1 (flora, "uSpeed", s.speed);
-        for (const auto& F : floraKinds)
+        set2 (flora, "uThin", thinGone - 15, thinGone);
+        for (int id = W::fanField; id <= W::polypField; ++id)
         {
-            const double shift = F.w * F.cell * 0.3;
-            const int bx = (int) (std::floor ((s.x + fx * shift) / F.cell) - F.w / 2), bz = (int) (std::floor ((s.z + fz * shift) / F.cell) - F.w / 2);
-            glBindVertexArray (floraMesh[(size_t) F.kind].vao);
-            glUniform2i (flora.uniform ("uFloraBase"), bx, bz); glUniform1i (flora.uniform ("uFloraW"), F.w);
+            const auto& F = W::fieldSpecs[(size_t) id];
+            const auto [first, count] = cellRuns[(size_t) id];
+            if (count == 0)
+                continue;
+            const int kind = id - W::fanField;
+            glBindVertexArray (floraMesh[(size_t) kind].vao);
             glUniform1i (flora.uniform ("uFloraM"), jsRoundInt (W::worldPeriod / F.cell));
-            set1 (flora, "uFloraCell", F.cell); set1 (flora, "uFloraKind", F.kind); set1 (flora, "uFloraDensity", F.density);
+            set1 (flora, "uFloraCell", F.cell); set1 (flora, "uFloraKind", kind); set1 (flora, "uFloraDensity", F.prob);
             set2 (flora, "uFloraSize", F.smin, F.smax);
-            glDrawElementsInstanced (GL_TRIANGLES, floraMesh[(size_t) F.kind].count, GL_UNSIGNED_SHORT, nullptr, F.w * F.w);
+            pointCells (first);
+            glDrawElementsInstanced (GL_TRIANGLES, floraMesh[(size_t) kind].count, GL_UNSIGNED_SHORT, nullptr, count);
         }
     }
+    if (quality.level > 0)
+        drawFloor();
 
     // The water, where nothing was drawn (depth == 1): before anything is blended, so nothing blended is lost.
     {
@@ -880,7 +1117,7 @@ void UnderwaterGl::drawScene (int rw, int rh, int cw, int ch)
                 glDrawElementsInstanced (GL_TRIANGLES, count, GL_UNSIGNED_SHORT, nullptr, jellyDrawn);
         }
     }
-    // The particles: the snow, the silt, the bubbles.
+    // The particles: the snow, the silt, the bubbles — at the foot the second half of each faded out, then not drawn.
     {
         glUseProgram (particle.id); glBindVertexArray (vaoEmpty);
         setCommon (particle); setLight (particle);
@@ -893,7 +1130,9 @@ void UnderwaterGl::drawScene (int rw, int rh, int cw, int ch)
             set1 (particle, "uSpeed", s.speed); set1 (particle, "uTanH", th);
             set2 (particle, "uFwdLevel", fx, fz); set2 (particle, "uRightLevel", -fz, fx);
             set3 (particle, "uBox", box); set3 (particle, "uWrapOff", wrapOff); set3 (particle, "uFlowAcc", flow);
-            glDrawArrays (GL_TRIANGLES, 0, count * 6);
+            const int kept = (count + 1) / 2;
+            set2 (particle, "uThin", kept, 1 - quality.thin);
+            glDrawArrays (GL_TRIANGLES, 0, (quality.thin >= 1 ? kept : count) * 6);
         };
         const V3 snowWrap { fract (s.x / W::snowBox[0]), fract (s.camY / W::snowBox[1]), fract (s.z / W::snowBox[2]) };
         draw (0, snowCount, 1.0, W::snowBox, snowWrap, s.snowFlow, 0.075);

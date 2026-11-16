@@ -6,6 +6,7 @@ uniform mat4 uViewProj; uniform vec3 uCamR, uCamU, uCamF;
 uniform float uAmount, uKind, uSizeK, uSpeed, uTanH;
 uniform vec3 uBox, uWrapOff, uFlowAcc;    // the box; fract (camera / box) in doubles; the flows (box units / ages)
 uniform vec2 uFwdLevel, uRightLevel;      // the rover's heading on the floor
+uniform vec2 uThin;                       // at the foot: from which particle on, and how much of them is left
 out vec2 vUv; out float vA; out vec3 vCol; out float vF;
 void main() {
   int id = gl_VertexID; uint pi = uint (id / 6); int ci = id - int (pi) * 6;
@@ -72,4 +73,5 @@ void main() {
   if (uKind < 0.5) { vCol = mix (vec3 (0.75, 0.95, 0.95), vec3 (1.0, 0.97, 0.85), r2) * lit * 0.9; vA *= 0.75; }
   else if (uKind < 1.5) { vCol = vec3 (0.64, 0.58, 0.50) * (0.6 + 0.4 * r2) + lamps (vec3 (0.0, 1.0, 0.0), rel) * 0.5; vA *= 0.26; }
   else { vCol = vec3 (0.85, 1.0, 1.0); vA *= 0.95; }
+  if (float (pi) >= uThin.x) vA *= uThin.y;
 }

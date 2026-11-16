@@ -3,11 +3,12 @@
 
 in vec3 aPos;     // x, z: the ring's unit circle; y: the ring's height 0..1
 uniform mat4 uViewProj;
-uniform ivec2 uWormBase; uniform int uWormW, uWormM; uniform float uWormCell;
+in ivec2 aCell;   // the cell: the window's cells that can hold one, as the view lists them
+uniform int uWormM; uniform float uWormCell;
+uniform vec2 uThin;      // at the foot: half of them (by the cell) shrink away over this band of distance, metres
 out vec3 vN; out vec3 vRel; out vec3 vPos; out float vT; out float vSeed; out vec3 vTipCol;
 void main() {
-  int ii = gl_InstanceID;
-  ivec2 cij = ivec2 (ii % uWormW, ii / uWormW) + uWormBase;
+  ivec2 cij = aCell;
   ivec2 c = (cij + uWormM * 8) % uWormM;
   vec2 cen = (vec2 (cij) + vec2 (hcell (c, 31u), hcell (c, 32u))) * uWormCell;
   vec2 pr = cen - uCamCell;
@@ -18,6 +19,7 @@ void main() {
   if (r0 > field * 0.35 || slopeish > 0.3) { gl_Position = vec4 (0.0, 0.0, 2.0, 1.0); vN = vec3 (0, 1, 0); vRel = vec3 (0); vPos = vec3 (0); vT = 0.0; vSeed = 0.0; vTipCol = vec3 (0); return; }
   float seed = hcell (c, 34u);
   float H = mix (0.4, 2.8, pow (hcell (c, 35u), 2.2));
+  if (hcell (c, 37u) < 0.5) H *= clamp ((uThin.y - length (pr - uCamFrac)) / (uThin.y - uThin.x), 0.0, 1.0);
   float R = H * mix (0.028, 0.05, hcell (c, 36u));
   float t = aPos.y;
   float phase = seed * 6.2831853;

@@ -3,8 +3,10 @@
 
 in vec3 aPos; in vec3 aNrm; in vec3 aCol; in vec2 aUV; in float aFlag;
 uniform mat4 uViewProj;
-uniform ivec2 uFloraBase; uniform int uFloraW, uFloraM; uniform float uFloraCell, uFloraKind, uFloraDensity; uniform vec2 uFloraSize;
+in ivec2 aCell;   // the cell: the window's cells that can hold one, as the view lists them
+uniform int uFloraM; uniform float uFloraCell, uFloraKind, uFloraDensity; uniform vec2 uFloraSize;
 uniform float uSpeed;
+uniform vec2 uThin;      // at the foot: half of them (by the cell) shrink away over this band of distance, metres
 out vec3 vN; out vec3 vRel; out vec3 vPos; out vec3 vCol; out vec2 vUV; out float vEmis; out float vSeed;
 float fieldFor (float kind, vec4 a, vec4 b, vec4 c) {
   if (kind < 0.5) return smoothstep (0.50, 0.60, b.g) * (1.0 - smoothstep (0.62, 0.72, b.g));           // fans: a band
@@ -14,8 +16,7 @@ float fieldFor (float kind, vec4 a, vec4 b, vec4 c) {
   return smoothstep (0.50, 0.65, c.r) * smoothstep (0.40, 0.60, b.b);                                   // polyps: patches
 }
 void main() {
-  int ii = gl_InstanceID;
-  ivec2 cij = ivec2 (ii % uFloraW, ii / uFloraW) + uFloraBase;
+  ivec2 cij = aCell;
   ivec2 c = (cij + uFloraM * 8) % uFloraM;
   vec2 cen = (vec2 (cij) + vec2 (hcell (c, 41u), hcell (c, 42u))) * uFloraCell;
   vec2 pr = cen - uCamCell;
@@ -33,6 +34,7 @@ void main() {
   }
   float seed = hcell (c, 44u);
   float H = mix (uFloraSize.x, uFloraSize.y, pow (hcell (c, 45u), 1.5));
+  if (hcell (c, 47u) < 0.5) H *= clamp ((uThin.y - far) / (uThin.y - uThin.x), 0.0, 1.0);
   float yaw = 6.2831853 * hcell (c, 46u); float cy = cos (yaw), sy = sin (yaw);
   float phase = seed * 6.2831853;
   float emis = step (9.5, aFlag); float motion = aFlag - 10.0 * emis;

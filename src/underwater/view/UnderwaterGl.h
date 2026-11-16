@@ -32,9 +32,14 @@ namespace orbitamp::underwater
     What is never seen is not drawn. While the cabin is drawn, where its panel is opaque (UnderwaterWorld::PanelMask's
     covered blocks: a third of the stage) is laid into the scene's depth at its nearest first, so nothing of the scene
     is shaded there, and the post pass skips it; the panel skips where it is bare glass; a jellyfish wholly outside the
-    view is not drawn. None of it changes a pixel that shows. A rung below the top of the windscreen's ladder (the
-    scale under 1) draws less besides — UnderwaterWorld::Quality says what, and fades it — and with the post pass at the
-    scene's pixels, scales the view up in the cabin's pass: one pass at the frame's pixels instead of two.
+    view, or under the panel's covered band, is not drawn; of the things on the floor only the cells that can hold one
+    (the world's FieldWindow) and whose thing can show (each frame, against the view's planes) are drawn, an instance
+    each, in the window's order; of the floor only its rows' runs of cells that can show, in the lattice's order. None
+    of it changes a pixel that shows. A rung below the top of the windscreen's ladder (the scale under 1) draws less
+    besides — UnderwaterWorld::Quality says what, and fades it — draws the floor after what stands on it, and with the
+    post pass at the scene's pixels, scales the view up in the cabin's pass: one pass at the frame's pixels instead of
+    two. At the foot the floor beyond the morph is the coarse lattice's (2 x 2 cells a cell, the lattice snapped to
+    them), except on the web, where each run would be a draw of its own.
     The attack of the playing (uHitT), the silt and the drive's state are the world's; the cabin's projection —
     a constant half-width tangent, the height from the aspect, the centre sheared — is set with setLens.
     Draws into frames of its own, then blits the finished one to the frame buffer it is given. GLSL 1.50 core in
@@ -112,11 +117,21 @@ private:
     UnderwaterWorld::PanelMask mask;
     UnderwaterWorld::Quality quality;
     double lastFrameMs = -1.0;
-    std::uint32_t vboGrid = 0, iboFloor = 0, vaoFloor = 0, vboRock = 0, vaoRock = 0, vboWorm = 0, iboWorm = 0, vaoWorm = 0;
+    std::uint32_t vboGrid = 0, iboFloor = 0, vaoFloor = 0, iboCoarse = 0, vaoFloorCoarse = 0, vboRock = 0, vaoRock = 0, vboWorm = 0, iboWorm = 0, vaoWorm = 0;
     struct Flora { std::uint32_t vao = 0, vbo = 0, ibo = 0; int count = 0; };
     std::array<Flora, 5> floraMesh {};
     std::uint32_t vboJelly = 0, vboBell = 0, iboBell = 0, vaoBell = 0, vboTend = 0, iboTend = 0, vaoTendril = 0;
     std::uint32_t vaoEmpty = 0, vboEmpty = 0;
+    // The cells the things on the floor are drawn in: each field's in one buffer, its run of it [first, count).
+    std::uint32_t vboCells = 0;
+    std::array<UnderwaterWorld::FieldWindow, UnderwaterWorld::numFields> windows;
+    std::vector<std::int32_t> cellData;
+    std::array<std::array<int, 2>, UnderwaterWorld::numFields> cellRuns {};
+    // The floor's runs of indices in view, and the heights it can reach.
+    std::vector<int> floorFirsts, floorCounts, coarseFirsts, coarseCounts;
+    std::vector<const void*> floorOffsets;
+    std::array<double, 2> floorRange { -20.0, 20.0 };
+    double coverTop = -1.0;     // NDC: under it, across the whole stage, the panel covers the view (-1: nowhere)
     int floorIndices = 0, wormIndices = 0, bellIndices = 0, tendrilIndices = 0;
     std::vector<float> jellyData;
 

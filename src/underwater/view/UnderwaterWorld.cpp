@@ -560,6 +560,152 @@ double UnderwaterWorld::floorHeight (double px, double pz) const noexcept
     return swell + dunes + mounds + (cr - 0.5) * 0.25;
 }
 
+//==============================================================================
+namespace
+{
+    /** Each channel of the height texture, the least and the most, round a sample: the four texels the filter reads
+        and one more each way (the GPU's coordinates are f32, the world's here doubles). */
+    struct Footprint { std::array<double, 4> lo, hi; };
+    Footprint footprintAt (const std::vector<float>& px, double u, double v) noexcept
+    {
+        constexpr int n = UnderwaterWorld::texSize, m = n - 1;
+        const auto x0 = (int64_t) std::floor (u * n - 0.5), y0 = (int64_t) std::floor (v * n - 0.5);
+        Footprint f;
+        f.lo.fill (1e30); f.hi.fill (-1e30);
+        for (int64_t y = y0 - 1; y <= y0 + 2; ++y)
+            for (int64_t x = x0 - 1; x <= x0 + 2; ++x)
+            {
+                const float* t = px.data() + ((size_t) (y & m) * n + (size_t) (x & m)) * 4;
+                for (size_t c = 0; c < 4; ++c) { f.lo[c] = std::min (f.lo[c], (double) t[c]); f.hi[c] = std::max (f.hi[c], (double) t[c]); }
+            }
+        return f;
+    }
+    /** floorH's least and most over the channels' bounds (each term moves one way with its channel). */
+    std::array<double, 2> heightRange (const Footprint& a, const Footprint& b, const Footprint& c) noexcept
+    {
+        constexpr size_t R = 0, G = 1, B = 2, A = 3;
+        const double lo = (a.lo[R] - 0.5) * 10 + (b.lo[B] - 0.5) * 2.6 + (c.lo[R] - 0.5) * 0.25;
+        const double hi = (a.hi[R] - 0.5) * 10 + (b.hi[B] - 0.5) * 2.6 + smoothstep (0.55, 0.95, c.hi[A]) * 1.8 * smoothstep (0.45, 0.75, a.hi[G])
+                          + (c.hi[R] - 0.5) * 0.25;
+        return { lo - 0.01, hi + 0.01 };
+    }
+}
+
+bool UnderwaterWorld::fieldCell (int id, int32_t x, int32_t z, Cell& out) const noexcept
+{
+    if (! built || id < 0 || id >= numFields)
+        return false;
+    const auto& F = fieldSpecs[(size_t) id];
+    // The shaders' seeds: the hash a cell is kept by, and where in it the thing stands (x, z).
+    const std::array<int32_t, 3> seeds = id <= spireField ? std::array<int32_t, 3> { 11, 12, 13 }
+                                       : id == wormField  ? std::array<int32_t, 3> { 33, 31, 32 }
+                                                          : std::array<int32_t, 3> { 43, 41, 42 };
+    const int32_t m = (int32_t) Js::round (worldPeriod / F.cell);     // the window's period, as the shaders take it
+    const int32_t cx = ((x % m) + m) % m, cz = ((z % m) + m) % m;
+    const double r0 = hcell (cx, cz, seeds[0]), share = (double) f32 (F.prob);
+    constexpr double slack = 1e-5;
+    if (r0 > share + slack)
+        return false;                       // empty however the floor lies: the field is at most 1
+    const double px = ((double) x + hcell (cx, cz, seeds[1])) * F.cell, pz = ((double) z + hcell (cx, cz, seeds[2])) * F.cell;
+    const auto a = footprintAt (heightPx, px / 420, pz / 420), b = footprintAt (heightPx, px / 96, pz / 96), c = footprintAt (heightPx, px / 27, pz / 27);
+    constexpr size_t R = 0, G = 1, B = 2;
+    const auto up = [] (double e0, double e1, double hi) { return smoothstep (e0, e1, hi); };
+    const auto down = [] (double e0, double e1, double lo) { return 1 - smoothstep (e0, e1, lo); };
+    double most = 1;                        // the most the field can be here
+    switch (id)
+    {
+        case spireField:   most = up (0.55, 0.7, b.hi[R]); break;
+        case wormField:    most = up (0.58, 0.72, a.hi[B]) * up (0.42, 0.7, c.hi[G]); break;
+        case fanField:     most = up (0.50, 0.60, b.hi[G]) * down (0.62, 0.72, b.lo[G]); break;
+        case bushField:    most = up (0.60, 0.75, a.hi[R]) * up (0.45, 0.65, c.hi[B]); break;
+        case anemoneField: most = up (0.28, 0.40, b.hi[G]) * down (0.42, 0.50, b.lo[G]); break;
+        case kelpField:    most = up (0.62, 0.72, b.hi[R]) * up (0.52, 0.75, c.hi[G]); break;
+        case polypField:   most = up (0.50, 0.65, c.hi[R]) * up (0.40, 0.60, b.hi[B]); break;
+        default: break;
+    }
+    if (r0 > share * most + slack)
+        return false;
+    const auto h = heightRange (a, b, c);
+    const bool thins = (id == wormField && hcell (cx, cz, 37) < 0.5) || (id >= fanField && hcell (cx, cz, 47) < 0.5);
+    out = { x, z, px, pz, h[0], h[1], thins };
+    return true;
+}
+
+UnderwaterWorld::Reach UnderwaterWorld::fieldReach (int id) noexcept
+{
+    // The flora's meshes across and up and down, once.
+    static const auto extents = []
+    {
+        std::array<std::array<double, 3>, 5> e {};
+        const auto meshes = floraMeshes();
+        for (size_t k = 0; k < meshes.size(); ++k)
+            for (size_t i = 0; i < meshes[k].v.size(); i += 12)
+            {
+                const double x = meshes[k].v[i], y = meshes[k].v[i + 1], zz = meshes[k].v[i + 2];
+                e[k][0] = std::max (e[k][0], std::sqrt (x * x + zz * zz));
+                e[k][1] = std::max (e[k][1], -y);
+                e[k][2] = std::max (e[k][2], y);
+            }
+        return e;
+    }();
+    if (id < 0 || id >= numFields)
+        return {};
+    const double s = fieldSpecs[(size_t) id].smax, lump = 1.22;      // the icosphere's lumps: 0.78 + 0.44 at most
+    Reach r;
+    switch (id)
+    {
+        case rockField:  r = { lump * 1.3 * s, (lump + 0.3) * s, lump * s }; break;
+        case spireField: r = { lump * 0.34 * s, (lump + 0.55) * 1.9 * s, lump * 1.9 * s }; break;
+        case wormField:  r = { (0.33 + 0.057 + 0.095) * s, 0.05, s }; break;     // the sway, the flutter, the bulb
+        default:
+        {
+            // the mesh, its wave (0.05 by sqrt 2) and the sway (the current, the flutter, the kelp's wave), by H
+            const auto& e = extents[(size_t) (id - fanField)];
+            r = { (e[0] + 0.071 + 0.392) * s, e[1] * s + 0.03, std::max (e[2], 0.05) * s };
+        }
+    }
+    return { r.across * 1.25 + 0.1, r.down * 1.25 + 0.1, r.up * 1.25 + 0.1 };
+}
+
+std::array<double, 2> UnderwaterWorld::floorRange() const noexcept
+{
+    Footprint f;
+    f.lo.fill (1e30); f.hi.fill (-1e30);
+    for (size_t i = 0; i < heightPx.size(); ++i)
+    {
+        f.lo[i & 3] = std::min (f.lo[i & 3], (double) heightPx[i]);
+        f.hi[i & 3] = std::max (f.hi[i & 3], (double) heightPx[i]);
+    }
+    return heightPx.empty() ? std::array<double, 2> { 0, 0 } : heightRange (f, f, f);
+}
+
+void UnderwaterWorld::FieldWindow::update (const UnderwaterWorld& world, int id, int bx, int bz)
+{
+    const int w = fieldSpecs[(size_t) std::clamp (id, 0, numFields - 1)].w;
+    workedOut = 0;
+    if (id == field && bx == baseX && bz == baseZ && ! slots.empty())
+        return;
+    if (id != field)
+        slots.assign ((size_t) (w * w), {});
+    field = id; baseX = bx; baseZ = bz;
+    // A cell keeps its slot (its coordinates modulo w) while the window moves over it.
+    kept.clear();
+    for (int j = 0; j < w; ++j)
+        for (int i = 0; i < w; ++i)
+        {
+            const int32_t x = bx + i, z = bz + j;
+            auto& slot = slots[(size_t) ((((z % w) + w) % w) * w + ((x % w) + w) % w)];
+            if (! slot.known || slot.x != x || slot.z != z)
+            {
+                slot.x = x; slot.z = z; slot.known = true;
+                slot.holds = world.fieldCell (id, x, z, slot.cell);
+                ++workedOut;
+            }
+            if (slot.holds)
+                kept.push_back (slot.cell);
+        }
+}
+
 double UnderwaterWorld::speedFor (int g, bool t) const noexcept
 {
     return gearSpeed[(size_t) (std::clamp (g, 1, numGears) - 1)] * (t ? turboFactor : 1);

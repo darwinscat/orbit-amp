@@ -325,6 +325,111 @@ namespace
         for (int id = 0; id < UnderwaterWorld::jellyCount; ++id)
             gone += Q::thinned (id);
         check (gone == UnderwaterWorld::jellyCount / 2, "the thinned view leaves out half the jellyfish");
+        // What thins out far off comes in from beyond the view (the floor's window reaches 205 m), and moves no
+        // faster than the fade.
+        Q far;
+        far.follow (1.0, 0.0);
+        check (far.gone (40) > 250 && far.gone (45) > 250, "at the top nothing thins out within the view");
+        double last = far.gone (40), fastest = 0;
+        for (int i = 0; i < 120; ++i)
+        {
+            far.follow (0.5, 1.0 / 60);
+            fastest = std::max (fastest, std::abs (far.gone (40) - last));
+            last = far.gone (40);
+        }
+        check (far.gone (40) == 40, "at the foot the thinned half is gone by 40 m");
+        check (fastest <= 250.0 / 60 / Q::fadeSeconds + 1e-9, "it comes in over the fade");
+    }
+
+    /** The bilinear read of a channel of the height texture, wrapping, in doubles: what a filter makes of it. */
+    double bilinear (const std::vector<float>& px, int ch, double u, double v)
+    {
+        constexpr int n = UnderwaterWorld::texSize;
+        const double x = u * n - 0.5, y = v * n - 0.5, x0 = std::floor (x), y0 = std::floor (y), fx = x - x0, fy = y - y0;
+        const auto at = [&] (double j, double i) { return (double) px[(size_t) ((((int64_t) j & (n - 1)) * n + ((int64_t) i & (n - 1))) * 4 + ch)]; };
+        return (at (y0, x0) * (1 - fx) + at (y0, x0 + 1) * fx) * (1 - fy) + (at (y0 + 1, x0) * (1 - fx) + at (y0 + 1, x0 + 1) * fx) * fy;
+    }
+    double smooth (double a, double b, double x) { const double t = std::clamp ((x - a) / (b - a), 0.0, 1.0); return t * t * (3 - 2 * t); }
+
+    /** THE THINGS ON THE FLOOR: the cells the view draws them in are every cell the shaders keep, as a filter reads the
+        textures (here in doubles, a hair off from where they are a GPU's, and the GPU reads them as it likes besides:
+        the footprint's margin takes both), each with the floor's height under it inside its bounds; the window lists
+        them row by row, working out only the cells it had not. */
+    void fieldChecks()
+    {
+        using W = UnderwaterWorld;
+        W w;
+        w.build();
+        const auto& px = w.height();
+        const auto range = w.floorRange();
+        int missed = 0, outside = 0, kept = 0, cells = 0, shaderKeeps = 0, rangeBroken = 0;
+        for (int id = 0; id < W::numFields; ++id)
+        {
+            const auto& F = W::fieldSpecs[(size_t) id];
+            const int32_t m = (int32_t) std::lround (W::worldPeriod / F.cell);
+            const std::array<int32_t, 3> seeds = id <= W::spireField ? std::array<int32_t, 3> { 11, 12, 13 }
+                                               : id == W::wormField  ? std::array<int32_t, 3> { 33, 31, 32 } : std::array<int32_t, 3> { 43, 41, 42 };
+            // Windows round the start, far off, and across the world's seam.
+            for (const auto& at : { std::array<double, 2> { 1200, 800 }, { 9000, 21000 }, { 30230, 15 }, { 17000, 4400 } })
+            {
+                const int bx = (int) std::floor (at[0] / F.cell) - F.w / 2, bz = (int) std::floor (at[1] / F.cell) - F.w / 2;
+                for (int j = 0; j < F.w; ++j)
+                    for (int i = 0; i < F.w; ++i)
+                    {
+                        const int32_t x = bx + i, z = bz + j, cx = ((x % m) + m) % m, cz = ((z % m) + m) % m;
+                        const double r0 = W::hcell (cx, cz, seeds[0]);
+                        const double ex = ((double) x + W::hcell (cx, cz, seeds[1])) * F.cell, ez = ((double) z + W::hcell (cx, cz, seeds[2])) * F.cell;
+                        const auto t = [&] (int ch, double L) { return bilinear (px, ch, ex / L, ez / L); };
+                        double field = 1;
+                        switch (id)
+                        {
+                            case W::spireField:   field = smooth (0.55, 0.7, t (0, 96)); break;
+                            case W::wormField:    field = smooth (0.58, 0.72, t (2, 420)) * smooth (0.42, 0.7, t (1, 27)); break;
+                            case W::fanField:     field = smooth (0.50, 0.60, t (1, 96)) * (1 - smooth (0.62, 0.72, t (1, 96))); break;
+                            case W::bushField:    field = smooth (0.60, 0.75, t (0, 420)) * smooth (0.45, 0.65, t (2, 27)); break;
+                            case W::anemoneField: field = smooth (0.28, 0.40, t (1, 96)) * (1 - smooth (0.42, 0.50, t (1, 96))); break;
+                            case W::kelpField:    field = smooth (0.62, 0.72, t (0, 96)) * smooth (0.52, 0.75, t (1, 27)); break;
+                            case W::polypField:   field = smooth (0.50, 0.65, t (0, 27)) * smooth (0.40, 0.60, t (2, 96)); break;
+                            default: break;
+                        }
+                        W::Cell c;
+                        const bool listed = w.fieldCell (id, x, z, c);
+                        const bool shaderKeeps1 = ! (r0 > (double) (float) F.prob * field);
+                        ++cells; kept += listed; shaderKeeps += shaderKeeps1;
+                        if (shaderKeeps1 && ! listed)
+                            ++missed;
+                        if (listed)
+                        {
+                            const double h = w.floorHeight (c.cx, c.cz);
+                            outside += h < c.lo || h > c.hi || c.cx != ex || c.cz != ez;
+                            rangeBroken += c.lo < range[0] || c.hi > range[1];
+                        }
+                    }
+                // The window: row by row as the shaders number its instances; moved a cell, it works out one row.
+                W::FieldWindow win;
+                win.update (w, id, bx, bz);
+                std::vector<W::Cell> direct;
+                for (int j = 0; j < F.w; ++j)
+                    for (int i = 0; i < F.w; ++i)
+                        if (W::Cell c; w.fieldCell (id, bx + i, bz + j, c))
+                            direct.push_back (c);
+                bool same = win.cells().size() == direct.size() && win.worked() == F.w * F.w;
+                for (size_t k = 0; same && k < direct.size(); ++k)
+                    same = win.cells()[k].x == direct[k].x && win.cells()[k].z == direct[k].z;
+                win.update (w, id, bx, bz + 1);
+                same = same && win.worked() == F.w && (win.cells().empty() || win.cells().front().z >= bz + 1);
+                win.update (w, id, bx, bz + 1);
+                same = same && win.worked() == 0;
+                if (! same)
+                    std::printf ("FAIL the window of field %d is not its cells row by row, or works them out again\n", id), ++failures;
+            }
+        }
+        std::printf ("fields: %d cells, the shaders keep %d, listed %d\n", cells, shaderKeeps, kept);
+        check (missed == 0, "every cell the shaders keep is listed");
+        check (outside == 0, "a listed cell's thing stands where the shaders put it, the floor under it within its bounds");
+        check (rangeBroken == 0, "and within the floor's whole range");
+        check (kept * 5 < cells, "the list leaves out most of the windows' cells");
+        check (W::fieldReach (W::kelpField).up > 3.0 && W::fieldReach (W::spireField).down > 1.77 * 13.3, "a thing's reach is its largest");
     }
 }
 
@@ -335,6 +440,7 @@ int main (int argc, char** argv)
     glassChecks();
     panelMaskChecks();
     qualityChecks();
+    fieldChecks();
     if (failures == 0)
         std::printf ("underwater_world_test: all passed\n");
     return failures == 0 ? 0 : 1;

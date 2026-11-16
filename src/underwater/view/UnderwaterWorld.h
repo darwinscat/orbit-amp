@@ -89,6 +89,54 @@ public:
     static Mesh tendrilMesh (int count, int segs);
 
     //==========================================================================
+    /** THE THINGS ON THE FLOOR, as the shaders place them (rock.vert, worm.vert, flora.vert): one at most in each cell
+        of a lattice snapped to the world, in a window of w x w cells ahead of the camera, kept or left empty by the
+        cell's hash against the field's share (prob) times what the floor's textures make of the place, sized between
+        smin and smax. The rocks, the spires, the worms, and the five flora (fan, bush, anemone, kelp, polyp). */
+    enum FieldId { rockField, spireField, wormField, fanField, bushField, anemoneField, kelpField, polypField, numFields };
+    struct FieldSpec { double cell; int w; double prob, smin, smax; };
+    static constexpr std::array<FieldSpec, numFields> fieldSpecs { {
+        { 3.0,  36, 0.16, 0.25, 1.3 },
+        { 14.0, 16, 0.22, 2.5,  7.0 },
+        { 1.1,  56, 0.35, 0.4,  2.8 },
+        { 2.2,  36, 0.50, 0.4,  1.1 },
+        { 2.6,  30, 0.40, 0.5,  1.3 },
+        { 1.6,  40, 0.55, 0.35, 0.9 },
+        { 1.0,  56, 0.40, 1.2,  3.0 },
+        { 0.7,  64, 0.50, 0.15, 0.4 },
+    } };
+    /** A cell that may hold something: the shaders' cell (cij), where the thing stands (world xz, metres), and the
+        floor's height there, the least and the most it can read however the GPU filters the textures; whether it is
+        of the half that thins out far off at the foot (worms and flora, by the cell's hash: Quality::gone). */
+    struct Cell { int32_t x = 0, z = 0; double cx = 0, cz = 0, lo = 0, hi = 0; bool thins = false; };
+    /** Whether the shaders may draw something in this cell — false only where they leave it empty however the
+        textures under it are filtered (each channel read as the least and the most of the texels round the sample,
+        a texel further each way than the filter reaches) — and if so, the cell. */
+    bool fieldCell (int id, int32_t x, int32_t z, Cell& out) const noexcept;
+    /** How far a thing of a field reaches from where it stands, metres: across, under the floor and over it, at its
+        largest and however it sways or curls (the shaders' bounds, with room to spare). */
+    struct Reach { double across = 0, down = 0, up = 0; };
+    static Reach fieldReach (int id) noexcept;
+    /** The floor's height anywhere, the least and the most (floorH over the textures' extremes), metres. */
+    std::array<double, 2> floorRange() const noexcept;
+
+    /** THE CELLS OF A FIELD'S WINDOW THAT MAY HOLD SOMETHING: w x w from (bx, bz), row by row as the shaders number
+        the window's instances, those fieldCell keeps. Each cell is worked out once while it stays in the window. */
+    class FieldWindow
+    {
+    public:
+        void update (const UnderwaterWorld& world, int id, int bx, int bz);
+        const std::vector<Cell>& cells() const noexcept { return kept; }
+        /** How many cells the last update worked out (the rest it had). */
+        int worked() const noexcept { return workedOut; }
+    private:
+        struct Slot { int32_t x = 0, z = 0; bool known = false, holds = false; Cell cell; };
+        std::vector<Slot> slots;
+        std::vector<Cell> kept;
+        int field = -1, baseX = 0, baseZ = 0, workedOut = 0;
+    };
+
+    //==========================================================================
     /** Another bathyscaphe, passing. */
     struct Sub
     {
@@ -213,9 +261,12 @@ public:
 
     /** WHAT THE VIEW DRAWS LESS OF A RUNG BELOW THE TOP, as the windscreen's ladder steps the render scale down (1,
         0.75, 0.5): at the top everything; under it (level 1) the cabin's panel flat — the dashboard alone, unmoved by
-        the water — and the light shafts marched at the scene's pixels rather than the frame's; at the foot (level 2,
-        0.5 and under) half the jellyfish as well. What goes fades out over fadeSeconds from the frame the rung
-        changes, and back in as it climbs: never a jump. The first frame starts where its rung is. */
+        the water — the light shafts marched at the scene's pixels rather than the frame's, and the floor drawn after
+        what stands on it; at the foot (level 2, 0.5 and under) besides: half the jellyfish, half the marine snow, the
+        silt and the bubbles, half the worms and the flora beyond 25 m (shrinking away by 40 m), and the floor's
+        lattice coarse beyond 45 m (its odd vertices sliding onto the even ones from 30 m). What goes fades out over
+        fadeSeconds from the frame the rung changes, and back in as it climbs: never a jump; what goes far off goes
+        from beyond the view inward. The first frame starts where its rung is. */
     struct Quality
     {
         static constexpr double fadeSeconds = 1.5;
@@ -226,6 +277,10 @@ public:
         /** The jellyfish a thinned view leaves out, by which it is: every second one as made, so the half that goes
             is any half, near and far, and stays the same half as they move. */
         static bool thinned (int id) noexcept { return (id & 1) != 0; }
+        /** Where what thins out with distance at the foot is gone by, metres from the camera across the floor: `at`
+            once thin is 1, and 250 m further off for each whole of thin still to come — beyond the whole view while
+            it is 0, so it comes in from out of sight. */
+        double gone (double at) const noexcept { return at + (1 - thin) * 250.0; }
         /** Toward the rung of this scale, `seconds` after the last frame. */
         void follow (double scale, double seconds) noexcept
         {
