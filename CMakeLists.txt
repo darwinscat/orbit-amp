@@ -349,9 +349,7 @@ FetchContent_MakeAvailable(felitronics_appkit)
 # miniature the CAB block draws (cabir::panel, JUCE views in our theme — CabWindow::useOurLook), and the
 # table they read (CABIR_CABINETS). The same code is the cabinets' own app and web page.
 # ----------------------------------------------------------------------------
-# Pinned by commit until its next release: its main, the panel reading SVG the JUCE 9 way. A commit is no
-# branch or tag, so the clone is a full one (GIT_SHALLOW takes a ref name only).
-set(ORBITAMP_CABIR_TAG "8013fffca54ff8c1c524f0b7ba5fc47b71dddd63" CACHE STRING "cab-ir-generator release tag or commit (fetched when no local checkout)")
+set(ORBITAMP_CABIR_TAG "v0.5.0" CACHE STRING "cab-ir-generator release tag (fetched when no local checkout)")
 set(ORBITAMP_CABIR_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../cab-ir-generator"
     CACHE PATH "Local cab-ir-generator checkout (used if present); else the ref is fetched")
 if(ORBITAMP_CABIR_DIR AND EXISTS "${ORBITAMP_CABIR_DIR}/CMakeLists.txt")
@@ -361,7 +359,8 @@ else()
     message(STATUS "cab-ir-generator: fetching ${ORBITAMP_CABIR_TAG} from GitHub")
     FetchContent_Declare(cab_ir_generator
         GIT_REPOSITORY https://github.com/darwinscat/cab-ir-generator.git
-        GIT_TAG        ${ORBITAMP_CABIR_TAG})
+        GIT_TAG        ${ORBITAMP_CABIR_TAG}
+        GIT_SHALLOW    TRUE)
 endif()
 FetchContent_MakeAvailable(cab_ir_generator)
 
