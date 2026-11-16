@@ -47,14 +47,18 @@ void Picture::paint (juce::Graphics& g)
     using namespace stage;
 
     const float scale = g.getInternalContext().getPhysicalPixelScaleFactor();
-    if (! layer.isValid() || std::abs (scale - layerScale) > 1.0e-3f)
+    const int state = layerState();
+    if (! layer.isValid() || std::abs (scale - layerScale) > 1.0e-3f || state != layerStateSeen)
     {
         layerScale = scale;
+        layerStateSeen = state;
         layer = juce::Image (juce::Image::ARGB, juce::roundToInt (width * scale), juce::roundToInt (height * scale), true);
         juce::Graphics lg (layer);
         lg.addTransform (juce::AffineTransform::scale (scale));
         lg.setImageResamplingQuality (juce::Graphics::highResamplingQuality);
+        onScreen = true;
         paintStatic (lg, scale);
+        onScreen = false;
         paintStrips (lg, scale);
     }
     g.drawImage (layer, juce::Rectangle<float> (0.0f, 0.0f, width, height));
