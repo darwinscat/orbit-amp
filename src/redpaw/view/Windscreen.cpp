@@ -142,7 +142,7 @@ float Windscreen::speedKmh() const noexcept
         case Mode::cpu:   return (float) marsSpeed / marsTexels (g) * world->speedFor (g, false) * kmh;
         case Mode::still: break;
     }
-    return world->speedFor (g, turboWanted.load()) * kmh;
+    return parkWanted.load() ? 0.0f : world->speedFor (g, turboWanted.load()) * kmh;
 }
 
 //==============================================================================
@@ -187,7 +187,8 @@ juce::String Windscreen::statusLine() const
     s << "   " << st.frameWidth << "x" << st.frameHeight;
     if (st.mode == Mode::gpu)
         s << "   scale " << juce::String (st.scale, 2);
-    s << "   gear " << gearWanted.load() << (turboWanted.load() ? " TURBO" : "");
+    s << "   gear " << gearWanted.load() << (turboWanted.load() ? " TURBO" : "") << (parkWanted.load() ? " PARK" : "")
+      << (drawsCabin() ? "   cabin" : "");
     if (st.gpuBroken)
         s << "   (no GPU: the shaders did not build)";
     if (st.note.isNotEmpty())
@@ -224,10 +225,16 @@ void Windscreen::apply()
     }
 }
 
+bool Windscreen::drawsCabin() const noexcept
+{
+    return running == Mode::gpu && glAttached && ! gpuFailed.load() && cabinShared.load();
+}
+
 void Windscreen::attachGl()
 {
     if (glAttached)
         return;
+    cabinShared.store (false);      // nothing drawn by this attachment yet
     if (host == nullptr)
         gl.attachTo (*this);
     glAttached = true;
@@ -240,6 +247,7 @@ void Windscreen::detachGl()
     if (host == nullptr)
         gl.detach();
     glAttached = false;
+    cabinShared.store (false);
 }
 
 void Windscreen::triggerFrame()
@@ -305,8 +313,8 @@ void Windscreen::firstFrame (std::unique_ptr<Drive> fresh, int width, int height
     }
     const std::shared_ptr<Drive> drive (std::move (fresh));
     const int g = gearWanted.load(), lights = lightsWanted.load(), wipers = wipersWanted.load();
-    const bool turbo = turboWanted.load();
-    context->executeOnGLThread ([drive, g, turbo, wipers, lights, width, height, deliver] (juce::OpenGLContext& c)
+    const bool turbo = turboWanted.load(), park = parkWanted.load();
+    context->executeOnGLThread ([drive, g, turbo, park, wipers, lights, width, height, deliver] (juce::OpenGLContext& c)
     {
         // As renderFrame draws a still: made, told where it stands, settled, drawn once, read back.
         std::shared_ptr<std::vector<std::uint8_t>> rgba;
@@ -315,6 +323,7 @@ void Windscreen::firstFrame (std::unique_ptr<Drive> fresh, int width, int height
         {
             drive->setGear (g);
             drive->setTurbo (turbo);
+            drive->setPark (park);
             drive->setSteer (0.0f);
             drive->setWipers (wipers);
             drive->setLights ((lights & 1) != 0, (lights & 2) != 0);
@@ -412,6 +421,14 @@ void Windscreen::forgetCosts()
 void Windscreen::tick()
 {
     const double now = juce::Time::getMillisecondCounterHiRes() * 0.001;
+
+    // The face paints its cabin whenever the view does not: it is told the moment that changes.
+    if (const bool cabin = drawsCabin(); cabin != cabinSeen)
+    {
+        cabinSeen = cabin;
+        if (auto* parent = getParentComponent())
+            parent->repaint();
+    }
 
     // Once a second: the count, the cost, the ladder.
     if (now - windowStart >= 1.0)
@@ -534,7 +551,7 @@ void Windscreen::drawCpuFrame (bool advance)
     const double dt = advance ? juce::jlimit (0.0, 0.1, now - cpuLast) : 0.0;
     cpuLast = now;
     const int g = gearWanted.load();
-    const double want = marsTexels (g) * (turboWanted.load() ? PlainsWorld::turboFactor : 1.0f);
+    const double want = parkWanted.load() ? 0.0 : marsTexels (g) * (turboWanted.load() ? PlainsWorld::turboFactor : 1.0f);
     marsSpeed += (want - marsSpeed) * (1 - std::exp (-dt / speedSeconds1993));
     marsPos += marsSpeed * 16 * dt;
     marsX += steering.value() * marsStrafePerSecond * 16 * dt;
@@ -582,6 +599,13 @@ void Windscreen::resized()
 }
 
 //==============================================================================
+bool Windscreen::hitTest (int x, int y)
+{
+    if (getWidth() <= 0 || getHeight() <= 0)
+        return Component::hitTest (x, y);
+    return world->glassAt (((float) x + 0.5f) / (float) getWidth(), ((float) y + 0.5f) / (float) getHeight());
+}
+
 void Windscreen::mouseDown (const juce::MouseEvent& e)
 {
     grabKeyboardFocus();
@@ -648,6 +672,7 @@ void Windscreen::renderFrame (int x, int y, int w, int h, juce::uint32 target)
     glLast = now;
     world->setGear (gearWanted.load());
     world->setTurbo (turboWanted.load());
+    world->setPark (parkWanted.load());
     world->setSteer (steering.value());
     world->setWipers (wipersWanted.load());
     world->setLights ((lightsWanted.load() & 1) != 0, (lightsWanted.load() & 2) != 0);
@@ -667,6 +692,7 @@ void Windscreen::renderFrame (int x, int y, int w, int h, juce::uint32 target)
     speedShared.store (world->speed());
 
     world->render (w, h, scaleInUse.load(), target, x, y);
+    cabinShared.store (world->drawsCabin());
     const float ms = world->gpuMillis();
     gpuMsShared.store (ms);
     if (ms >= 0.0f)
@@ -684,6 +710,7 @@ void Windscreen::renderFrame (int x, int y, int w, int h, juce::uint32 target)
 
 void Windscreen::openGLContextClosing()
 {
+    cabinShared.store (false);
     world->destroy();
 }
 

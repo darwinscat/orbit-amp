@@ -43,7 +43,7 @@ namespace orbitamp::redpaw
 class Mars1993 final
 {
 public:
-    enum class Look { mars, ice, titan, walker };
+    enum class Look { mars, ice, titan, walker, underwater };
 
     /** Makes the sky and the terrain from a seed, as the program did at start — a 15-bit number it
         took from the clock. About a millisecond. The look is the palette. */
@@ -110,6 +110,7 @@ private:
 
     void makeMarsPalette();
     void makeWalkerPalette();
+    void makeUnderwaterPalette();
     void makeRanges (uint32_t seed);
     void plainsRow (uint8_t* shade, int d) const noexcept;
     void drawRanges();

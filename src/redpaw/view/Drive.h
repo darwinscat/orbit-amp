@@ -35,6 +35,9 @@ public:
     virtual void setGear (int gear) = 0;            // 1..numGears()
     virtual void setTurbo (bool on) = 0;
     virtual void setSteer (float amount) = 0;       // -1..1, held
+    /** PARK, where the product's lever has it (the bass amp's: everything bypassed): the vehicle stands, and the
+        world does what it does for one standing still. A world without it takes no notice. */
+    virtual void setPark (bool /*on*/) {}
     /** The wipers' speed, where the face has keys for it: 0 off, 1 a wipe now and then, 2 slow, 3 fast. A
         world whose wipers keep their own time takes no notice. */
     virtual void setWipers (int /*speed*/) {}
@@ -99,6 +102,14 @@ public:
     /** The scene drawn this many times a frame — for measuring: the timer then reads that many scenes,
         clear of the frame's fixed cost. 1 is the picture. A drive may ignore it. */
     virtual void setRepeats (int /*times*/) {}
+
+    /** Whether the last render drew the cabin's own picture over the view, as the last pass — a world that draws
+        its cabin itself, its panel moved by the water — so the face paints none over it. GL thread, after render. */
+    virtual bool drawsCabin() const { return false; }
+    /** Whether a press at (x, y), 0..1 of the view from its top-left, falls on the glass: a world whose view lies
+        under the whole stage answers false on the panel's metal, so a drag there does not steer. Any thread: what
+        it answers from is fixed when the drive is made. */
+    virtual bool glassAt (float /*x01*/, float /*y01*/) const { return true; }
 };
 
 } // namespace orbitamp::redpaw

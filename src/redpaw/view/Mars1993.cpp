@@ -115,6 +115,8 @@ void Mars1993::makeMaps (uint16_t seed, Look lookWanted)
         makeTitanPalette();
     else if (look == Look::walker)
         makeWalkerPalette();
+    else if (look == Look::underwater)
+        makeUnderwaterPalette();
     else
         makeMarsPalette();
 
@@ -151,7 +153,7 @@ void Mars1993::makeMaps (uint16_t seed, Look lookWanted)
             colours[i] = (uint8_t) (c < 0 ? 0 : (c > 0x3F ? 0x3F : c));
         }
     }
-    if (look == Look::mars || look == Look::walker)
+    if (look == Look::mars || look == Look::walker || look == Look::underwater)
         makeRanges (s2 ^ 0x5A5Au);
     // Blur 2, in place: the 2 x 2 box on the heights.
     for (uint32_t i = 0; i < 65536; ++i)
@@ -293,6 +295,39 @@ void Mars1993::makeWalkerPalette()
     put (97, haze);
     horizonIndex = 97;
     const C rockShadow { 0.03f, 0.02f, 0.05f }, rockLit { 0.14f, 0.08f, 0.16f }, farShadow { 0.16f, 0.07f, 0.14f }, farLit { 0.26f, 0.11f, 0.16f };
+    for (int i = 0; i < rangeShadesEach; ++i)
+    {
+        const float t = (float) i / (float) (rangeShadesEach - 1);
+        put (rangeShades + i, mix (rockShadow, rockLit, t));
+        put (rangeShades + rangeShadesEach + i, mix (farShadow, farLit, t));
+    }
+}
+
+/** The sea floor in Mars's palette layout, as the walker's forest has it: the ground's 64 shades from a violet
+    shadow through the lilac sand to its pale lit crests, the far ground into the teal water, the water above from
+    a pale aquamarine high up down to the teal at level, the ridges dark slate, the far one in the murk. */
+void Mars1993::makeUnderwaterPalette()
+{
+    struct C { float r, g, b; };
+    const auto mix = [] (C a, C b, float t) { return C { a.r + (b.r - a.r) * t, a.g + (b.g - a.g) * t, a.b + (b.b - a.b) * t }; };
+    const auto ss = [] (float e0, float e1, float x) { const float t = std::clamp ((x - e0) / (e1 - e0), 0.0f, 1.0f); return t * t * (3 - 2 * t); };
+    const auto put = [this] (int i, C c)
+    {
+        const auto q = [] (float v) { return (uint32_t) std::lround (std::clamp (v, 0.0f, 1.0f) * 255); };
+        pal[(size_t) i] = 0xFF000000u | (q (c.r) << 16) | (q (c.g) << 8) | q (c.b);
+    };
+    const C shadow { 0.10f, 0.07f, 0.16f }, sand { 0.42f, 0.34f, 0.52f }, crest { 0.72f, 0.62f, 0.80f }, haze { 0.06f, 0.40f, 0.44f };
+    const auto shade = [&] (int i) { return i < 32 ? mix (shadow, sand, (float) i / 32.0f) : mix (sand, crest, (float) (i - 32) / 31.0f); };
+    for (int i = 0; i < 64; ++i)
+        put (groundShades + i, shade (i));
+    for (int i = 0; i < 64; ++i)
+        put (i, mix (shade (farGround), haze, ss (18.0f, 40.0f, (float) i)));
+    const C waterHigh { 0.30f, 0.62f, 0.62f }, waterLow { 0.06f, 0.36f, 0.40f };
+    for (int i = 64; i < 96; ++i)
+        put (i, mix (waterHigh, waterLow, (float) (i - 64) / 31.0f));
+    put (97, haze);
+    horizonIndex = 97;
+    const C rockShadow { 0.03f, 0.08f, 0.10f }, rockLit { 0.10f, 0.20f, 0.24f }, farShadow { 0.05f, 0.26f, 0.30f }, farLit { 0.08f, 0.33f, 0.37f };
     for (int i = 0; i < rangeShadesEach; ++i)
     {
         const float t = (float) i / (float) (rangeShadesEach - 1);
@@ -587,7 +622,7 @@ void Mars1993::drawSky (uint16_t alt, uint16_t camX, uint16_t camY)
         tone[v] = (uint8_t) v;
     for (int y = 0; y < skyRows; ++y)
     {
-        if (look == Look::mars || look == Look::walker)        // the clouds at half their contrast, over a sky paler toward the horizon
+        if (look == Look::mars || look == Look::walker || look == Look::underwater)        // the clouds at half their contrast, over a sky paler toward the horizon
             for (int v = 64; v < 96; ++v)
                 tone[v] = (uint8_t) (64 + std::clamp ((v - 64) / 2 + (int) std::lround (16.0 * y / std::max (1, skyRows - 1)), 0, 31));
         const int64_t D = (int64_t) std::floor ((double) K / ((G - y) / P - 1.0));   // K / (99 - y) at P = 1
@@ -633,7 +668,7 @@ void Mars1993::drawGround (uint16_t alt, uint16_t camX, uint16_t camY)
     {
         if (look == Look::titan)
             seaRow (shade, distances[k]);
-        else if (look == Look::mars || look == Look::walker)
+        else if (look == Look::mars || look == Look::walker || look == Look::underwater)
             plainsRow (shade, distances[k]);
         const int D = (distances[k] << 4) + (fy ^ 15);              // distance in 1/16 texel
         int y0; uint32_t kq;

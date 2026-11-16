@@ -1405,6 +1405,32 @@ set(REDGROOVE_VIEW_SOURCES
 if(NOT MSVC)
     set_source_files_properties(src/redgroove/view/WalkerWorld.cpp PROPERTIES COMPILE_OPTIONS "-ffp-contract=off")
 endif()
+# The bass amp's cabin, the bathyscaphe DC-744's: the sea floor of an ocean world (src/underwater/view), handed to
+# the windscreen as an UnderwaterDrive, the cabin's panel drawn over it by the GPU as its last pass. Its world and
+# its matrices are matched to their prototype (sea-gl.js) number for number, with the walker's JS built-ins (Js in
+# WalkerWorld.cpp), so compiled without contraction too.
+set(UNDERWATER_VIEW_SOURCES
+    src/underwater/view/UnderwaterWorld.cpp
+    src/underwater/view/UnderwaterGl.cpp
+    src/redgroove/view/WalkerWorld.cpp)
+if(NOT MSVC)
+    set_source_files_properties(src/underwater/view/UnderwaterWorld.cpp src/underwater/view/UnderwaterGl.cpp
+        PROPERTIES COMPILE_OPTIONS "-ffp-contract=off")
+endif()
+# ...and the cabin's art it draws (src/underwater/view/UnderwaterArt.h): the dashboard, its sea layer and the passing
+# bathyscaphe's atlas as the lossless WebP of the renders in resources/underwater/source (made by
+# `cwebp -lossless -exact -z 9 source/<name>.png -o <name>.webp`: every pixel as rendered, the colour under the
+# window's zero alpha too), and the atlas's table, sprites.txt, as plain text. Linked by whatever draws it, with
+# libwebp to decode it.
+juce_add_binary_data(UnderwaterArtData
+    NAMESPACE   UnderwaterData
+    HEADER_NAME UnderwaterData.h
+    SOURCES     resources/underwater/dashboard.webp
+                resources/underwater/sea.webp
+                resources/underwater/atlas.webp
+                resources/underwater/sprites.txt)
+set_target_properties(UnderwaterArtData PROPERTIES EXCLUDE_FROM_ALL TRUE)
+set(UNDERWATER_ART_SOURCES src/underwater/view/UnderwaterArt.cpp)
 
 # A world's demo: a bare window with the windscreen in it over one world — the sea's in the canopy's
 # shape — for looking at it and measuring it. Built only when asked for by name. No audio.
@@ -1429,6 +1455,9 @@ view_demo(amberpaw_view_demo "AmberPawViewDemo" SOURCES ${REDPAW_VIEW_SOURCES} $
     DEFINITIONS ORBITAMP_VIEW_DEMO_TITAN=1)
 view_demo(walker_view_demo   "WalkerViewDemo"   SOURCES ${REDPAW_VIEW_SOURCES} ${REDGROOVE_VIEW_SOURCES}
     DEFINITIONS ORBITAMP_VIEW_DEMO_WALKER=1)
+view_demo(underwater_view_demo "UnderwaterViewDemo" SOURCES ${REDPAW_VIEW_SOURCES} ${UNDERWATER_VIEW_SOURCES} ${UNDERWATER_ART_SOURCES}
+    DEFINITIONS ORBITAMP_VIEW_DEMO_UNDERWATER=1)
+target_link_libraries(underwater_view_demo PRIVATE UnderwaterArtData felitronics::appkit_webp)
 
 # The sea's CPU half against the prototype it was ported from: the start, five scripted flights, the
 # gears, Saturn, the wipers' panes. JUCE-free, links only the world.
@@ -1444,6 +1473,17 @@ target_include_directories(walker_world_test PRIVATE src)
 target_compile_features(walker_world_test PRIVATE cxx_std_20)
 target_compile_definitions(walker_world_test PRIVATE
     WALKER_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/walker/walker-world.txt")
+
+# The sea floor's world against its prototype, sea-gl.js, number for number: the hashes, the textures, the meshes,
+# the floor's height, the drive at each gear, steered and parked, the jellyfish frame by frame, the passing
+# bathyscaphe, an attack — compared with the prototype's own dump (tests/fixtures/underwater) — and the sprites'
+# table and the cabin's window as the drive reads them. JUCE-free, links only the world (and the walker's Js).
+add_executable(underwater_world_test tests/UnderwaterWorldTests.cpp src/underwater/view/UnderwaterWorld.cpp src/redgroove/view/WalkerWorld.cpp)
+target_include_directories(underwater_world_test PRIVATE src)
+target_compile_features(underwater_world_test PRIVATE cxx_std_20)
+target_compile_definitions(underwater_world_test PRIVATE
+    UNDERWATER_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/underwater/underwater-world.txt"
+    UNDERWATER_SPRITES="${CMAKE_CURRENT_SOURCE_DIR}/resources/underwater/sprites.txt")
 
 # THE ROVER'S FACE IS WORN BY MORE THAN ONE PRODUCT (src/redpaw/RedPawSkin.h): what every rover is made
 # of is said once here — the renders by the file names the face asks for, as bake-art made them, the
