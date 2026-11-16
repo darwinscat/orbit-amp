@@ -1420,16 +1420,9 @@ endif()
 # ...and the cabin's art it draws (src/underwater/view/UnderwaterArt.h): the dashboard, its sea layer and the passing
 # bathyscaphe's atlas as WebP made from the renders in resources/underwater/source (resources/underwater/README.txt
 # says how: lossy colour, the alpha lossless and exact, the sea layer at half size), and the atlas's table,
-# sprites.txt, as plain text. Linked by whatever draws it, with libwebp to decode it — and so carried once in every
-# binary that links it, every format and every slice of a universal binary.
-juce_add_binary_data(UnderwaterArtData
-    NAMESPACE   UnderwaterData
-    HEADER_NAME UnderwaterData.h
-    SOURCES     resources/underwater/dashboard.webp
-                resources/underwater/sea.webp
-                resources/underwater/atlas.webp
-                resources/underwater/sprites.txt)
-set_target_properties(UnderwaterArtData PROPERTIES EXCLUDE_FROM_ALL TRUE)
+# sprites.txt, as plain text. Not built into any binary: the installer lays them out once, in the factory folder's
+# Faces/UnderwaterBass, and they are read from there at run time (src/face/Renders.h, UNDERWATER_ART_DIR), decoded
+# with libwebp.
 set(UNDERWATER_ART_SOURCES src/underwater/view/UnderwaterArt.cpp)
 
 # A world's demo: a bare window with the windscreen in it over one world — the sea's in the canopy's
@@ -1455,9 +1448,11 @@ view_demo(amberpaw_view_demo "AmberPawViewDemo" SOURCES ${REDPAW_VIEW_SOURCES} $
     DEFINITIONS ORBITAMP_VIEW_DEMO_TITAN=1)
 view_demo(walker_view_demo   "WalkerViewDemo"   SOURCES ${REDPAW_VIEW_SOURCES} ${REDGROOVE_VIEW_SOURCES}
     DEFINITIONS ORBITAMP_VIEW_DEMO_WALKER=1)
-view_demo(underwater_view_demo "UnderwaterViewDemo" SOURCES ${REDPAW_VIEW_SOURCES} ${UNDERWATER_VIEW_SOURCES} ${UNDERWATER_ART_SOURCES}
+view_demo(underwater_view_demo "UnderwaterViewDemo" SOURCES ${REDPAW_VIEW_SOURCES} ${UNDERWATER_VIEW_SOURCES} ${UNDERWATER_ART_SOURCES} src/face/Renders.cpp
     DEFINITIONS ORBITAMP_VIEW_DEMO_UNDERWATER=1)
-target_link_libraries(underwater_view_demo PRIVATE UnderwaterArtData felitronics::appkit_webp)
+target_link_libraries(underwater_view_demo PRIVATE felitronics::appkit_webp)
+# The demo has no factory folder: the art is read from the source tree unless UNDERWATER_ART_DIR says otherwise.
+target_compile_definitions(underwater_view_demo PRIVATE ORBITAMP_UNDERWATER_ART_DEFAULT="${CMAKE_CURRENT_SOURCE_DIR}/resources/underwater")
 
 # The sea's CPU half against the prototype it was ported from: the start, five scripted flights, the
 # gears, Saturn, the wipers' panes. JUCE-free, links only the world.

@@ -42,6 +42,7 @@
 
 #include <juce_gui_extra/juce_gui_extra.h>
 
+#include <cstdlib>
 #include <iostream>
 
 namespace
@@ -216,6 +217,15 @@ namespace
         std::unique_ptr<orbitamp::redpaw::Drive> makeDrive() const
         {
            #if ORBITAMP_VIEW_DEMO_UNDERWATER
+            // No factory folder here: the cabin's art from the source tree, unless UNDERWATER_ART_DIR names a folder.
+            if (juce::SystemStats::getEnvironmentVariable ("UNDERWATER_ART_DIR", {}).isEmpty())
+            {
+               #if JUCE_WINDOWS
+                _putenv_s ("UNDERWATER_ART_DIR", ORBITAMP_UNDERWATER_ART_DEFAULT);
+               #else
+                setenv ("UNDERWATER_ART_DIR", ORBITAMP_UNDERWATER_ART_DEFAULT, 1);
+               #endif
+            }
             std::unique_ptr<orbitamp::redpaw::Drive> d = std::make_unique<orbitamp::underwater::UnderwaterDrive> (orbitamp::underwater::shippedArt());
             constexpr bool ownStart = true;     // the sea floor's world has its own start
             d->setPark (park);

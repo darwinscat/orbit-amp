@@ -3,7 +3,9 @@
 
 #include "UnderwaterArt.h"
 
-#include <UnderwaterData.h>     // resources/underwater, as binary data
+#include "../../face/Renders.h"
+
+#include <juce_core/juce_core.h>
 #include <webp/decode.h>
 
 namespace orbitamp::underwater
@@ -24,13 +26,31 @@ UnderwaterGl::Picture decodeWebp (const void* data, size_t size)
     return p;
 }
 
+namespace
+{
+    constexpr const char* product = "UnderwaterBass";
+    constexpr const char* folderVariable = "UNDERWATER_ART_DIR";
+
+    /** A picture's file, read and decoded when it is asked for; none when it is not there. */
+    std::function<UnderwaterGl::Picture()> picture (const char* name)
+    {
+        if (! face::renders::has (product, name, folderVariable))
+            return {};
+        return [file = face::renders::fileOf (product, name, folderVariable)]
+        {
+            juce::MemoryBlock bytes;
+            return file.loadFileAsData (bytes) ? decodeWebp (bytes.getData(), bytes.getSize()) : UnderwaterGl::Picture {};
+        };
+    }
+}
+
 UnderwaterGl::Art shippedArt()
 {
     UnderwaterGl::Art art;
-    art.dashboard = [] { return decodeWebp (UnderwaterData::dashboard_webp, (size_t) UnderwaterData::dashboard_webpSize); };
-    art.sea       = [] { return decodeWebp (UnderwaterData::sea_webp, (size_t) UnderwaterData::sea_webpSize); };
-    art.atlas     = [] { return decodeWebp (UnderwaterData::atlas_webp, (size_t) UnderwaterData::atlas_webpSize); };
-    art.sprites.assign (UnderwaterData::sprites_txt, (size_t) UnderwaterData::sprites_txtSize);
+    art.dashboard = picture ("dashboard.webp");
+    art.sea       = picture ("sea.webp");
+    art.atlas     = picture ("atlas.webp");
+    art.sprites   = face::renders::text (product, "sprites.txt", folderVariable).toStdString();
     return art;
 }
 
