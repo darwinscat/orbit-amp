@@ -1418,10 +1418,10 @@ if(NOT MSVC)
         PROPERTIES COMPILE_OPTIONS "-ffp-contract=off")
 endif()
 # ...and the cabin's art it draws (src/underwater/view/UnderwaterArt.h): the dashboard, its sea layer and the passing
-# bathyscaphe's atlas as the lossless WebP of the renders in resources/underwater/source (made by
-# `cwebp -lossless -exact -z 9 source/<name>.png -o <name>.webp`: every pixel as rendered, the colour under the
-# window's zero alpha too), and the atlas's table, sprites.txt, as plain text. Linked by whatever draws it, with
-# libwebp to decode it.
+# bathyscaphe's atlas as WebP made from the renders in resources/underwater/source (resources/underwater/README.txt
+# says how: lossy colour, the alpha lossless and exact, the sea layer at half size), and the atlas's table,
+# sprites.txt, as plain text. Linked by whatever draws it, with libwebp to decode it — and so carried once in every
+# binary that links it, every format and every slice of a universal binary.
 juce_add_binary_data(UnderwaterArtData
     NAMESPACE   UnderwaterData
     HEADER_NAME UnderwaterData.h
