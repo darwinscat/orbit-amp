@@ -17,6 +17,7 @@
 
 #include "AmpChannels.h"
 #include "PluginProcessor.h"
+#include "StandaloneInputs.h"
 #include "core/BypassWire.h"
 
 #include "device/Cabinets.h"
@@ -3054,6 +3055,32 @@ int main()
 
         mixP->setValueNotifyingHost (mixWas);
         set (amp, orbitamp::params::stereoMode, (float) orbitamp::params::StereoMode::mono);
+    }
+
+    // THE STANDALONE'S INPUTS BY NUMBER (StandaloneInputs.h), the rules apart from JUCE's holder. An interface seen for
+    // the first time plays what it played: the first input open is the amp's left and the second its right, read through
+    // the session's Left / Right / L+R, and STEREO pairs the two. A click plays an input alone; with Shift it joins the one
+    // playing, the lower first, and on that one it is alone again; in STEREO a click sets the left amp's input and Shift
+    // the right one's.
+    {
+        namespace si = orbitamp::standaloneInputs;
+        using orbitamp::params::InputSource;
+        using C = si::InputChoice;
+        const std::uint64_t threeAndFour = (1u << 2) | (1u << 3);
+        report ("standalone input: first sight, Left of IN 3+4 is IN 3", si::seed (threeAndFour, InputSource::left).mono == C::single (2));
+        report ("standalone input: first sight, Right of IN 3+4 is IN 4", si::seed (threeAndFour, InputSource::right).mono == C::single (3));
+        report ("standalone input: first sight, L+R of IN 3+4 sums them", si::seed (threeAndFour, InputSource::both).mono == C::summed (2, 3));
+        report ("standalone input: first sight, STEREO pairs IN 3, IN 4", si::seed (threeAndFour, InputSource::left).stereo == C::paired (2, 3));
+        report ("standalone input: first sight, one open input alone", si::seed (1u << 1, InputSource::right).mono == C::single (1));
+        report ("standalone input: first sight, none open is IN 1", si::seed (0, InputSource::left).mono == C::single (0));
+
+        report ("standalone input: a click plays it alone", si::clicked (C::summed (0, 1), 3, false, false) == C::single (3));
+        report ("standalone input: Shift joins the lower first", si::clicked (C::single (3), 2, true, false) == C::summed (2, 3));
+        report ("standalone input: Shift on the one playing, alone", si::clicked (C::single (3), 3, true, false) == C::single (3));
+        report ("standalone input: STEREO click sets the left", si::clicked (C::paired (0, 1), 3, false, true) == C::paired (3, 1));
+        report ("standalone input: STEREO Shift sets the right", si::clicked (C::paired (0, 1), 3, true, true) == C::paired (0, 3));
+        report ("standalone input: the words", si::words (C::summed (2, 3)) == "IN 3 + IN 4" && si::words (C::paired (0, 1)) == "IN 1, IN 2"
+                                                && si::words (C::single (3)) == "IN 4");
     }
 
     // THE INPUT THE AMP PLAYS (params::InputSource). A guitar in one input and nothing in the other: LEFT plays the

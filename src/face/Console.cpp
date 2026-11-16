@@ -13,6 +13,7 @@
 #include "../Parameters.h"
 #include "../Product.h"
 #include "../ProductPage.h"
+#include "../StandaloneInputs.h"
 #include "../core/ProcessMemory.h"
 #include "../device/IrLibrary.h"
 #include "../device/SwitchWords.h"
@@ -157,6 +158,8 @@ Console::Console (AmpProcessor& p, std::unique_ptr<Picture> pic, const Places& w
       presetDoor (stage::px13)
 {
     using namespace stage;
+
+    standaloneInputs::start();   // the standalone's inputs by number, once a run (StandaloneInputs.h)
 
     // Everything this constructor sets is the face settling onto the state, not a player's edit: with
     // undo on the panel it must not leave a step to press back through.
@@ -1310,17 +1313,27 @@ void Console::addChoice (juce::PopupMenu& menu, const juce::String& text, bool t
     menu.addItem (item);
 }
 
-/** Where the input stands, as a title says it: the one the amp plays, or both in STEREO. */
+/** Where the input stands, as a title says it: the one the amp plays, or both in STEREO; in the standalone, the
+    interface's inputs it plays, by number (StandaloneInputs.h). */
 juce::String Console::inputState() const
 {
+    if (standaloneInputs::listed())
+        return standaloneInputs::state();
     return amp.choosesInput() ? params::inputSources[(int) amp.inputSource()] : juce::String ("both, in Stereo");
 }
 
 /** WHICH INPUT THE AMP PLAYS (params::InputSource): Left, Right, L+R — the interface's, kept by the session, no
     preset's, and no step of undo. Not offered where the bus has one input; in STEREO both play, each through its
-    own amp, and the lines stand greyed. */
+    own amp, and the lines stand greyed. In the standalone, the interface's inputs by number instead, each with its
+    meter (StandaloneInputs.h). */
 bool Console::addInputLines (juce::PopupMenu& menu, bool headed)
 {
+    if (standaloneInputs::listed())
+    {
+        if (headed)
+            menu.addSectionHeader ("IN  " + inputState());
+        return standaloneInputs::addTo (menu, false);
+    }
     if (amp.getTotalNumInputChannels() < 2)
         return false;
 

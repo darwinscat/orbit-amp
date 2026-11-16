@@ -323,7 +323,7 @@ FetchContent_MakeAvailable(felitronics_guitar_core)
 # the modules transitively. This is also where the faceplate render kit MOVES once it settles
 # here (see CLAUDE.md — build it here first, move it later).
 # ----------------------------------------------------------------------------
-set(ORBITAMP_APPKIT_TAG "v0.23.0" CACHE STRING "felitronics-appkit release tag (fetched when no local checkout)")
+set(ORBITAMP_APPKIT_TAG "v0.25.0" CACHE STRING "felitronics-appkit release tag (fetched when no local checkout)")
 set(ORBITAMP_APPKIT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../felitronics-appkit"
     CACHE PATH "Local felitronics-appkit checkout (used if present); else the pinned release is fetched")
 if(ORBITAMP_APPKIT_DIR AND EXISTS "${ORBITAMP_APPKIT_DIR}/CMakeLists.txt")
@@ -1305,6 +1305,7 @@ set(ORBITAMP_SOURCES
     src/PluginEditor.cpp
     src/OrbitAmpStart.cpp
     src/Parameters.cpp
+    src/StandaloneInputs.cpp
     src/ui/Theme.cpp
     src/ui/FaceplateView.cpp
     src/ui/CapturedBlockPanel.cpp
@@ -1335,6 +1336,7 @@ list(APPEND ORBITBASS_SOURCES src/OrbitBassStart.cpp)
 set(FACE_SOURCES
     src/PluginProcessor.cpp
     src/Parameters.cpp
+    src/StandaloneInputs.cpp
     src/ui/Theme.cpp
     src/core/ProcessMemory.cpp
     src/channels/Channels.cpp
