@@ -111,6 +111,7 @@ private:
     bool channelKey (const juce::KeyPress&) override;
     void stripsLaid (const face::Strips&) override;
     void webExtras (const juce::File& dir, juce::DynamicObject& kit, juce::DynamicObject& world) override;
+    juce::Image webStill;           // the site's still: the sea's first frame, the first a poster brings
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (UnderwaterEditor)
 };

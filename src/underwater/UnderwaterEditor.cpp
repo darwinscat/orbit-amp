@@ -629,8 +629,10 @@ void UnderwaterEditor::stripsLaid (const face::Strips& laid)
     said: the lever, its places the three gears (the site has no PARK: the app's top stop is not written), the rings, the
     four columns — BLEND, OCTAVE, CHORUS, REVERB — the cuts' two switches, the cabinet's screen and the readings, each
     with the parameter it moves and how. The cabin is the console's own, the dashboard in it: on the site the world draws
-    behind the glass alone. No still: the posters carry the sea's first frame. */
-void UnderwaterEditor::webExtras (const juce::File&, juce::DynamicObject& kit, juce::DynamicObject& world)
+    behind the glass alone. THE STILL, the one the window shows where there is no live sea (no WebGL 2, before the first
+    frame, a view that fails): the sea's first frame, the world alone, the whole stage at twice its size — the first a
+    poster's frame brings, the same sea in every gear at the start. */
+void UnderwaterEditor::webExtras (const juce::File& dir, juce::DynamicObject& kit, juce::DynamicObject& world)
 {
     using Obj = juce::DynamicObject;
     const auto rect = [] (juce::Rectangle<float> r)
@@ -743,19 +745,29 @@ void UnderwaterEditor::webExtras (const juce::File&, juce::DynamicObject& kit, j
     }
 
     kit.setProperty ("window", rect (layout::view));
-    kit.setProperty ("stills", juce::Array<juce::var>());
+    kit.setProperty ("stills", list ({ juce::var ("still.webp") }));
 
     webPoses.count = channels.count();
     webPoses.opening = channels.active();
     webPoses.standAt = [this] (int at) { go (at); };
-    webPoses.firstFrame = [this] (int, std::function<void (juce::Image)> done)
+    webStill = {};
+    webPoses.firstFrame = [this, dir] (int, std::function<void (juce::Image)> done)
     {
         const auto box = layout::view * 2.0f;
-        view->firstFrame (makeDrive(), juce::roundToInt (box.getWidth()), juce::roundToInt (box.getHeight()), std::move (done));
+        view->firstFrame (makeDrive(), juce::roundToInt (box.getWidth()), juce::roundToInt (box.getHeight()),
+                          [this, dir, done = std::move (done)] (juce::Image frame)
+                          {
+                              if (frame.isValid() && ! webStill.isValid())
+                              {
+                                  webStill = frame;
+                                  writeForWeb (dir.getChildFile ("still.webp"), webStill);
+                              }
+                              done (frame);
+                          });
     };
     webPoses.live = "the sea's first frame for the channel, behind the glass alone: the bathyscaphe on the GPU from its world's "
                     "start, in the channel's gear, settled, nothing stepped (t = 0); the top poster is the channel the app opens at";
-    webPoses.still = [] (int) { return juce::Image(); };
+    webPoses.still = [this] (int) { return webStill; };
     webPoses.window = layout::view;
     webPoses.hidden = { view.get() };
 }
