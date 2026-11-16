@@ -201,6 +201,11 @@ public:
     void setSteer (double v) noexcept;                 // -1..1
     /** The speed where the gear (or PARK) is taking it, at once. */
     void settle() noexcept;
+    /** The camera evaluated directly where the vehicle stands, as the first steps would leave it settled: its height
+        over the floor, its pitch with the offset and the slope, the curious jellyfish looking where it looks. For a
+        world that has not stepped yet (a poster, a site's first frame): unstepped, the camera is at height 0, under
+        the floor, looking up at it. A world that has stepped keeps its own. */
+    void settleCamera() noexcept;
     /** When the next bathyscaphe comes, the world's time in seconds; one passing now is called off. */
     void setPassFirst (double atTime) noexcept { subNext = atTime; s.sub.on = false; }
     /** One attack of the playing, 0..1: the living things flash and glow, near ones first. */

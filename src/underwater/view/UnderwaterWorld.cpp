@@ -714,6 +714,15 @@ double UnderwaterWorld::speedFor (int g, bool t) const noexcept
 void UnderwaterWorld::setGear (int g) noexcept       { gearWanted = std::clamp (g, 1, numGears); }
 void UnderwaterWorld::setSteer (double v) noexcept   { steer = v != v ? 0 : clamp (v, -1, 1); }
 void UnderwaterWorld::settle() noexcept              { s.speed = parked ? 0 : speedFor (gearWanted, turbo); }
+void UnderwaterWorld::settleCamera() noexcept
+{
+    const double fx = Js::sin (s.heading), fz = -Js::cos (s.heading);
+    const double g0 = floorHeight (s.x, s.z), g1 = floorHeight (s.x + fx * 4, s.z + fz * 4);
+    s.camY = jsMax (jsMax (g0, g1) + camHeight, g0 + 1.1);
+    const double gb = floorHeight (s.x - fx * 4, s.z - fz * 4), gf = floorHeight (s.x + fx * 10, s.z + fz * 10);
+    s.pitch = basePitch + s.pitchOffset + clamp (Js::atan2 (gf - gb, 14) * 0.7, -0.15, 0.15);
+    s.lookHeading = s.heading;
+}
 void UnderwaterWorld::hit (double level) noexcept    { s.hitT = 0; s.hitS = level != level ? 0 : clamp (level, 0, 1); }
 void UnderwaterWorld::setPitchOffset (double rad) noexcept { s.pitchOffset = rad != rad ? 0 : clamp (rad, -0.5, 0.5); }
 

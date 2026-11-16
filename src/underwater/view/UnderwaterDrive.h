@@ -97,6 +97,10 @@ public:
             made();
         else if (changed)
             world.settle();
+        // Placed with no history (Drive::settle): a world that has not stepped yet gets its camera evaluated where it
+        // stands — the windscreen's first frame (the kit's posters, the site's start) is drawn before any step.
+        if (world.state().time == 0)
+            world.settleCamera();
     }
 
     /** A fresh drive from there: the world made again with no history, standing at (x, z) on that heading. */
