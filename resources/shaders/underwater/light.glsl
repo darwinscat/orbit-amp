@@ -69,7 +69,7 @@ vec3 lamps (vec3 n, vec3 rel) {
     float L = max (length (d), 0.05); vec3 dn = d / L;
     float cone = pow (max (dot (dn, uLampDir), 0.0), 16.0);
     float ndl = max (dot (n, -dn), 0.0);
-    sum += vec3 (1.0, 0.92, 0.78) * 9.0 * cone * ndl / (1.0 + L * L * 0.09) * exp (-L * uFogK * 1.5);
+    sum += vec3 (1.0, 0.92, 0.78) * 4.5 * cone * ndl / (1.0 + L * L * 0.09) * exp (-L * uFogK * 1.5);   // the booms' pools land nearer than the rover's did: half
   }
   return sum * uLampOn;
 }

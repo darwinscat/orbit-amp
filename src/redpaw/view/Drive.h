@@ -106,6 +106,10 @@ public:
     /** Whether the last render drew the cabin's own picture over the view, as the last pass — a world that draws
         its cabin itself, its panel moved by the water — so the face paints none over it. GL thread, after render. */
     virtual bool drawsCabin() const { return false; }
+    /** Whether the renders from now on draw that cabin, where the world draws one: on for the live frames, off for
+        a still and a poster — the face paints its cabin over those, so the frame is the world alone, its window
+        where the live frame has it. */
+    virtual void setCabin (bool /*drawn*/) {}
     /** Whether a press at (x, y), 0..1 of the view from its top-left, falls on the glass: a world whose view lies
         under the whole stage answers false on the panel's metal, so a drag there does not steer. Any thread: what
         it answers from is fixed when the drive is made. */

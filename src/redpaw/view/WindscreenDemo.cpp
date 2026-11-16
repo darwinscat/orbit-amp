@@ -106,6 +106,7 @@ namespace
         int frameHeight() const noexcept override                     { return inner->frameHeight(); }
         void setRepeats (int times) override                          { inner->setRepeats (times); }
         bool drawsCabin() const override                              { return inner->drawsCabin(); }
+        void setCabin (bool drawn) override                           { inner->setCabin (drawn); }
         bool glassAt (float x, float y) const override                { return inner->glassAt (x, y); }
 
     private:

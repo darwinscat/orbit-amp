@@ -324,6 +324,7 @@ void Windscreen::firstFrame (std::unique_ptr<Drive> fresh, int width, int height
             drive->setGear (g);
             drive->setTurbo (turbo);
             drive->setPark (park);
+            drive->setCabin (false);        // the poster is the world alone: the page paints the cabin over it
             drive->setSteer (0.0f);
             drive->setWipers (wipers);
             drive->setLights ((lights & 1) != 0, (lights & 2) != 0);
@@ -691,6 +692,7 @@ void Windscreen::renderFrame (int x, int y, int w, int h, juce::uint32 target)
         world->step (dt);
     speedShared.store (world->speed());
 
+    world->setCabin (! wantStill);      // a still is the world alone: the face paints the cabin over it
     world->render (w, h, scaleInUse.load(), target, x, y);
     cabinShared.store (world->drawsCabin());
     const float ms = world->gpuMillis();

@@ -125,6 +125,7 @@ public:
     int frameHeight() const noexcept override                    { return gl.frameHeight(); }
     void setRepeats (int times) override                         { gl.setRepeats (times); }
     bool drawsCabin() const override                             { return gl.drawsCabin(); }
+    void setCabin (bool drawn) override                          { gl.setCabin (drawn); }
     /** The window, where the dashboard's alpha is low; everywhere when no dashboard was given. Any thread. */
     bool glassAt (float x01, float y01) const override           { return glass.open (x01, y01); }
 

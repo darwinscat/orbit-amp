@@ -66,8 +66,10 @@ public:
         blitted to `targetFrameBuffer` over (x, y, w, h) — GL's own pixels, from its bottom-left corner. */
     void render (int w, int h, float scale, std::uint32_t targetFrameBuffer, int x = 0, int y = 0);
 
-    /** Whether the cabin pass is drawn: its two pictures are on the GPU. */
-    bool drawsCabin() const noexcept { return texDash != 0 && texSea != 0; }
+    /** Whether the cabin pass is drawn: asked for (setCabin), and its two pictures are on the GPU. */
+    bool drawsCabin() const noexcept { return cabinOn && texDash != 0 && texSea != 0; }
+    /** The cabin pass on (the live frames) or off (a still, a poster: the world alone, the face paints the panel). */
+    void setCabin (bool on) noexcept { cabinOn = on; }
 
     /** What the last frames cost on the GPU, milliseconds, a running mean; -1 until known. */
     float gpuMillis() const noexcept { return gpuMs; }
@@ -86,6 +88,7 @@ private:
     Art art;
     UnderwaterWorld::Sprites sprites;
     double tanH = 18.0 / 13.0, shear = -0.2339;
+    bool cabinOn = true;
 
     struct Program
     {
