@@ -72,6 +72,9 @@ public:
 
     juce::Colour handLight;
     static constexpr float capWidth = 44.0f, capHeight = 28.0f;
+    /** The room each name is set in about its centre, condensed where wider: the underwater cabin's names beside the
+        slot, short of DRIVE's socket. */
+    float nameRoom = 80.0f;
 
     void paint (juce::Graphics&) override;
     void mouseDown (const juce::MouseEvent&) override;
