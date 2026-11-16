@@ -12,8 +12,8 @@
 //
 // THE RENDERER is the app's UnderwaterGl over the drive's world, set up as the drive sets up its own (the cabin's
 // projection, its art), but held here: the art comes from the page — the cabin's two pictures before the renderer is
-// made, the passing bathyscaphe's whenever it arrives — and UnderwaterGl takes its art as it is made. So new art is
-// taken by making the renderer again over the same world, between two frames: nothing of the drive is lost.
+// made, with it; the passing bathyscaphe's whenever it arrives, handed to the renderer already made between two frames
+// (UnderwaterGl::setPassing): its texture, nothing else.
 //
 // THE CABIN: off unless the page asks for it (view_cabin), the world alone behind the glass as in the app's STILL —
 // the page paints the cabin over it. Asked for, and its two pictures in, the panel is the renderer's last pass, as in
@@ -171,7 +171,7 @@ extern "C"
     }
 
     /** One frame: the drive stepped by dt seconds with the hand on the glass at `steer`, drawn at w x h into the
-        canvas — the renderer made again first where the passing bathyscaphe's art has come since the last. */
+        canvas — the passing bathyscaphe's art handed to the renderer first where it has come since the last. */
     EMSCRIPTEN_KEEPALIVE void view_frame (int w, int h, double dt, float steer)
     {
         auto& d = sea->drive;
@@ -182,16 +182,8 @@ extern "C"
         if (passingNew)
         {
             passingNew = false;
-            sea->gl.destroy();
-            sea->gl.setArt (art());
-            if (! sea->gl.create())
-            {
-                // As it was, then: the bathyscaphe does not pass.
-                sea->gl.destroy();
-                sprites.clear();
-                sea->gl.setArt (art());
-                created = sea->gl.create();
-            }
+            sea->gl.setPassing (pictures[atlas], sprites);
+            pictures[atlas] = {};       // on the GPU now: the largest of the pictures is let go
         }
         sea->gl.render (w, h, 1.0f, 0, 0, 0);
     }

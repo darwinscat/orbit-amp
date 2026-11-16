@@ -314,6 +314,17 @@ void UnderwaterGl::makeArt()
         texAtlas = pictureTexture (art.atlas(), true, true);
 }
 
+void UnderwaterGl::setPassing (const Picture& atlas, const std::string& table)
+{
+    art.sprites = table;
+    sprites = W::parseSprites (art.sprites);
+    if (texAtlas != 0)
+        glDeleteTextures (1, &texAtlas);
+    texAtlas = 0;
+    if (post.id != 0 && sprites.scale > 0 && ! sprites.cells.empty())
+        texAtlas = pictureTexture (atlas, true, true);
+}
+
 void UnderwaterGl::makeMask (const Picture& dash)
 {
     // Blocks of 8 of the picture's pixels; covered with a margin of 24 round them (three blocks: a scene pixel at a
