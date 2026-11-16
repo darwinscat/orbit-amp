@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <vector>
@@ -224,6 +225,55 @@ public:
     /** The instance lists of class k for the window whose base cell is (bx, bz): per variant, 8 floats an
         instance (x, z, size, rot, hue, phase, glow, lean). */
     void instancesOf (int k, int bx, int bz, std::array<std::vector<float>, variants>& lists) const;
+
+    //==========================================================================
+    /** WHAT A MUSHROOM'S SHAPE SPANS, at unit height (mushroomMesh's vertices): the widest from its axis, its
+        top, its foot (the stalk's foot is a little under the ground). */
+    struct Extent { double reach = 0, top = 0, bottom = 0; };
+    static Extent extentOf (const Mesh& unitMushroom) noexcept;
+
+    /** A BALL THAT HOLDS ALL A MUSHROOM DRAWS, its mesh and its halo, however they move: mush.vert's and
+        halo.vert's own displacements at their widest for this breath and storm (the cap swollen and lifted, a
+        footprint's crush, the lean; the halo grown and drawn toward the eye), with the ground under its foot
+        anywhere in [groundLo, groundHi]. A view with none of the ball in it has none of the mushroom: the
+        renderer leaves such out. `instance` is one of instancesOf()'s, 8 floats; the centre's xz absolute. */
+    struct Ball { double x = 0, y = 0, z = 0, r = 0; };
+    static Ball ballOf (const Extent& shape, const float* instance, double groundLo, double groundHi,
+                        double breath, double storm) noexcept;
+
+    /** The least and the greatest height the GPU's filtered lookup of the ground at absolute (x, z) can read
+        (groundAt0 in the shaders): the heightfield's texels round it, widened by a half float's rounding.
+        Zero before build(). */
+    std::array<double, 2> groundSpan (double x, double z) const noexcept;
+
+    /** WHAT THE VIEW DRAWS LESS OF A RUNG BELOW THE TOP, as the windscreen's ladder steps the render scale
+        down (1, 0.75, 0.5): at the top everything; under it (level 1) the eye candy first — half the drifting
+        spores; at the foot (level 2, 0.5 and under) half the knee-high caps as well, which wither into the moss,
+        their glow, halo and pool of light with them. What goes fades out over fadeSeconds from the frame the
+        rung changes, and back in as it climbs: never a jump. The first frame starts where its rung is. */
+    struct Quality
+    {
+        static constexpr double fadeSeconds = 1.5;
+        double spare = 0, thin = 0;     // 0..1: how far the spared spores are gone, how far the thinned caps
+        int level = 0;
+        bool started = false;
+        static int levelOf (double scale) noexcept { return scale > 0.99 ? 0 : scale > 0.74 ? 1 : 2; }
+        /** The knee-high caps a thinned view leaves out, by their phase (instancesOf's sixth float, a cell's
+            hash times 2 pi): any half, near and far, the same half as the walker walks on. */
+        static bool thinned (float phase) noexcept { return phase < 3.14159265f; }
+        /** The spore cloud's share a view keeps (spore.vert's uSpores is scaled by it). */
+        double sporeShare() const noexcept { return 1 - 0.5 * spare; }
+        /** Toward the rung of this scale, `seconds` after the last frame. */
+        void follow (double scale, double seconds) noexcept
+        {
+            level = levelOf (scale);
+            const double toSpare = level >= 1 ? 1 : 0, toThin = level >= 2 ? 1 : 0;
+            const double d = started ? std::max (0.0, seconds) / fadeSeconds : 1.0;
+            started = true;
+            spare += std::clamp (toSpare - spare, -d, d);
+            thin += std::clamp (toThin - thin, -d, d);
+        }
+    };
 
 private:
     bool built = false;

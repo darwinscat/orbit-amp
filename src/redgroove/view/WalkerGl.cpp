@@ -77,6 +77,31 @@ namespace
         for (int i = 0; i < 9; ++i) N[(size_t) i] = (float) n[i];
     }
 
+    /** An instance's 8 floats onto `out`; a withering one's (WalkerWorld::Quality) with its size and its glow
+        times `keep`. */
+    void putInstance (std::vector<float>& out, const float* in, bool withers, float keep)
+    {
+        out.insert (out.end(), in, in + 8);
+        if (withers)
+        {
+            out[out.size() - 6] *= keep;        // the size
+            out[out.size() - 2] *= keep;        // the glow
+        }
+    }
+
+    /** The floats into an instance buffer, in new storage so that nothing waits for the GPU (an empty list as
+        one instance of zeros); the instances they hold. */
+    int upload (std::uint32_t buffer, const std::vector<float>& data)
+    {
+        static const float none[8] {};
+        glBindBuffer (GL_ARRAY_BUFFER, buffer);
+        if (data.empty())
+            glBufferData (GL_ARRAY_BUFFER, sizeof (none), none, GL_DYNAMIC_DRAW);
+        else
+            glBufferData (GL_ARRAY_BUFFER, (GLsizeiptr) (data.size() * sizeof (float)), data.data(), GL_DYNAMIC_DRAW);
+        return (int) (data.size() / 8);
+    }
+
     /** a * b, column-major, as the prototype multiplies its Float32Arrays: in doubles, kept as f32. */
     std::array<float, 16> multiply (const std::array<float, 16>& a, const std::array<float, 16>& b) noexcept
     {
@@ -170,8 +195,11 @@ void WalkerGl::destroy()
     const auto del = [] (std::uint32_t& id, void (*f) (GLsizei, const GLuint*)) { if (id != 0) f (1, &id); id = 0; };
     for (auto& L : lists)
     {
-        del (L.inst, glDeleteBuffers); del (L.vaoMesh, glDeleteVertexArrays); del (L.vaoQuad, glDeleteVertexArrays);
-        L.count = 0;
+        del (L.inst, glDeleteBuffers); del (L.vaoSplat, glDeleteVertexArrays);
+        del (L.seen, glDeleteBuffers); del (L.vaoMesh, glDeleteVertexArrays); del (L.vaoHalo, glDeleteVertexArrays);
+        L.count = L.splatCount = L.seenCount = 0;
+        L.splatThin = 0;
+        L.data.clear(); L.ground.clear();
     }
     for (auto& b : windowBase) b.set = false;
     del (vboGround, glDeleteBuffers); del (iboGround, glDeleteBuffers); del (vaoGround, glDeleteVertexArrays);
@@ -180,6 +208,8 @@ void WalkerGl::destroy()
     del (texHeight, glDeleteTextures); del (texDetail, glDeleteTextures); del (texLight, glDeleteTextures); del (fboLight, glDeleteFramebuffers);
     del (fboColour, glDeleteRenderbuffers); del (fboDepth, glDeleteRenderbuffers); del (fbo, glDeleteFramebuffers);
     fbW = fbH = 0;
+    quality = {};
+    lastFrameMs = -1.0;
     if (query[0] != 0) glDeleteQueries ((GLsizei) query.size(), query.data());
     query.fill (0);
     queriesWork = false; queriesPending = 0; queryNext = 0;
@@ -261,6 +291,7 @@ void WalkerGl::makeBuffers()
             const auto m = W::mushroomMesh (v, W::classes[(size_t) k].segs);
             auto& L = lists[(size_t) (k * W::variants + v)];
             L.first = (int) allIdx.size(); L.indices = (int) m.idx.size();
+            L.shape = W::extentOf (m);
             allVerts.insert (allVerts.end(), m.verts.begin(), m.verts.end());
             for (auto i : m.idx) allIdx.push_back ((std::uint16_t) (i + vbase));
             vbase += (int) (m.verts.size() / 9);
@@ -276,13 +307,16 @@ void WalkerGl::makeBuffers()
     const auto offset = [] (int bytes) { return reinterpret_cast<const void*> ((std::uintptr_t) bytes); };
     for (auto& L : lists)
     {
-        glGenBuffers (1, &L.inst);
-        glBindBuffer (GL_ARRAY_BUFFER, L.inst);
         const float none[8] {};
-        glBufferData (GL_ARRAY_BUFFER, sizeof (none), none, GL_DYNAMIC_DRAW);
-        const auto instAttrs = [&]
+        for (auto* b : { &L.inst, &L.seen })
         {
-            glBindBuffer (GL_ARRAY_BUFFER, L.inst);
+            glGenBuffers (1, b);
+            glBindBuffer (GL_ARRAY_BUFFER, *b);
+            glBufferData (GL_ARRAY_BUFFER, sizeof (none), none, GL_DYNAMIC_DRAW);
+        }
+        const auto instAttrs = [&] (std::uint32_t buffer)
+        {
+            glBindBuffer (GL_ARRAY_BUFFER, buffer);
             glEnableVertexAttribArray (locI0); glVertexAttribPointer (locI0, 4, GL_FLOAT, GL_FALSE, 32, offset (0)); glVertexAttribDivisor (locI0, 1);
             glEnableVertexAttribArray (locI1); glVertexAttribPointer (locI1, 4, GL_FLOAT, GL_FALSE, 32, offset (16)); glVertexAttribDivisor (locI1, 1);
         };
@@ -293,11 +327,14 @@ void WalkerGl::makeBuffers()
         glEnableVertexAttribArray (locNrm);  glVertexAttribPointer (locNrm, 3, GL_FLOAT, GL_FALSE, 36, offset (12));
         glEnableVertexAttribArray (locUv);   glVertexAttribPointer (locUv, 2, GL_FLOAT, GL_FALSE, 36, offset (24));
         glEnableVertexAttribArray (locPart); glVertexAttribPointer (locPart, 1, GL_FLOAT, GL_FALSE, 36, offset (32));
-        instAttrs();
+        instAttrs (L.seen);
         glBindBuffer (GL_ELEMENT_ARRAY_BUFFER, iboMesh);
-        glGenVertexArrays (1, &L.vaoQuad);
-        glBindVertexArray (L.vaoQuad);
-        instAttrs();
+        glGenVertexArrays (1, &L.vaoHalo);
+        glBindVertexArray (L.vaoHalo);
+        instAttrs (L.seen);
+        glGenVertexArrays (1, &L.vaoSplat);
+        glBindVertexArray (L.vaoSplat);
+        instAttrs (L.inst);
         glBindVertexArray (0);
     }
     glBindBuffer (GL_ARRAY_BUFFER, 0);
@@ -371,6 +408,16 @@ void WalkerGl::render (int w, int h, float scale, std::uint32_t target, int x, i
     if (! ensureFrame (rw, rh))
         return;
     glBindFramebuffer (GL_FRAMEBUFFER, fbo);
+    // The rung: what is drawn less of below the top, eased by the time since the last frame. Then the frame's
+    // camera, the instance windows where the walker is, and of them what the view can see — uploaded once, before
+    // the timer starts, whatever the repeats.
+    const double now = gpu::milliseconds();
+    quality.follow (scale, lastFrameMs < 0 ? 0.0 : (now - lastFrameMs) * 0.001);
+    lastFrameMs = now;
+    const Camera cam = cameraFor (rw, rh);
+    updateWindows();
+    cullLists (cam.VP);
+    thinSplats();
 
     // The timer: queries read back a few frames late so nothing waits — or, without them, one frame in sixty
     // finished and clocked. On the web, neither.
@@ -401,7 +448,7 @@ void WalkerGl::render (int w, int h, float scale, std::uint32_t target, int x, i
     }
 
     for (int i = 0; i < repeats; ++i)
-        drawScene (rw, rh);
+        drawScene (rw, rh, cam);
 
     if (queriesWork)
         gpu::endTimer();
@@ -450,19 +497,119 @@ void WalkerGl::updateWindows()
         {
             auto& L = lists[(size_t) (k * W::variants + v)];
             const auto& data = per[(size_t) v];
-            L.count = (int) (data.size() / 8);
-            const float none[8] {};
-            glBindBuffer (GL_ARRAY_BUFFER, L.inst);
-            if (L.count > 0)
-                glBufferData (GL_ARRAY_BUFFER, (GLsizeiptr) (data.size() * sizeof (float)), data.data(), GL_DYNAMIC_DRAW);
-            else
-                glBufferData (GL_ARRAY_BUFFER, sizeof (none), none, GL_DYNAMIC_DRAW);
+            L.count = L.splatCount = (int) (data.size() / 8);
+            L.splatThin = 0;
+            L.data = data;
+            L.ground.resize ((size_t) L.count * 2);
+            for (int i = 0; i < L.count; ++i)
+            {
+                const auto span = world.groundSpan (data[(size_t) i * 8], data[(size_t) i * 8 + 1]);
+                L.ground[(size_t) i * 2] = (float) span[0]; L.ground[(size_t) i * 2 + 1] = (float) span[1];
+            }
+            upload (L.inst, data);
         }
     }
     glBindBuffer (GL_ARRAY_BUFFER, 0);
 }
 
-void WalkerGl::drawScene (int rw, int rh)
+void WalkerGl::cullLists (const std::array<float, 16>& VP)
+{
+    // The view's six planes from VP's rows, in the scene's frame (xz from the eye, y absolute): a mushroom whose
+    // ball (WalkerWorld::ballOf) lies wholly outside one of them puts no pixel in the frame, mesh or halo. Those
+    // that are left keep their order, so what is drawn is drawn as before.
+    const auto& s = world.state();
+    std::array<std::array<double, 4>, 6> planes {};
+    for (int k = 0; k < 3; ++k)
+        for (int c = 0; c < 4; ++c)
+        {
+            planes[(size_t) (2 * k)][(size_t) c] = (double) VP[(size_t) (c * 4 + 3)] + VP[(size_t) (c * 4 + k)];
+            planes[(size_t) (2 * k + 1)][(size_t) c] = (double) VP[(size_t) (c * 4 + 3)] - VP[(size_t) (c * 4 + k)];
+        }
+    std::array<double, 6> norm {};
+    for (size_t i = 0; i < planes.size(); ++i)
+        norm[i] = std::sqrt (planes[i][0] * planes[i][0] + planes[i][1] * planes[i][1] + planes[i][2] * planes[i][2]);
+    const double eyeX = (float) s.eyeX, eyeZ = (float) s.eyeZ;
+    const double breath = (float) s.breath, storm = (float) s.storm;
+    // Below the top rung half the knee-high caps wither (WalkerWorld::Quality): their size and their glow
+    // eased toward nothing, then left out.
+    const float keep = (float) (1 - quality.thin);
+    for (size_t l = 0; l < lists.size(); ++l)
+    {
+        auto& L = lists[l];
+        const bool thinning = l < (size_t) W::variants && quality.thin > 0;
+        seenData.clear();
+        for (int i = 0; i < L.count; ++i)
+        {
+            const float* in = L.data.data() + (size_t) i * 8;
+            const bool withers = thinning && W::Quality::thinned (in[5]);
+            if (withers && keep <= 0.0f)
+                continue;
+            const auto ball = W::ballOf (L.shape, in, L.ground[(size_t) i * 2], L.ground[(size_t) i * 2 + 1], breath, storm);
+            const double x = ball.x - eyeX, z = ball.z - eyeZ;
+            bool seen = true;
+            for (size_t p = 0; p < planes.size() && seen; ++p)
+                seen = planes[p][0] * x + planes[p][1] * ball.y + planes[p][2] * z + planes[p][3] >= -ball.r * norm[p];
+            if (seen)
+                putInstance (seenData, in, withers, keep);
+        }
+        L.seenCount = upload (L.seen, seenData);
+    }
+    glBindBuffer (GL_ARRAY_BUFFER, 0);
+}
+
+void WalkerGl::thinSplats()
+{
+    // The knee-high caps' splats as cullLists leaves them: withering, then gone; the whole window again once
+    // the view climbs back to the top. Remade only when the thinning moves or the window does.
+    for (int v = 0; v < W::variants; ++v)
+    {
+        auto& L = lists[(size_t) v];
+        if (std::abs (L.splatThin - quality.thin) < 1.0e-9)
+            continue;
+        L.splatThin = quality.thin;
+        const float keep = (float) (1 - quality.thin);
+        seenData.clear();
+        for (int i = 0; i < L.count; ++i)
+        {
+            const float* in = L.data.data() + (size_t) i * 8;
+            const bool withers = quality.thin > 0 && W::Quality::thinned (in[5]);
+            if (! withers || keep > 0.0f)
+                putInstance (seenData, in, withers, keep);
+        }
+        L.splatCount = upload (L.inst, seenData);
+    }
+    glBindBuffer (GL_ARRAY_BUFFER, 0);
+}
+
+WalkerGl::Camera WalkerGl::cameraFor (int rw, int rh) const
+{
+    // The field from the frame's aspect, the horizon sheared to where it is asked, the gait's heave, pitch, nod
+    // and roll.
+    const auto& s = world.state();
+    Camera c;
+    const double aspect = (double) rw / rh;
+    const auto field = fieldFor (aspect);
+    c.th = field[0]; c.tv = field[1]; c.shear = 1 - 2 * horizon;
+    auto& P = c.P;
+    P[0] = (float) (1 / c.th); P[5] = (float) (1 / c.tv); P[10] = (float) (-(zFar + zNear) / (zFar - zNear)); P[11] = -1;
+    P[14] = (float) (-2 * zFar * zNear / (zFar - zNear));
+    P[9] = (float) -c.shear;
+    const Basis basis = cameraBasis (s.heading, s.pitch + s.nod, s.roll);
+    c.f = basis.f; c.r = basis.r; c.u = basis.u;
+    auto& V = c.V;
+    {
+        const double cy = s.camY;
+        const auto& r = basis.r; const auto& u = basis.u; const auto& f = basis.f;
+        V[0] = (float) r[0]; V[4] = (float) r[1]; V[8] = (float) r[2];     V[12] = (float) -(r[1] * cy);
+        V[1] = (float) u[0]; V[5] = (float) u[1]; V[9] = (float) u[2];     V[13] = (float) -(u[1] * cy);
+        V[2] = (float) -f[0]; V[6] = (float) -f[1]; V[10] = (float) -f[2]; V[14] = (float) (f[1] * cy);
+        V[15] = 1;
+    }
+    c.VP = multiply (P, V);
+    return c;
+}
+
+void WalkerGl::drawScene (int rw, int rh, const Camera& cam)
 {
     const auto& s = world.state();
     const double storm = s.storm;
@@ -484,7 +631,6 @@ void WalkerGl::drawScene (int rw, int rh)
         prints[at + 2] = (float) ((double) s.prints[at + 2] - tBase); prints[at + 3] = s.prints[at + 3];
     }
 
-    updateWindows();
     const auto setCommon = [&] (const Program& p)
     {
         glUniform1i (p.uniform ("uHeight"), 0);
@@ -508,6 +654,10 @@ void WalkerGl::drawScene (int rw, int rh)
         set3 (p, "uSkyHorSun", skyHorSun);
     };
 
+    const auto& P = cam.P; const auto& V = cam.V; const auto& VP = cam.VP;
+    const double th = cam.th, tv = cam.tv, shear = cam.shear;
+    const Basis basis { cam.f, cam.r, cam.u };
+
     // 1. The light map.
     glBindFramebuffer (GL_FRAMEBUFFER, fboLight);
     glViewport (0, 0, lmTex, lmTex);
@@ -517,10 +667,10 @@ void WalkerGl::drawScene (int rw, int rh)
     glUseProgram (splat.id); setCommon (splat);
     glUniform1f (splat.uniform ("uLmSize"), (float) lmSize); glUniform1f (splat.uniform ("uLmScale"), (float) lmScale);
     for (const auto& L : lists)
-        if (L.count > 0)
+        if (L.splatCount > 0)
         {
-            glBindVertexArray (L.vaoQuad);
-            glDrawArraysInstanced (GL_TRIANGLES, 0, 6, L.count);
+            glBindVertexArray (L.vaoSplat);
+            glDrawArraysInstanced (GL_TRIANGLES, 0, 6, L.splatCount);
         }
     glDisable (GL_BLEND);
 
@@ -528,45 +678,41 @@ void WalkerGl::drawScene (int rw, int rh)
     glBindFramebuffer (GL_FRAMEBUFFER, fbo);
     glViewport (0, 0, rw, rh);
     glEnable (GL_DEPTH_TEST); glDepthFunc (GL_LEQUAL); glDepthMask (GL_TRUE);
-    glClear (GL_DEPTH_BUFFER_BIT);
+    // The colour cleared too though every pixel is drawn (the sky takes what nothing nearer did), so that a GPU
+    // that keeps the frame in tiles need not read the last one back first.
+    glClear (GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glActiveTexture (GL_TEXTURE0); glBindTexture (GL_TEXTURE_2D, texHeight);
     glActiveTexture (GL_TEXTURE1); glBindTexture (GL_TEXTURE_2D, texDetail);
     glActiveTexture (GL_TEXTURE2); glBindTexture (GL_TEXTURE_2D, texLight);
 
-    const double aspect = (double) rw / rh;
-    const auto field = fieldFor (aspect);
-    const double th = field[0], tv = field[1], shear = 1 - 2 * horizon;
-    std::array<float, 16> P {};
-    P[0] = (float) (1 / th); P[5] = (float) (1 / tv); P[10] = (float) (-(zFar + zNear) / (zFar - zNear)); P[11] = -1;
-    P[14] = (float) (-2 * zFar * zNear / (zFar - zNear));
-    P[9] = (float) -shear;
-    const Basis basis = cameraBasis (s.heading, s.pitch + s.nod, s.roll);
-    std::array<float, 16> V {};
+    // The ground: at the top rung first, as it always was. Below it, after what stands on it, so that none of it
+    // is shaded under a cap or a leg on a GPU that shades in the order it is given (Apple's sort that out
+    // themselves, so here it is worth nothing): it takes a pixel only where it is nearer, so the picture is the same
+    // but for the ground's texture detail where a quad of pixels is part cap — a level or three in about one pixel
+    // of a thousand, which at the top rung would not be the frame it always was.
+    const auto drawGround = [&] (GLenum depthFunc)
     {
-        const double cy = s.camY;
-        const auto& r = basis.r; const auto& u = basis.u; const auto& f = basis.f;
-        V[0] = (float) r[0]; V[4] = (float) r[1]; V[8] = (float) r[2];     V[12] = (float) -(r[1] * cy);
-        V[1] = (float) u[0]; V[5] = (float) u[1]; V[9] = (float) u[2];     V[13] = (float) -(u[1] * cy);
-        V[2] = (float) -f[0]; V[6] = (float) -f[1]; V[10] = (float) -f[2]; V[14] = (float) (f[1] * cy);
-        V[15] = 1;
-    }
-    const auto VP = multiply (P, V);
-
-    glUseProgram (ground.id); setCommon (ground); setLight (ground);
-    glUniform1i (ground.uniform ("uDetail"), 1);
-    glUniform4fv (ground.uniform ("uPrint[0]"), W::maxPrints, prints.data());
-    glUniformMatrix4fv (ground.uniform ("uViewProj"), 1, GL_FALSE, VP.data());
-    glBindVertexArray (vaoGround);
-    glDrawElements (GL_TRIANGLES, groundIndices, GL_UNSIGNED_SHORT, nullptr);
+        glUseProgram (ground.id); setCommon (ground); setLight (ground);
+        glUniform1i (ground.uniform ("uDetail"), 1);
+        glUniform4fv (ground.uniform ("uPrint[0]"), W::maxPrints, prints.data());
+        glUniformMatrix4fv (ground.uniform ("uViewProj"), 1, GL_FALSE, VP.data());
+        glBindVertexArray (vaoGround);
+        glDepthFunc (depthFunc);
+        glDrawElements (GL_TRIANGLES, groundIndices, GL_UNSIGNED_SHORT, nullptr);
+        glDepthFunc (GL_LEQUAL);
+    };
+    const bool groundLast = quality.level >= 1;
+    if (! groundLast)
+        drawGround (GL_LEQUAL);
 
     glUseProgram (mush.id); setCommon (mush); setLight (mush);
     glUniform4fv (mush.uniform ("uPrint[0]"), W::maxPrints, prints.data());
     glUniformMatrix4fv (mush.uniform ("uViewProj"), 1, GL_FALSE, VP.data());
     for (const auto& L : lists)
-        if (L.count > 0)
+        if (L.seenCount > 0)
         {
             glBindVertexArray (L.vaoMesh);
-            glDrawElementsInstanced (GL_TRIANGLES, L.indices, GL_UNSIGNED_SHORT, reinterpret_cast<const void*> ((std::uintptr_t) L.first * 2), L.count);
+            glDrawElementsInstanced (GL_TRIANGLES, L.indices, GL_UNSIGNED_SHORT, reinterpret_cast<const void*> ((std::uintptr_t) L.first * 2), L.seenCount);
         }
 
     {
@@ -594,6 +740,9 @@ void WalkerGl::drawScene (int rw, int rh)
         }
     }
 
+    if (groundLast)
+        drawGround (GL_LESS);
+
     glUseProgram (sky.id); setCommon (sky); setLight (sky);
     set3 (sky, "uCamFwd", basis.f); set3 (sky, "uCamRight", basis.r); set3 (sky, "uCamUp", basis.u);
     glUniform2f (sky.uniform ("uTanHalf"), (float) th, (float) tv); glUniform1f (sky.uniform ("uShear"), (float) shear);
@@ -607,10 +756,10 @@ void WalkerGl::drawScene (int rw, int rh)
     glUniformMatrix4fv (halo.uniform ("uView"), 1, GL_FALSE, V.data()); glUniformMatrix4fv (halo.uniform ("uProj"), 1, GL_FALSE, P.data());
     glUniform1f (halo.uniform ("uFogK"), (float) fogK);
     for (const auto& L : lists)
-        if (L.count > 0)
+        if (L.seenCount > 0)
         {
-            glBindVertexArray (L.vaoQuad);
-            glDrawArraysInstanced (GL_TRIANGLES, 0, 6, L.count);
+            glBindVertexArray (L.vaoHalo);
+            glDrawArraysInstanced (GL_TRIANGLES, 0, 6, L.seenCount);
         }
     {
         // The bursts: a footfall's puff of spores, an attack's sparks from the caps.
@@ -627,7 +776,27 @@ void WalkerGl::drawScene (int rw, int rh)
         glUniform4fv (burst.uniform ("uB0[0]"), W::maxBursts, b0.data()); glUniform4fv (burst.uniform ("uB1[0]"), W::maxBursts, b1.data());
         glUniform1i (burst.uniform ("uPer"), W::burstParticles);
         glBindVertexArray (vaoEmpty);
-        glDrawArrays (GL_TRIANGLES, 0, W::maxBursts * W::burstParticles * 6);
+        // Only the bursts alive: burst.vert's test, a little wider, on the same single floats — one not begun,
+        // spent or of no strength puts every vertex of its particles behind the far plane. A run of them in
+        // one draw, its vertices counted from the run's first by uFirst rather than by the draw's own first (which
+        // not every WebGL has added to gl_VertexID), so each vertex is the one it was.
+        const float now = (float) tNow;
+        const auto alive = [&] (int b)
+        {
+            const auto at = (size_t) (b * 4);
+            const float age = now - b0[at + 3], life = b1[at] > 0.5f ? 1.6f : 3.2f;
+            return b1[at + 1] > 0.0f && age >= -1.0e-3f && age <= life + 1.0e-3f;
+        };
+        constexpr int perBurst = W::burstParticles * 6;
+        for (int b = 0; b < W::maxBursts;)
+        {
+            if (! alive (b)) { ++b; continue; }
+            int e = b + 1;
+            while (e < W::maxBursts && alive (e)) ++e;
+            glUniform1i (burst.uniform ("uFirst"), b * perBurst);
+            glDrawArrays (GL_TRIANGLES, 0, (e - b) * perBurst);
+            b = e;
+        }
     }
     glDisable (GL_DEPTH_TEST);
     if (s.spores > 0.005)
@@ -637,9 +806,14 @@ void WalkerGl::drawScene (int rw, int rh)
         glUniformMatrix4fv (spore.uniform ("uProj"), 1, GL_FALSE, P.data());
         glUniform2f (spore.uniform ("uResolution"), (float) rw, (float) rh); glUniform2f (spore.uniform ("uTanHalf"), (float) th, (float) tv);
         glUniform1f (spore.uniform ("uTravel"), (float) std::fmod (s.travel, 100000.0)); glUniform1f (spore.uniform ("uSpeed"), (float) s.speed);
-        glUniform1f (spore.uniform ("uSpores"), (float) s.spores); glUniform1f (spore.uniform ("uCount"), (float) sporeCount);
+        // Below the top rung a share of the cloud: the last of them fade as they fade in.
+        const float spores = quality.spare > 0 ? (float) (s.spores * quality.sporeShare()) : (float) s.spores;
+        glUniform1f (spore.uniform ("uSpores"), spores); glUniform1f (spore.uniform ("uCount"), (float) sporeCount);
         glBindVertexArray (vaoEmpty);
-        glDrawArrays (GL_TRIANGLES, 0, sporeCount * 6);
+        // Only the spores the cloud has: spore.vert fades the i-th in as uSpores * uCount passes i, so one
+        // past that adds nothing — however near, however long its streak.
+        const int drawn = std::min (sporeCount, (int) std::ceil ((double) spores * sporeCount) + 1);
+        glDrawArrays (GL_TRIANGLES, 0, drawn * 6);
     }
     glDisable (GL_BLEND); glDepthMask (GL_TRUE); glDisable (GL_DEPTH_TEST);
     glBindVertexArray (0);

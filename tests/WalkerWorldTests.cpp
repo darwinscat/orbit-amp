@@ -306,6 +306,162 @@ namespace
     }
 
     struct Group { double maxDiff = 0; int entries = 0, exactBad = 0, tolBad = 0; };
+
+    /** WHAT THE RENDERER LEAVES OUT IS WHAT IT WOULD NOT HAVE DRAWN: every vertex of a mushroom as mush.vert moves
+        it (the breath's swell and lift at their most, a footprint's whole crush, the lean, any turn, the ground
+        anywhere in its span) and every corner of its halo as halo.vert makes it (drawn toward the eye by any amount
+        up to its most, turned to any view) lies inside WalkerWorld::ballOf; and the ground's filtered height lies
+        in groundSpan. Not the prototype's: the renderer's own, so checked here and not against the fixture. */
+    int checkBalls()
+    {
+        int failures = 0;
+        uint32_t seed = 12345u;
+        const auto rnd = [&seed] { seed = seed * 1664525u + 1013904223u; return (double) (seed >> 8) / 16777216.0; };
+        double closest = 1e9;
+        for (int k = 0; k < WalkerWorld::numClasses; ++k)
+            for (int v = 0; v < WalkerWorld::variants; ++v)
+            {
+                const auto& C = WalkerWorld::classes[(size_t) k];
+                const auto mesh = WalkerWorld::mushroomMesh (v, C.segs);
+                const auto shape = WalkerWorld::extentOf (mesh);
+                for (int trial = 0; trial < 40; ++trial)
+                {
+                    const double size = C.smin + (C.smax - C.smin) * (trial == 0 ? 0 : trial == 1 ? 1 : rnd());
+                    const double lean = trial < 4 ? (trial & 1 ? 0.14 : -0.14) : (rnd() - 0.5) * 0.28, rot = rnd() * 6.2832;
+                    const double breath = trial % 3 == 0 ? 1 : rnd(), storm = trial % 2 == 0 ? 1 : rnd();
+                    const double crush = size < 1.3 && trial % 4 < 2 ? 1 : 0;
+                    const double lo = (rnd() - 0.5) * 20, hi = lo + rnd() * 3;
+                    const float inst[8] { (float) (1000 * rnd()), (float) (1000 * rnd()), (float) size, (float) rot, 0, 0, 1, (float) lean };
+                    const auto ball = WalkerWorld::ballOf (shape, inst, lo, hi, breath, storm);
+                    const auto inside = [&] (double x, double y, double z)
+                    {
+                        const double d = std::sqrt ((x - ball.x) * (x - ball.x) + (y - ball.y) * (y - ball.y) + (z - ball.z) * (z - ball.z));
+                        closest = std::min (closest, ball.r - d);
+                        return d <= ball.r;
+                    };
+                    bool ok = true;
+                    for (const double gh : { lo, hi })
+                    {
+                        for (size_t i = 0; i + 9 <= mesh.verts.size(); i += 9)
+                        {
+                            double px = mesh.verts[i] * size, py = mesh.verts[i + 1] * size, pz = mesh.verts[i + 2] * size;
+                            if (mesh.verts[i + 8] > 0.5f)
+                            {
+                                const double swell = 1 + 0.05 * breath;
+                                px *= swell; pz *= swell;
+                                py = (py - size * 0.6) * (1 + 0.03 * breath) + size * 0.6;
+                            }
+                            py *= 1 - 0.82 * crush; px *= 1 + 0.4 * crush; pz *= 1 + 0.4 * crush;
+                            px += lean * py * py / size;
+                            const double ca = std::cos (rot), sa = std::sin (rot);
+                            ok = inside (inst[0] + ca * px - sa * pz, gh + py, inst[1] + sa * px + ca * pz) && ok;
+                        }
+                        const double R = size * (0.55 + 0.30 * breath + 0.25 * storm) + 0.25;
+                        for (int view = 0; view < 8; ++view)
+                        {
+                            // A view's right, up and back, any way round; the quad drawn toward the eye by 0..0.7 R.
+                            const double yaw = rnd() * 6.2832, pitch = (rnd() - 0.5) * 3.1416, toward = view == 0 ? 0.7 * R : rnd() * 0.7 * R;
+                            const double f[3] { std::sin (yaw) * std::cos (pitch), std::sin (pitch), -std::cos (yaw) * std::cos (pitch) };
+                            const double r[3] { std::cos (yaw), 0, std::sin (yaw) };
+                            const double u[3] { r[1] * f[2] - r[2] * f[1], r[2] * f[0] - r[0] * f[2], r[0] * f[1] - r[1] * f[0] };
+                            for (int c = 0; c < 4; ++c)
+                            {
+                                const double cx = c & 1 ? R : -R, cy = c & 2 ? R : -R;
+                                ok = inside (inst[0] + r[0] * cx + u[0] * cy - f[0] * toward,
+                                             gh + 0.72 * size + r[1] * cx + u[1] * cy - f[1] * toward,
+                                             inst[1] + r[2] * cx + u[2] * cy - f[2] * toward) && ok;
+                            }
+                        }
+                    }
+                    if (! ok && failures++ < 5)
+                        std::printf ("FAIL ballOf: class %d variant %d size %.3f lean %.3f breath %.2f storm %.2f crush %.0f: a point outside the ball\n",
+                                     k, v, size, lean, breath, storm, crush);
+                }
+            }
+
+        WalkerWorld w;
+        w.build();
+        for (int i = 0; i < 2000; ++i)
+        {
+            const double x = rnd() * 3000 - 1500, z = rnd() * 3000 - 1500;
+            const auto span = w.groundSpan (x, z);
+            for (const double e : { 0.0, 0.3, -0.3 })
+            {
+                const double h = w.groundH (x + e, z - e);
+                if (! (h >= span[0] && h <= span[1]) && failures++ < 10)
+                    std::printf ("FAIL groundSpan at (%.2f, %.2f): %.4f outside %.4f..%.4f\n", x + e, z - e, h, span[0], span[1]);
+            }
+        }
+        std::printf ("%s ballOf, groundSpan       closest a point came to a ball's edge %.4f m\n", failures ? "FAIL " : "  ok ", closest);
+        return failures;
+    }
+
+    /** THE RUNG'S FADES: the first frame starts where its rung is; then each step of the ladder fades what it
+        leaves out, or brings back, over Quality::fadeSeconds and no faster — never a jump; and the knee-high caps
+        it thins are about half of a window's, the same ones however the window is cut. */
+    int checkQuality()
+    {
+        int failures = 0;
+        const auto fail = [&failures] (const char* what) { if (failures++ < 10) std::printf ("FAIL Quality: %s\n", what); };
+        using Q = WalkerWorld::Quality;
+        if (Q::levelOf (1.0) != 0 || Q::levelOf (0.75) != 1 || Q::levelOf (0.5) != 2 || Q::levelOf (0.4) != 2)
+            fail ("the levels of the ladder's rungs");
+        for (const double scale : { 1.0, 0.75, 0.5 })
+        {
+            Q q;
+            q.follow (scale, 0.25);
+            if (q.spare != (scale < 1 ? 1 : 0) || q.thin != (scale < 0.75 ? 1 : 0))
+                fail ("the first frame not where its rung is");
+        }
+        // Down from the top to the foot at 60 frames a second, then back up: no frame moves either fade by more
+        // than its share of the fade's seconds, and both arrive.
+        Q q;
+        q.follow (1.0, 0);
+        const double frame = 1.0 / 60, most = frame / Q::fadeSeconds + 1e-12;
+        double spare = q.spare, thin = q.thin;
+        int framesToFoot = -1;
+        for (int i = 0; i < 400; ++i)
+        {
+            q.follow (i < 200 ? 0.5 : 1.0, frame);
+            if (std::abs (q.spare - spare) > most || std::abs (q.thin - thin) > most)
+                fail ("a fade jumped");
+            if (framesToFoot < 0 && q.thin >= 1)
+                framesToFoot = i + 1;
+            spare = q.spare; thin = q.thin;
+        }
+        if (framesToFoot < 89 || framesToFoot > 91)
+            fail ("the foot's thinning did not take its 1.5 s");
+        if (q.spare != 0 || q.thin != 0 || q.sporeShare() != 1)
+            fail ("the top rung not all back");
+
+        // Half the knee-high caps, give or take, and the same ones from two windows that overlap.
+        WalkerWorld w;
+        w.build();
+        std::array<std::vector<float>, WalkerWorld::variants> a, b;
+        w.instancesOf (0, 100, 100, a);
+        w.instancesOf (0, 110, 104, b);
+        int all = 0, thinned = 0, shared = 0, sameChoice = 0;
+        for (const auto& l : a)
+            for (size_t i = 0; i + 8 <= l.size(); i += 8)
+            {
+                ++all;
+                thinned += Q::thinned (l[i + 5]) ? 1 : 0;
+                for (const auto& m : b)
+                    for (size_t j = 0; j + 8 <= m.size(); j += 8)
+                        if (m[j] == l[i] && m[j + 1] == l[i + 1])
+                        {
+                            ++shared;
+                            sameChoice += Q::thinned (m[j + 5]) == Q::thinned (l[i + 5]) ? 1 : 0;
+                        }
+            }
+        if (all < 500 || std::abs ((double) thinned / all - 0.5) > 0.05)
+            fail ("not about half the knee-high caps thinned");
+        if (shared < 100 || sameChoice != shared)
+            fail ("a cap thinned in one window and not in another");
+        std::printf ("%s Quality                  %d of %d knee-high caps thinned, %d frames to the foot\n",
+                     failures ? "FAIL " : "  ok ", thinned, all, framesToFoot);
+        return failures;
+    }
 }
 
 int main (int argc, char** argv)
@@ -375,6 +531,8 @@ int main (int argc, char** argv)
             }
         }
     }
+    failures += checkBalls();
+    failures += checkQuality();
     if (seen != (int) made.size()) { ++failures; std::printf ("FAIL the fixture has %d entries, this side makes %zu\n", seen, made.size()); }
     for (const auto& g : order)
     {

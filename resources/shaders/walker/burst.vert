@@ -4,9 +4,10 @@ uniform mat4 uView, uProj;
 uniform vec4 uB0[24];               // x, y, z (xz absolute), t0
 uniform vec4 uB1[24];               // kind, strength, hue, radius
 uniform int uPer;                   // particles a burst
+uniform int uFirst;                 // the vertex a draw starts from: a run of the bursts alive
 out float vA; out vec2 vQ; out vec3 vCol;
 void main () {
-  int id = gl_VertexID; int q = id / 6; int ci = id - q * 6;
+  int id = uFirst + gl_VertexID; int q = id / 6; int ci = id - q * 6;
   int b = q / uPer; uint pi = uint (q - b * uPer);
   vec2 corner = vec2 ((ci == 1 || ci == 2 || ci == 4) ? 1.0 : -1.0, (ci == 2 || ci == 4 || ci == 5) ? 1.0 : -1.0);
   vec4 B0 = uB0[b], B1 = uB1[b];

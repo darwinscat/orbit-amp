@@ -728,6 +728,65 @@ void WalkerWorld::instancesOf (int k, int bx, int bz, std::array<std::vector<flo
 }
 
 //==============================================================================
+// WHAT A FRAME CAN LEAVE OUT.
+
+WalkerWorld::Extent WalkerWorld::extentOf (const Mesh& m) noexcept
+{
+    Extent e;
+    bool first = true;
+    for (size_t i = 0; i + 9 <= m.verts.size(); i += 9)
+    {
+        const double x = m.verts[i], y = m.verts[i + 1], z = m.verts[i + 2];
+        e.reach = std::max (e.reach, std::sqrt (x * x + z * z));
+        e.top = first ? y : std::max (e.top, y);
+        e.bottom = first ? y : std::min (e.bottom, y);
+        first = false;
+    }
+    return e;
+}
+
+WalkerWorld::Ball WalkerWorld::ballOf (const Extent& shape, const float* inst, double groundLo, double groundHi,
+                                       double breath, double storm) noexcept
+{
+    const double size = inst[2], lean = std::abs ((double) inst[7]), b = std::max (0.0, breath), st = std::max (0.0, storm);
+    // mush.vert, at unit height: the cap's height round 0.6 stretched by up to 1 + 0.03 * breath (the stalk's not
+    // at all), then a footprint's crush flattens toward the foot (the span takes in 0)...
+    const double stretch = 1 + 0.03 * b;
+    const double yHi = std::max ({ shape.top, 0.6 + (shape.top - 0.6) * stretch, 0.0 });
+    const double yLo = std::min ({ shape.bottom, 0.6 + (shape.bottom - 0.6) * stretch, 0.0 });
+    // ...and across: the cap swollen by up to 1 + 0.05 * breath, the crush's 1.4, the lean's lean * y^2 / size.
+    const double y2 = std::max (yHi * yHi, yLo * yLo);
+    const double across = size * (shape.reach * (1 + 0.05 * b) * 1.4 + lean * y2);
+    // halo.vert: a quad of half-side R round the cap, at 0.72 of the height, drawn toward the eye by up to 0.7 R,
+    // so no corner is farther than sqrt (2 + 0.49) R from that centre.
+    const double haloR = (size * (0.55 + 0.30 * b + 0.25 * st) + 0.25) * 1.5780;
+    const double lo = std::min (groundLo + yLo * size, groundLo + 0.72 * size - haloR);
+    const double hi = std::max (groundHi + yHi * size, groundHi + 0.72 * size + haloR);
+    const double side = std::max (across, haloR), half = (hi - lo) / 2;
+    // A margin for the GPU's single floats: the foot made relative to the eye, the matrices, the grown quad.
+    return { inst[0], (lo + hi) / 2, inst[1], std::sqrt (side * side + half * half) * 1.001 + 0.05 };
+}
+
+std::array<double, 2> WalkerWorld::groundSpan (double x, double z) const noexcept
+{
+    if (! built)
+        return { 0, 0 };
+    // The texels a bilinear lookup reads round (x, z), and one more each way for the GPU's rounding of where.
+    const int n = heightTex, m = n - 1;
+    const int i0 = (int) std::floor (x / heightPeriod * n - 0.5), j0 = (int) std::floor (z / heightPeriod * n - 0.5);
+    const std::vector<float>& height = mips[0];
+    double lo = 1e30, hi = -1e30;
+    for (int j = j0 - 1; j <= j0 + 2; ++j)
+        for (int i = i0 - 1; i <= i0 + 2; ++i)
+        {
+            const double h = height[(size_t) (((j & m) * n + (i & m)) * 4)];
+            lo = std::min (lo, h); hi = std::max (hi, h);
+        }
+    // Uploaded as half floats: 11 bits of mantissa.
+    return { lo - std::abs (lo) * 1e-3 - 0.01, hi + std::abs (hi) * 1e-3 + 0.01 };
+}
+
+//==============================================================================
 // THE DRIVE.
 
 void WalkerWorld::gatherDiscs()

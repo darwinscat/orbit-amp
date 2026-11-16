@@ -28,6 +28,11 @@ namespace orbitamp::redgroove
      3. THE GLOW — a soft halo over each cap, the spore bursts (a footfall's puff, an attack's sparks), then
         the drifting spores in a box ahead of the glass, streaking with the pace; all added over everything.
     The bass's breath, an attack's flash and its glow are the world's (uBreath, uHit, uHitGlow).
+    What is never seen is not drawn: a mushroom whose ball (WalkerWorld::ballOf) is wholly outside the view puts
+    neither its mesh nor its halo through the GPU, a burst not alive draws no particles, a spore the cloud has not
+    faded in is not drawn at all. None of it changes a pixel. A rung below the top of the windscreen's ladder (the
+    scale under 1) draws less besides — WalkerWorld::Quality says what, and fades it — and the ground after what
+    stands on it.
 
     The camera's field follows the frame's aspect (fieldFor), the horizon sits where it is asked to
     (setHorizon), and the gait's heave, pitch, nod and roll are the camera's. Draws into an offscreen frame
@@ -77,16 +82,25 @@ private:
     };
     Program ground, mush, splat, halo, sky, leg, spore, burst;
 
-    /** A class's instance list of one shape: its buffer, a vertex array with the mesh under it, one with
-        the instances alone (the splats and the halos), and where the shape's triangles are. */
+    /** A class's instance list of one shape: the window's instances (and a copy here, with the height under
+        each foot), a vertex array of them alone for the light map's splats; the instances this frame's view
+        can see, with a vertex array over the shape's mesh and one of them alone for the halos; where the
+        shape's triangles are and what they span. */
     struct List
     {
-        std::uint32_t inst = 0, vaoMesh = 0, vaoQuad = 0;
-        int count = 0, first = 0, indices = 0;
+        std::uint32_t inst = 0, vaoSplat = 0;
+        std::uint32_t seen = 0, vaoMesh = 0, vaoHalo = 0;
+        int count = 0, splatCount = 0, seenCount = 0, first = 0, indices = 0;
+        double splatThin = 0;                // how thinned the splats' buffer is (WalkerWorld::Quality::thin)
+        WalkerWorld::Extent shape;
+        std::vector<float> data, ground;     // 8 floats an instance; the ground's least and greatest under it
     };
     std::array<List, WalkerWorld::numClasses * WalkerWorld::variants> lists {};
     struct Base { bool set = false; int bx = 0, bz = 0; };
     std::array<Base, WalkerWorld::numClasses> windowBase {};
+    std::vector<float> seenData;
+    WalkerWorld::Quality quality;
+    double lastFrameMs = -1.0;
 
     std::uint32_t texHeight = 0, texDetail = 0, texLight = 0, fboLight = 0;
     std::uint32_t vboGround = 0, iboGround = 0, vaoGround = 0, vboMesh = 0, iboMesh = 0, vaoEmpty = 0, vboEmpty = 0;
@@ -112,7 +126,18 @@ private:
     void makeBuffers();
     bool ensureFrame (int w, int h);
     void updateWindows();
-    void drawScene (int w, int h);
+    void cullLists (const std::array<float, 16>& viewProj);
+    void thinSplats();
+    /** A frame's camera: the projection, the view, their product; its forward, right and up; the field's
+        half-tangents and the horizon's shear. */
+    struct Camera
+    {
+        std::array<float, 16> P {}, V {}, VP {};
+        std::array<double, 3> f {}, r {}, u {};
+        double th = 0, tv = 0, shear = 0;
+    };
+    Camera cameraFor (int w, int h) const;
+    void drawScene (int w, int h, const Camera&);
     void noteCost (float ms);
 };
 
