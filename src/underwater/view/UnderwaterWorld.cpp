@@ -530,6 +530,7 @@ void UnderwaterWorld::makeJellies()
         j.curiousW = h (12) < 0.6 && ! j.giant ? 1 : 0;
         j.flinchK = 3 + 4 * h (13); j.near = 2.4 + 3 * h (14); j.side = (h (15) - 0.5) * 7; j.lift = (h (16) - 0.35) * 2.2;
         j.vx = j.axis[0] * 0.14; j.vz = j.axis[2] * 0.14;
+        j.id = i;
         jelly.push_back (j);
     }
 }
@@ -784,6 +785,44 @@ bool UnderwaterWorld::Glass::open (float x01, float y01) const noexcept
         return true;
     const int x = std::clamp ((int) (x01 * (float) width), 0, width - 1), y = std::clamp ((int) (y01 * (float) height), 0, height - 1);
     return alpha[(size_t) (y * width + x)] < 128;    // more than half see-through: the window, not the metal
+}
+
+UnderwaterWorld::PanelMask UnderwaterWorld::PanelMask::of (const uint8_t* rgba, int w, int h, int block, int coverMargin, int openMargin)
+{
+    PanelMask m;
+    if (rgba == nullptr || w <= 0 || h <= 0 || block <= 0)
+        return m;
+    m.block = block; m.pictureWidth = w; m.pictureHeight = h;
+    m.width = (w + block - 1) / block;
+    m.height = (h + block - 1) / block;
+    // Each block's least and greatest alpha...
+    const size_t n = (size_t) m.width * (size_t) m.height;
+    std::vector<uint8_t> lo (n, 255), hi (n, 0);
+    for (int y = 0; y < h; ++y)
+        for (int x = 0; x < w; ++x)
+        {
+            const uint8_t a = rgba[((size_t) y * (size_t) w + (size_t) x) * 4 + 3];
+            const size_t b = (size_t) ((y / block) * m.width + x / block);
+            lo[b] = std::min (lo[b], a); hi[b] = std::max (hi[b], a);
+        }
+    // ...then over the blocks the margin reaches (beyond the picture's edge there is nothing: a sampler clamps there).
+    const int rc = (coverMargin + block - 1) / block, ro = (openMargin + block - 1) / block;
+    m.coverMargin = rc * block; m.openMargin = ro * block;
+    m.cells.assign (n, neither);
+    for (int by = 0; by < m.height; ++by)
+        for (int bx = 0; bx < m.width; ++bx)
+        {
+            bool opaque = true, bare = true;
+            for (int y = std::max (0, by - std::max (rc, ro)); y <= std::min (m.height - 1, by + std::max (rc, ro)); ++y)
+                for (int x = std::max (0, bx - std::max (rc, ro)); x <= std::min (m.width - 1, bx + std::max (rc, ro)); ++x)
+                {
+                    const size_t b = (size_t) (y * m.width + x);
+                    if (std::abs (x - bx) <= rc && std::abs (y - by) <= rc && lo[b] < 255) opaque = false;
+                    if (std::abs (x - bx) <= ro && std::abs (y - by) <= ro && hi[b] > 1)   bare = false;
+                }
+            m.cells[(size_t) (by * m.width + bx)] = opaque ? covered : bare ? open : neither;
+        }
+    return m;
 }
 
 } // namespace orbitamp::underwater

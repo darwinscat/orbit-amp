@@ -3,10 +3,13 @@
 #include "underwater/light.glsl"
 
 uniform sampler2D uColour, uDepth;
+// Where the cabin's panel covers the view (UnderwaterWorld::PanelMask, R): nothing drawn here is seen.
+uniform sampler2D uMask; uniform vec2 uMaskScale; uniform float uMaskOn;
 uniform vec3 uCamFwd, uCamRight, uCamUp; uniform vec2 uTanHalf; uniform float uShear, uNear, uFar, uShaftGain;
 in vec2 vNdc;
 out vec4 fragColor;
 void main() {
+  if (uMaskOn > 0.5 && texelFetch (uMask, min (ivec2 (vec2 (vNdc.x * 0.5 + 0.5, 0.5 - vNdc.y * 0.5) * uMaskScale), textureSize (uMask, 0) - 1), 0).r > 0.5) discard;
   vec2 uv = vNdc * 0.5 + 0.5;
   vec3 col = texture (uColour, uv).rgb;
   float z = texture (uDepth, uv).r;

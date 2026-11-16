@@ -126,10 +126,10 @@ int UnderwaterGl::Program::uniform (const char* name) const
     return glGetUniformLocation (id, name);
 }
 
-bool UnderwaterGl::compile (Program& p, const char* vertexPath, const char* fragmentPath, const char* what)
+bool UnderwaterGl::compile (Program& p, const char* vertexPath, const char* fragmentPath, const char* what, const std::vector<shaders::Written>& written)
 {
     std::string log;
-    p.id = gpu::program (gpu::header() + shaders::source (vertexPath), gpu::header() + shaders::source (fragmentPath), log, attributes);
+    p.id = gpu::program (gpu::header() + shaders::source (vertexPath), gpu::header() + shaders::source (fragmentPath, written), log, attributes);
     if (p.id == 0)
     {
         trouble = std::string ("the ") + what + " shader did not build — " + log;
@@ -161,7 +161,10 @@ bool UnderwaterGl::create()
         || ! compile (post, "underwater/post.vert", "underwater/post.frag", "post")
         || ! compile (sprite, "underwater/sprite.vert", "underwater/sprite.frag", "sprite")
         || ! compile (glow, "underwater/sprite.vert", "underwater/glow.frag", "glow")
-        || ! compile (panel, "underwater/post.vert", "underwater/panel.frag", "panel"))
+        || ! compile (panel, "underwater/post.vert", "underwater/panel.frag", "panel", { { "panel", "" } })
+        || ! compile (panelOver, "underwater/post.vert", "underwater/panel.frag", "panel over the view", { { "panel", "#define OVER 1\n" } })
+        || ! compile (panelOverFlat, "underwater/post.vert", "underwater/panel.frag", "flat panel over the view", { { "panel", "#define OVER 1\n#define FLAT 1\n" } })
+        || ! compile (cover, "underwater/cover.vert", "underwater/cover.frag", "cover"))
     {
         destroy();
         return false;
@@ -200,15 +203,19 @@ void UnderwaterGl::destroy()
     del (vboJelly, glDeleteBuffers); del (vboBell, glDeleteBuffers); del (iboBell, glDeleteBuffers); del (vaoBell, glDeleteVertexArrays);
     del (vboTend, glDeleteBuffers); del (iboTend, glDeleteBuffers); del (vaoTendril, glDeleteVertexArrays);
     del (vaoEmpty, glDeleteVertexArrays); del (vboEmpty, glDeleteBuffers);
-    for (auto* t : { &texHeight, &texDetail, &texCaustic, &texDash, &texSea, &texAtlas, &fboColour, &fboDepth })
+    del (vboCover, glDeleteBuffers); del (vaoCover, glDeleteVertexArrays); coverVertices = 0;
+    for (auto* t : { &texHeight, &texDetail, &texCaustic, &texDash, &texSea, &texAtlas, &texMask, &fboColour, &fboDepth, &fboPostColour })
         del (*t, glDeleteTextures);
     del (fboOutColour, glDeleteRenderbuffers);
-    del (fbo, glDeleteFramebuffers); del (fboOut, glDeleteFramebuffers);
-    fbW = fbH = outW = outH = 0;
+    del (fbo, glDeleteFramebuffers); del (fboOut, glDeleteFramebuffers); del (fboPost, glDeleteFramebuffers);
+    fbW = fbH = outW = outH = postW = postH = 0;
+    mask = {};
+    quality = {};
+    lastFrameMs = -1.0;
     if (query[0] != 0) glDeleteQueries ((GLsizei) query.size(), query.data());
     query.fill (0);
     queriesWork = false; queriesPending = 0; queryNext = 0;
-    for (auto* p : { &floor, &rock, &worm, &flora, &bell, &tendril, &particle, &water, &post, &sprite, &glow, &panel })
+    for (auto* p : { &floor, &rock, &worm, &flora, &bell, &tendril, &particle, &water, &post, &sprite, &glow, &panel, &panelOver, &panelOverFlat, &cover })
     {
         if (p->id != 0) glDeleteProgram (p->id);
         p->id = 0;
@@ -248,19 +255,87 @@ void UnderwaterGl::makeArt()
 {
     // The cabin's panel and its sea layer in straight alpha, no mips (drawn at the stage's own size); the passing
     // bathyscaphe's atlas premultiplied, with mips (seen small and far). Each picture is made here and let go.
+    Picture dash;
     if (art.dashboard && art.sea)
     {
-        texDash = pictureTexture (art.dashboard(), false, false);
+        dash = art.dashboard();
+        texDash = pictureTexture (dash, false, false);
         texSea = pictureTexture (art.sea(), false, false);
         if (texDash == 0 || texSea == 0)
         {
             const auto del = [] (std::uint32_t& id) { if (id != 0) glDeleteTextures (1, &id); id = 0; };
             del (texDash); del (texSea);
+            dash = {};
             gpu::note ("underwater: the cabin's pictures did not come; the face paints the panel");
         }
     }
+    makeMask (dash);
     if (art.atlas && sprites.scale > 0 && ! sprites.cells.empty())
         texAtlas = pictureTexture (art.atlas(), true, true);
+}
+
+void UnderwaterGl::makeMask (const Picture& dash)
+{
+    // Blocks of 8 of the picture's pixels; covered with a margin of 24 round them (three blocks: a scene pixel at a
+    // quarter of the frame's, and the filters' reach), bare with one (the panel's own filter).
+    constexpr int block = 8, coverMargin = 24, openMargin = 1;
+    mask = dash.valid() ? W::PanelMask::of (dash.rgba.data(), dash.width, dash.height, block, coverMargin, openMargin) : W::PanelMask {};
+    const int mw = std::max (1, mask.width), mh = std::max (1, mask.height);
+    std::vector<std::uint8_t> rg ((size_t) mw * (size_t) mh * 2, 0);
+    for (int y = 0; y < mask.height; ++y)
+        for (int x = 0; x < mask.width; ++x)
+        {
+            const auto c = mask.at (x, y);
+            rg[(size_t) (y * mw + x) * 2] = c == W::PanelMask::covered ? 255 : 0;
+            rg[(size_t) (y * mw + x) * 2 + 1] = c == W::PanelMask::open ? 255 : 0;
+        }
+    glGenTextures (1, &texMask);
+    glBindTexture (GL_TEXTURE_2D, texMask);
+    glPixelStorei (GL_UNPACK_ALIGNMENT, 1);
+    glTexImage2D (GL_TEXTURE_2D, 0, GL_RG8, mw, mh, 0, GL_RG, GL_UNSIGNED_BYTE, rg.data());
+    glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glBindTexture (GL_TEXTURE_2D, 0);
+
+    // The covered blocks as rectangles in NDC, a run of them along a row each (the picture's top row at y = 1).
+    std::vector<float> v;
+    const double pw = mask.pictureWidth, ph = mask.pictureHeight;
+    for (int y = 0; y < mask.height; ++y)
+        for (int x = 0; x < mask.width;)
+        {
+            if (mask.at (x, y) != W::PanelMask::covered) { ++x; continue; }
+            int e = x;
+            while (e < mask.width && mask.at (e, y) == W::PanelMask::covered) ++e;
+            const auto ndcX = [pw] (int px) { return (float) (std::min ((double) px, pw) / pw * 2 - 1); };
+            const auto ndcY = [ph] (int py) { return (float) (1 - std::min ((double) py, ph) / ph * 2); };
+            const float x0 = ndcX (x * block), x1 = ndcX (e * block), y0 = ndcY (y * block), y1 = ndcY ((y + 1) * block);
+            v.insert (v.end(), { x0, y0, x1, y0, x1, y1, x0, y0, x1, y1, x0, y1 });
+            x = e;
+        }
+    coverVertices = (int) v.size() / 2;
+    if (coverVertices > 0)
+    {
+        glGenVertexArrays (1, &vaoCover);
+        glBindVertexArray (vaoCover);
+        glGenBuffers (1, &vboCover);
+        glBindBuffer (GL_ARRAY_BUFFER, vboCover);
+        glBufferData (GL_ARRAY_BUFFER, (GLsizeiptr) (v.size() * sizeof (float)), v.data(), GL_STATIC_DRAW);
+        glEnableVertexAttribArray (locPos); glVertexAttribPointer (locPos, 2, GL_FLOAT, GL_FALSE, 0, nullptr);
+        glBindVertexArray (0);
+        glBindBuffer (GL_ARRAY_BUFFER, 0);
+    }
+}
+
+bool UnderwaterGl::maskHolds (int w, int h) const noexcept
+{
+    // A pixel that shows reads the scene within one of its pixels, and below the top the post pass's frame within one
+    // more: two scene pixels and the panel's filter must lie inside the margin.
+    if (coverVertices == 0 || w <= 0 || h <= 0)
+        return false;
+    const double reach = 2 * std::max ((double) mask.pictureWidth / w, (double) mask.pictureHeight / h) + 2;
+    return reach <= mask.coverMargin;
 }
 
 void UnderwaterGl::makeBuffers()
@@ -424,6 +499,28 @@ bool UnderwaterGl::ensureFrame (int w, int h, int cw, int ch)
     return true;
 }
 
+bool UnderwaterGl::ensurePostFrame (int w, int h)
+{
+    // Below the top rung: the post pass's frame at the scene's pixels, scaled up to the finished one (filtered).
+    if (fboPost != 0 && w == postW && h == postH)
+        return true;
+    if (fboPost == 0) { glGenFramebuffers (1, &fboPost); glGenTextures (1, &fboPostColour); }
+    glBindTexture (GL_TEXTURE_2D, fboPostColour);
+    glTexImage2D (GL_TEXTURE_2D, 0, GL_RGBA8, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+    glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR); glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE); glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glBindTexture (GL_TEXTURE_2D, 0);
+    glBindFramebuffer (GL_FRAMEBUFFER, fboPost);
+    glFramebufferTexture2D (GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, fboPostColour, 0);
+    if (glCheckFramebufferStatus (GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+    {
+        postW = postH = 0;
+        return false;
+    }
+    postW = w; postH = h;
+    return true;
+}
+
 void UnderwaterGl::noteCost (float ms)
 {
     gpuMs = gpuMs < 0 ? ms : gpuMs + (ms - gpuMs) * 0.1f;
@@ -435,6 +532,12 @@ void UnderwaterGl::render (int w, int h, float scale, std::uint32_t target, int 
         return;
     const int rw = std::max (2, jsRoundInt ((double) w * scale)), rh = std::max (2, jsRoundInt ((double) h * scale));
     if (! ensureFrame (rw, rh, w, h))
+        return;
+    // The rung: what is drawn less of below the top, eased by the time since the last frame.
+    const double now = gpu::milliseconds();
+    quality.follow (scale, lastFrameMs < 0 ? 0.0 : (now - lastFrameMs) * 0.001);
+    lastFrameMs = now;
+    if (quality.level >= 1 && ! ensurePostFrame (rw, rh))
         return;
 
     // The timer: queries read back a few frames late so nothing waits — or, without them, one frame in sixty
@@ -574,12 +677,67 @@ void UnderwaterGl::drawScene (int rw, int rh, int cw, int ch)
         set2 (p, "uHitT", std::min (s.hitT, 1e4), s.hitS);
     };
 
+    // The jellyfish moved, and those that can be seen packed in their order (far to near), each with its fade: one
+    // wholly outside the view — the frustum's planes from VP's rows, its reach round it — draws nothing, nor one
+    // faded out. Uploaded before the scene's pass begins, into a buffer let go of first, so nothing waits for the GPU.
+    world.updateJellies (s.dt);
+    int jellyDrawn = 0;
+    {
+        std::array<std::array<double, 4>, 6> planes {};
+        for (int k = 0; k < 3; ++k)
+            for (int c = 0; c < 4; ++c)
+            {
+                planes[(size_t) (2 * k)][(size_t) c] = (double) VP[(size_t) (c * 4 + 3)] + VP[(size_t) (c * 4 + k)];
+                planes[(size_t) (2 * k + 1)][(size_t) c] = (double) VP[(size_t) (c * 4 + 3)] - VP[(size_t) (c * 4 + k)];
+            }
+        const auto seen = [&planes] (const float* p, double reach)
+        {
+            for (const auto& q : planes)
+                if (q[0] * p[0] + q[1] * p[1] + q[2] * p[2] + q[3] < -reach * std::sqrt (q[0] * q[0] + q[1] * q[1] + q[2] * q[2]))
+                    return false;
+            return true;
+        };
+        for (const auto& j : world.jellies())
+        {
+            const float alpha = W::Quality::thinned (j.id) ? (float) (1 - quality.thin) : 1.0f;
+            float* o = jellyData.data() + (size_t) jellyDrawn * 16;
+            o[0] = (float) (camRel[0] + j.rel[0]); o[1] = (float) (camRel[1] + j.rel[1]); o[2] = (float) (camRel[2] + j.rel[2]);
+            if (alpha <= 0.0f || ! seen (o, W::jellyReach (j)))
+                continue;
+            o[3] = (float) j.scale;
+            o[4] = (float) j.col[0]; o[5] = (float) j.col[1]; o[6] = (float) j.col[2];
+            o[7] = (float) std::fmod (j.phase, 2 * pi);
+            o[8] = (float) j.outAxis[0]; o[9] = (float) j.outAxis[1]; o[10] = (float) j.outAxis[2];
+            o[11] = alpha;
+            o[12] = (float) j.glow[0]; o[13] = (float) j.glow[1]; o[14] = (float) j.glow[2];
+            o[15] = (float) j.tend;
+            ++jellyDrawn;
+        }
+        glBindBuffer (GL_ARRAY_BUFFER, vboJelly);
+        glBufferData (GL_ARRAY_BUFFER, (GLsizeiptr) (jellyData.size() * sizeof (float)), nullptr, GL_DYNAMIC_DRAW);
+        if (jellyDrawn > 0)
+            glBufferSubData (GL_ARRAY_BUFFER, 0, (GLsizeiptr) ((size_t) jellyDrawn * 16 * sizeof (float)), jellyData.data());
+        glBindBuffer (GL_ARRAY_BUFFER, 0);
+    }
+
+    // What the cabin's panel covers is never seen: while it is drawn, laid into the depth at its nearest before
+    // anything, so nothing of the scene is shaded under it, and skipped by the post pass.
+    const bool masked = drawsCabin() && maskHolds (rw, rh);
+    const bool postLow = quality.level >= 1 && fboPost != 0;
+
     glBindFramebuffer (GL_FRAMEBUFFER, fbo);
     glViewport (0, 0, rw, rh);
     glDisable (GL_BLEND); glEnable (GL_DEPTH_TEST); glDepthFunc (GL_LEQUAL); glDisable (GL_CULL_FACE);
     glDepthMask (GL_TRUE);
     glClearColor (0, 0, 0, 1);
     glClear (GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    if (masked)
+    {
+        glUseProgram (cover.id); glBindVertexArray (vaoCover);
+        glColorMask (GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE); glDepthFunc (GL_ALWAYS);
+        glDrawArrays (GL_TRIANGLES, 0, coverVertices);
+        glColorMask (GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE); glDepthFunc (GL_LEQUAL);
+    }
     glActiveTexture (GL_TEXTURE0); glBindTexture (GL_TEXTURE_2D, texHeight);
     glActiveTexture (GL_TEXTURE1); glBindTexture (GL_TEXTURE_2D, texDetail);
     glActiveTexture (GL_TEXTURE2); glBindTexture (GL_TEXTURE_2D, texCaustic);
@@ -713,30 +871,13 @@ void UnderwaterGl::drawScene (int rw, int rh, int cw, int ch)
         glActiveTexture (GL_TEXTURE5); glBindTexture (GL_TEXTURE_2D, 0);
     }
     {
-        world.updateJellies (s.dt);
-        const auto& J = world.jellies();
-        for (size_t i = 0; i < J.size(); ++i)
-        {
-            const auto& j = J[i];
-            float* o = jellyData.data() + i * 16;
-            o[0] = (float) (camRel[0] + j.rel[0]); o[1] = (float) (camRel[1] + j.rel[1]); o[2] = (float) (camRel[2] + j.rel[2]);
-            o[3] = (float) j.scale;
-            o[4] = (float) j.col[0]; o[5] = (float) j.col[1]; o[6] = (float) j.col[2];
-            o[7] = (float) std::fmod (j.phase, 2 * pi);
-            o[8] = (float) j.outAxis[0]; o[9] = (float) j.outAxis[1]; o[10] = (float) j.outAxis[2];
-            o[11] = 1.0f;
-            o[12] = (float) j.glow[0]; o[13] = (float) j.glow[1]; o[14] = (float) j.glow[2];
-            o[15] = (float) j.tend;
-        }
-        glBindBuffer (GL_ARRAY_BUFFER, vboJelly);
-        glBufferSubData (GL_ARRAY_BUFFER, 0, (GLsizeiptr) (jellyData.size() * sizeof (float)), jellyData.data());
-        glBindBuffer (GL_ARRAY_BUFFER, 0);
         for (const auto& [p, vao, count] : { std::tuple<const Program*, std::uint32_t, int> { &tendril, vaoTendril, tendrilIndices }, { &bell, vaoBell, bellIndices } })
         {
             glUseProgram (p->id); glBindVertexArray (vao);
             setCommon (*p); setLight (*p);
             set3 (*p, "uCamR", basis.r); set3 (*p, "uCamU", basis.u);
-            glDrawElementsInstanced (GL_TRIANGLES, count, GL_UNSIGNED_SHORT, nullptr, W::jellyCount);
+            if (jellyDrawn > 0)
+                glDrawElementsInstanced (GL_TRIANGLES, count, GL_UNSIGNED_SHORT, nullptr, jellyDrawn);
         }
     }
     // The particles: the snow, the silt, the bubbles.
@@ -761,10 +902,12 @@ void UnderwaterGl::drawScene (int rw, int rh, int cw, int ch)
     }
     glDisable (GL_BLEND); glDepthMask (GL_TRUE);
 
-    // The post pass: to the finished frame, at its own pixels.
-    glBindFramebuffer (GL_FRAMEBUFFER, fboOut);
-    glViewport (0, 0, cw, ch);
+    // The post pass: to the finished frame, at its own pixels — or below the top rung at the scene's, scaled up to it.
+    glBindFramebuffer (GL_FRAMEBUFFER, postLow ? fboPost : fboOut);
+    glViewport (0, 0, postLow ? rw : cw, postLow ? rh : ch);
     glDisable (GL_DEPTH_TEST);
+    glActiveTexture (GL_TEXTURE7); glBindTexture (GL_TEXTURE_2D, texMask);
+    const double maskScaleX = mask.block > 0 ? (double) mask.pictureWidth / mask.block : 1, maskScaleY = mask.block > 0 ? (double) mask.pictureHeight / mask.block : 1;
     {
         glUseProgram (post.id); glBindVertexArray (vaoEmpty);
         setLight (post);
@@ -774,31 +917,63 @@ void UnderwaterGl::drawScene (int rw, int rh, int cw, int ch)
         set3 (post, "uCamFwd", basis.f); set3 (post, "uCamRight", basis.r); set3 (post, "uCamUp", basis.u);
         set2 (post, "uTanHalf", th, tv); set1 (post, "uShear", sh);
         set1 (post, "uNear", zn); set1 (post, "uFar", zf); set1 (post, "uShaftGain", 3.3);   // a little softer (Oleh, 16.11)
+        glUniform1i (post.uniform ("uMask"), 7); set2 (post, "uMaskScale", maskScaleX, maskScaleY); set1 (post, "uMaskOn", masked ? 1 : 0);
         glDrawArrays (GL_TRIANGLES, 0, 3);
         glActiveTexture (GL_TEXTURE3); glBindTexture (GL_TEXTURE_2D, 0);
         glActiveTexture (GL_TEXTURE4); glBindTexture (GL_TEXTURE_2D, 0);
     }
-    // The cabin's panel over it all: the dashboard, its sea layer moved by the caustics and dimmed by the silt.
-    if (drawsCabin())
+    // ...scaled up: by the cabin's pass where it is drawn, else as it is.
+    const bool cabin = drawsCabin();
+    if (postLow && ! cabin)
     {
-        glUseProgram (panel.id); glBindVertexArray (vaoEmpty);
-        setLight (panel);
+        glBindFramebuffer (GL_READ_FRAMEBUFFER, fboPost);
+        glBindFramebuffer (GL_DRAW_FRAMEBUFFER, fboOut);
+        glBlitFramebuffer (0, 0, rw, rh, 0, 0, cw, ch, GL_COLOR_BUFFER_BIT, GL_LINEAR);
+        glBindFramebuffer (GL_FRAMEBUFFER, fboOut);
+        glViewport (0, 0, cw, ch);
+    }
+    // The cabin's panel over it all: the dashboard, its sea layer moved by the caustics and dimmed by the silt.
+    // Below the top rung it is drawn flat, faded to that — the dashboard alone, with no sea and no caustics — over the
+    // view scaled up from the scene's pixels, in one pass that writes every pixel of the frame.
+    if (cabin)
+    {
+        const Program& pp = ! postLow ? panel : quality.flat >= 1 ? panelOverFlat : panelOver;
+        if (postLow)
+        {
+            glBindFramebuffer (GL_FRAMEBUFFER, fboOut);
+            glViewport (0, 0, cw, ch);
+            glClear (GL_COLOR_BUFFER_BIT);      // every pixel is written: what was there need not be read back
+        }
+        glUseProgram (pp.id); glBindVertexArray (vaoEmpty);
+        setLight (pp);
         glActiveTexture (GL_TEXTURE5); glBindTexture (GL_TEXTURE_2D, texDash);
         glActiveTexture (GL_TEXTURE6); glBindTexture (GL_TEXTURE_2D, texSea);
-        glUniform1i (panel.uniform ("uDash"), 5); glUniform1i (panel.uniform ("uSea"), 6);
-        set1 (panel, "uPanelGain", 1.0 - 0.35 * silt);
-        set2 (panel, "uCauScale", 6.0, 3.4);
+        glUniform1i (pp.uniform ("uDash"), 5); glUniform1i (pp.uniform ("uSea"), 6);
+        glUniform1i (pp.uniform ("uMask"), 7); set2 (pp, "uMaskScale", maskScaleX, maskScaleY); set1 (pp, "uFlat", quality.flat);
+        set1 (pp, "uPanelGain", 1.0 - 0.35 * silt);
+        set2 (pp, "uCauScale", 6.0, 3.4);
         // the net slides with the way travelled, slower than on the floor and never in steps
         const double tr = s.travel * 0.08;
-        set2 (panel, "uPanelOff1", fract (tr / 2.1), fract (tr * 0.37 / 2.1));
-        set2 (panel, "uPanelOff2", fract (-tr * 0.6 / 1.44), fract (tr * 0.8 / 1.44));
-        set2 (panel, "uPanelOffW", fract (tr / 19.0), fract (tr * 0.5 / 19.0));
-        glEnable (GL_BLEND); glBlendFunc (GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
-        glDrawArrays (GL_TRIANGLES, 0, 3);
-        glDisable (GL_BLEND);
+        set2 (pp, "uPanelOff1", fract (tr / 2.1), fract (tr * 0.37 / 2.1));
+        set2 (pp, "uPanelOff2", fract (-tr * 0.6 / 1.44), fract (tr * 0.8 / 1.44));
+        set2 (pp, "uPanelOffW", fract (tr / 19.0), fract (tr * 0.5 / 19.0));
+        if (postLow)
+        {
+            glActiveTexture (GL_TEXTURE3); glBindTexture (GL_TEXTURE_2D, fboPostColour);
+            glUniform1i (pp.uniform ("uPost"), 3);
+            glDrawArrays (GL_TRIANGLES, 0, 3);
+            glActiveTexture (GL_TEXTURE3); glBindTexture (GL_TEXTURE_2D, 0);
+        }
+        else
+        {
+            glEnable (GL_BLEND); glBlendFunc (GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+            glDrawArrays (GL_TRIANGLES, 0, 3);
+            glDisable (GL_BLEND);
+        }
         glActiveTexture (GL_TEXTURE5); glBindTexture (GL_TEXTURE_2D, 0);
         glActiveTexture (GL_TEXTURE6); glBindTexture (GL_TEXTURE_2D, 0);
     }
+    glActiveTexture (GL_TEXTURE7); glBindTexture (GL_TEXTURE_2D, 0);
     glDepthMask (GL_TRUE);
     glBindVertexArray (0);
     glUseProgram (0);

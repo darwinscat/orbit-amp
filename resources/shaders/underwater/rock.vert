@@ -13,6 +13,8 @@ void main() {
   float r0 = hcell (c, 11u);
   int variant = (hcell (c, 19u) < 0.5) ? 0 : 1;
   int myVar = gl_VertexID / 240;
+  // the cell left empty, or the other variant's vertex: known before the floor is read (fieldOk is at most 1)
+  if (r0 > uRockProb || variant != myVar) { gl_Position = vec4 (0.0, 0.0, 2.0, 1.0); vN = vec3 (0, 1, 0); vRel = vec3 (0); vPos = vec3 (0); vTint = 0.0; vLocalY = 0.0; return; }
   vec2 cen = (vec2 (cij) + vec2 (hcell (c, 12u), hcell (c, 13u))) * uRockCell;
   vec2 pr = cen - uCamCell;
   vec4 a, b, cc; float gh = floorH (pr, a, b, cc);

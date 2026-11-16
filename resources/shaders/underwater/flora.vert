@@ -19,11 +19,15 @@ void main() {
   ivec2 c = (cij + uFloraM * 8) % uFloraM;
   vec2 cen = (vec2 (cij) + vec2 (hcell (c, 41u), hcell (c, 42u))) * uFloraCell;
   vec2 pr = cen - uCamCell;
+  float r0 = hcell (c, 43u);
+  float far = length (pr - uCamFrac);
+  // a cell its kind leaves empty however its field lies (the field is at most 1), or too far: known before the floor is read
+  if (r0 > uFloraDensity || far > 70.0) {
+    gl_Position = vec4 (0.0, 0.0, 2.0, 1.0); vN = vec3 (0, 1, 0); vRel = vec3 (0); vPos = vec3 (0); vCol = vec3 (0); vUV = vec2 (0); vEmis = 0.0; vSeed = 0.0; return;
+  }
   vec4 la, lb, lc; float gh = floorH (pr, la, lb, lc);
   float field = fieldFor (uFloraKind, la, lb, lc);
   float mound = smoothstep (0.70, 0.92, lc.a);
-  float r0 = hcell (c, 43u);
-  float far = length (pr - uCamFrac);
   if (r0 > field * uFloraDensity || (uFloraKind > 0.5 && uFloraKind < 2.5 && mound > 0.3) || far > 70.0) {
     gl_Position = vec4 (0.0, 0.0, 2.0, 1.0); vN = vec3 (0, 1, 0); vRel = vec3 (0); vPos = vec3 (0); vCol = vec3 (0); vUV = vec2 (0); vEmis = 0.0; vSeed = 0.0; return;
   }

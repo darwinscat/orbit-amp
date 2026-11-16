@@ -250,6 +250,82 @@ namespace
         check (! g.open (0.9f, 0.5f), "a press on the panel's metal is not");
         check (UnderwaterWorld::Glass().open (0.9f, 0.5f), "with no dashboard, everywhere is glass");
     }
+
+    void panelMaskChecks()
+    {
+        // A dashboard of 64 x 32: open window left of x = 20 (alpha 0), one column of glass's edge at 20 (128), metal
+        // beyond (255) — and a pinhole of 254 in the metal at (52, 6), a speck of 2 in the window at (6, 26).
+        constexpr int w = 64, h = 32;
+        std::vector<uint8_t> px ((size_t) (w * h * 4), 0);
+        for (int y = 0; y < h; ++y)
+            for (int x = 0; x < w; ++x)
+                px[(size_t) ((y * w + x) * 4 + 3)] = (uint8_t) (x < 20 ? 0 : x == 20 ? 128 : 255);
+        px[(size_t) ((6 * w + 52) * 4 + 3)] = 254;
+        px[(size_t) ((26 * w + 6) * 4 + 3)] = 2;
+        const auto m = UnderwaterWorld::PanelMask::of (px.data(), w, h, 4, 8, 1);
+        check (m.width == 16 && m.height == 8 && m.coverMargin == 8 && m.openMargin == 4, "the mask is in blocks of 4, its margins whole blocks");
+        // What it promises: a covered block's pixels and every pixel within its margin are opaque; an open block's
+        // and its margin's are clear. A sampler reading the picture anywhere in a covered block finds 255 alone.
+        int covered = 0, open = 0, broken = 0;
+        for (int by = 0; by < m.height; ++by)
+            for (int bx = 0; bx < m.width; ++bx)
+            {
+                const auto c = m.at (bx, by);
+                covered += c == UnderwaterWorld::PanelMask::covered;
+                open += c == UnderwaterWorld::PanelMask::open;
+                for (int y = std::max (0, by * 4 - 8); y < std::min (h, by * 4 + 4 + 8); ++y)
+                    for (int x = std::max (0, bx * 4 - 8); x < std::min (w, bx * 4 + 4 + 8); ++x)
+                    {
+                        const auto a = px[(size_t) ((y * w + x) * 4 + 3)];
+                        const bool inOpen = x >= bx * 4 - 4 && x < bx * 4 + 8 && y >= by * 4 - 4 && y < by * 4 + 8;
+                        if ((c == UnderwaterWorld::PanelMask::covered && a < 255) || (c == UnderwaterWorld::PanelMask::open && inOpen && a > 1))
+                            ++broken;
+                    }
+            }
+        check (broken == 0, "nothing under a covered block shows, nothing over an open one is drawn");
+        check (m.at (3, 0) == UnderwaterWorld::PanelMask::open && m.at (4, 0) != UnderwaterWorld::PanelMask::open, "the window is open up to a block short of its edge");
+        check (m.at (7, 4) != UnderwaterWorld::PanelMask::covered && m.at (8, 4) == UnderwaterWorld::PanelMask::covered, "the metal is covered from two blocks past the edge");
+        check (m.at (13, 1) != UnderwaterWorld::PanelMask::covered && m.at (1, 6) != UnderwaterWorld::PanelMask::open, "a pinhole and a speck are seen");
+        check (covered > 0 && open > 0, "a dashboard has both");
+        check (UnderwaterWorld::PanelMask::of (nullptr, 0, 0, 8, 24, 1).cells.empty()
+               && UnderwaterWorld::PanelMask().at (0, 0) == UnderwaterWorld::PanelMask::neither, "no dashboard, no mask: neither everywhere");
+    }
+
+    void qualityChecks()
+    {
+        using Q = UnderwaterWorld::Quality;
+        check (Q::levelOf (1.0) == 0 && Q::levelOf (0.75) == 1 && Q::levelOf (0.5) == 2 && Q::levelOf (0.25) == 2, "the ladder's rungs are the levels");
+        Q top;
+        top.follow (1.0, 0.0);
+        check (top.flat == 0 && top.thin == 0, "at the top nothing is drawn less");
+        Q low;
+        low.follow (0.5, 0.0);
+        check (low.flat == 1 && low.thin == 1, "the first frame starts where its rung is");
+        // Down a rung and back: what goes fades at 1 / fadeSeconds a second, never faster.
+        Q q;
+        q.follow (1.0, 0.0);
+        double worst = 0, flat = q.flat, thin = q.thin;
+        const auto stepFor = [&] (double scale, double seconds, int frames)
+        {
+            for (int i = 0; i < frames; ++i)
+            {
+                q.follow (scale, seconds);
+                worst = std::max ({ worst, std::abs (q.flat - flat), std::abs (q.thin - thin) });
+                flat = q.flat; thin = q.thin;
+            }
+        };
+        stepFor (0.75, 1.0 / 60, 45);
+        check (std::abs (q.flat - 0.5) < 1e-9 && q.thin == 0, "three quarters of a fade down a rung: the panel half flat, every jellyfish there");
+        stepFor (0.5, 1.0 / 60, 120);
+        check (q.flat == 1 && q.thin == 1, "at the foot: the panel flat, the thinned half gone");
+        stepFor (1.0, 1.0 / 60, 30);
+        check (std::abs (q.flat - (1 - 30.0 / 90)) < 1e-9 && std::abs (q.thin - (1 - 30.0 / 90)) < 1e-9, "climbing back, they fade in");
+        check (worst <= 1.0 / 60 / Q::fadeSeconds + 1e-12, "no frame jumps");
+        int gone = 0;
+        for (int id = 0; id < UnderwaterWorld::jellyCount; ++id)
+            gone += Q::thinned (id);
+        check (gone == UnderwaterWorld::jellyCount / 2, "the thinned view leaves out half the jellyfish");
+    }
 }
 
 int main (int argc, char** argv)
@@ -257,6 +333,8 @@ int main (int argc, char** argv)
     makeEntries();
     compareWithFixture (argc > 1 ? argv[1] : UNDERWATER_FIXTURE);
     glassChecks();
+    panelMaskChecks();
+    qualityChecks();
     if (failures == 0)
         std::printf ("underwater_world_test: all passed\n");
     return failures == 0 ? 0 : 1;

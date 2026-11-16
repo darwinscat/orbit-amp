@@ -5,6 +5,7 @@
 
 #include "UnderwaterWorld.h"
 #include "../../shaders/Gpu.h"
+#include "../../shaders/Shaders.h"
 
 #include <algorithm>
 #include <array>
@@ -28,6 +29,12 @@ namespace orbitamp::underwater
      3. THE CABIN, last: the bathyscaphe's dashboard over the whole stage, straight alpha, its sea layer moved by
         the soft caustic — rgb = dashboard + (k - 1) * sea — blended over the view. Drawn only while its two
         pictures are in (drawsCabin()); without them the face paints the panel itself.
+    What is never seen is not drawn. While the cabin is drawn, where its panel is opaque (UnderwaterWorld::PanelMask's
+    covered blocks: a third of the stage) is laid into the scene's depth at its nearest first, so nothing of the scene
+    is shaded there, and the post pass skips it; the panel skips where it is bare glass; a jellyfish wholly outside the
+    view is not drawn. None of it changes a pixel that shows. A rung below the top of the windscreen's ladder (the
+    scale under 1) draws less besides — UnderwaterWorld::Quality says what, and fades it — and with the post pass at the
+    scene's pixels, scales the view up in the cabin's pass: one pass at the frame's pixels instead of two.
     The attack of the playing (uHitT), the silt and the drive's state are the world's; the cabin's projection —
     a constant half-width tangent, the height from the aspect, the centre sheared — is set with setLens.
     Draws into frames of its own, then blits the finished one to the frame buffer it is given. GLSL 1.50 core in
@@ -95,9 +102,16 @@ private:
         std::uint32_t id = 0;
         int uniform (const char* name) const;
     };
-    Program floor, rock, worm, flora, bell, tendril, particle, water, post, sprite, glow, panel;
+    Program floor, rock, worm, flora, bell, tendril, particle, water, post, sprite, glow, panel, panelOver, panelOverFlat, cover;
 
     std::uint32_t texHeight = 0, texDetail = 0, texCaustic = 0, texDash = 0, texSea = 0, texAtlas = 0;
+    // Where the panel covers the view and where it is bare (R, G: PanelMask's blocks), and its covered blocks as
+    // rectangles for the scene's depth; a 1 x 1 of neither when there is no dashboard.
+    std::uint32_t texMask = 0, vboCover = 0, vaoCover = 0;
+    int coverVertices = 0;
+    UnderwaterWorld::PanelMask mask;
+    UnderwaterWorld::Quality quality;
+    double lastFrameMs = -1.0;
     std::uint32_t vboGrid = 0, iboFloor = 0, vaoFloor = 0, vboRock = 0, vaoRock = 0, vboWorm = 0, iboWorm = 0, vaoWorm = 0;
     struct Flora { std::uint32_t vao = 0, vbo = 0, ibo = 0; int count = 0; };
     std::array<Flora, 5> floraMesh {};
@@ -108,7 +122,8 @@ private:
 
     std::uint32_t fbo = 0, fboColour = 0, fboDepth = 0;     // the scene: textures the post pass reads
     std::uint32_t fboOut = 0, fboOutColour = 0;             // the finished frame
-    int fbW = 0, fbH = 0, outW = 0, outH = 0;
+    std::uint32_t fboPost = 0, fboPostColour = 0;           // below the top rung: the post pass at the scene's pixels (a texture)
+    int fbW = 0, fbH = 0, outW = 0, outH = 0, postW = 0, postH = 0;
     int repeats = 1;
 
     // The frame timer, as the other worlds have it.
@@ -120,11 +135,15 @@ private:
     double probeStart = 0.0;
     std::string trouble;
 
-    bool compile (Program&, const char* vertexPath, const char* fragmentPath, const char* what);
+    bool compile (Program&, const char* vertexPath, const char* fragmentPath, const char* what, const std::vector<shaders::Written>& written = {});
     void makeTextures();
     void makeArt();
     void makeBuffers();
     bool ensureFrame (int w, int h, int cw, int ch);
+    bool ensurePostFrame (int w, int h);
+    void makeMask (const Picture& dashboard);
+    /** Whether the scene at w x h is fine enough for the covered blocks' margin: a pixel that shows never reads one. */
+    bool maskHolds (int w, int h) const noexcept;
     void drawScene (int rw, int rh, int cw, int ch);
     void noteCost (float ms);
 };

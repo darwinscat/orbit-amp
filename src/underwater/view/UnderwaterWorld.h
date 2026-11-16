@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <string_view>
@@ -118,7 +119,11 @@ public:
         V3 rel {};
         double dist = 0;
         V3 outAxis { 0, 1, 0 };
+        int id = 0;                 // which it is, as made: the list is sorted far to near every frame
     };
+    /** How far a jellyfish reaches from where it is, metres: its bell and its tendrils however they lie (the shaders'
+        bell and tendrilPoint at their widest, the ribbons' width), so one farther than this from the view is not in it. */
+    static double jellyReach (const Jelly& j) noexcept { return j.scale * (1.5 + 3.2 * j.tend); }
 
     UnderwaterWorld() noexcept = default;
 
@@ -188,6 +193,49 @@ public:
         static Glass of (const uint8_t* rgba, int w, int h, int step);
         /** Whether (x, y), 0..1 from the top-left, is open window: true where nothing was made. */
         bool open (float x01, float y01) const noexcept;
+    };
+
+    /** WHERE THE CABIN'S PANEL HIDES THE VIEW, AND WHERE IT LEAVES IT BARE: the dashboard's alpha in square blocks,
+        each one COVERED — every pixel of it, and of a margin round it, opaque (255): the view under it is never seen,
+        however the panel's picture or the view is filtered near it — OPEN — every pixel of it and of its margin 0 or
+        1, under what the panel pass draws (0.004): the panel adds nothing there — or neither. Rows top first. */
+    struct PanelMask
+    {
+        static constexpr uint8_t neither = 0, covered = 1, open = 2;
+        int width = 0, height = 0;          // in blocks
+        int block = 0, coverMargin = 0, openMargin = 0;     // in the picture's pixels
+        int pictureWidth = 0, pictureHeight = 0;
+        std::vector<uint8_t> cells;
+        /** Made from straight RGBA rows, top row first; each margin counted in whole blocks, rounded up. */
+        static PanelMask of (const uint8_t* rgba, int w, int h, int block, int coverMargin, int openMargin);
+        uint8_t at (int bx, int by) const noexcept { return cells.empty() ? neither : cells[(size_t) (std::clamp (by, 0, height - 1) * width + std::clamp (bx, 0, width - 1))]; }
+    };
+
+    /** WHAT THE VIEW DRAWS LESS OF A RUNG BELOW THE TOP, as the windscreen's ladder steps the render scale down (1,
+        0.75, 0.5): at the top everything; under it (level 1) the cabin's panel flat — the dashboard alone, unmoved by
+        the water — and the light shafts marched at the scene's pixels rather than the frame's; at the foot (level 2,
+        0.5 and under) half the jellyfish as well. What goes fades out over fadeSeconds from the frame the rung
+        changes, and back in as it climbs: never a jump. The first frame starts where its rung is. */
+    struct Quality
+    {
+        static constexpr double fadeSeconds = 1.5;
+        double flat = 0, thin = 0;      // 0..1: how flat the panel is drawn, how far the thinned jellyfish are gone
+        int level = 0;
+        bool started = false;
+        static int levelOf (double scale) noexcept { return scale > 0.99 ? 0 : scale > 0.74 ? 1 : 2; }
+        /** The jellyfish a thinned view leaves out, by which it is: every second one as made, so the half that goes
+            is any half, near and far, and stays the same half as they move. */
+        static bool thinned (int id) noexcept { return (id & 1) != 0; }
+        /** Toward the rung of this scale, `seconds` after the last frame. */
+        void follow (double scale, double seconds) noexcept
+        {
+            level = levelOf (scale);
+            const double toFlat = level >= 1 ? 1 : 0, toThin = level >= 2 ? 1 : 0;
+            const double d = started ? std::max (0.0, seconds) / fadeSeconds : 1.0;
+            started = true;
+            flat += std::clamp (toFlat - flat, -d, d);
+            thin += std::clamp (toThin - thin, -d, d);
+        }
     };
 
 private:

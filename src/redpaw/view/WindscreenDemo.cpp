@@ -23,7 +23,8 @@
 // --bass=level holds a low note through the walk and --strike=seconds strikes an attack that long before its end.
 // --glass=WxH sizes the glass, any world's. The sea floor parks with --park (P toggles it), sends a bathyscaphe past
 // --sub=seconds from the start (the prototype's setPassFirst), strikes an attack --strike=seconds before the drive's
-// end, and after the drive takes one step of no time, as the prototype's first frame does (cabin.html?t=...).
+// end, and after the drive takes one step of no time, as the prototype's first frame does (cabin.html?t=...); --cabin keeps
+// the cabin the world draws itself in the STILL too, so --still writes the frame as it is seen live.
 
 #include "Windscreen.h"
 #if ORBITAMP_VIEW_DEMO_UNDERWATER
@@ -114,6 +115,51 @@ namespace
         float peak;
     };
 
+    /** A DRIVE WHOSE CABIN STAYS DRAWN, for --cabin: the STILL is the live frame, panel and all. Everything else is the
+        drive's own. */
+    class WithCabin final : public orbitamp::redpaw::Drive
+    {
+    public:
+        explicit WithCabin (std::unique_ptr<orbitamp::redpaw::Drive> d) : inner (std::move (d)) {}
+
+        void setCabin (bool) override                                 { inner->setCabin (true); }
+
+        const char* name() const noexcept override                   { return inner->name(); }
+        int numGears() const noexcept override                        { return inner->numGears(); }
+        void setGear (int g) override                                 { inner->setGear (g); }
+        void setTurbo (bool on) override                              { inner->setTurbo (on); }
+        void setSteer (float amount) override                         { inner->setSteer (amount); }
+        void setPark (bool on) override                               { inner->setPark (on); }
+        void setTempo (double bpm) override                           { inner->setTempo (bpm); }
+        void setWipers (int speed) override                           { inner->setWipers (speed); }
+        void setLights (bool l, bool r) override                      { inner->setLights (l, r); }
+        void hear (float p, float k) override                         { inner->hear (p, k); }
+        void setLit (bool on) override                                { inner->setLit (on); }
+        void step (double dt) override                                { inner->step (dt); }
+        void settle (int g, bool t) override                          { inner->settle (g, t); }
+        void placeAt (double x, double z, double h) override          { inner->placeAt (x, z, h); }
+        void setClock (double seconds, double metres) override        { inner->setClock (seconds, metres); }
+        float speed() const noexcept override                         { return inner->speed(); }
+        float speedFor (int g, bool t) const noexcept override        { return inner->speedFor (g, t); }
+        Ease ease() const noexcept override                           { return inner->ease(); }
+        orbitamp::redpaw::Mars1993::Look look1993() const noexcept override { return inner->look1993(); }
+        std::string landmarks (double metres) const override         { return inner->landmarks (metres); }
+        bool create() override                                        { return inner->create(); }
+        std::string error() const override                           { return inner->error(); }
+        void destroy() override                                       { inner->destroy(); }
+        void render (int w, int h, float sc, uint32_t target, int x, int y) override { inner->render (w, h, sc, target, x, y); }
+        float gpuMillis() const noexcept override                     { return inner->gpuMillis(); }
+        bool readFrame (std::vector<uint8_t>& rgba, int& w, int& h) override { return inner->readFrame (rgba, w, h); }
+        int frameWidth() const noexcept override                      { return inner->frameWidth(); }
+        int frameHeight() const noexcept override                     { return inner->frameHeight(); }
+        void setRepeats (int times) override                          { inner->setRepeats (times); }
+        bool drawsCabin() const override                              { return inner->drawsCabin(); }
+        bool glassAt (float x, float y) const override                { return inner->glassAt (x, y); }
+
+    private:
+        std::unique_ptr<orbitamp::redpaw::Drive> inner;
+    };
+
     struct Args
     {
         Mode mode = Mode::gpu;
@@ -124,7 +170,7 @@ namespace
         float play = 0.0f, hit = 0.0f;
         double bpm = 0, horizon = 0.40, bass = 0, strike = -1;
         int glassW = glassWidth, glassH = glassHeight;
-        bool lights = false, park = false;
+        bool lights = false, park = false, cabin = false;
         double sub = -1;
         juce::String stillFile;
 
@@ -154,6 +200,7 @@ namespace
                 else if (a.startsWith ("--hit="))    hit = value.getFloatValue();
                 else if (a == "--lights")            lights = true;
                 else if (a == "--park")              park = true;
+                else if (a == "--cabin")             cabin = true;
                 else if (a.startsWith ("--sub="))    sub = value.getDoubleValue();
                 else if (a.startsWith ("--bpm="))    bpm = value.getDoubleValue();
                 else if (a.startsWith ("--horizon=")) horizon = value.getDoubleValue();
@@ -238,7 +285,9 @@ namespace
                 std::cout << d->landmarks (findMetres);
             }
             if (hit > 0.0f)
-                return std::make_unique<Picked> (std::move (d), hit);
+                d = std::make_unique<Picked> (std::move (d), hit);
+            if (cabin)
+                d = std::make_unique<WithCabin> (std::move (d));
             return d;
         }
     };
