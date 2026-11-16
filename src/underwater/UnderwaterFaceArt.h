@@ -8,11 +8,11 @@
 namespace orbitamp::underwater
 {
 
-/** WHAT THE FACE DRAWS WITH. The dashboard is the one the world draws (view/UnderwaterArt.h): the binary carries it,
-    and the face decodes the same bytes for the frames it paints the panel itself — the CPU's landscape, the still, a
-    GPU that will not draw, a picture taken. The knobs and the faders' cap are renders of the family's, laid out in the
-    factory folder under Faces/UnderwaterBass (CMakeLists.txt: UNDERWATERBASS_RENDERS), as the walker's are, with its
-    mark and its MIDI list. A render that fails to decode leaves its image null, and its control draws a stand-in. */
+/** WHAT THE FACE DRAWS WITH, laid out in the factory folder under Faces/UnderwaterBass (CMakeLists.txt:
+    UNDERWATERBASS_RENDERS), as the walker's are: the dashboard the world draws (view/UnderwaterArt.h), which the face
+    paints itself whenever the world does not — the CPU's landscape, the still, a GPU that will not draw, a picture
+    taken; the knobs and the faders' cap, renders of the family's; its mark and its MIDI list. A render that fails to
+    decode leaves its image null, and its control draws a stand-in. */
 struct FaceArt
 {
     juce::Image bg;                 // the dashboard, its window transparent
@@ -29,7 +29,7 @@ struct FaceArt
     /** What its MIDI window lists (face/Midi.h). */
     static juce::String midiCommands();
 
-    /** Whether the renders the factory folder holds are there at all: no knobs, no face (ui/FactoryMissing.h). */
+    /** Whether its pictures are there at all: no dashboard, no face (ui/FactoryMissing.h). */
     static bool present();
 };
 

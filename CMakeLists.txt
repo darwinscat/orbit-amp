@@ -1568,10 +1568,15 @@ set(REDGROOVEBASS_SOURCES
     ${REDGROOVE_VIEW_SOURCES})       # ... looking out on the walker's forest
 
 # THE BATHYSCAPHE'S FACE (src/underwater): the family's console on the bathyscaphe's dashboard, the sea floor under the
-# whole of it. Its dashboard is the one the world draws, in the binary (UnderwaterArtData); the knobs and the faders' cap
-# are the walker's renders, its own where resources/underwater/face has one, the helicopter's otherwise — laid out in
-# the factory folder with its mark and its MIDI list.
-set(UNDERWATERBASS_RENDERS "")
+# whole of it. The world's art — the dashboard, its sea layer, the passing bathyscaphe's atlas and its table — laid out in
+# the factory folder and read at run time (src/underwater/view/UnderwaterArt.h), the face painting the same dashboard
+# where the world does not; the knobs and the faders' cap the walker's renders, its own where resources/underwater/face
+# has one, the helicopter's otherwise, with its mark and its MIDI list.
+set(UNDERWATERBASS_RENDERS
+    "${CMAKE_CURRENT_SOURCE_DIR}/resources/underwater/dashboard.webp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/resources/underwater/sea.webp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/resources/underwater/atlas.webp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/resources/underwater/sprites.txt")
 file(GLOB underwater_own CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/resources/underwater/face/*")
 foreach(render IN ITEMS mark.svg midi.txt knob-drive.webp knob-tone.webp fader-cap.webp)
     if("${CMAKE_CURRENT_SOURCE_DIR}/resources/underwater/face/${render}" IN_LIST underwater_own)
@@ -1694,8 +1699,7 @@ add_amp(UnderwaterBass CODE Uwtr   BY_NAME    BASS
     LIBRARIES
         OrbitAmpData                 # the family's mark, the notice, the disclaimer — BinaryData::*
         OrbitAmpShaders              # the sea's shaders
-        UnderwaterArtData            # the dashboard, the sea layer, the passing bathyscaphe
-        felitronics::appkit_webp     # ...decoded
+        felitronics::appkit_webp     # the world's art, decoded
         ${AMP_ENGINE_LIBRARIES}
         juce::juce_opengl            # the sea, on the GPU
     SET       ${UNDERWATERBASS_SET})

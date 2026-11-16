@@ -5,8 +5,6 @@
 
 #include "../face/Renders.h"
 
-#include <UnderwaterData.h>     // resources/underwater, as binary data: the world's and the face's dashboard
-
 namespace orbitamp::underwater
 {
 
@@ -26,7 +24,7 @@ const FaceArt& FaceArt::of()
     static const FaceArt art = []
     {
         FaceArt a;
-        a.bg        = face::renders::decodeWebp (UnderwaterData::dashboard_webp, (size_t) UnderwaterData::dashboard_webpSize);
+        a.bg        = load ("dashboard.webp");
         a.knobDrive = load ("knob-drive.webp");
         a.knobTone  = load ("knob-tone.webp");
         a.faderCap  = load ("fader-cap.webp");
@@ -47,7 +45,7 @@ juce::String FaceArt::midiCommands()
 
 bool FaceArt::present()
 {
-    return face::renders::has (product, "knob-drive.webp", folderVariable);
+    return face::renders::has (product, "dashboard.webp", folderVariable);
 }
 
 } // namespace orbitamp::underwater
