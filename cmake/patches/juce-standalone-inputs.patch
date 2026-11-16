@@ -1,0 +1,96 @@
+EVERY INPUT TO THE APP FIRST, in JUCE's standalone. Applied by cmake/PatchedWrappers.cmake to the pinned JUCE
+(ORBITAMP_JUCE_TAG, 9.0.5) after the other three; git apply reads from the first "diff --git" line on, so this text
+is not part of the patch.
+
+JUCE's standalone hands the plug-in the device's open inputs in order: the first open one is the plug-in's left, the
+second its right. To play IN 4 alone, a player had to untick inputs 1 to 3 in Audio/MIDI Settings, and no list of
+inputs could show which one a plucked string is on, since only the ticked ones reach the app at all.
+
+With this patch StandalonePluginHolder takes an InputPicker (setInputPicker, from the message thread): it gets every
+input the device has open, after the feedback mute, and writes the plug-in's inputs from them, so the app opens
+every input, meters them all, and plays the ones the player picked (felitronics-appkit's InputPick). It is handed
+the device whenever it starts, and when the picker is set, to read its open inputs, rate and block length. Without
+a picker, and in every app that sets none, the inputs go to the plug-in exactly as they did.
+
+diff --git a/modules/juce_audio_plugin_client/Standalone/juce_StandaloneFilterWindow.h b/modules/juce_audio_plugin_client/Standalone/juce_StandaloneFilterWindow.h
+index e7e5bb9..dbad7c9 100644
+--- a/modules/juce_audio_plugin_client/Standalone/juce_StandaloneFilterWindow.h
++++ b/modules/juce_audio_plugin_client/Standalone/juce_StandaloneFilterWindow.h
+@@ -428,6 +428,33 @@ public:
+         return currentInstance;
+     }
+ 
++    //==============================================================================
++    /** What the app does with the device's inputs before the plug-in hears them (juce-standalone-inputs.patch): it
++        gets every input the device has open and writes the plug-in's inputs from them. */
++    struct InputPicker
++    {
++        virtual ~InputPicker() = default;
++
++        /** The device starts, or the picker is set while it runs: its open inputs, rate and block length are those it
++            has now. Never during pick. */
++        virtual void inputsOpened (AudioIODevice& device) = 0;
++
++        /** The open inputs in (numIn, in the device's order), the plug-in's inputs out (numOut). The audio thread. */
++        virtual void pick (const float* const* in, int numIn, float* const* out, int numOut, int numSamples) noexcept = 0;
++    };
++
++    /** From the message thread. Null hands the inputs on as JUCE does. The picker outlives its being set. */
++    void setInputPicker (InputPicker* newPicker)
++    {
++        const ScopedLock sl (deviceManager.getAudioCallbackLock());
++
++        if (newPicker != nullptr)
++            if (auto* device = deviceManager.getCurrentAudioDevice())
++                newPicker->inputsOpened (*device);
++
++        inputPicker = newPicker;
++    }
++
+     //==============================================================================
+     OptionalScopedPointer<PropertySet> settings;
+     std::unique_ptr<AudioProcessor> processor;
+@@ -440,6 +467,8 @@ public:
+     std::atomic<bool> muteInput { true };
+     Value shouldMuteInput;
+     AudioBuffer<float> emptyBuffer;
++    InputPicker* inputPicker = nullptr;   // read and set under the device manager's audio callback lock
++    AudioBuffer<float> pickedBuffer;
+     bool autoOpenMidiDevices;
+ 
+     std::unique_ptr<AudioDeviceManager::AudioDeviceSetup> options;
+@@ -574,6 +603,14 @@ private:
+             inputChannelData = emptyBuffer.getArrayOfReadPointers();
+         }
+ 
++        if (inputPicker != nullptr && numSamples <= pickedBuffer.getNumSamples())
++        {
++            const auto outs = pickedBuffer.getNumChannels();
++            inputPicker->pick (inputChannelData, numInputChannels, pickedBuffer.getArrayOfWritePointers(), outs, numSamples);
++            inputChannelData = pickedBuffer.getArrayOfReadPointers();
++            numInputChannels = outs;
++        }
++
+         player.audioDeviceIOCallbackWithContext (inputChannelData,
+                                                  numInputChannels,
+                                                  outputChannelData,
+@@ -586,6 +623,11 @@ private:
+     {
+         emptyBuffer.setSize (device->getActiveInputChannels().countNumberOfSetBits(), device->getCurrentBufferSizeSamples());
+         emptyBuffer.clear();
++        pickedBuffer.setSize (getNumInputChannels(), device->getCurrentBufferSizeSamples());
++        pickedBuffer.clear();
++
++        if (inputPicker != nullptr)
++            inputPicker->inputsOpened (*device);
+ 
+         player.audioDeviceAboutToStart (device);
+         player.setMidiOutput (deviceManager.getDefaultMidiOutput());
+@@ -596,6 +638,7 @@ private:
+         player.setMidiOutput (nullptr);
+         player.audioDeviceStopped();
+         emptyBuffer.setSize (0, 0);
++        pickedBuffer.setSize (0, 0);
+     }
+ 
+     //==============================================================================
