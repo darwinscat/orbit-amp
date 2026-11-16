@@ -10,7 +10,7 @@ namespace orbitamp::underwater
 
 namespace
 {
-    constexpr const char* product = "UnderwaterBass";
+    constexpr const char* product = "DeepGrooveBass";
     constexpr const char* folderVariable = "UNDERWATER_ART_DIR";
 
     juce::Image load (const char* name)

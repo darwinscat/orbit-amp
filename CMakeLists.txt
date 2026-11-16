@@ -1015,19 +1015,19 @@ add_custom_target(OrbitAmpSetPacks DEPENDS ${ORBITAMP_SET_PACKS})
 
 # THE BASS'S PACKS, which no guitar amp plays — a guitar amp's packs and a bass amp's never cross, as their
 # cabinets do not (resources/cabinets.txt). OrbitBass plays them and opens on the first; RedGrooveBass's two
-# channels, B15 and SVT, are the SGT-DI's two voices (src/redgroove/RedGrooveLineup.cpp). UnderwaterBass's three, CLEAN,
+# channels, B15 and SVT, are the SGT-DI's two voices (src/redgroove/RedGrooveLineup.cpp). DeepGrooveBass's three, CLEAN,
 # DIRT and DRIVE, play the SGT-DI too, TEMPORARILY, until the Two Notes bass's captures are in the set
 # (src/underwater/UnderwaterLineup.cpp).
 set(ORBITBASS_SET   "Ampeg SGT-DI")
 set(REDGROOVEBASS_SET "Ampeg SGT-DI")
-set(UNDERWATERBASS_SET "Ampeg SGT-DI")
+set(DEEPGROOVEBASS_SET "Ampeg SGT-DI")
 
 # WHAT ORBITAMP PLAYS: every pack in resources/set/Devices but the bass's — every folder there, zipped — the
 # X88-IR's, the IR-X's, the ReVolt's and the V4's, each one file in the family's folder whichever amps play it. A
 # guitar pack added there is OrbitAmp's from the next build on, with nobody to remember to list it; a pack the
 # tree keeps but OrbitAmp should not play has no place in resources/set/Devices, or is a bass amp's.
 set(ORBITAMP_PLAYS ${ORBITAMP_SET_NAMES})
-list(REMOVE_ITEM ORBITAMP_PLAYS ${ORBITBASS_SET} ${REDGROOVEBASS_SET} ${UNDERWATERBASS_SET})
+list(REMOVE_ITEM ORBITAMP_PLAYS ${ORBITBASS_SET} ${REDGROOVEBASS_SET} ${DEEPGROOVEBASS_SET})
 
 # WHAT EACH OTHER AMP PLAYS of the set, said once — its row in THE AMPS names it by these.
 set(CATPITAMP_SET   "Soldano X88-IR Normal" "Soldano X88-IR Altered" "Soldano X88-IR Crunch" "Soldano X88-IR Overdrive")
@@ -1572,7 +1572,7 @@ set(REDGROOVEBASS_SOURCES
 # the factory folder and read at run time (src/underwater/view/UnderwaterArt.h), the face painting the same dashboard
 # where the world does not; the knobs and the faders' cap the walker's renders, its own where resources/underwater/face
 # has one, the helicopter's otherwise, with its mark and its MIDI list.
-set(UNDERWATERBASS_RENDERS
+set(DEEPGROOVEBASS_RENDERS
     "${CMAKE_CURRENT_SOURCE_DIR}/resources/underwater/dashboard.webp"
     "${CMAKE_CURRENT_SOURCE_DIR}/resources/underwater/sea.webp"
     "${CMAKE_CURRENT_SOURCE_DIR}/resources/underwater/atlas.webp"
@@ -1580,12 +1580,12 @@ set(UNDERWATERBASS_RENDERS
 file(GLOB underwater_own CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/resources/underwater/face/*")
 foreach(render IN ITEMS mark.svg midi.txt knob-drive.webp knob-tone.webp fader-cap.webp)
     if("${CMAKE_CURRENT_SOURCE_DIR}/resources/underwater/face/${render}" IN_LIST underwater_own)
-        list(APPEND UNDERWATERBASS_RENDERS "${CMAKE_CURRENT_SOURCE_DIR}/resources/underwater/face/${render}")
+        list(APPEND DEEPGROOVEBASS_RENDERS "${CMAKE_CURRENT_SOURCE_DIR}/resources/underwater/face/${render}")
     else()
-        list(APPEND UNDERWATERBASS_RENDERS "${CMAKE_CURRENT_SOURCE_DIR}/resources/amberpaw/${render}")
+        list(APPEND DEEPGROOVEBASS_RENDERS "${CMAKE_CURRENT_SOURCE_DIR}/resources/amberpaw/${render}")
     endif()
 endforeach()
-set(UNDERWATERBASS_SOURCES
+set(DEEPGROOVEBASS_SOURCES
     ${FACE_SOURCES}
     src/redgroove/RedGrooveControls.cpp     # the walker's lever, switches, cabinet slider and readings
     src/underwater/UnderwaterEditor.cpp
@@ -1690,19 +1690,19 @@ add_amp(RedGrooveBass CODE Rgrv    BY_NAME    BASS
         juce::juce_opengl            # the dome, on the GPU
     SET       ${REDGROOVEBASS_SET})
 
-# UnderwaterBass — a working name: the bathyscaphe DC-744, a bass amp in its sphere over the sea floor (src/underwater)
+# DeepGrooveBass — the bathyscaphe DC-744, a bass amp in its sphere over the sea floor (src/underwater)
 # — the family's console over the bass's chain (Chain::bass), driven as channels: three, CLEAN, DIRT and DRIVE, its
 # gears, PARK the amp's bypass; Darwin's Cat's own cabinets. Not in the family's release, and asked for by name.
-add_amp(UnderwaterBass CODE Uwtr   BY_NAME    BASS
-    ART       ${UNDERWATERBASS_RENDERS}
-    SOURCES   ${UNDERWATERBASS_SOURCES}
+add_amp(DeepGrooveBass CODE Dgrv   BY_NAME    BASS
+    ART       ${DEEPGROOVEBASS_RENDERS}
+    SOURCES   ${DEEPGROOVEBASS_SOURCES}
     LIBRARIES
         OrbitAmpData                 # the family's mark, the notice, the disclaimer — BinaryData::*
         OrbitAmpShaders              # the sea's shaders
         felitronics::appkit_webp     # the world's art, decoded
         ${AMP_ENGINE_LIBRARIES}
         juce::juce_opengl            # the sea, on the GPU
-    SET       ${UNDERWATERBASS_SET})
+    SET       ${DEEPGROOVEBASS_SET})
 
 # ----------------------------------------------------------------------------
 # THE FACES' GATES — in the gates binary, with every other (THE GATES BINARY, below); amp_console builds an amp

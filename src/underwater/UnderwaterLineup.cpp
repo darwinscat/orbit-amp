@@ -38,7 +38,7 @@ const channels::Lineup& lineup()
 {
     // THE THREE GEARS, CLEAN, DIRT AND DRIVE: the Two Notes bass the owner captured, a channel each — its captures are
     // being trained (16.11). Until they are in the set, every gear plays the walker's Ampeg SGT-DI, a voice each,
-    // TEMPORARILY, so the face has a sound under it (CMakeLists.txt: UNDERWATERBASS_SET).
+    // TEMPORARILY, so the face has a sound under it (CMakeLists.txt: DEEPGROOVEBASS_SET).
     //
     // EACH GEAR IS AN AMP OF ITS OWN: beside what every channel keeps — DRIVE, the tones, the room, the cabinet — its
     // BLEND and its three effects' amounts. BLEND is DIRT's and DRIVE's; CLEAN has none, and stands at the capture alone
@@ -105,14 +105,14 @@ namespace
     }
 }
 
-/** UNDERWATERBASS (Product.h), a working name: the bathyscaphe DC-744 — its face (underwater/UnderwaterEditor.h) over
+/** DEEPGROOVEBASS (Product.h), the owner's name (16.11): the bathyscaphe DC-744 — its face (underwater/UnderwaterEditor.h) over
     its three channels and the bass's chain (Chain::bass), its tuner down to a drop-A's A0, its sea answering the bass
     from the first note as the walker's forest does. No first start: it has no player's files of before to gather. */
-const Product& products::underwaterBass()
+const Product& products::deepGrooveBass()
 {
     static const Product sub = []
     {
-        Product p { "UnderwaterBass", underwater::makeEditor };
+        Product p { "DeepGrooveBass", underwater::makeEditor };
         p.addParameters = addParameters;
         p.makeEngine    = makeEngine;
         p.opening       = opening;
@@ -130,6 +130,6 @@ const Product& products::underwaterBass()
 #if ORBITAMP_PLUGIN_ENTRY
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()
 {
-    return new orbitamp::AmpProcessor (orbitamp::products::underwaterBass());
+    return new orbitamp::AmpProcessor (orbitamp::products::deepGrooveBass());
 }
 #endif

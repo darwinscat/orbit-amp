@@ -127,7 +127,7 @@ void addBassParameters (juce::AudioProcessorValueTreeState::ParameterLayout& lay
                                           hz (200.0f, 500.0f, 300.0f), 200.0f));
 
     // IN THE STRIP OR NOT (Parameters.h): the three effects in, the echo and the room out — a player adds them through
-    // the strip's checklist — unless the product's Opening says otherwise (UnderwaterBass: no ENVELOPE, the room in).
+    // the strip's checklist — unless the product's Opening says otherwise (DeepGrooveBass: no ENVELOPE, the room in).
     layout.add (std::make_unique<Bool> (juce::ParameterID { octavePresent, 1 }, "Octave In Strip", true),
                 std::make_unique<Bool> (juce::ParameterID { filterPresent, 1 }, "Envelope In Strip", opening.filterPresent),
                 std::make_unique<Bool> (juce::ParameterID { chorusPresent, 1 }, "Chorus In Strip", true),

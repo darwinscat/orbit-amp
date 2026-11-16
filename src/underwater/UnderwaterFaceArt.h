@@ -8,8 +8,8 @@
 namespace orbitamp::underwater
 {
 
-/** WHAT THE FACE DRAWS WITH, laid out in the factory folder under Faces/UnderwaterBass (CMakeLists.txt:
-    UNDERWATERBASS_RENDERS), as the walker's are: the dashboard the world draws (view/UnderwaterArt.h), which the face
+/** WHAT THE FACE DRAWS WITH, laid out in the factory folder under Faces/DeepGrooveBass (CMakeLists.txt:
+    DEEPGROOVEBASS_RENDERS), as the walker's are: the dashboard the world draws (view/UnderwaterArt.h), which the face
     paints itself whenever the world does not — the CPU's landscape, the still, a GPU that will not draw, a picture
     taken; the knobs and the faders' cap, renders of the family's; its mark and its MIDI list. A render that fails to
     decode leaves its image null, and its control draws a stand-in. */

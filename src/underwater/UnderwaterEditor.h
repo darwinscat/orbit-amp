@@ -37,7 +37,7 @@ private:
 };
 
 //==============================================================================
-/** UNDERWATERBASS'S FACE over OrbitAmp's processor: the family's console (face/Console.h) laid out on the
+/** DEEPGROOVEBASS'S FACE over OrbitAmp's processor: the family's console (face/Console.h) laid out on the
     bathyscaphe's dashboard, the sea floor under the whole of it, its channels the bass's three gears. What it has of
     the console's own: DRIVE, the tones, the six keys of the history and the registers, IN and OUT, GATE and LIMITER, the
     tuner, the maker's plate; what it has not: the REVERB, DELAY and CAB plates and the HPF and LPF keys

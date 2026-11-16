@@ -77,7 +77,7 @@ namespace
             { products::frostPawAmp(), &redpaw::skinOf (products::frostPawAmp()).lineup },
             { products::amberPawAmp(), &redpaw::skinOf (products::amberPawAmp()).lineup },
             { products::redGrooveBass(), &redgroove::lineup() },
-            { products::underwaterBass(), &underwater::lineup() },
+            { products::deepGrooveBass(), &underwater::lineup() },
         };
     }
 
@@ -338,7 +338,7 @@ int ORBITAMP_GATE_MAIN()
 
         // ...THE BASS AMPS, OrbitBass and the walker alike: none of the shelf, whatever the number; their player's IRs in
         // `Bass IRs` — the walker's cabinets drawn besides (channels::Lineup::drawnCabinets), no file at all.
-        for (const auto* bass : { &products::orbitBass(), &products::redGrooveBass(), &products::underwaterBass() })
+        for (const auto* bass : { &products::orbitBass(), &products::redGrooveBass(), &products::deepGrooveBass() })
         {
             bool none = cabinetsOn (*bass) == 0;
             for (int i = 0; i < params::cabIrNames.size(); ++i)

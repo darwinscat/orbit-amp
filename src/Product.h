@@ -149,7 +149,7 @@ const Product& frostPawAmp();
 const Product& amberPawAmp();
 const Product& orbitBass();
 const Product& redGrooveBass();
-const Product& underwaterBass();
+const Product& deepGrooveBass();
 } // namespace products
 
 } // namespace orbitamp
