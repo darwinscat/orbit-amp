@@ -483,7 +483,9 @@ UnderwaterEditor::UnderwaterEditor (AmpProcessor& p)
     view->setBounds (layout::view.toNearestInt());
     view->addMouseListener (&glassClicks, false);
     glassClicks.menu = [this] { showWindowMenu(); };
-    cabin().worldDrawsPanel = [this] { return view->drawsCabin(); };
+    // ...the panel the world's while it is drawing it — and not while the view is hidden for a picture taken of the face
+    // (Console::writePoster): the face's own panel goes into that.
+    cabin().worldDrawsPanel = [this] { return view->isVisible() && view->drawsCabin(); };
 
     park.sendInitialUpdate();
     showChannel();
@@ -620,6 +622,142 @@ void UnderwaterEditor::stripsLaid (const face::Strips& laid)
                         layout::ringWidth * laid.toneScale);
         ring.setVisible (shown);
     }
+}
+
+/** THE BATHYSCAPHE'S OWN PART OF THE SITE'S DEMO (Console::webExtras), in the walker's words and no others: under
+    places.json's "world", the box the sea is drawn in — the whole stage — and every control the console has not already
+    said: the lever, its places the three gears (the site has no PARK: the app's top stop is not written), the rings, the
+    four columns — BLEND, OCTAVE, CHORUS, REVERB — the cuts' two switches, the cabinet's screen and the readings, each
+    with the parameter it moves and how. The cabin is the console's own, the dashboard in it: on the site the world draws
+    behind the glass alone. No still: the posters carry the sea's first frame. */
+void UnderwaterEditor::webExtras (const juce::File&, juce::DynamicObject& kit, juce::DynamicObject& world)
+{
+    using Obj = juce::DynamicObject;
+    const auto rect = [] (juce::Rectangle<float> r)
+    {
+        auto* o = new Obj();
+        o->setProperty ("x", r.getX()); o->setProperty ("y", r.getY());
+        o->setProperty ("w", r.getWidth()); o->setProperty ("h", r.getHeight());
+        return juce::var (o);
+    };
+    const auto point = [] (juce::Point<float> p) { auto* o = new Obj(); o->setProperty ("x", p.x); o->setProperty ("y", p.y); return juce::var (o); };
+    const auto boxOf = [] (const juce::Component& c) { return c.getBoundsInParent().toFloat(); };
+    const auto list = [] (std::initializer_list<juce::var> items) { juce::Array<juce::var> a; for (const auto& v : items) a.add (v); return juce::var (a); };
+
+    world.setProperty ("dome", rect (layout::view));
+    world.setProperty ("gears", channels.count());
+    world.setProperty ("channelGears", list ({ 1, 2, 3 }));     // CLEAN the first, DIRT the second, DRIVE the third; no TURBO
+
+    // THE LEVER: its places top to bottom — the gears, PARK left out — the slot it runs in, each name where it stands.
+    {
+        auto* l = new Obj();
+        l->setProperty ("box", rect (boxOf (lever)));
+        l->setProperty ("slotX", layout::leverX);
+        juce::Array<juce::var> stops, names;
+        const auto centres = leverNameCentres();
+        for (size_t i = 1; i < layout::leverStops.size(); ++i)
+        {
+            stops.add (layout::leverStops[i]);
+            auto* n = new Obj();
+            n->setProperty ("name", leverWords[(int) i]); n->setProperty ("at", point (centres[i]));
+            names.add (juce::var (n));
+        }
+        l->setProperty ("stops", stops);
+        l->setProperty ("names", names);
+        l->setProperty ("capWidth", redgroove::ChannelLever::capWidth);
+        l->setProperty ("capHeight", redgroove::ChannelLever::capHeight);
+        l->setProperty ("does", "the channel: place i is channel i (the lineup's), its gear i + 1");
+        world.setProperty ("lever", l);
+    }
+
+    // THE RINGS: DRIVE's and the tones' (the console's knobs) — the cabin has no knob of its own.
+    {
+        world.setProperty ("knobs", juce::Array<juce::var>());
+        auto* r = new Obj();
+        r->setProperty ("inset", layout::ringInset); r->setProperty ("width", layout::ringWidth); r->setProperty ("driveWidth", layout::driveRingWidth);
+        r->setProperty ("sockets", list ({ juce::var ("drive"), juce::var ("tones") }));
+        world.setProperty ("rings", r);
+        world.setProperty ("knobNameY", layout::nameY);
+    }
+
+    // THE COLUMNS: BLEND, then the three effects' amounts, upright, the fader cap's render.
+    {
+        struct F { const char* id; const char* name; const juce::Component* c; const char* param; const char* travel; };
+        const F faders[] {
+            { "blend",  "BLEND",  &blend,  params::ampBlend,     "the value, 0..1, bottom to top" },
+            { "octave", "OCTAVE", &octave, params::octaveAmount, "the value, 0..1, bottom to top" },
+            { "chorus", "CHORUS", &chorus, params::chorusAmount, "the value, 0..1, bottom to top" },
+            { "reverb", "REVERB", &reverb, params::reverbMix,    "the value / 100, bottom to top" } };
+        juce::Array<juce::var> a;
+        for (const auto& f : faders)
+        {
+            auto* v = new Obj();
+            v->setProperty ("id", f.id); v->setProperty ("name", f.name); v->setProperty ("box", rect (boxOf (*f.c)));
+            v->setProperty ("sprite", "fader-cap"); v->setProperty ("capLength", layout::faderCapLength);
+            v->setProperty ("param", f.param); v->setProperty ("travel", f.travel); v->setProperty ("reading", "percent");
+            a.add (juce::var (v));
+        }
+        world.setProperty ("columns", a);
+    }
+
+    // THE CUTS' SWITCHES: two positions each, a word over each, the one it stands at lit; the parameter's value is the position.
+    {
+        struct S { const char* id; const redgroove::SlideSwitch* sw; const char* left; const char* right; const char* param; };
+        const S switches[] { { "lowCut", &lowCut, "5 STR", "4 STR", params::bassHpf }, { "highCut", &highCut, "FINGERS", "SLAP", params::bassLpf } };
+        juce::Array<juce::var> a;
+        for (const auto& w : switches)
+        {
+            auto* v = new Obj();
+            const auto box = boxOf (*w.sw);
+            v->setProperty ("id", w.id); v->setProperty ("box", rect (box)); v->setProperty ("slot", rect (w.sw->slot + box.getPosition()));
+            v->setProperty ("wordsY", w.sw->wordsY + box.getY()); v->setProperty ("wordRoom", w.sw->wordRoom);
+            v->setProperty ("words", list ({ juce::var (w.left), juce::var (w.right) }));
+            v->setProperty ("param", w.param); v->setProperty ("values", list ({ 0, 1 }));
+            a.add (juce::var (v));
+        }
+        world.setProperty ("switches", a);
+    }
+
+    // THE CABINET'S SCREEN.
+    {
+        auto* c = new Obj();
+        c->setProperty ("box", rect (boxOf (cabinet))); c->setProperty ("shows", "the playing cabinet's name, a list on a click");
+        world.setProperty ("cabinetScreen", c);
+    }
+
+    // THE READINGS, each under its control, in the order the face makes them: the box and how it writes the value.
+    {
+        struct R { const char* id; const char* format; };
+        const R names[] { { "drive", "the dial, 0.0..10.0" }, { "blend", "percent: 30%" }, { "in", "dB, a tenth: +1.5 dB, 0.0 dB" },
+                          { "out", "dB, a tenth" }, { "octave", "percent" }, { "chorus", "percent" }, { "reverb", "percent" },
+                          { "tone0", "dB, a tenth" }, { "tone1", "dB, a tenth" }, { "tone2", "dB, a tenth" } };
+        juce::Array<juce::var> a;
+        for (size_t i = 0; i < readouts.size() && i < std::size (names); ++i)
+        {
+            auto* v = new Obj();
+            v->setProperty ("id", names[i].id); v->setProperty ("box", rect (boxOf (*readouts[i]))); v->setProperty ("format", names[i].format);
+            a.add (juce::var (v));
+        }
+        world.setProperty ("readings", a);
+        world.setProperty ("readingPx", stage::px13);
+    }
+
+    kit.setProperty ("window", rect (layout::view));
+    kit.setProperty ("stills", juce::Array<juce::var>());
+
+    webPoses.count = channels.count();
+    webPoses.opening = channels.active();
+    webPoses.standAt = [this] (int at) { go (at); };
+    webPoses.firstFrame = [this] (int, std::function<void (juce::Image)> done)
+    {
+        const auto box = layout::view * 2.0f;
+        view->firstFrame (makeDrive(), juce::roundToInt (box.getWidth()), juce::roundToInt (box.getHeight()), std::move (done));
+    };
+    webPoses.live = "the sea's first frame for the channel, behind the glass alone: the bathyscaphe on the GPU from its world's "
+                    "start, in the channel's gear, settled, nothing stepped (t = 0); the top poster is the channel the app opens at";
+    webPoses.still = [] (int) { return juce::Image(); };
+    webPoses.window = layout::view;
+    webPoses.hidden = { view.get() };
 }
 
 //==============================================================================

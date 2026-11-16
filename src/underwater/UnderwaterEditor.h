@@ -110,6 +110,7 @@ private:
     void showPark (bool on);
     bool channelKey (const juce::KeyPress&) override;
     void stripsLaid (const face::Strips&) override;
+    void webExtras (const juce::File& dir, juce::DynamicObject& kit, juce::DynamicObject& world) override;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (UnderwaterEditor)
 };
