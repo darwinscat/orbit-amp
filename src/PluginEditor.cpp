@@ -3,6 +3,7 @@
 
 #include "PluginEditor.h"
 
+#include "StandaloneInputs.h"
 #include "ui/HumMenu.h"
 #include "ui/HumTuning.h"
 #include "ui/Prefs.h"
@@ -43,6 +44,7 @@ AmpEditor::AmpEditor (AmpProcessor& p)
       tunerStrip (p.tunerEar, p.tunerStrobe, p.tunerPoly), footer (p), demoStrip (p), setup (p)
 {
     setWantsKeyboardFocus (true);
+    standaloneInputs::start();   // the standalone's inputs by number, once a run (StandaloneInputs.h)
 
     addAndMakeVisible (chrome);
     addAndMakeVisible (faceplate);
@@ -593,10 +595,17 @@ void AmpEditor::showInputMenu (juce::Point<int> screenPos)
 {
     juce::PopupMenu m;
 
-    // WHICH INPUT: Left, Right, L+R, where the bus has two — greyed in STEREO, which plays both, each through its own
+    // WHICH INPUT: in the standalone, the interface's inputs by number, each with its meter (StandaloneInputs.h);
+    // inside a host Left, Right, L+R, where the bus has two — greyed in STEREO, which plays both, each through its own
     // amp. They answer as inputItem + their index.
-    const bool inputs = amp.getTotalNumInputChannels() >= 2;
-    if (inputs)
+    const bool listed = standaloneInputs::listed();
+    const bool inputs = listed || amp.getTotalNumInputChannels() >= 2;
+    if (listed)
+    {
+        m.addSectionHeader ("IN  " + standaloneInputs::state());
+        standaloneInputs::addTo (m, true);
+    }
+    else if (inputs)
     {
         const bool chooses = amp.choosesInput();
         m.addSectionHeader (chooses ? juce::String ("IN") : juce::String ("IN  BOTH, IN STEREO"));

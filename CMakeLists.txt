@@ -1305,6 +1305,7 @@ set(ORBITAMP_SOURCES
     src/PluginEditor.cpp
     src/OrbitAmpStart.cpp
     src/Parameters.cpp
+    src/StandaloneInputs.cpp
     src/ui/Theme.cpp
     src/ui/FaceplateView.cpp
     src/ui/CapturedBlockPanel.cpp
@@ -1335,6 +1336,7 @@ list(APPEND ORBITBASS_SOURCES src/OrbitBassStart.cpp)
 set(FACE_SOURCES
     src/PluginProcessor.cpp
     src/Parameters.cpp
+    src/StandaloneInputs.cpp
     src/ui/Theme.cpp
     src/core/ProcessMemory.cpp
     src/channels/Channels.cpp
