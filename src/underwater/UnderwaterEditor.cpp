@@ -259,8 +259,8 @@ UnderwaterEditor::UnderwaterEditor (AmpProcessor& p)
       blend (FaceArt::of().faderCap), octave (FaceArt::of().faderCap), chorus (FaceArt::of().faderCap), reverb (FaceArt::of().faderCap),
       frozenTone (FaceArt::of().knobTone, tonePointer),
       lever (cabinInk(), leverWords, layout::leverStops, layout::leverX, leverNameCentres(), layout::leverBox.getPosition()),
-      lowCut (cabinInk(), "STR", "4", "5", 2, true),
-      highCut (cabinInk(), "STYL", "F", "S"),
+      lowCut (cabinInk(), {}, "4 STR", "5 STR", 2, true),     // the words either side, no name before them (the owner, 17.11)
+      highCut (cabinInk(), {}, "FING", "SLAP"),
       cabinet (cabinInk(), FaceArt::of().faderCap, layout::faderCapLength, layout::faderCapSquash),
       park (p.bypassParameter(), [this] (float v) { showPark (v > 0.5f); }, nullptr)
 {
@@ -411,6 +411,8 @@ UnderwaterEditor::UnderwaterEditor (AmpProcessor& p)
     // on either its positions' frequencies.
     const auto lineAt = [this] (redgroove::SlideSwitch& sw, juce::Rectangle<float> slotOnStage)
     {
+        sw.nameRoom = 0.0f;
+        sw.wordRoom = 48.0f;
         const float left = sw.nameRoom + sw.wordRoom + 6.0f, right = sw.wordRoom + 6.0f;
         const auto box = juce::Rectangle<float> (slotOnStage.getX() - left, slotOnStage.getY() - 3.0f,
                                                  left + slotOnStage.getWidth() + right, slotOnStage.getHeight() + 6.0f);
