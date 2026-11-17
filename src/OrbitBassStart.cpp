@@ -21,8 +21,8 @@ namespace
         are out of the strip (params::delayPresent, reverbPresent) — not in its sound or on its face until a player adds
         them — and their switches ON, so one added plays at once. The gate stays off, as every amp's does. Its cuts are
         its own stage, not the cabinet's (params::bassHpf: the HPF at 5, a low B whole; the LPF at FINGERS), so the
-        cabinet's own stay off and its IR plays as it was shot. The pack it opens on is the first of its list, which is
-        its only one (CMakeLists.txt: ORBITBASS_SET). MIDDLE's frequency opens at 1 kHz, as the walker's (the owner,
+        cabinet's own stay off and its IR plays as it was shot. The pack it opens on is the first of its list, the SGT-DI,
+        the ReVolt Bass's three after it (CMakeLists.txt: ORBITBASS_SET). MIDDLE's frequency opens at 1 kHz, as the walker's (the owner,
         10.11) — INIT and a double click on MID FREQ bring it back there. */
     void bassOpening (const Product&, params::Opening& o)
     {
