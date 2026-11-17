@@ -46,8 +46,9 @@ const channels::Lineup& lineup()
     // CLEAN has none, and stands at the capture alone (16.11). The instrument and the hand are the player's on every gear: 5 STR / 4 STR and FINGERS / SLAP
     // are kept by no channel.
     //
-    // WHAT THE BATHYSCAPHE HOLDS WHERE IT IS: no COMP and no ENVELOPE (its effects are OCTAVE, CHORUS and REVERB, the
-    // owner, 16.11); OCTAVE and CHORUS in the strip and on, their faders their amounts, 0 the dry; the room in the strip
+    // WHAT THE BATHYSCAPHE HOLDS WHERE IT IS: COMP on, three quarters of the signal through it at 4:1 on OPTO, its fader
+    // the threshold alone (the owner, 17.11, as the walker's knob); no ENVELOPE (its effects are OCTAVE, CHORUS and REVERB,
+    // 16.11); OCTAVE and CHORUS in the strip and on, their faders their amounts, 0 the dry; the room in the strip
     // and on, its fader its share; both cuts on, the switches choosing between their positions; no delay.
     static const channels::Lineup sub {
         "underwater", "underwater_channel", "4x10-classic",
@@ -58,10 +59,13 @@ const channels::Lineup& lineup()
         },
         false,
         {
-            params::ampBlend, params::octaveAmount, params::chorusAmount,
+            params::ampBlend, params::octaveAmount, params::chorusAmount, params::compThreshold,
         },
         {
-            { params::compOn,        0.0f },
+            { params::compOn,        1.0f },     // COMP (the owner, 17.11): on, three quarters through it at 4:1 on OPTO
+            { params::compAmount,    0.75f },
+            { params::compRatio,     4.0f },
+            { params::compCharacter, (float) params::compCharacters.indexOf ("Opto") },
             { params::octavePresent, 1.0f }, { params::octaveOn, 1.0f },
             { params::filterPresent, 0.0f },
             { params::chorusPresent, 1.0f }, { params::chorusOn, 1.0f },

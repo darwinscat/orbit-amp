@@ -84,16 +84,20 @@ inline constexpr float leverStopX = 240.0f;
 inline constexpr float leverNameLeft = 247.0f, leverNameRoom = 39.0f;               // the names beside the stops, short of DRIVE
 inline const juce::Rectangle<float> leverBox { 188.0f, 797.0f, 104.0f, 122.0f };
 
-inline const juce::Point<float> drive { 350.0f, 849.8f };
+inline const juce::Point<float> drive { 465.0f, 849.8f };
 inline constexpr float driveSocket = 112.0f, driveKnob = 97.0f;
-inline const juce::Rectangle<float> blendSlot = socket (484.0f, 849.8f, 16.0f, 78.5f);
+inline const juce::Rectangle<float> blendSlot = socket (564.0f, 849.8f, 16.0f, 78.5f);
+
+// COMP (the owner, 17.11): its fader — the threshold alone — and its squeeze's column beside it, between the lever and DRIVE.
+inline const juce::Rectangle<float> compSlot   = socket (331.0f, 849.8f, 16.0f, 78.5f);
+inline const juce::Rectangle<float> compGrSlot = socket (356.0f, 849.8f, 14.0f, 78.5f);
 
 // TONE: three sockets, BASS, MIDDLE and TREBLE.
-inline constexpr std::array<float, 3> toneX { 602.0f, 710.0f, 818.0f };
+inline constexpr std::array<float, 3> toneX { 694.0f, 784.0f, 874.0f };
 inline constexpr float toneY = 845.8f, toneSocket = 80.0f, toneKnob = 66.0f;
 
 // THE EFFECTS: OCTAVE, CHORUS and REVERB, a vertical fader in each slot.
-inline constexpr std::array<float, 3> effectX { 948.0f, 1042.0f, 1136.0f };
+inline constexpr std::array<float, 3> effectX { 993.0f, 1068.0f, 1143.0f };
 inline constexpr float effectY = 849.8f, effectSlotHeight = 78.5f, effectFaderWidth = 44.0f;
 
 inline constexpr float ringInset = 3.5f, ringWidth = 2.5f, driveRingWidth = 3.0f;

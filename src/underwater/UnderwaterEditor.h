@@ -87,6 +87,11 @@ private:
     // THE BASS'S OWN CONTROLS: BLEND, and the three effects' amounts, 0 the dry. A double click puts any of them back
     // where it opens.
     face::ColumnFader blend, octave, chorus, reverb;
+
+    // COMP (the owner, 17.11): a fader that is its threshold alone, 0 at the foot to -48 dB at the head, its ratio, its
+    // character and its share the cabin's to hold (channels::Lineup::pinned) — and its squeeze in a column beside it.
+    face::ColumnFader comp;
+    redgroove::GrColumn squeeze;
     std::vector<std::unique_ptr<face::KnobRing>> rings;     // DRIVE's, then the tones'
     static constexpr size_t firstToneRing = 1;
     std::vector<std::unique_ptr<redgroove::Readout>> readouts;

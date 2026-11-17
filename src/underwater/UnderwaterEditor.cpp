@@ -101,6 +101,7 @@ namespace
 
     juce::String dbTenth (float v) { return (v > 0.04f ? "+" : "") + juce::String (v, 1) + " dB"; }
     juce::String percent (float share) { return juce::String (juce::roundToInt (share * 100.0f)) + "%"; }
+    juce::String dbWhole (float v) { return juce::String (juce::roundToInt (v)) + " dB"; }
 
     /** A PACK'S DIAL in decibels where its tone slot stands (0..1), as the rig player plays it — the walker's reading. */
     float dialDb (const namz::rig::Tone& tone, float v)
@@ -245,9 +246,10 @@ void Cabin::paintStatic (juce::Graphics& g, float scale) const
     // dims (darwinscat-com-35, 17.11).
     if (onScreen)
         print (g, "BLEND", { blendSlot.getCentreX(), nameY }, px12, blendDark != nullptr && blendDark() ? ink.at (nameInk, 0.35f) : nameInk);
-    const char* effects[] { "OCTAVE", "CHORUS", "REVERB" };
+    print (g, "COMP", { compSlot.getCentreX(), nameY }, px12, nameInk);
+    const char* effects[] { "OCT", "CHR", "REV" };     // short, the panel narrower (the owner, 17.11)
     for (size_t i = 0; i < effectX.size(); ++i)
-        printInto (g, effects[i], { effectX[i], nameY }, 80.0f, px12, nameInk);
+        printInto (g, effects[i], { effectX[i], nameY }, 60.0f, px12, nameInk);
 }
 
 /** THE PLAYING CHANNEL'S TONES' NAMES over their knobs. */
@@ -263,6 +265,8 @@ UnderwaterEditor::UnderwaterEditor (AmpProcessor& p)
     : face::Console (p, std::make_unique<Cabin>(), cabinPlaces(), cabinLook()),
       view (std::make_unique<redpaw::Windscreen> (makeDrive())),
       blend (FaceArt::of().faderCap), octave (FaceArt::of().faderCap), chorus (FaceArt::of().faderCap), reverb (FaceArt::of().faderCap),
+      comp (FaceArt::of().faderCap),
+      squeeze ([&p] { return p.compGrDb.load (std::memory_order_relaxed); }),
       frozenTone (FaceArt::of().knobTone, tonePointer),
       lever (cabinInk(), leverWords, layout::leverStops, layout::leverX, leverNameCentres(), layout::leverBox.getPosition()),
       lowCut (cabinInk(), {}, "4 STR", "5 STR", 2, true),     // the words either side, no name before them (the owner, 17.11)
@@ -340,6 +344,11 @@ UnderwaterEditor::UnderwaterEditor (AmpProcessor& p)
     for (size_t i = 0; i < 3; ++i)
         faderIn (*effectFaders[i], around ({ layout::effectX[i], layout::effectY }, layout::effectFaderWidth, layout::effectSlotHeight));
 
+    faderIn (comp, layout::compSlot.withSizeKeepingCentre (layout::faderWidth, layout::compSlot.getHeight()));
+    addToStage (squeeze);
+    squeeze.setBounds (layout::compGrSlot.reduced (2.0f, 4.0f).toNearestInt());   // inside the render's slot, as the meters are
+    comp.setComponentID ("comp");
+    squeeze.setComponentID ("squeeze");
     blend.setComponentID ("blend");
     octave.setComponentID ("octave");
     chorus.setComponentID ("chorus");
@@ -372,6 +381,10 @@ UnderwaterEditor::UnderwaterEditor (AmpProcessor& p)
                 follow (id.toRawUTF8(), [this] (float) { showToneReadings(); });
             }
     showToneReadings();
+    auto& compValue = readout (under (layout::compSlot.getCentreX(), layout::valueY, 84.0f));
+    bindTravel (comp, params::compThreshold, [] (float db) { return db / params::compThresholdMin; },
+                [] (float t) { return t * params::compThresholdMin; }, [&compValue] (float db) { compValue.set (dbWhole (db)); });
+    sayLeverAs (comp, "COMP", [this] { return dbWhole (getParam (params::compThreshold)); });
     follow (params::inTrim,  [&inValue]  (float v) { inValue.set (dbTenth (v)); })->sendInitialUpdate();
     follow (params::outTrim, [&outValue] (float v) { outValue.set (dbTenth (v)); })->sendInitialUpdate();
 
@@ -747,6 +760,7 @@ void UnderwaterEditor::webExtras (const juce::File& dir, juce::DynamicObject& ki
     {
         struct F { const char* id; const char* name; const juce::Component* c; const char* param; const char* travel; };
         const F faders[] {
+            { "comp",   "COMP",   &comp,   params::compThreshold, "travel = threshold / -48 dB: 0 dB at the foot, -48 dB at the head" },
             { "blend",  "BLEND",  &blend,  params::ampBlend,     "the value, 0..1, bottom to top" },
             { "octave", "OCTAVE", &octave, params::octaveAmount, "the value, 0..1, bottom to top" },
             { "chorus", "CHORUS", &chorus, params::chorusAmount, "the value, 0..1, bottom to top" },
@@ -757,7 +771,8 @@ void UnderwaterEditor::webExtras (const juce::File& dir, juce::DynamicObject& ki
             auto* v = new Obj();
             v->setProperty ("id", f.id); v->setProperty ("name", f.name); v->setProperty ("box", rect (boxOf (*f.c)));
             v->setProperty ("sprite", "fader-cap"); v->setProperty ("capLength", layout::faderCapLength);
-            v->setProperty ("param", f.param); v->setProperty ("travel", f.travel); v->setProperty ("reading", "percent");
+            v->setProperty ("param", f.param); v->setProperty ("travel", f.travel);
+            v->setProperty ("reading", f.c == &comp ? "whole dB" : "percent");
             a.add (juce::var (v));
         }
         world.setProperty ("columns", a);
@@ -781,6 +796,14 @@ void UnderwaterEditor::webExtras (const juce::File& dir, juce::DynamicObject& ki
         world.setProperty ("switches", a);
     }
 
+    // COMP'S SQUEEZE: its gain reduction as a column filling down, its full span.
+    {
+        auto* g = new Obj();
+        g->setProperty ("box", rect (boxOf (squeeze))); g->setProperty ("slot", rect (layout::compGrSlot)); g->setProperty ("across", false);
+        g->setProperty ("rangeDb", redgroove::GrColumn::rangeDb); g->setProperty ("reads", "COMP's gain reduction in dB (AmpProcessor::compGrDb)");
+        world.setProperty ("squeeze", g);
+    }
+
     // THE CABINET'S SCREEN.
     {
         auto* c = new Obj();
@@ -793,7 +816,8 @@ void UnderwaterEditor::webExtras (const juce::File& dir, juce::DynamicObject& ki
         struct R { const char* id; const char* format; };
         const R names[] { { "drive", "the dial, 0.0..10.0" }, { "blend", "percent: 30%" }, { "in", "dB, a tenth: +1.5 dB, 0.0 dB" },
                           { "out", "dB, a tenth" }, { "octave", "percent" }, { "chorus", "percent" }, { "reverb", "percent" },
-                          { "tone0", "dB, a tenth" }, { "tone1", "dB, a tenth" }, { "tone2", "dB, a tenth" } };
+                          { "tone0", "dB, a tenth" }, { "tone1", "dB, a tenth" }, { "tone2", "dB, a tenth" },
+                          { "comp", "whole dB: -24 dB" } };
         juce::Array<juce::var> a;
         for (size_t i = 0; i < readouts.size() && i < std::size (names); ++i)
         {
