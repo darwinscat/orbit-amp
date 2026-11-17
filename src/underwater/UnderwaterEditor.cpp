@@ -241,8 +241,10 @@ void Cabin::paintStatic (juce::Graphics& g, float scale) const
     // hero, a size up and in the values' white; BLEND and the effects; the tones' are the playing channel's (paintStrips).
     const auto ink = cabinInk();
     print (g, "DRIVE", { drive.x, nameY }, px15, ink.values);
-    const bool dark = onScreen && blendDark != nullptr && blendDark();      // a picture taken shows it lit
-    print (g, "BLEND", { blendSlot.getCentreX(), nameY }, px12, dark ? ink.at (nameInk, 0.35f) : nameInk);
+    // BLEND's name dims on CLEAN; the site's cabin (a picture taken) leaves it out, and the page writes it, dimmed where it
+    // dims (darwinscat-com-35, 17.11).
+    if (onScreen)
+        print (g, "BLEND", { blendSlot.getCentreX(), nameY }, px12, blendDark != nullptr && blendDark() ? ink.at (nameInk, 0.35f) : nameInk);
     const char* effects[] { "OCTAVE", "CHORUS", "REVERB" };
     for (size_t i = 0; i < effectX.size(); ++i)
         printInto (g, effects[i], { effectX[i], nameY }, 80.0f, px12, nameInk);
