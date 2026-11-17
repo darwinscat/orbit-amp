@@ -546,8 +546,9 @@ int ORBITAMP_GATE_MAIN()
         const auto factory = DeviceLibrary::scan (DeviceLibrary::ampSlot, true, set.getChildFile ("Devices"), none, everyPack);
         const auto shelf = DeviceLibrary::shelfOf (factory);
 
-        // Five since the bass's own pack joined the set (the owner's SGT-DI, 02.11): the guitar's four and the bass's one.
-        report ("the set's packs make five devices, by name",  names (shelf.factory) == "Ampeg SGT-DI, Friedman IR-X, Soldano X88-IR, Two Notes ReVolt, Victory V4",
+        // Six since the ReVolt Bass joined the set (the owner's, DeepGrooveBass's, 17.11): the guitar's four and the bass's two
+        // — the bass's ReVolt a device apart from the guitar's, by its family.
+        report ("the set's packs make six devices, by name",   names (shelf.factory) == "Ampeg SGT-DI, Friedman IR-X, Soldano X88-IR, Two Notes ReVolt, Two Notes ReVolt Bass, Victory V4",
                 names (shelf.factory));
         report ("...the bass's SGT-DI a device of its own",    named (shelf.factory, "Ampeg SGT-DI") != nullptr
                                                                   && named (shelf.factory, "Ampeg SGT-DI")->channels.size() == 1,
@@ -562,6 +563,8 @@ int ORBITAMP_GATE_MAIN()
                 channels (named (shelf.factory, "Victory V4")));
         report ("ReVolt: distinct aliases name the channels",  channels (named (shelf.factory, "Two Notes ReVolt")) == "Clean, Crunch, Lead",
                 channels (named (shelf.factory, "Two Notes ReVolt")));
+        report ("ReVolt Bass: its three, apart from the guitar's", channels (named (shelf.factory, "Two Notes ReVolt Bass")) == "Clean, Dirt, Drive",
+                channels (named (shelf.factory, "Two Notes ReVolt Bass")));
         report ("the list is in the menu's order",             inOrder (shelf, factory.size()));
 
         // The player's own folder: devices at its top, and folders inside it mirrored as they lie.
