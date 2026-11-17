@@ -30,6 +30,11 @@ struct Strip
     float size = 0.0f;              // one item's width at the nominal size
     float minScale = 1.0f;          // the smallest the row may shrink to, as a share of nominal
 
+    /** FEWER THAN IT HOLDS, SPREAD TO ITS ENDS: where the picture paints a socket for every place the row holds, a row of
+        fewer stands on the first and the last of them, the rest evenly between — DeepGrooveBass's CLEAN, BASS and TREBLE
+        in the outer sockets, the middle one bare (the owner, 16.11). Off, a shorter row is centred, as every other face's. */
+    bool spread = false;
+
     /** How many it would show of `count` at the smallest it may be. */
     int fitsAtMost() const noexcept
     {
@@ -67,7 +72,9 @@ inline Laid lay (const Strip& strip, int count)
         shown = juce::jmin (count, strip.fitsAtMost());
     }
 
-    const float step = strip.pitch * scale;
+    float step = strip.pitch * scale;
+    if (const int holds = strip.fitsAtMost(); strip.spread && scale >= 1.0f && shown > 1 && shown < holds)
+        step = strip.pitch * (float) (holds - 1) / (float) (shown - 1);
     const float first = strip.area.getCentreX() - 0.5f * step * (float) (shown - 1);
     for (int i = 0; i < shown; ++i)
         laid.centres.push_back ({ first + step * (float) i, strip.area.getCentreY() });

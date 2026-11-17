@@ -138,6 +138,7 @@ namespace
         p.toneStrip.pitch = pitch;
         p.toneStrip.size = toneSocket;
         p.toneStrip.minScale = 1.0f;
+        p.toneStrip.spread = true;          // CLEAN's two in the outer sockets, the middle one bare
         p.toneKnob = toneKnob;
         p.toneNameY = nameY;
         p.toneNameEm = px13;
