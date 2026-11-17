@@ -65,6 +65,11 @@ namespace
     /** THE SIZE OF WHAT IS READ ON THIS PANEL — the controls' names, the readings, the lever's and the switches' words: 12 px
         (the owner, 17.11: at 13 the bathyscaphe's rows ran into each other). The panels' titles stay 13, DRIVE 15. */
     const float px12 = stage::px13 * 12.0f / 13.0f;
+
+    /** THE READINGS UNDER THE CONTROLS a size further down and quieter than the values' white (the owner, 17.11: they
+        stood out over everything else on the panel). */
+    const float px11 = stage::px13 * 11.0f / 13.0f;
+    const juce::Colour readingInk { 0xffc4bed2 };
     const juce::Colour makerInk { 0xffd3cedd };     // the maker's words on the plates, quieter than the titles
     const juce::Colour keyCap { 0xff22222e }, keyRim { 0xff8b6cff };
     const juce::Colour ringLight { 0xff8b6cff };    // the rings round the knobs: the family's violet
@@ -179,8 +184,8 @@ namespace
         p.lamps[outClipLamp] = around ({ outMeterSlot.getCentreX(), outMeterSlot.getY() - 9.0f }, 14.0f, 14.0f);
         p.lamps[gateLamp]    = around ({ gateSlot.getX() + 13.0f, gateSlot.getCentreY() }, 14.0f, 14.0f);
         p.lamps[limiterLamp] = around ({ limiterSlot.getX() + 13.0f, limiterSlot.getCentreY() }, 14.0f, 14.0f);
-        p.gateDoor    = gateSlot.withTrimmedLeft (24.0f).withTrimmedRight (2.0f);
-        p.limiterDoor = limiterSlot.withTrimmedLeft (24.0f).withTrimmedRight (2.0f);
+        p.gateDoor    = gateSlot.reduced (4.0f, 1.0f);       // the words in the middle of their slots (the owner, 17.11),
+        p.limiterDoor = limiterSlot.reduced (4.0f, 1.0f);    // the lamps clear of them at the left
         p.doorsFit = true;
         p.limiterWord = "LIMIT";
 
@@ -481,11 +486,11 @@ UnderwaterEditor::UnderwaterEditor (AmpProcessor& p)
     addToStage (cabinet);
     cabinet.setBounds (layout::cabinetControl.toNearestInt());
     cabinet.setComponentID ("cabinet");
-    cabinet.label = &readout (layout::cabinetName);
+    cabinet.label = &readout (layout::cabinetName, false);
     {
         const float after = layout::cabinetTitle.x + juce::GlyphArrangement::getStringWidth (
                                 labelFont (stage::px13).withExtraKerningFactor (0.08f), "CABINET ");
-        auto& n = readout ({ after, layout::titleY - 16.0f, layout::cabinetScreen.getRight() - after, 32.0f });
+        auto& n = readout ({ after, layout::titleY - 16.0f, layout::cabinetScreen.getRight() - after, 32.0f }, false);
         n.colour = titleInk;
         n.fromLeft = true;
         n.setComponentID ("cabinetNumber");
@@ -539,9 +544,11 @@ std::unique_ptr<redpaw::Drive> UnderwaterEditor::makeDrive()
     return std::make_unique<UnderwaterDrive> (shippedArt());
 }
 
-Readout& UnderwaterEditor::readout (juce::Rectangle<float> box)
+Readout& UnderwaterEditor::readout (juce::Rectangle<float> box, bool underControl)
 {
-    auto& r = *readouts.emplace_back (std::make_unique<Readout> (cabinInk(), px12));
+    auto& r = *readouts.emplace_back (std::make_unique<Readout> (cabinInk(), underControl ? px11 : px12));
+    if (underControl)
+        r.colour = readingInk;
     addToStage (r);
     r.setBounds (box.toNearestInt());
     return r;

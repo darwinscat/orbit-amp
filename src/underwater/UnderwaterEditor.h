@@ -104,7 +104,8 @@ private:
     face::ArtKnob frozenTone;
     std::unique_ptr<face::KnobRing> frozenRing;
 
-    redgroove::Readout& readout (juce::Rectangle<float> box);
+    /** A reading of its own in `box`: under a control, a size down and quieter; else the panel's names' size. */
+    redgroove::Readout& readout (juce::Rectangle<float> box, bool underControl = true);
 
     template <typename Control>
     void bindTravel (Control&, const juce::String& paramId, std::function<float (float)> toTravel,
