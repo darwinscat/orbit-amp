@@ -1834,6 +1834,12 @@ gate_in_binary(redgroove-channel tests/AmpChannelTests.cpp  PRODUCT RedGrooveBas
 gate_in_binary(redgroove-set     tests/AmpSetTests.cpp      PRODUCT RedGrooveBass CHANNELS 2)
 # ...and the walker's face, its window made and never shown: what its own controls turn, and the tone left alone.
 gate_in_binary(redgroove-face    tests/RedGrooveFaceTests.cpp PRODUCT RedGrooveBass)
+gate_in_binary(deepgroove-channel tests/AmpChannelTests.cpp  PRODUCT DeepGrooveBass CHANNELS 3)
+gate_in_binary(deepgroove-set    tests/AmpSetTests.cpp      PRODUCT DeepGrooveBass CHANNELS 3)
+# ...and the bathyscaphe's face, its window made and never shown: the lever's PARK the amp's bypass over the three gears,
+# each gear's BLEND and CLEAN's held, COMP's threshold and what the bathyscaphe holds of it, CLEAN's two tones in the
+# outer sockets and the frozen one between them, each socket's reading its own knob's.
+gate_in_binary(deepgroove-face   tests/DeepGrooveFaceTests.cpp PRODUCT DeepGrooveBass)
 
 # ORBITBASS'S CHAIN, headless: where a fresh one stands (the gate off, the HPF on at 25 Hz, the LPF off, mono,
 # its one temporary pack), the strip's arrows in its order (GATE, AMP, CAB, LIMIT), the delay and the reverb
@@ -1843,12 +1849,13 @@ gate_in_binary(orbitbass         tests/OrbitBassTests.cpp   PRODUCT OrbitBass
                DEFINES "ORBITBASS_STEP2B=\"${CMAKE_CURRENT_SOURCE_DIR}/tests/golden/orbitbass-step2b.f32\"")
 
 # AN AMP WITH NO FACTORY FOLDER — copied off a zip without it, or the folder deleted: it plays, and says where
-# the folder belongs instead of opening an empty face (src/ui/FactoryMissing.h). OrbitAmp, the cockpit and the
-# rovers' dashboard, which FrostPawAmp and AmberPawAmp wear too.
+# the folder belongs instead of opening an empty face (src/ui/FactoryMissing.h). OrbitAmp, the cockpit, the
+# rovers' dashboard, which FrostPawAmp and AmberPawAmp wear too, the walker's and the bathyscaphe's.
 gate_in_binary(nofactory         tests/NoFactoryTests.cpp   PRODUCT OrbitAmp     NO_FACTORY)
 gate_in_binary(catpit-nofactory  tests/NoFactoryTests.cpp   PRODUCT CatpitAmp    NO_FACTORY)
 gate_in_binary(redpaw-nofactory  tests/NoFactoryTests.cpp   PRODUCT RedPawAmp    NO_FACTORY)
 gate_in_binary(redgroove-nofactory tests/NoFactoryTests.cpp  PRODUCT RedGrooveBass NO_FACTORY)
+gate_in_binary(deepgroove-nofactory tests/NoFactoryTests.cpp PRODUCT DeepGrooveBass NO_FACTORY)
 
 # ORBITAMP'S FACE AS THE SITE GETS IT (src/ui/WebFaceplate.h): a fresh OrbitAmp writes the kit, and the kit
 # builds the face back — its own format, every place on the stage, the hull the poster less its places.

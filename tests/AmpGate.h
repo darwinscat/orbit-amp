@@ -9,8 +9,8 @@
     product, and run as it (CMakeLists.txt: amp_set_test, amp_console). What tells the products apart is
     said here, once, in the table below — apart from each product's lineup, so that a lineup that drifts
     is caught rather than read back: the captures its channels play and what each opens on, whether they
-    go in pairs, a gear and its TURBO, the marks on its DRIVE's dial, the variable that
-    tells its channel gate the home is its own (tests/gates.txt), and the words its gate says what it found
+    go in pairs, a gear and its TURBO, the marks on its DRIVE's dial, on the bass's chain each gear's BLEND
+    and the bass's console as the product has it, the variable that tells its channel gate the home is its own (tests/gates.txt), and the words its gate says what it found
     in. How many of the channels the build plays, GATE_CHANNELS, the build says. */
 
 #include <juce_core/juce_core.h>
@@ -71,6 +71,11 @@ struct Channel
     float wet, echo;                // ...how much of it, and how much delay
     const char* opens = nullptr;    // where the product's gate says this channel's opening in a line of its own
     const char* cabinet = nullptr;  // where the product's cabinets are drawn (Lineup::drawnCabinets): the preset it opens on, by its stem
+
+    /** ON THE BASS'S CHAIN, where its BLEND opens, the capture's share — 1, the capture alone, unless said — and whether
+        the channel holds it there, a gear with no BLEND of its own (Lineup::Channel::blend, blendHeld). */
+    float blend = 1.0f;
+    bool blendHeld = false;
 };
 
 /** A mark on DRIVE's dial, where the packs are captures shot at several hours of the gear's own knob:
@@ -108,6 +113,18 @@ struct Product
     /** Whether it has IRs of before to gather at its first start (gatherFormerIrs) — every amp that kept them in a
         folder of its own before the family's; not one made after. */
     bool gathers = true;
+
+    /** ON THE BASS'S CHAIN, THE BASS'S CONSOLE AS THE PRODUCT HAS IT, beyond what every bass amp has — DRIVE, BLEND, the
+        tones, COMP's threshold, OCTAVE and CHORUS, each gear's own (Lineup::kept): whether it has ENVELOPE, in the strip
+        and on and its amount each gear's; MIDDLE's frequency, each gear's; DI/CAB, each gear's; and the room in its strip
+        and on, or none in it (Lineup::pinned) — and what its gate says it found of them. */
+    struct Console
+    {
+        bool envelope = true, middleFrequency = true, diCab = true, room = false;
+        const char* opensOwn = nullptr;     // a gear never pulled since INIT opens on its own
+        const char* keeps = nullptr;        // ...each gear comes back with what it was left with
+        const char* holds = nullptr;        // ...INIT gives what the product holds
+    } console {};
 };
 
 /** THE PRODUCTS, each as its gate knows it. */
@@ -196,7 +213,34 @@ inline const Product& product()
           "two switches apart — or, on a pack with no tone of its own, the bass's standard's three",
           "...and each gear on its own of the bass's dozen, drawn: B15 the 1x15, SVT the 8x10",
           true,
-          false },
+          false,
+          { true, true, true, false,
+            "a bass's gear never pulled since INIT opens on its own DRIVE, BLEND, tones, MIDDLE's frequency, its pack's switches, COMP, effects and DI/CAB, not the other gear's",
+            "each gear comes back with the DRIVE, BLEND, BASS, MIDDLE, TREBLE, MIDDLE's frequency, ULTRA LO and HI, COMP threshold, OCTAVE, ENVELOPE, CHORUS and DI/CAB it was left with",
+            "INIT gives COMP on, three quarters of the signal through it at 4:1 on OPTO, OCTAVE, ENVELOPE and CHORUS in the strip and on, both cuts on, no delay and no room" } },
+        // The bathyscaphe: the Two Notes ReVolt Bass's three channels, CLEAN, DIRT and DRIVE, a pack a gear and each its own
+        // memory, on the bass's chain — every one on a plate it opens with none of, and no delay. DIRT's BLEND opens at
+        // 80/20 and DRIVE's at 90/10; CLEAN has none and holds the capture alone. CLEAN on the dozen's 1x15, DIRT and DRIVE
+        // on its 8x10, drawn (src/underwater/UnderwaterLineup.cpp). No ENVELOPE, no MIDDLE's frequency and no DI/CAB of a
+        // gear's own; the room in the strip and on.
+        { "DeepGrooveBass", "bathyscaphe", "DEEPGROOVE_GATE_OWNS_HOME",
+          {
+              { "revolt-bass-clean-0fba", "", "Plate", 0.0f, 0.0f, nullptr, "rock-14-1x15-thump", 1.0f, true },
+              { "revolt-bass-dirt-e9d4",  "", "Plate", 0.0f, 0.0f, nullptr, "rock-03-8x10-stack", 0.8f },
+              { "revolt-bass-drive-2655", "", "Plate", 0.0f, 0.0f, nullptr, "rock-03-8x10-stack", 0.9f },
+          },
+          nullptr,
+          {},
+          "all three gears' packs are installed",
+          "every gear's tone knobs are its pack's dials on the bass's chain — the ReVolt Bass's CLEAN Bass and Treble, its DIRT's "
+          "and DRIVE's Bass, Mid and Treble — with no frequency knob and no switch",
+          "...and each gear on its own of the bass's dozen, drawn: CLEAN the 1x15, DIRT and DRIVE the 8x10",
+          true,
+          false,
+          { false, false, false, true,
+            "a bass's gear never pulled since INIT opens on its own DRIVE, BLEND, tones, COMP and effects, not the other gear's",
+            "each gear comes back with the DRIVE, BLEND, BASS, MID, TREBLE, COMP threshold, OCTAVE and CHORUS it was left with",
+            "INIT gives COMP on, three quarters of the signal through it at 4:1 on OPTO, OCTAVE and CHORUS in the strip and on, no ENVELOPE, both cuts on, no delay, and the room in the strip and on" } },
     };
 
     for (const auto& p : products)
