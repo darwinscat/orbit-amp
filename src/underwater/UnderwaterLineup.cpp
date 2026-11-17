@@ -62,6 +62,7 @@ const channels::Lineup& lineup()
             params::ampBlend, params::octaveAmount, params::chorusAmount, params::compThreshold,
         },
         {
+            { params::ampBlendInvert, 0.0f },    // the clean leg as it comes: no flip (17.11, BLEND's menu has none)
             { params::compOn,        1.0f },     // COMP (the owner, 17.11): on, three quarters through it at 4:1 on OPTO
             { params::compAmount,    0.75f },
             { params::compRatio,     4.0f },

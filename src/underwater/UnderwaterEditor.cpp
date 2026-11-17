@@ -393,14 +393,13 @@ UnderwaterEditor::UnderwaterEditor (AmpProcessor& p)
     bindTravel (blend, params::ampBlend, [] (float v) { return v; }, [] (float t) { return t; },
                 [this] (float v) { blendValue->set (percent (v)); });
     sayLeverAs (blend, "BLEND", [this] { return percent (getParam (params::ampBlend)); });
-    // ...and a right click on it, BLEND's own two of the AMP's menu: its crossover, 80 to 250 Hz, and the clean leg's
-    // polarity — nothing else (the owner, 17.11: no ON, no cuts, no RESET there).
+    // ...and a right click on it, BLEND's crossover alone, 80 to 250 Hz (the owner, 17.11). No INVERT: the ReVolt Bass's
+    // captures turn the lows' phase note by note rather than flip it, so a flip would mend some notes and spoil others.
     blend.onMenu = [this]
     {
         bass::Menu m;
         bass::addStepsMenu (m, amp.apvts, params::ampBlendHz, "BLEND CROSSOVER",
                             { 80.0f, 100.0f, 120.0f, 150.0f, 180.0f, 200.0f, 250.0f }, bass::hzWord);
-        bass::addToggle (m, m.items, amp.apvts, params::ampBlendInvert, "INVERT POLARITY");
         bass::show (std::move (m), &blend);
     };
     const char* effectIds[] { params::octaveAmount, params::chorusAmount, params::reverbMix };
