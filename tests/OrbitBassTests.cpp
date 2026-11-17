@@ -1068,10 +1068,23 @@ int ORBITAMP_GATE_MAIN()
             check (worstApart (hi.l, heard.l) > 1.0e-3f, "...and BLEND turned up is heard");
             set (*blended, params::ampBlendHz, 80.0f);
             const auto lo = play (*blended, blocks, false);
-            set (*blended, params::ampBlendInvert, 0.0f);
-            const auto straight = play (*blended, blocks, false);
-            check (worstApart (lo.l, hi.l) > 1.0e-3f && worstApart (straight.l, lo.l) < 1.0e-6f,
-                   "...and its frequency is heard too, the old INVERT not");
+            check (worstApart (lo.l, hi.l) > 1.0e-3f, "...and its frequency is heard too");
+
+            // ...and the old INVERT not: two amps alike from their first block, at BLEND 30 % and 80 Hz, one with INVERT on —
+            // the same sound, sample for sample (17.11: the clean leg's polarity is the pack's alone).
+            const auto playWith = [&] (float invert)
+            {
+                auto t = asBefore();
+                set (*t, params::cabOn, 0.0f);
+                set (*t, params::ampBlend, 0.3f);
+                set (*t, params::ampBlendHz, 80.0f);
+                set (*t, params::ampBlendInvert, invert);
+                t->pumpDeviceWork();
+                return play (*t, blocks, false);
+            };
+            const float invertHeard = worstApart (playWith (1.0f).l, playWith (0.0f).l);
+            check (invertHeard < 1.0e-6f, "...and the old INVERT not: an amp with it on plays what one with it off does ("
+                                              + juce::String (invertHeard, 9) + " apart)");
         }
 
         // The cabinets in, on the same IR's bytes, at the CAB's MIX 100 %: the cabinet alone — the same stage, its IR
@@ -5974,7 +5987,7 @@ int ORBITAMP_GATE_MAIN()
             { "OCTAVE",   params::octaveOn, [] (auto& s) { return bass::octaveMenu (s); }, {} },
             { "ENVELOPE", params::filterOn, [] (auto& s) { return bass::filterMenu (s); },
               { "MODE >", "DIRECTION >", "RESONANCE >", "CLEAN LOWS >" } },
-            { "AMP",      params::preampOn, [] (auto& s) { return bass::ampMenu (s); },    { "BLEND CROSSOVER >", "INVERT POLARITY", "HPF >", "LPF >" } },
+            { "AMP",      params::preampOn, [] (auto& s) { return bass::ampMenu (s); },    { "BLEND CROSSOVER >", "HPF >", "LPF >" } },
             { "CHORUS",   params::chorusOn, [] (auto& s) { return bass::chorusMenu (s); }, {} },
             { "DELAY",    params::delayOn,  [] (auto& s) { return bass::delayMenu (s); },
               { "SYNC", "DIVISION >", "TIME (FREE) >", "HOST TEMPO", "BPM >", "REPEATS >", "DARK >", "OFFSET >" } },
