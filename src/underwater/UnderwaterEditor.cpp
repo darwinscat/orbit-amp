@@ -397,9 +397,10 @@ UnderwaterEditor::UnderwaterEditor (AmpProcessor& p)
     // captures turn the lows' phase note by note rather than flip it, so a flip would mend some notes and spoil others.
     blend.onMenu = [this]
     {
-        bass::Menu m;
-        bass::addStepsMenu (m, amp.apvts, params::ampBlendHz, "BLEND CROSSOVER",
-                            { 80.0f, 100.0f, 120.0f, 150.0f, 180.0f, 200.0f, 250.0f }, bass::hzWord);
+        bass::Menu m;                                   // one level: the heading, the frequencies under it (17.11)
+        m.items.addSectionHeader ("BLEND CROSSOVER");
+        bass::addSteps (m, m.items, amp.apvts, params::ampBlendHz,
+                        { 80.0f, 100.0f, 120.0f, 150.0f, 180.0f, 200.0f, 250.0f }, bass::hzWord);
         bass::show (std::move (m), &blend);
     };
     const char* effectIds[] { params::octaveAmount, params::chorusAmount, params::reverbMix };
