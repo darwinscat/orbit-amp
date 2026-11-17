@@ -60,7 +60,6 @@ namespace
         return ink;
     }
 
-    const juce::Colour titleInk { 0xffded9e8 };     // the panels' titles, a little lighter than the names
 
     /** THE SIZE OF WHAT IS READ ON THIS PANEL — the controls' names, the readings, the lever's and the switches' words: 12 px
         (the owner, 17.11: at 13 the bathyscaphe's rows ran into each other). The panels' titles stay 13, DRIVE 15. */
@@ -94,13 +93,6 @@ namespace
         if (wide > room)
             g.addTransform (juce::AffineTransform::scale (room / wide, 1.0f, at.x, at.y));
         print (g, text, at, em, colour);
-    }
-
-    /** ...a title, from its left edge at `at.x`. */
-    void printFromLeft (juce::Graphics& g, const juce::String& text, juce::Point<float> at, float em, juce::Colour colour)
-    {
-        const float wide = juce::GlyphArrangement::getStringWidth (labelFont (em).withExtraKerningFactor (0.08f), text.toUpperCase());
-        print (g, text, { at.x + 0.5f * wide, at.y }, em, colour);
     }
 
     juce::String dbTenth (float v) { return (v > 0.04f ? "+" : "") + juce::String (v, 1) + " dB"; }
@@ -241,20 +233,10 @@ void Cabin::paintStatic (juce::Graphics& g, float scale) const
     print (g, "POWERED BY", poweredByPlate.getCentre(), px13, makerInk);
     print (g, "DARWIN'S CAT", makerNamePlate.getCentre(), px13, makerInk);
 
-    // The panels' titles.
-    printFromLeft (g, "TUNER", tunerTitle, px12, titleInk);     // the top row's two a size down (the owner, 17.11)
-    printFromLeft (g, "KEYS", keysTitle, px12, titleInk);
-    print (g, "IN", inTitle, px13, titleInk);
-    printFromLeft (g, "AMP", ampTitle, px13, titleInk);
-    printFromLeft (g, "TONE", toneTitle, px13, titleInk);
-    printFromLeft (g, "EFFECTS", effectsTitle, px13, titleInk);
-    printFromLeft (g, "CABINET", cabinetTitle, px13, titleInk);
-    print (g, "OUT", outTitle, px13, titleInk);
-
-    // DRIVE, the hero, a size up and in the values' white, in the titles' row its socket leaves; BLEND and the effects in
-    // the names' row; the tones' names are the playing channel's (paintStrips).
+    // NO PANEL TITLES (the owner, 17.11): the controls say what they are. Their names in one row over them — DRIVE, the
+    // hero, a size up and in the values' white; BLEND and the effects; the tones' are the playing channel's (paintStrips).
     const auto ink = cabinInk();
-    print (g, "DRIVE", { drive.x, titleY }, px15, ink.values);
+    print (g, "DRIVE", { drive.x, nameY }, px15, ink.values);
     const bool dark = onScreen && blendDark != nullptr && blendDark();      // a picture taken shows it lit
     print (g, "BLEND", { blendSlot.getCentreX(), nameY }, px12, dark ? ink.at (ink.words, 0.35f) : ink.words);
     const char* effects[] { "OCTAVE", "CHORUS", "REVERB" };
@@ -361,8 +343,8 @@ UnderwaterEditor::UnderwaterEditor (AmpProcessor& p)
     const auto under = [] (float x, float y, float w = 120.0f) { return around ({ x, y }, w, 26.0f); };
     auto& driveValue = readout (under (layout::drive.x, layout::driveValueY));
     blendValue = &readout (under (layout::blendSlot.getCentreX(), layout::valueY, 84.0f));
-    auto& inValue  = readout (under (layout::inTitle.x, layout::levelValueY, 104.0f));
-    auto& outValue = readout (under (layout::outTitle.x, layout::levelValueY, 104.0f));
+    auto& inValue  = readout (under (layout::inX, layout::levelValueY, 104.0f));
+    auto& outValue = readout (under (layout::outX, layout::levelValueY, 104.0f));
     Readout* effectValues[] { &readout (under (layout::effectX[0], layout::valueY, 90.0f)),
                               &readout (under (layout::effectX[1], layout::valueY, 90.0f)),
                               &readout (under (layout::effectX[2], layout::valueY, 90.0f)) };
@@ -469,14 +451,22 @@ UnderwaterEditor::UnderwaterEditor (AmpProcessor& p)
             const auto name = channels.slotName (slot);
             return name.isNotEmpty() ? name : CabWindow::labelOf (AmpProcessor::cabSynthOf (channels.slotFrom (slot)));
         };
-        if (dragAt >= 0)
-            return named (dragAt);
-        if (! channels.cabinetOn())
-            return juce::String ("OFF");
-        const auto playing = AmpProcessor::cabSynthOf (amp.cabChoice());
-        if (const auto slot = AmpProcessor::cabSynthOf (channels.slotFrom (channels.cabinetSlot())); playing.valid && slot.valid && playing.state == slot.state)
-            return named (channels.cabinetSlot());
-        return CabWindow::labelOf (playing);
+        const auto plays = [this, &named]
+        {
+            if (dragAt >= 0)
+                return named (dragAt);
+            if (! channels.cabinetOn())
+                return juce::String ("OFF");
+            const auto playing = AmpProcessor::cabSynthOf (amp.cabChoice());
+            if (const auto slot = AmpProcessor::cabSynthOf (channels.slotFrom (channels.cabinetSlot())); playing.valid && slot.valid && playing.state == slot.state)
+                return named (channels.cabinetSlot());
+            return CabWindow::labelOf (playing);
+        };
+        // ONE LINE OVER THE SCREEN (the owner, 17.11): "CAB: 8x10 STACK" — the dozen's number left out.
+        auto words = plays();
+        if (const auto head = words.upToFirstOccurrenceOf (": ", false, false); words.contains (": ") && head.isNotEmpty() && head.containsOnly ("0123456789"))
+            words = words.fromFirstOccurrenceOf (": ", false, false);
+        return "CAB: " + words;
     };
     cabinet.notches = channels.cabinetSlots();
     cabinet.notch   = [this] { return channels.cabinetSlot(); };
@@ -487,15 +477,6 @@ UnderwaterEditor::UnderwaterEditor (AmpProcessor& p)
     cabinet.setBounds (layout::cabinetControl.toNearestInt());
     cabinet.setComponentID ("cabinet");
     cabinet.label = &readout (layout::cabinetName, false);
-    {
-        const float after = layout::cabinetTitle.x + juce::GlyphArrangement::getStringWidth (
-                                labelFont (stage::px13).withExtraKerningFactor (0.08f), "CABINET ");
-        auto& n = readout ({ after, layout::titleY - 16.0f, layout::cabinetScreen.getRight() - after, 32.0f }, false);
-        n.colour = titleInk;
-        n.fromLeft = true;
-        n.setComponentID ("cabinetNumber");
-        cabinet.number = &n;
-    }
     cabinet.refresh();
 
     // LEARN — from GATE's menu, or a double click on its lamp — takes the tuner's glass while it runs.

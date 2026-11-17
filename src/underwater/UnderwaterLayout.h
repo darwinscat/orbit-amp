@@ -31,12 +31,11 @@ inline juce::Rectangle<float> socket (float cx, float cy, float w, float h)
     return juce::Rectangle<float> (w, h).withCentre ({ cx, cy });
 }
 
-// THE TOP ROW. Its titles stand in the strip over each panel's sockets.
+// THE TOP ROW. No panel has a title (the owner, 17.11); the strip over the plates holds PRESET, the version, MEM and CPU.
 inline constexpr float topTitleY = 684.0f;
 
 // TUNER, on the left: the screen across the panel.
 inline const juce::Rectangle<float> tunerScreen = socket (267.0f, 717.5f, 446.0f, 38.0f);
-inline const juce::Point<float> tunerTitle { 48.0f, topTitleY };
 
 // THE MAKER'S PLATE: the hexagon the family's cat is cut in, between POWERED BY and DARWIN'S CAT's plates.
 inline constexpr std::array<juce::Point<float>, 8> emblemFace {{
@@ -57,17 +56,10 @@ inline constexpr float keyRowY = 718.5f, keyHole = 36.0f;
 inline constexpr std::array<float, 6> keyX { 1232.0f, 1322.0f, 1399.0f, 1463.0f, 1527.0f, 1591.0f };
 inline constexpr float historyHole = 80.0f, registerHole = 54.0f;
 inline constexpr float keyInset = 3.0f;                 // a key's cap inside its hole's edge
-inline const juce::Point<float> keysTitle { 1192.0f, topTitleY };
 
-// THE BOTTOM ROW: each panel's title in the strip over its sockets, the controls' names in the row under it. DRIVE's
-// socket reaches into that row, so its name stands in the titles' row.
-inline constexpr float titleY = 766.5f, nameY = 790.0f;
-inline const juce::Point<float> inTitle      { 92.0f, titleY };     // centred
-inline const juce::Point<float> ampTitle     { 185.0f, titleY };
-inline const juce::Point<float> toneTitle    { 556.0f, titleY };
-inline const juce::Point<float> effectsTitle { 907.0f, titleY };
-inline const juce::Point<float> cabinetTitle { 1220.0f, titleY };
-inline const juce::Point<float> outTitle     { 1580.0f, titleY };   // centred
+// THE BOTTOM ROW: no panel titles (the owner, 17.11) — the controls' names in one row over their sockets, DRIVE's with them.
+inline constexpr float nameY = 778.0f;
+inline constexpr float inX = 92.0f, outX = 1580.0f;                 // IN's and OUT's middles, their readings centred there
 
 // IN: the trim's fader at the outer edge, the meter toward the middle, GATE's slot under them.
 inline const juce::Rectangle<float> inFaderSlot = socket (70.0f, 844.3f, 16.0f, 67.5f);
@@ -116,7 +108,6 @@ inline const juce::Rectangle<float> fingersSlot = socket (1354.0f, 898.6f, 52.0f
 
 // THE READINGS, a row under each group of controls.
 inline constexpr float valueY = 901.0f, driveValueY = 916.5f;
-inline constexpr float levelValueY = nameY;     // IN's and OUT's over their slots, in the names' row (the owner, 17.11: room there,
-                                                // none over GATE and LIMIT)
+inline constexpr float levelValueY = 884.5f;    // IN's and OUT's under their slots, over GATE and LIMIT, as every reading is under
 
 } // namespace orbitamp::underwater::layout
