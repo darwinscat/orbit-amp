@@ -8,7 +8,7 @@
       "gear": { "make": "Two Notes", "model": "ReVolt Bass", "type": "preamp", "year": 2026,
                 "serial_number": "155D6DF8", "designed_in": "France", "made_in": "China",
                 "url": "https://www.two-notes.com/en/revolt-bass/" },
-      "input_db": -11.0,
+      "input_db": -2.0,
       "output_db": -3.0,
       "controls": [
         { "name": "Gain", "role": "gain", "sweep": 300,
