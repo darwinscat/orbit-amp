@@ -62,13 +62,13 @@ inline constexpr float nameY = 778.0f;
 inline constexpr float inX = 92.0f, outX = 1580.0f;                 // IN's and OUT's middles, their readings centred there
 
 // IN: the trim's fader at the outer edge, the meter toward the middle, GATE's slot under them.
-inline const juce::Rectangle<float> inFaderSlot = socket (70.0f, 834.3f, 16.0f, 67.5f);
-inline const juce::Rectangle<float> inMeterSlot = socket (114.0f, 834.3f, 14.0f, 67.5f);
+inline const juce::Rectangle<float> inFaderSlot = socket (70.0f, 823.5f, 16.0f, 88.0f);
+inline const juce::Rectangle<float> inMeterSlot = socket (114.0f, 823.5f, 14.0f, 88.0f);
 inline const juce::Rectangle<float> gateSlot    = socket (92.0f, 907.0f, 92.0f, 26.0f);
 
 // OUT: its mirror.
-inline const juce::Rectangle<float> outMeterSlot = socket (1558.0f, 834.3f, 14.0f, 67.5f);
-inline const juce::Rectangle<float> outFaderSlot = socket (1602.0f, 834.3f, 16.0f, 67.5f);
+inline const juce::Rectangle<float> outMeterSlot = socket (1558.0f, 823.5f, 14.0f, 88.0f);
+inline const juce::Rectangle<float> outFaderSlot = socket (1602.0f, 823.5f, 16.0f, 88.0f);
 inline const juce::Rectangle<float> limiterSlot  = socket (1580.0f, 907.0f, 92.0f, 26.0f);
 
 inline constexpr float faderWidth = 40.0f;          // a column fader's box round its slot
@@ -100,11 +100,11 @@ inline constexpr float ringInset = 3.5f, ringWidth = 2.5f, driveRingWidth = 3.0f
 
 // CABINET: its screen — the slider across it, the playing cabinet's name in the names' row over it — and the two
 // switches under it, 5 STR / 4 STR over FINGERS / SLAP.
-inline const juce::Rectangle<float> cabinetScreen = socket (1354.0f, 821.5f, 244.0f, 38.0f);
+inline const juce::Rectangle<float> cabinetScreen = socket (1354.0f, 810.5f, 244.0f, 38.0f);
 inline const juce::Rectangle<float> cabinetControl = cabinetScreen.reduced (12.0f, 0.0f);
 inline const juce::Rectangle<float> cabinetName { cabinetScreen.getX(), nameY - 10.0f, cabinetScreen.getWidth(), 20.0f };
-inline const juce::Rectangle<float> stringsSlot = socket (1354.0f, 863.8f, 52.0f, 28.0f);
-inline const juce::Rectangle<float> fingersSlot = socket (1354.0f, 898.6f, 52.0f, 28.0f);
+inline const juce::Rectangle<float> stringsSlot = socket (1354.0f, 857.2f, 52.0f, 28.0f);
+inline const juce::Rectangle<float> fingersSlot = socket (1354.0f, 898.9f, 52.0f, 28.0f);
 
 // THE READINGS, a row under each group of controls.
 inline constexpr float valueY = 901.0f, driveValueY = 916.5f;
