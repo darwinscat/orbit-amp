@@ -1732,7 +1732,9 @@ void AmpProcessor::tellBlend()
     if (productEngine != nullptr)
         if (const auto held = productEngine->heldBlend())
             wet = *held;
-    preamp.setCrossover (1.0f - wet, bass.blendHz->load(), bass.blendInvert->load() > 0.5f);
+    // The clean leg's polarity is the pack's (files[].polarity, which the player reads itself), never a hand's: the old
+    // INVERT parameter is told nothing (the owner, 17.11) — a state that kept it on would flip a leg the pack already set right.
+    preamp.setCrossover (1.0f - wet, bass.blendHz->load(), false);
 }
 
 namespace

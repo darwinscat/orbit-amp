@@ -578,7 +578,8 @@ inline constexpr float chorusCrossoverItems[] { 200.0f, 250.0f, 300.0f, 400.0f, 
 /** BLEND, in the AMP: the capture's share against the clean input below a frequency (RigPlayer's crossover
     blend, told 1 - this) — 1 is the capture alone, as every MIX on the bass is its block alone at the top (the owner,
     03.11). A new id since it turned: a state saved the other way round falls to the default instead. The frequency
-    and the polarity in its menu. */
+    in its menu. INVERT is a parameter no more told anything (17.11): the clean leg's polarity is each pack's own
+    (files[].polarity), and a state that kept INVERT on must not flip it back; it stays for the states that name it. */
 inline constexpr const char* ampBlend       = "amp_blend_wet";
 inline constexpr const char* ampBlendHz     = "amp_blend_hz";
 inline constexpr const char* ampBlendInvert = "amp_blend_invert";
