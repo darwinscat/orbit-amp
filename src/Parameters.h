@@ -768,6 +768,10 @@ struct Opening
     // INIT and a double click bring it back here (engineDefault leaves it its declared default).
     float midHz = 400.0f;
 
+    // WHERE THE AMP'S BLEND OPENS (ampBlend), where the product's opening channel says other than the capture alone:
+    // DeepGrooveBass opens on DIRT, at 80/20 (channels::Lineup::Channel::blend). A default, not a hold.
+    float ampBlend = 1.0f;
+
     // WHAT THE BOOST ADDS OUT OF THE BOX (boostLevel): the family's +3, AmberPawAmp's 0 (channels::Lineup::boostLevel). A
     // default, not a hold: the boost's menu moves it, and INIT brings it back here (engineDefault leaves it its declared
     // default).

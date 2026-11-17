@@ -135,7 +135,7 @@ void addBassParameters (juce::AudioProcessorValueTreeState::ParameterLayout& lay
                 std::make_unique<Bool> (juce::ParameterID { reverbPresent, 1 }, "Reverb In Strip", opening.reverbPresent));
 
     layout.add (std::make_unique<Float> (juce::ParameterID { ampBlend, 1 },       "Amp Blend",
-                                         juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 1.0f),
+                                         juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), opening.ampBlend),
                 std::make_unique<Float> (juce::ParameterID { ampBlendHz, 1 },     "Amp Blend Hz",
                                          hz (ampBlendMinHz, ampBlendMaxHz, ampBlendDefaultHz), ampBlendDefaultHz),
                 std::make_unique<Bool>  (juce::ParameterID { ampBlendInvert, 1 }, "Amp Blend Invert", false));

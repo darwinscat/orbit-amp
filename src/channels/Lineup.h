@@ -38,6 +38,13 @@ struct Lineup
         /** ITS CABINET'S SLOT, where the product's cabinets are drawn (drawnCabinets): the one of `cabinets` the
             channel stands at, never visited. */
         int cabinet = 0;
+
+        /** WHERE ITS BLEND OPENS (params::ampBlend, the capture's share), where the channel opens it elsewhere than the
+            parameter's 1, the capture alone: DeepGrooveBass's DIRT at 80/20, its DRIVE at 50/50 (the owner, 17.11). */
+        std::optional<float> blend {};
+        /** ...and HOLDS it there, whatever a record, a preset or a host says: a gear with no BLEND of its own —
+            DeepGrooveBass's CLEAN, the capture alone (the owner, 16.11). */
+        bool blendHeld = false;
     };
 
     const char* nodeType;       // the product's node in the state tree, where the channels' memory is kept
