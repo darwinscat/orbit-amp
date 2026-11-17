@@ -198,6 +198,10 @@ int ORBITAMP_GATE_MAIN()
         // its record — in a session saved then too. Pulled again (Channels::hold), it stands at the capture alone.
         setPlain (params::ampBlend, 0.4f);
         settle();
+        // ...and a host moving it while CLEAN plays moves neither the sound nor the dark fader: the player is told the held
+        // 100/0 (ProductEngine::heldBlend, AmpProcessor::tellBlend), the fader and its reading show it.
+        check (std::abs (engine.heldBlend().value_or (-1.0f) - 1.0f) < 1.0e-6f && std::abs (blend->getValue() - 1.0f) < 1.0e-3f,
+               "a host setting CLEAN's BLEND to 40/60 while it plays: the player still told 100/0, the dark fader at 100/0");
         pull (1);
         juce::MemoryBlock session;
         amp->getStateInformation (session);     // a session on DIRT, CLEAN's record in it saying 40/60

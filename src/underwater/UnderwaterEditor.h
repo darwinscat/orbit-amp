@@ -132,6 +132,7 @@ private:
 
     void showSelector (int channel) override;
     void showPark (bool on);
+    void showBlend (float value);
     bool channelKey (const juce::KeyPress&) override;
     void stripsLaid (const face::Strips&) override;
     void webExtras (const juce::File& dir, juce::DynamicObject& kit, juce::DynamicObject& world) override;

@@ -43,6 +43,8 @@
 #include <felitronics/dynamics/NoiseGate.h>
 #include <felitronics/reverb/AmpReverb.h>
 #include <synth/State.h>
+
+#include <optional>
 namespace cabir::synth { class PairRenderer; }                  // the bass's own cabinets, as cab-ir-generator says one
 #include "core/SpaceTap.h"
 #include <juce_audio_processors/juce_audio_processors.h>
@@ -66,6 +68,11 @@ struct ProductEngine
     /** The state changed under the processor — a session opened, a register recalled, a step of the
         history taken. Said from inside the landing itself: it may look, and must not write. */
     virtual void stateLanded() = 0;
+
+    /** BLEND AS THE PLAYING CHANNEL HOLDS IT, where it holds one (channels::Lineup::Channel::blendHeld): what the player is
+        told whatever BLEND's parameter says — a host's automation, a session landing on that channel. None: the
+        parameter's. Any thread a prepare runs on: it reads atomics and a lineup fixed at build. */
+    virtual std::optional<float> heldBlend() const { return {}; }
 };
 
 /** The plugin shell. Deliberately thin: the chain (preamp -> EQ -> delay -> reverb -> cabinet) lands

@@ -104,6 +104,16 @@ bool Engine::makeOwn()
     return unseen;
 }
 
+/** The playing channel's BLEND where its lineup holds it (Lineup::Channel::blendHeld). */
+std::optional<float> Engine::heldBlend() const
+{
+    const auto& line = channels.lineup();
+    const auto& own = line.channels[(size_t) juce::jlimit (0, line.count() - 1, channels.active())];
+    if (own.blendHeld && own.blend.has_value())
+        return own.blend;
+    return {};
+}
+
 void Engine::stateLanded()
 {
     lastAsked = asked();

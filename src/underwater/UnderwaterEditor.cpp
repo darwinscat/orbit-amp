@@ -391,7 +391,7 @@ UnderwaterEditor::UnderwaterEditor (AmpProcessor& p)
     // ...and the bass's own, each bound through its own travel: BLEND and OCTAVE and CHORUS their 0..1, REVERB its
     // share in percent.
     bindTravel (blend, params::ampBlend, [] (float v) { return v; }, [] (float t) { return t; },
-                [this] (float v) { blendValue->set (percent (v)); });
+                [this] (float v) { showBlend (v); });
     sayLeverAs (blend, "BLEND", [this] { return percent (getParam (params::ampBlend)); });
     // ...and a right click on it, BLEND's crossover alone, 80 to 250 Hz (the owner, 17.11). No INVERT: the ReVolt Bass's
     // captures turn the lows' phase note by note rather than flip it, so a flip would mend some notes and spoil others.
@@ -624,12 +624,24 @@ void UnderwaterEditor::showSelector (int channel)
     // CLEAN HAS NO BLEND (the owner, 16.11): the capture alone, the fader dark and out of the hand's reach.
     const bool blends = ! channels.lineup().channels[(size_t) channel].blendHeld;
     blend.defaultValue = channels.defaultOf (channel, params::ampBlend);     // a double click: where this gear's BLEND opens
+    showBlend (getParam (params::ampBlend));
     blend.setEnabled (blends);
     blend.setInterceptsMouseClicks (blends, false);     // the fader takes a hand only where the gear has a BLEND
     blend.setAlpha (blends ? 1.0f : 0.35f);
     if (blendValue != nullptr)
         blendValue->setAlpha (blends ? 1.0f : 0.35f);
     picture->repaint();                                 // ...and BLEND's name dims with it (Cabin::layerState)
+}
+
+/** BLEND where it plays: on a gear that holds it (CLEAN), the held value — the player's (AmpProcessor::tellBlend) — on
+    the dark fader and under it, whatever the parameter says; else the parameter's. */
+void UnderwaterEditor::showBlend (float v)
+{
+    const auto& own = channels.lineup().channels[(size_t) channels.active()];
+    const float shown = own.blendHeld && own.blend.has_value() ? *own.blend : v;
+    blend.setValue (shown, false);
+    if (blendValue != nullptr)
+        blendValue->set (percent (shown));
 }
 
 /** PARK: the amp's bypass, from the lever, a host's bypass or anywhere — the lever to it, the sea parked. */

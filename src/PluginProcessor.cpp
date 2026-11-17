@@ -1726,7 +1726,13 @@ void AmpProcessor::runSpaceStage (SpaceStage& stage, bool ready, params::ChainRo
 void AmpProcessor::tellBlend()
 {
     const std::scoped_lock control (blendControl);
-    preamp.setCrossover (1.0f - bass.blend->load(), bass.blendHz->load(), bass.blendInvert->load() > 0.5f);   // BLEND 1: the capture alone
+    // BLEND 1: the capture alone — or where the playing channel holds BLEND, there (DeepGrooveBass's CLEAN), whatever the
+    // parameter says.
+    float wet = bass.blend->load();
+    if (productEngine != nullptr)
+        if (const auto held = productEngine->heldBlend())
+            wet = *held;
+    preamp.setCrossover (1.0f - wet, bass.blendHz->load(), bass.blendInvert->load() > 0.5f);
 }
 
 namespace
