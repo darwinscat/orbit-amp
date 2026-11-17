@@ -4,8 +4,9 @@
 // The captured-block gate: a pack on disk, through the block the plugin plays it with, checked without
 // a sound card. Every installed pack sounds; the dial changes the sound and never steps; a position the
 // pack linked to its neighbour is fed softer, as its own `input_db` says; a tone knob of either form —
-// a measured ladder or bands — reaches the audio, its reference plays flat, and OURS parks it. Skips
-// cleanly when no pack is installed.
+// a measured ladder or bands — reaches the audio, its reference plays flat, and OURS parks it; and the
+// bass packs' crossover blend sums its low end without the dip their lag and polarity alone left, once
+// the block has fitted each capture's clean match. Skips cleanly when no pack is installed.
 //
 // The player's own law — which captures, the crossfade, the filter design — is checked where it lives
 // (felitronics-core's rigplayer tests). What is checked here is the TRANSLATION: a host's 0..10 and 0..1
@@ -17,6 +18,7 @@
 #include <juce_events/juce_events.h>
 
 #include <cmath>
+#include <complex>
 #include <cstdio>
 #include <vector>
 
@@ -112,6 +114,50 @@ namespace
     {
         const int deg = namz::rig::detail::degrees (value);
         return dial.sweep > 0 && deg >= 0 ? 10.0f * (float) deg / (float) dial.sweep : 5.0f;
+    }
+
+    /** One tone's complex response through the block, input to output: a settle (the glides, the crossover's sweep),
+        then a Hann-windowed lock-in over the whole periods that fill a quarter of a second. The pump runs inline. */
+    std::complex<double> phasorOf (Block& b, double hz, float amplitude)
+    {
+        juce::AudioBuffer<float> buf (1, blockSize), dry (1, blockSize);
+        const double w = 2.0 * juce::MathConstants<double>::pi * hz / sampleRate;
+        const long settle = (long) (0.3 * sampleRate);
+        const long measure = std::lround (std::ceil (0.25 * hz) * sampleRate / hz);
+        std::complex<double> x, y;
+
+        for (long n = 0; n < settle + measure; n += blockSize)
+        {
+            for (int i = 0; i < blockSize; ++i)
+                buf.setSample (0, i, amplitude * (float) std::sin (w * (double) (n + i)));
+
+            b.process (buf, dry);
+            b.pump (nullptr);
+
+            for (int i = 0; i < blockSize; ++i)
+            {
+                const long m = n + i - settle;
+                if (m < 0 || m >= measure)
+                    continue;
+                const double win = 0.5 - 0.5 * std::cos (2.0 * juce::MathConstants<double>::pi * ((double) m + 0.5) / (double) measure);
+                const auto turn = std::polar (win, -w * (double) (n + i));
+                x += (double) amplitude * std::sin (w * (double) (n + i)) * turn;
+                y += (double) buf.getSample (0, i) * turn;
+            }
+        }
+
+        return y / x;
+    }
+
+    /** The crossover pair's two halves at `f`, as core's eq::Crossover2 builds them (two Butterworth SVFs a side,
+        prewarped at the crossover): the low and the high LR4, complex. */
+    std::pair<std::complex<double>, std::complex<double>> crossoverHalves (double f, double fc)
+    {
+        const double o = std::tan (juce::MathConstants<double>::pi * f / sampleRate)
+                       / std::tan (juce::MathConstants<double>::pi * fc / sampleRate);
+        const std::complex<double> den (1.0 - o * o, o * std::sqrt (2.0));
+        const auto lp = 1.0 / den, hp = -o * o / den;
+        return { lp * lp, hp * hp };
     }
 
     const namz::rig::Control* dialOf (const Block& b)
@@ -539,6 +585,138 @@ int ORBITAMP_GATE_MAIN()
                         + juce::String (byBoth.db - byLevel.db, 2) + " of the trimmed -6");
 
             lv.player.load (found, bytesOfPack);      // …and the device is left as it was found
+        }
+    }
+
+    // ---- THE BASS PACKS' CROSSOVER BLEND: the low end's dip, and the clean match that closes it ----
+    //
+    // The blend sums HP4(device) + LP4((1 - amount)·device + amount·clean). The packs line the clean leg up by their
+    // captures' own lag and polarity, which leaves it sliding out of phase where a capture's low end turns — the
+    // ReVolt Bass's coupling caps — and the low sum dipped there. A block whose host plays the crossover fits each
+    // capture a clean match at load (CapturedBlock::askFit) and the dip closes. Read at 15 tones, 30 - 260 Hz, the
+    // crossover at 150 Hz, at 50/50 and 80/20 (the device's share first): the device's response D (amount 0), the clean
+    // leg's C (from amount 1, its high half taken out), and the sum Y at the amount — against the two bands' levels
+    // added as if they met in phase. REAL is the block as it plays (its own clean level); MATCHED gives the clean leg the
+    // device's level, 40 - 150 Hz, as the offline reading did. BEFORE is a block whose host never played the crossover
+    // (the pack's readings alone), AFTER one that did, both through the same pack files.
+    {
+        std::printf ("\nthe bass packs' crossover blend, before and after the clean match:\n");
+        const double tones[] { 30, 35, 41.2, 46, 55, 62, 73.4, 82.4, 98, 110, 130, 150, 180, 220, 260 };
+        constexpr int numTones = (int) (sizeof (tones) / sizeof (tones[0]));
+        constexpr double fc = 150.0;
+        constexpr float level = 0.1f;
+
+        struct Reading { double real[2][numTones], matched[2][numTones]; };   // [50/50, 80/20][tone], dB
+
+        const auto read = [&] (Block& b, bool viaHost)
+        {
+            const auto setAmount = [&] (float amount)
+            {
+                if (viaHost) b.setCrossover (amount, (float) fc, false);
+                else { (void) b.player.setCrossoverAmount ((double) amount); (void) b.player.setCrossoverHz (fc); }
+            };
+            Reading r {};
+            const double amounts[2] { 0.5, 0.2 };
+            std::complex<double> D[numTones], C[numTones], Y[2][numTones];
+            for (int k = 0; k < numTones; ++k)
+            {
+                setAmount (0.0f); D[k] = phasorOf (b, tones[k], level);
+                setAmount (1.0f); const auto Y1 = phasorOf (b, tones[k], level);
+                const auto [lp, hp] = crossoverHalves (tones[k], fc);
+                C[k] = (Y1 - hp * D[k]) / lp;
+                for (int a = 0; a < 2; ++a) { setAmount ((float) amounts[a]); Y[a][k] = phasorOf (b, tones[k], level); }
+            }
+            double mag = 0.0, cmag = 0.0;
+            int inBand = 0;
+            for (int k = 0; k < numTones; ++k)
+                if (tones[k] >= 40.0 && tones[k] <= 150.0) { mag += std::abs (D[k]); cmag += std::abs (C[k]); ++inBand; }
+            mag /= inBand; cmag /= inBand;
+            for (int a = 0; a < 2; ++a)
+                for (int k = 0; k < numTones; ++k)
+                {
+                    const double am = amounts[a];
+                    const auto [lp, hp] = crossoverHalves (tones[k], fc);
+                    const double inPhase = std::abs (hp) * std::abs (D[k]) + std::abs (lp) * ((1.0 - am) * std::abs (D[k]) + am * std::abs (C[k]));
+                    r.real[a][k] = toDb (std::abs (Y[a][k]) / inPhase);
+                    const auto cl = C[k] * (mag / cmag);
+                    r.matched[a][k] = toDb (std::abs ((1.0 - am) * D[k] + am * cl) / ((1.0 - am) * std::abs (D[k]) + am * mag));
+                }
+            setAmount (0.0f);
+            return r;
+        };
+
+        Block plain (orbitamp::device::DeviceLibrary::Slot::preamp), fitted (orbitamp::device::DeviceLibrary::Slot::preamp);
+        plain.prepare (sampleRate, blockSize, 1);
+        fitted.prepare (sampleRate, blockSize, 1);
+        fitted.setCrossover (0.0f, (float) fc, false);       // its host plays the crossover: every pack it loads is fitted
+        plain.rescan ("OrbitBass", 0);
+        fitted.rescan ("OrbitBass", 0);
+
+        struct Want { const char* name; double bound; };      // the worst |dip| allowed after, REAL, both amounts
+        const Want wants[] { { "Two Notes ReVolt Bass Dirt", 1.0 }, { "Two Notes ReVolt Bass Drive", 1.0 }, { "Ampeg SGT-DI", 1.0 } };
+
+        for (const auto& want : wants)
+        {
+            int at = -1;
+            for (int i = 0; i < plain.packs.size(); ++i)
+                if (plain.packs.getReference (i).displayName() == want.name)
+                    at = i;
+            if (at < 0)
+            {
+                report (juce::String ("bass pack in the build's set: ") + want.name, false, "not found");
+                continue;
+            }
+
+            plain.select (at);
+            fitted.select (at);
+            plain.setGain (5.0f, true);
+            fitted.setGain (5.0f, true);
+            const auto t0 = juce::Time::getMillisecondCounterHiRes();
+            int pumps = 0;
+            for (; fitted.cleanMatchPending() && pumps < 1000; ++pumps)
+                (void) run (fitted, 0.0, 220.0, 0.1f, 1);
+            const double fitMs = juce::Time::getMillisecondCounterHiRes() - t0;
+
+            const auto before = read (plain, false);
+            const auto after = read (fitted, true);
+
+            juce::String fits;
+            for (const auto& [id, m] : fitted.player.alignment().cleanMatchByFile)
+                fits << "  " << id << ": lag " << m.lag << (m.inverted ? " inv" : "") << " ap "
+                     << juce::String (m.allpassHz[0], 0) << "+" << juce::String (m.allpassHz[1], 0) << "\n";
+            std::printf ("\n%s — %d captures fitted in %.0f ms:\n%s", want.name, (int) fitted.player.alignment().cleanMatchByFile.size(),
+                         fitMs, fits.toRawUTF8());
+            std::printf ("  tone Hz           ");
+            for (const double f : tones) std::printf ("%6.0f", f);
+            std::printf ("\n");
+
+            double worst[2][2][2] {};                       // [before, after][real, matched][amount]
+            bool notWorse = true;
+            for (int a = 0; a < 2; ++a)
+                for (int kind = 0; kind < 2; ++kind)
+                    for (int ba = 0; ba < 2; ++ba)
+                    {
+                        const auto& rd = ba == 0 ? before : after;
+                        const auto* row = kind == 0 ? rd.real[a] : rd.matched[a];
+                        std::printf ("  %s %s %s ", ba == 0 ? "before" : "after ", a == 0 ? "50/50" : "80/20", kind == 0 ? "real   " : "matched");
+                        for (int k = 0; k < numTones; ++k)
+                        {
+                            std::printf ("%6.1f", row[k]);
+                            worst[ba][kind][a] = std::min (worst[ba][kind][a], row[k]);
+                        }
+                        std::printf ("  worst %6.2f\n", worst[ba][kind][a]);
+                    }
+            for (int a = 0; a < 2; ++a)
+                for (int k = 0; k < numTones; ++k)
+                    notWorse = notWorse && after.real[a][k] >= before.real[a][k] - 0.25;
+
+            report (juce::String ("clean match fitted: ") + want.name, ! fitted.cleanMatchPending(),
+                    juce::String (fitted.player.alignment().cleanMatchByFile.size()) + " of its captures matched");
+            report (juce::String ("no tone worse with it: ") + want.name, notWorse, "after >= before - 0.25 dB, real, 15 tones x 2");
+            report (juce::String ("low sum within ") + juce::String (want.bound, 1) + " dB: " + want.name,
+                    std::min (worst[1][0][0], worst[1][0][1]) >= -want.bound,
+                    "50/50 " + juce::String (worst[0][0][0], 2) + " -> " + juce::String (worst[1][0][0], 2) + " dB, 80/20 "
+                        + juce::String (worst[0][0][1], 2) + " -> " + juce::String (worst[1][0][1], 2) + " dB");
         }
     }
 

@@ -108,6 +108,9 @@ public:
         if (pack == nullptr)
         {
             loadedName.clear();
+            loadedPack.reset();
+            ++fitGen;
+            fitQueue.clear();
             player.unload();
             refreshWearableTone();
             return;
@@ -128,6 +131,12 @@ public:
         });
 
         player.setBlendShape (shapeFor (lastSmooth));
+
+        // …and the crossover's clean match for it, where the host plays the crossover (askFit): fitted off this
+        // pack's own models by the pump, or taken from the session's cache when this file was fitted before.
+        loadedPack = where;
+        ++fitGen;
+        askFit();
 
         if (raw)
             parkTone();
@@ -319,11 +328,22 @@ public:
         only what moved reaches the player. */
     void setCrossover (float amount, float hz, bool invert)
     {
+        // The first word from a host that plays the crossover is when this block starts fitting clean matches: from
+        // here on every pack it loads gets one (askFit), and the pack loaded now gets one too.
+        if (! crossoverPlayed)
+        {
+            crossoverPlayed = true;
+            askFit();
+        }
+
         const auto moved = [] (float a, float b) { return a < b || a > b; };
         if (moved (amount, crossoverSet[0])) { crossoverSet[0] = amount; (void) player.setCrossoverAmount ((double) amount); }
         if (moved (hz, crossoverSet[1]))     { crossoverSet[1] = hz;     (void) player.setCrossoverHz ((double) hz); }
         if (invert != crossoverInvertSet) { crossoverInvertSet = invert; player.setCrossoverInvert (invert); }
     }
+
+    /** Whether a clean match is still being fitted for the loaded pack (askFit): queued, or out on the pool. */
+    bool cleanMatchPending() const noexcept { return fitInFlight || ! fitQueue.empty(); }
 
     /** What the player was last told of its crossover: the amount, the frequency and the polarity. */
     float crossoverAmountTold() const noexcept { return crossoverSet[0]; }
@@ -543,6 +563,7 @@ public:
             while (auto job = player.takeLoadJob())
                 player.deliver (RigPlayer::run (std::move (*job)));
                 if (onLanded) onLanded();
+            serveFit (nullptr);
             return;
         }
 
@@ -576,6 +597,8 @@ public:
                 });
             });
         }
+
+        serveFit (pool);
     }
 
     /** Called on the MESSAGE THREAD the moment a model has landed and `latencySamples()` has
@@ -884,11 +907,153 @@ public:
     RigPlayer player;
     float crossoverSet[2] { 0.0f, 150.0f };   // the amount and the frequency the player was last told: its own defaults
     bool  crossoverInvertSet = false;
+    bool  crossoverPlayed = false;            // a host plays the crossover here (setCrossover): its packs get a clean match
     ScopeTap scope;
     WaveRibbon ribbon;
     juce::Array<device::DeviceLibrary::Pack> packs;
 
 private:
+    /** THE CROSSOVER'S CLEAN MATCH. RigPlayer's crossover blend lines its clean leg up with each capture by the pack's
+        own lag and polarity, which is right only where the capture's phase is a delay — and a bass pedal's coupling
+        caps turn its low end ahead of that. The blend's low sum dipped where the two then met out of phase — as this block
+        plays them, at 50/50 and a 150 Hz crossover, the ReVolt Bass Dirt by 16.5 dB at 35 Hz, the Ampeg SGT-DI by 2.5 dB
+        at 30 Hz, the ReVolt Bass Drive by 1.9 dB at 62 Hz (its clean leg far under it; at the capture's level, 24 dB at
+        82 Hz) — and with the match by less than half a decibel anywhere 30 - 260 Hz (CapturedBlockTests). felitronics::rigplayer's
+        measureCleanMatch fits each capture a delay, a polarity and two all-passes from its own response at a handful
+        of tones, and the player turns the clean leg through them (RigPlayer::setAlignment).
+
+        Nothing of it is in the pack: it is read off the models, here, whenever a block whose host plays the crossover
+        loads one. ONE CAPTURE A JOB, on the pump's pool — about a tenth of a second of inference each — so a model the
+        law asks for never waits behind a whole pack's fitting; each match is handed to the player as it lands, on the
+        message thread. A pack's matches are kept for the session by its file and date, so a channel switched back to
+        has them at once. A fit of a pack no longer loaded (fitGen) lands nowhere. With no pool (a test, an offline
+        driver) one capture is fitted per pump, right there. */
+    using CleanMatches = std::map<std::string, felitronics::rigplayer::CleanMatch>;
+
+    struct FitAsk
+    {
+        std::shared_ptr<const device::DeviceLibrary::Pack> where;   // the pack's bytes, as the load job reads them
+        namz::rig::Device one;                                      // the device with this one capture in it
+        double inputDb = 0.0;                                       // the stage's own input level, as the player feeds it
+        felitronics::rigplayer::AlignmentTable start;               // the pack's readings: where the fit starts
+    };
+
+    /** The rate a capture that states none is fitted at — the rate the family's packs are captured at. */
+    static constexpr double fitRate = 48000.0;
+
+    void askFit()
+    {
+        fitQueue.clear();
+        fitFound.clear();
+
+        if (! crossoverPlayed || loadedPack == nullptr || ! player.loaded())
+            return;
+
+        fitKey = loadedPack->location.getFullPathName() + "|" + juce::String (loadedPack->modified.toMilliseconds());
+
+        if (const auto hit = fitCache.find (fitKey); hit != fitCache.end())
+        {
+            if (! hit->second.empty())
+                applyFit (hit->second);
+            return;
+        }
+
+        const auto& stage = player.stage();
+        for (const auto& f : stage.device.files)
+        {
+            if (f.id.empty() || std::any_of (fitQueue.begin(), fitQueue.end(),
+                                             [&f] (const FitAsk& a) { return a.one.files.front().id == f.id; }))
+                continue;
+
+            FitAsk a;
+            a.where = loadedPack;
+            a.one = stage.device;
+            a.one.files = { f };
+            a.inputDb = stage.inputDb;
+            a.start = player.alignment();
+            fitQueue.push_back (std::move (a));
+        }
+
+        if (fitQueue.empty())
+            fitCache[fitKey] = {};
+    }
+
+    static CleanMatches fitOne (const FitAsk& a)
+    {
+        const auto where = a.where;
+        return felitronics::rigplayer::measureCleanMatch (a.one, [where] (const std::string& id) -> std::vector<std::byte>
+        {
+            const auto block = device::DeviceLibrary::readBinaryEntry (*where, juce::String (id));
+            const auto* p = static_cast<const std::byte*> (block.getData());
+            return std::vector<std::byte> (p, p + block.getSize());
+        }, a.start, a.inputDb, fitRate);
+    }
+
+    void serveFit (juce::ThreadPool* pool)
+    {
+        if (fitInFlight || fitQueue.empty())
+            return;
+
+        auto ask = std::make_shared<FitAsk> (std::move (fitQueue.front()));
+        fitQueue.erase (fitQueue.begin());
+        const int gen = fitGen;
+
+        if (pool == nullptr)
+        {
+            landFit (gen, fitOne (*ask));
+            return;
+        }
+
+        fitInFlight = true;
+        std::weak_ptr<int> token = alive;
+        auto* self = this;
+
+        pool->addJob ([self, token, ask, gen]
+        {
+            auto found = std::make_shared<CleanMatches> (fitOne (*ask));
+
+            juce::MessageManager::callAsync ([self, token, gen, found]
+            {
+                if (token.lock() != nullptr)
+                {
+                    self->fitInFlight = false;
+                    self->landFit (gen, std::move (*found));
+                }
+            });
+        });
+    }
+
+    void landFit (int gen, CleanMatches found)
+    {
+        if (gen != fitGen)
+            return;
+
+        for (auto& [id, m] : found)
+            fitFound[id] = m;
+
+        if (! found.empty())
+            applyFit (fitFound);
+
+        if (fitQueue.empty() && ! fitInFlight)
+            fitCache[fitKey] = fitFound;
+    }
+
+    /** The player's own table — the pack's readings — with the matches in it. */
+    void applyFit (const CleanMatches& matches)
+    {
+        auto table = player.alignment();
+        table.cleanMatchByFile = matches;
+        player.setAlignment (std::move (table));
+    }
+
+    std::shared_ptr<const device::DeviceLibrary::Pack> loadedPack;   // what select() loaded, for a fit asked later
+    std::vector<FitAsk> fitQueue;                                     // the loaded pack's captures still to fit
+    bool fitInFlight = false;                                         // one of them is out on the pool
+    CleanMatches fitFound;                                            // what has landed for the loaded pack
+    juce::String fitKey;                                              // the pack file they belong to: its path and date
+    std::map<juce::String, CleanMatches> fitCache;                    // fitted packs, by that key, for the session
+    int fitGen = 0;                                                   // bumped by every select()
+
     // Four decibels a step: the full dial spans forty, which is enough to take a capture from barely
     // breaking up to thoroughly into it without leaving the range a model behaves in.
     static constexpr float driveDbPerStep = 4.0f;
