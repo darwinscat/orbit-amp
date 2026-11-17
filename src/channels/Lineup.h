@@ -40,7 +40,7 @@ struct Lineup
         int cabinet = 0;
 
         /** WHERE ITS BLEND OPENS (params::ampBlend, the capture's share), where the channel opens it elsewhere than the
-            parameter's 1, the capture alone: DeepGrooveBass's DIRT at 80/20, its DRIVE at 50/50 (the owner, 17.11). */
+            parameter's 1, the capture alone: DeepGrooveBass's DIRT at 80/20, its DRIVE at 90/10 (the owner, 17.11). */
         std::optional<float> blend {};
         /** ...and HOLDS it there, whatever a record, a preset or a host says: a gear with no BLEND of its own —
             DeepGrooveBass's CLEAN, the capture alone (the owner, 16.11). */

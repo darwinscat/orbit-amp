@@ -42,7 +42,7 @@ const channels::Lineup& lineup()
     // is BLEND's.
     //
     // EACH GEAR IS AN AMP OF ITS OWN: beside what every channel keeps — DRIVE, the tones, the room, the cabinet — its
-    // BLEND and its three effects' amounts. BLEND is DIRT's and DRIVE's, opening at 80/20 and 50/50 (the owner, 17.11);
+    // BLEND and its three effects' amounts. BLEND is DIRT's and DRIVE's, opening at 80/20 and 90/10 (the owner, 17.11);
     // CLEAN has none, and stands at the capture alone (16.11). The instrument and the hand are the player's on every gear: 5 STR / 4 STR and FINGERS / SLAP
     // are kept by no channel.
     //
@@ -55,7 +55,7 @@ const channels::Lineup& lineup()
         {
             { "CLEAN", "revolt-bass-clean-0fba", "Plate", 0.0f, 0.0f, false, {}, dozenAt ("rock-14-1x15-thump"), 1.0f, true },
             { "DIRT",  "revolt-bass-dirt-e9d4",  "Plate", 0.0f, 0.0f, false, {}, dozenAt ("rock-03-8x10-stack"), 0.8f },
-            { "DRIVE", "revolt-bass-drive-2655", "Plate", 0.0f, 0.0f, false, {}, dozenAt ("rock-03-8x10-stack"), 0.5f },
+            { "DRIVE", "revolt-bass-drive-2655", "Plate", 0.0f, 0.0f, false, {}, dozenAt ("rock-03-8x10-stack"), 0.9f },
         },
         false,
         {
