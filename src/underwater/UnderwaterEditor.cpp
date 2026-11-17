@@ -281,7 +281,7 @@ UnderwaterEditor::UnderwaterEditor (AmpProcessor& p)
     for (int i = 0; i < 6; ++i)
         roofKey (i).drawKey = [this, &k = roofKey (i), i] (juce::Graphics& g, juce::Rectangle<float> box, bool down, float)
         {
-            const auto ink = cabinInk();
+            const auto words = cabinInk();
             const bool history = i < ovFirstRegister;
             const bool lit = ! history && k.isOn();
             const bool live = ! history || (i == ovUndo ? amp.history.canUndo() : amp.history.canRedo());
@@ -293,8 +293,8 @@ UnderwaterEditor::UnderwaterEditor (AmpProcessor& p)
             g.setColour (lit || held ? orange : keyRim.withAlpha (live ? 1.0f : 0.45f));
             g.drawRoundedRectangle (cap, 6.0f, 1.4f);
 
-            const auto word = lit ? ink.state : ink.at (ink.values, live ? 0.92f : 0.35f);
-            ink.label (g, k.name, cap.translated (0.0f, held ? 1.0f : 0.0f), history ? px12 : stage::px13, word, 0.04f);   // UNDO and REDO a size down
+            const auto word = lit ? words.state : words.at (words.values, live ? 0.92f : 0.35f);
+            words.label (g, k.name, cap.translated (0.0f, held ? 1.0f : 0.0f), history ? px12 : stage::px13, word, 0.04f);   // UNDO and REDO a size down
 
             if (k.isMouseOverOrDragging() && live)
             {
