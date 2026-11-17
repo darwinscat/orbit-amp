@@ -659,7 +659,7 @@ void UnderwaterEditor::showPark (bool on)
 bool UnderwaterEditor::channelKey (const juce::KeyPress& key)
 {
     const auto c = (juce::juce_wchar) key.getKeyCode();
-    const int at = c >= '1' && c < '1' + channels.count() ? (int) (c - '1') : -1;
+    const int at = c >= '1' && (int) c < '1' + channels.count() ? (int) (c - '1') : -1;
     if (at < 0)
         return false;
     if (! lever.isHeld())
@@ -803,9 +803,9 @@ void UnderwaterEditor::webExtras (const juce::File& dir, juce::DynamicObject& ki
     // THE CUTS' SWITCHES: two positions each, a word over each, the one it stands at lit; the parameter's value is the position.
     {
         struct S { const char* id; const redgroove::SlideSwitch* sw; const char* left; const char* right; const char* param; };
-        const S switches[] { { "lowCut", &lowCut, "5 STR", "4 STR", params::bassHpf }, { "highCut", &highCut, "FINGERS", "SLAP", params::bassLpf } };
+        const S cuts[] { { "lowCut", &lowCut, "5 STR", "4 STR", params::bassHpf }, { "highCut", &highCut, "FINGERS", "SLAP", params::bassLpf } };
         juce::Array<juce::var> a;
-        for (const auto& w : switches)
+        for (const auto& w : cuts)
         {
             auto* v = new Obj();
             const auto box = boxOf (*w.sw);
