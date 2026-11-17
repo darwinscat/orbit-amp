@@ -265,6 +265,7 @@ UnderwaterEditor::UnderwaterEditor (AmpProcessor& p)
     : face::Console (p, std::make_unique<Cabin>(), cabinPlaces(), cabinLook()),
       view (std::make_unique<redpaw::Windscreen> (makeDrive())),
       blend (FaceArt::of().faderCap), octave (FaceArt::of().faderCap), chorus (FaceArt::of().faderCap), reverb (FaceArt::of().faderCap),
+      frozenTone (FaceArt::of().knobTone, tonePointer),
       lever (cabinInk(), leverWords, layout::leverStops, layout::leverX, leverNameCentres(), layout::leverBox.getPosition()),
       lowCut (cabinInk(), "STR", "4", "5", 2, true),
       highCut (cabinInk(), "STYL", "F", "S"),
@@ -310,6 +311,17 @@ UnderwaterEditor::UnderwaterEditor (AmpProcessor& p)
     ringFor (driveKnob(), layout::drive, layout::driveSocket, layout::driveRingWidth);
     for (int t = 0; t < Channels::maxTones; ++t)
         ringFor (toneKnob (t), { layout::toneX[0], layout::toneY }, layout::toneSocket, layout::ringWidth);
+
+    // ...and the frozen knob, for a socket the channel has no tone for (stripsLaid shows it).
+    addToStage (frozenTone);
+    frozenTone.setBounds (around ({ layout::toneX[1], layout::toneY }, layout::toneKnob, layout::toneKnob).toNearestInt());
+    frozenTone.setEnabled (false);
+    frozenTone.setInterceptsMouseClicks (false, false);
+    frozenTone.setAlpha (0.4f);
+    frozenRing = std::make_unique<face::KnobRing> (frozenTone, ringLight, juce::Point<float> { layout::toneX[1], layout::toneY },
+                                                   layout::toneSocket * 0.5f - layout::ringInset, layout::ringWidth);
+    addToStage (*frozenRing);
+    frozenRing->setAlpha (0.4f);
     stripsLaid (strips);
 
     // THE FADERS: BLEND in the AMP, the three effects upright in their slots. Each says where it stands in the tag over
@@ -349,18 +361,19 @@ UnderwaterEditor::UnderwaterEditor (AmpProcessor& p)
     // stands, or on a pack with no tone the bass's standard's three; the levers' in decibels.
     auto* gain = amp.apvts.getParameter (params::preampGain);
     follow (params::preampGain, [gain, &driveValue] (float v) { driveValue.set (juce::String (gain->convertTo0to1 (v) * 10.0f, 1)); })->sendInitialUpdate();
-    const auto dials = channels.tonesOf (channels.active());
-    for (int t = 0; t < 3; ++t)
-    {
-        auto& value = readout (under (layout::toneX[(size_t) t], layout::valueY, 100.0f));
-        const auto id = channels.toneOf (channels.active(), t);
-        if (id.isEmpty())
-            continue;
-        if (t < (int) dials.size())
-            follow (id.toRawUTF8(), [&value, tone = dials[(size_t) t]] (float v) { value.set (dbTenth (dialDb (tone, v))); })->sendInitialUpdate();
-        else
-            follow (id.toRawUTF8(), [&value] (float v) { value.set (dbTenth (v)); })->sendInitialUpdate();
-    }
+    // ...the tones' each under its socket, reading the knob that stands in it on the playing channel (stripsLaid) — so every
+    // tone parameter of every channel is followed, and each move reads them all again.
+    for (size_t s = 0; s < toneReadings.size(); ++s)
+        toneReadings[s] = &readout (under (layout::toneX[s], layout::valueY, 100.0f));
+    juce::StringArray followed;
+    for (int c = 0; c < channels.count(); ++c)
+        for (int t = 0; t < Channels::maxTones; ++t)
+            if (const auto id = channels.toneOf (c, t); id.isNotEmpty() && ! followed.contains (id))
+            {
+                followed.add (id);
+                follow (id.toRawUTF8(), [this] (float) { showToneReadings(); });
+            }
+    showToneReadings();
     follow (params::inTrim,  [&inValue]  (float v) { inValue.set (dbTenth (v)); })->sendInitialUpdate();
     follow (params::outTrim, [&outValue] (float v) { outValue.set (dbTenth (v)); })->sendInitialUpdate();
 
@@ -583,6 +596,7 @@ void UnderwaterEditor::showSelector (int channel)
 
     // CLEAN HAS NO BLEND (the owner, 16.11): the capture alone, the fader dark and out of the hand's reach.
     const bool blends = channel != 0;
+    blend.defaultValue = channels.defaultOf (channel, params::ampBlend);     // a double click: where this gear's BLEND opens
     blend.setEnabled (blends);
     blend.setAlpha (blends ? 1.0f : 0.35f);
     if (blendValue != nullptr)
@@ -622,6 +636,46 @@ void UnderwaterEditor::stripsLaid (const face::Strips& laid)
             ring.place (laid.tones[t].knob.getCentre(), (layout::toneSocket * 0.5f - layout::ringInset) * laid.toneScale,
                         layout::ringWidth * laid.toneScale);
         ring.setVisible (shown);
+    }
+
+    // Which tone stands in which socket, and the frozen knob in a socket none does, between two that are.
+    socketParam.fill ({});
+    socketTone.fill (-1);
+    const float near = 0.25f * (layout::toneX[1] - layout::toneX[0]);
+    for (const auto& tone : laid.tones)
+        for (size_t s = 0; s < layout::toneX.size(); ++s)
+            if (std::abs (tone.knob.getCentreX() - layout::toneX[s]) < near)
+            {
+                socketParam[s] = tone.param;
+                socketTone[s] = tone.tone;
+            }
+    const bool frozen = socketParam[1].isEmpty() && socketParam[0].isNotEmpty() && socketParam[2].isNotEmpty();
+    frozenTone.setVisible (frozen);
+    if (frozenRing != nullptr)
+        frozenRing->setVisible (frozen);
+    showToneReadings();
+}
+
+/** THE TONES' READINGS: each socket's knob in the decibels its pack's dial gives — or, on a pack with no tone, the bass's
+    standard's own — and a bare socket's frozen knob at its noon, dim. */
+void UnderwaterEditor::showToneReadings()
+{
+    const auto dials = channels.tonesOf (channels.active());
+    for (size_t s = 0; s < toneReadings.size(); ++s)
+    {
+        auto* r = toneReadings[s];
+        if (r == nullptr)
+            continue;
+        if (socketParam[s].isEmpty())
+        {
+            r->set (dbTenth (0.0f));
+            r->setAlpha (0.35f);
+            continue;
+        }
+        r->setAlpha (1.0f);
+        const float v = getParam (socketParam[s].toRawUTF8());
+        const int t = socketTone[s];
+        r->set (t >= 0 && t < (int) dials.size() ? dbTenth (dialDb (dials[(size_t) t], v)) : dbTenth (v));
     }
 }
 

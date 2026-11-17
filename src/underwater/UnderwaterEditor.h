@@ -9,6 +9,7 @@
 
 #include <juce_opengl/juce_opengl.h>
 
+#include <array>
 #include <atomic>
 
 namespace orbitamp::underwater
@@ -85,6 +86,18 @@ private:
     static constexpr size_t firstToneRing = 1;
     std::vector<std::unique_ptr<redgroove::Readout>> readouts;
     redgroove::Readout* blendValue = nullptr;
+
+    // THE TONES' SOCKETS: which of the playing channel's tones stands in each — its parameter and its place in the pack's
+    // list, none where the socket is bare — and the reading under each, which reads the knob in its socket.
+    std::array<juce::String, 3> socketParam;
+    std::array<int, 3> socketTone { -1, -1, -1 };
+    std::array<redgroove::Readout*, 3> toneReadings {};
+    void showToneReadings();
+
+    // A SOCKET THE CHANNEL HAS NO TONE FOR keeps a knob, frozen (the owner, 17.11): CLEAN's middle, at its noon, dim, out of
+    // the hand's reach, its ring with it.
+    face::ArtKnob frozenTone;
+    std::unique_ptr<face::KnobRing> frozenRing;
 
     redgroove::Readout& readout (juce::Rectangle<float> box);
 
