@@ -114,6 +114,6 @@ inline const juce::Rectangle<float> stringsSlot = socket (1354.0f, 852.8f, 52.0f
 inline const juce::Rectangle<float> fingersSlot = socket (1354.0f, 887.6f, 52.0f, 28.0f);
 
 // THE READINGS, a row under each group of controls.
-inline constexpr float valueY = 892.0f, driveValueY = 912.0f, levelValueY = 886.0f;
+inline constexpr float valueY = 892.0f, driveValueY = 912.0f, levelValueY = 884.5f;
 
 } // namespace orbitamp::underwater::layout

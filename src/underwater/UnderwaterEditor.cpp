@@ -61,6 +61,10 @@ namespace
     }
 
     const juce::Colour titleInk { 0xffded9e8 };     // the panels' titles, a little lighter than the names
+
+    /** THE SIZE OF WHAT IS READ ON THIS PANEL — the controls' names, the readings, the lever's and the switches' words: 12 px
+        (the owner, 17.11: at 13 the bathyscaphe's rows ran into each other). The panels' titles stay 13, DRIVE 15. */
+    const float px12 = stage::px13 * 12.0f / 13.0f;
     const juce::Colour makerInk { 0xffd3cedd };     // the maker's words on the plates, quieter than the titles
     const juce::Colour keyCap { 0xff22222e }, keyRim { 0xff8b6cff };
     const juce::Colour ringLight { 0xff8b6cff };    // the rings round the knobs: the family's violet
@@ -114,7 +118,7 @@ namespace
     {
         using namespace layout;
         std::vector<juce::Point<float>> at;
-        const auto font = labelFont (stage::px13).withExtraKerningFactor (0.04f);
+        const auto font = labelFont (px12).withExtraKerningFactor (0.04f);
         for (int i = 0; i < leverWords.size(); ++i)
         {
             const float wide = juce::jmin (leverNameRoom, juce::GlyphArrangement::getStringWidth (font, leverWords[i]) + 2.0f);
@@ -141,7 +145,7 @@ namespace
         p.toneStrip.spread = true;          // CLEAN's two in the outer sockets, the middle one bare
         p.toneKnob = toneKnob;
         p.toneNameY = nameY;
-        p.toneNameEm = px13;
+        p.toneNameEm = px12;
         p.toneSignDrop = 0.0f;
 
         // No filter keys; the six keys of the history and the registers in their holes, the history's wider.
@@ -246,10 +250,11 @@ void Cabin::paintStatic (juce::Graphics& g, float scale) const
     // the names' row; the tones' names are the playing channel's (paintStrips).
     const auto ink = cabinInk();
     print (g, "DRIVE", { drive.x, titleY }, px15, ink.values);
-    print (g, "BLEND", { blendSlot.getCentreX(), nameY }, px13, ink.words);
+    const bool dark = onScreen && blendDark != nullptr && blendDark();      // a picture taken shows it lit
+    print (g, "BLEND", { blendSlot.getCentreX(), nameY }, px12, dark ? ink.at (ink.words, 0.35f) : ink.words);
     const char* effects[] { "OCTAVE", "CHORUS", "REVERB" };
     for (size_t i = 0; i < effectX.size(); ++i)
-        printInto (g, effects[i], { effectX[i], nameY }, 80.0f, px13, ink.words);
+        printInto (g, effects[i], { effectX[i], nameY }, 80.0f, px12, ink.words);
 }
 
 /** THE PLAYING CHANNEL'S TONES' NAMES over their knobs. */
@@ -257,7 +262,7 @@ void Cabin::paintStrips (juce::Graphics& g, float) const
 {
     const auto ink = cabinInk();
     for (const auto& t : strips.tones)
-        ink.label (g, t.name, t.label.withSizeKeepingCentre (t.label.getWidth() + 40.0f, t.label.getHeight()), stage::px13, ink.words);
+        ink.label (g, t.name, t.label.withSizeKeepingCentre (t.label.getWidth() + 40.0f, t.label.getHeight()), px12, ink.words);
 }
 
 //==============================================================================
@@ -292,7 +297,7 @@ UnderwaterEditor::UnderwaterEditor (AmpProcessor& p)
             g.drawRoundedRectangle (cap, 6.0f, 1.4f);
 
             const auto word = lit ? ink.state : ink.at (ink.values, live ? 0.92f : 0.35f);
-            ink.label (g, k.name, cap.translated (0.0f, held ? 1.0f : 0.0f), stage::px13, word, 0.04f);
+            ink.label (g, k.name, cap.translated (0.0f, held ? 1.0f : 0.0f), history ? px12 : stage::px13, word, 0.04f);   // UNDO and REDO a size down
 
             if (k.isMouseOverOrDragging() && live)
             {
@@ -398,6 +403,7 @@ UnderwaterEditor::UnderwaterEditor (AmpProcessor& p)
     addToStage (lever);
     lever.setBounds (layout::leverBox.toNearestInt());
     lever.nameRoom = layout::leverNameRoom;
+    lever.em = px12;
     lever.handLight = handLight;
     lever.onPlace = [this] (int at)
     {
@@ -425,6 +431,7 @@ UnderwaterEditor::UnderwaterEditor (AmpProcessor& p)
         const auto& bg = FaceArt::of().bg;
         sw.slotPicture = bg.getClippedImage ((slotOnStage * ((float) bg.getWidth() / stage::width)).toNearestInt());
         sw.handLight = handLight;
+        sw.em = px12;
         addToStage (sw);
         sw.setBounds (box.toNearestInt());
     };
@@ -500,6 +507,7 @@ UnderwaterEditor::UnderwaterEditor (AmpProcessor& p)
     // ...the panel the world's while it is drawing it — and not while the view is hidden for a picture taken of the face
     // (Console::writePoster): the face's own panel goes into that.
     cabin().worldDrawsPanel = [this] { return view->isVisible() && view->drawsCabin(); };
+    cabin().blendDark = [this] { return channels.lineup().channels[(size_t) channels.active()].blendHeld; };
 
     park.sendInitialUpdate();
     showChannel();
@@ -533,7 +541,7 @@ std::unique_ptr<redpaw::Drive> UnderwaterEditor::makeDrive()
 
 Readout& UnderwaterEditor::readout (juce::Rectangle<float> box)
 {
-    auto& r = *readouts.emplace_back (std::make_unique<Readout> (cabinInk(), stage::px13));
+    auto& r = *readouts.emplace_back (std::make_unique<Readout> (cabinInk(), px12));
     addToStage (r);
     r.setBounds (box.toNearestInt());
     return r;
@@ -595,12 +603,14 @@ void UnderwaterEditor::showSelector (int channel)
     view->setGear (channel + 1);        // CLEAN the first gear, DIRT the second, DRIVE the third
 
     // CLEAN HAS NO BLEND (the owner, 16.11): the capture alone, the fader dark and out of the hand's reach.
-    const bool blends = channel != 0;
+    const bool blends = ! channels.lineup().channels[(size_t) channel].blendHeld;
     blend.defaultValue = channels.defaultOf (channel, params::ampBlend);     // a double click: where this gear's BLEND opens
     blend.setEnabled (blends);
+    blend.setInterceptsMouseClicks (blends, false);     // the fader takes a hand only where the gear has a BLEND
     blend.setAlpha (blends ? 1.0f : 0.35f);
     if (blendValue != nullptr)
         blendValue->setAlpha (blends ? 1.0f : 0.35f);
+    picture->repaint();                                 // ...and BLEND's name dims with it (Cabin::layerState)
 }
 
 /** PARK: the amp's bypass, from the lever, a host's bypass or anywhere — the lever to it, the sea parked. */

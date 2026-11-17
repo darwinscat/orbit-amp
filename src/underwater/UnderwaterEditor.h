@@ -28,13 +28,18 @@ class Cabin final : public face::Picture
 {
 public:
     std::function<bool()> worldDrawsPanel;
+    /** Whether the playing gear has no BLEND of its own (CLEAN): BLEND's name stands dim then. */
+    std::function<bool()> blendDark;
 
 private:
     void paintStatic (juce::Graphics&, float scale) const override;
     void paintStrips (juce::Graphics&, float scale) const override;
     juce::Colour signInk() const override;
     juce::Rectangle<int> historyArea() const override;
-    int layerState() const override { return worldDrawsPanel != nullptr && worldDrawsPanel() ? 1 : 0; }
+    int layerState() const override
+    {
+        return (worldDrawsPanel != nullptr && worldDrawsPanel() ? 1 : 0) | (blendDark != nullptr && blendDark() ? 2 : 0);
+    }
 };
 
 //==============================================================================

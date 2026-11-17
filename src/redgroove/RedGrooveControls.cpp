@@ -157,7 +157,7 @@ void ChannelLever::paint (juce::Graphics& g)
     // Each place's name where the face puts it, the one the lever stands nearest lit — set condensed into the room, as
     // tall, where it is wider.
     const int nearest = juce::roundToInt (travel());
-    const auto font = face::labelFont (face::stage::px13).withExtraKerningFactor (0.04f);
+    const auto font = face::labelFont (em).withExtraKerningFactor (0.04f);
     for (int i = 0; i < names.size() && i < (int) nameCentres.size(); ++i)
     {
         const auto at = nameCentres[(size_t) i];
@@ -166,7 +166,7 @@ void ChannelLever::paint (juce::Graphics& g)
         if (wide > nameRoom)
             g.addTransform (juce::AffineTransform::scale (nameRoom / wide, 1.0f, at.x, at.y));
         writeAsIs (g, ink, names[i], juce::Rectangle<float> (juce::jmax (nameRoom, wide), 30.0f).withCentre (at),
-                   face::stage::px13, i == nearest ? ink.words : ink.at (ink.words, 0.45f));
+                   em, i == nearest ? ink.words : ink.at (ink.words, 0.45f));
     }
 
     // The cap across the slot, its orange line where it stands.
