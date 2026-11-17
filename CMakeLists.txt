@@ -1014,10 +1014,10 @@ endforeach()
 add_custom_target(OrbitAmpSetPacks DEPENDS ${ORBITAMP_SET_PACKS})
 
 # THE BASS'S PACKS, which no guitar amp plays — a guitar amp's packs and a bass amp's never cross, as their
-# cabinets do not (resources/cabinets.txt). OrbitBass plays them and opens on the first; RedGrooveBass's two
+# cabinets do not (resources/cabinets.txt). OrbitBass plays them all and opens on the first, the SGT-DI; RedGrooveBass's two
 # channels, B15 and SVT, are the SGT-DI's two voices (src/redgroove/RedGrooveLineup.cpp). DeepGrooveBass's three, CLEAN,
 # DIRT and DRIVE, are the Two Notes ReVolt Bass's three channels, a pack each (src/underwater/UnderwaterLineup.cpp).
-set(ORBITBASS_SET   "Ampeg SGT-DI")
+set(ORBITBASS_SET   "Ampeg SGT-DI" "Two Notes ReVolt Bass Clean" "Two Notes ReVolt Bass Dirt" "Two Notes ReVolt Bass Drive")
 set(REDGROOVEBASS_SET "Ampeg SGT-DI")
 set(DEEPGROOVEBASS_SET "Two Notes ReVolt Bass Clean" "Two Notes ReVolt Bass Dirt" "Two Notes ReVolt Bass Drive")
 
