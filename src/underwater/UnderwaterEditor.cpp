@@ -55,7 +55,7 @@ namespace
     {
         Ink ink;
         ink.words  = juce::Colour (0xffb9a6ff);
-        ink.values = juce::Colour (0xffd5e2e7);     // a pale cold grey-blue, the panel's metal under the sea's light (17.11)
+        ink.values = juce::Colour (0xffa9b6cc);     // the panel's own steel, lightened: not white (the owner, 17.11)
         ink.edge   = juce::Colour (0xaa000000);
         return ink;
     }
@@ -68,12 +68,12 @@ namespace
     /** THE READINGS UNDER THE CONTROLS a size further down and quieter than the values' white (the owner, 17.11: they
         stood out over everything else on the panel). */
     const float px11 = stage::px13 * 11.0f / 13.0f;
-    const juce::Colour readingInk { 0xffa9b9c1 };
-    const juce::Colour makerInk { 0xffc9d6dc };     // the maker's words on the plates, a shade under the values
+    const juce::Colour readingInk { 0xff8592a8 };
+    const juce::Colour makerInk { 0xff9eabc0 };     // the maker's words on the plates, a shade under the values
 
     /** THE CONTROLS' NAMES in the cabin's own pale (the owner, 17.11: white, as DRIVE and POWERED BY, in the cabin's tone),
         not the family's lilac — that stays for the words of a state: the lever's places, the switches' positions. */
-    const juce::Colour nameInk { 0xffd5e2e7 };
+    const juce::Colour nameInk { 0xffa9b6cc };
     const juce::Colour keyCap { 0xff22222e }, keyRim { 0xff8b6cff };
     const juce::Colour ringLight { 0xff8b6cff };    // the rings round the knobs: the family's violet
 
