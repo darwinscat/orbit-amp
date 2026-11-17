@@ -61,7 +61,7 @@ inline const juce::Point<float> keysTitle { 1192.0f, topTitleY };
 
 // THE BOTTOM ROW: each panel's title in the strip over its sockets, the controls' names in the row under it. DRIVE's
 // socket reaches into that row, so its name stands in the titles' row.
-inline constexpr float titleY = 764.0f, nameY = 786.5f;
+inline constexpr float titleY = 766.5f, nameY = 790.0f;
 inline const juce::Point<float> inTitle      { 92.0f, titleY };     // centred
 inline const juce::Point<float> ampTitle     { 185.0f, titleY };
 inline const juce::Point<float> toneTitle    { 556.0f, titleY };
@@ -70,50 +70,51 @@ inline const juce::Point<float> cabinetTitle { 1220.0f, titleY };
 inline const juce::Point<float> outTitle     { 1580.0f, titleY };   // centred
 
 // IN: the trim's fader at the outer edge, the meter toward the middle, GATE's slot under them.
-inline const juce::Rectangle<float> inFaderSlot = socket (70.0f, 838.8f, 16.0f, 78.5f);
-inline const juce::Rectangle<float> inMeterSlot = socket (114.0f, 838.8f, 14.0f, 78.5f);
+inline const juce::Rectangle<float> inFaderSlot = socket (70.0f, 844.3f, 16.0f, 67.5f);
+inline const juce::Rectangle<float> inMeterSlot = socket (114.0f, 844.3f, 14.0f, 67.5f);
 inline const juce::Rectangle<float> gateSlot    = socket (92.0f, 907.0f, 92.0f, 26.0f);
 
 // OUT: its mirror.
-inline const juce::Rectangle<float> outMeterSlot = socket (1558.0f, 838.8f, 14.0f, 78.5f);
-inline const juce::Rectangle<float> outFaderSlot = socket (1602.0f, 838.8f, 16.0f, 78.5f);
+inline const juce::Rectangle<float> outMeterSlot = socket (1558.0f, 844.3f, 14.0f, 67.5f);
+inline const juce::Rectangle<float> outFaderSlot = socket (1602.0f, 844.3f, 16.0f, 67.5f);
 inline const juce::Rectangle<float> limiterSlot  = socket (1580.0f, 907.0f, 92.0f, 26.0f);
 
 inline constexpr float faderWidth = 40.0f;          // a column fader's box round its slot
 inline constexpr float faderCapLength = 16.0f;      // ...its cap's render, across the slot
 inline constexpr float faderCapSquash = 0.5f;       // ...at half its render's height, as the walker's
 
-// AMP: the lever's slot with its four stops, DRIVE the hero, BLEND's fader.
+// AMP: the lever's slot with its four stops, DRIVE the hero, BLEND's fader. The row 11 px lower and DRIVE's socket
+// a size down since the re-render of 17.11 (the owner: the titles and the names had no room over the sockets).
 inline constexpr float leverX = 214.0f;
-inline const juce::Rectangle<float> leverSlot = socket (leverX, 847.5f, 24.0f, 110.0f);
-inline const std::vector<float> leverStops { 804.5f, 833.2f, 861.9f, 890.5f };      // PARK, CLEAN, DIRT, DRIVE
+inline const juce::Rectangle<float> leverSlot = socket (leverX, 858.5f, 24.0f, 110.0f);
+inline const std::vector<float> leverStops { 815.5f, 844.2f, 872.9f, 901.5f };      // PARK, CLEAN, DIRT, DRIVE
 inline constexpr float leverStopX = 240.0f;
 inline constexpr float leverNameLeft = 247.0f, leverNameRoom = 39.0f;               // the names beside the stops, short of DRIVE
-inline const juce::Rectangle<float> leverBox { 188.0f, 786.0f, 104.0f, 122.0f };
+inline const juce::Rectangle<float> leverBox { 188.0f, 797.0f, 104.0f, 122.0f };
 
-inline const juce::Point<float> drive { 350.0f, 838.8f };
-inline constexpr float driveSocket = 124.0f, driveKnob = 107.0f;
-inline const juce::Rectangle<float> blendSlot = socket (484.0f, 838.8f, 16.0f, 78.5f);
+inline const juce::Point<float> drive { 350.0f, 849.8f };
+inline constexpr float driveSocket = 112.0f, driveKnob = 97.0f;
+inline const juce::Rectangle<float> blendSlot = socket (484.0f, 849.8f, 16.0f, 78.5f);
 
 // TONE: three sockets, BASS, MIDDLE and TREBLE.
 inline constexpr std::array<float, 3> toneX { 602.0f, 710.0f, 818.0f };
-inline constexpr float toneY = 834.8f, toneSocket = 80.0f, toneKnob = 66.0f;
+inline constexpr float toneY = 845.8f, toneSocket = 80.0f, toneKnob = 66.0f;
 
 // THE EFFECTS: OCTAVE, CHORUS and REVERB, a vertical fader in each slot.
 inline constexpr std::array<float, 3> effectX { 948.0f, 1042.0f, 1136.0f };
-inline constexpr float effectY = 838.8f, effectSlotHeight = 78.5f, effectFaderWidth = 44.0f;
+inline constexpr float effectY = 849.8f, effectSlotHeight = 78.5f, effectFaderWidth = 44.0f;
 
 inline constexpr float ringInset = 3.5f, ringWidth = 2.5f, driveRingWidth = 3.0f;
 
 // CABINET: its screen — the slider across it, the playing cabinet's name in the names' row over it — and the two
 // switches under it, 5 STR / 4 STR over FINGERS / SLAP.
-inline const juce::Rectangle<float> cabinetScreen = socket (1354.0f, 810.5f, 244.0f, 38.0f);
+inline const juce::Rectangle<float> cabinetScreen = socket (1354.0f, 821.5f, 244.0f, 38.0f);
 inline const juce::Rectangle<float> cabinetControl = cabinetScreen.reduced (12.0f, 0.0f);
 inline const juce::Rectangle<float> cabinetName { cabinetScreen.getX(), nameY - 10.0f, cabinetScreen.getWidth(), 20.0f };
-inline const juce::Rectangle<float> stringsSlot = socket (1354.0f, 852.8f, 52.0f, 28.0f);
-inline const juce::Rectangle<float> fingersSlot = socket (1354.0f, 887.6f, 52.0f, 28.0f);
+inline const juce::Rectangle<float> stringsSlot = socket (1354.0f, 863.8f, 52.0f, 28.0f);
+inline const juce::Rectangle<float> fingersSlot = socket (1354.0f, 898.6f, 52.0f, 28.0f);
 
 // THE READINGS, a row under each group of controls.
-inline constexpr float valueY = 892.0f, driveValueY = 912.0f, levelValueY = 884.5f;
+inline constexpr float valueY = 901.0f, driveValueY = 916.5f, levelValueY = 884.5f;
 
 } // namespace orbitamp::underwater::layout
