@@ -36,9 +36,10 @@ namespace
 
 const channels::Lineup& lineup()
 {
-    // THE THREE GEARS, CLEAN, DIRT AND DRIVE: the Two Notes bass the owner captured, a channel each — its captures are
-    // being trained (16.11). Until they are in the set, every gear plays the walker's Ampeg SGT-DI, a voice each,
-    // TEMPORARILY, so the face has a sound under it (CMakeLists.txt: DEEPGROOVEBASS_SET).
+    // THE THREE GEARS, CLEAN, DIRT AND DRIVE: the owner's Two Notes ReVolt Bass, a pack a channel, each its own capture
+    // of the pedal's channel at nine GAIN positions (CMakeLists.txt: DEEPGROOVEBASS_SET) — CLEAN's tone BASS and TREBLE,
+    // DIRT's and DRIVE's BASS, MID and TREBLE, as the pedal's are. DRIVE was captured at its blend's 100% wet: its dry
+    // is BLEND's.
     //
     // EACH GEAR IS AN AMP OF ITS OWN: beside what every channel keeps — DRIVE, the tones, the room, the cabinet — its
     // BLEND and its three effects' amounts. BLEND is DIRT's and DRIVE's; CLEAN has none, and stands at the capture alone
@@ -51,9 +52,9 @@ const channels::Lineup& lineup()
     static const channels::Lineup sub {
         "underwater", "underwater_channel", "4x10-classic",
         {
-            { "CLEAN", "sgt-di-19a4", "Plate", 0.0f, 0.0f, false, { "Voice", "B15" }, dozenAt ("rock-14-1x15-thump") },
-            { "DIRT",  "sgt-di-19a4", "Plate", 0.0f, 0.0f, false, { "Voice", "SVT" }, dozenAt ("rock-03-8x10-stack") },
-            { "DRIVE", "sgt-di-19a4", "Plate", 0.0f, 0.0f, false, { "Voice", "SVT" }, dozenAt ("rock-03-8x10-stack") },
+            { "CLEAN", "revolt-bass-clean-0fba", "Plate", 0.0f, 0.0f, false, {}, dozenAt ("rock-14-1x15-thump") },
+            { "DIRT",  "revolt-bass-dirt-e9d4",  "Plate", 0.0f, 0.0f, false, {}, dozenAt ("rock-03-8x10-stack") },
+            { "DRIVE", "revolt-bass-drive-2655", "Plate", 0.0f, 0.0f, false, {}, dozenAt ("rock-03-8x10-stack") },
         },
         false,
         {

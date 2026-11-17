@@ -1,0 +1,66 @@
+{
+  "format": "orbitrig", "schema": 5,
+  "rig_id": "revolt-bass-drive-2655", "family_id": "twonotes-revolt-bass", "name": "ReVolt Bass", "modeled_by": "Darwin's Cat",
+  "picture": "device.webp",
+  "chain": [
+    {
+      "kind": "nam", "slot": "preamp",
+      "gear": { "make": "Two Notes", "model": "ReVolt Bass", "type": "preamp", "year": 2026,
+                "serial_number": "155D6DF8", "designed_in": "France", "made_in": "China",
+                "url": "https://www.two-notes.com/en/revolt-bass/" },
+      "input_db": -20.0,
+      "output_db": -3.0,
+      "controls": [
+        { "name": "Gain", "role": "gain", "sweep": 300,
+          "values": ["0", "30", "60", "90", "120", "150", "180", "210", "240", "270", "300"] }
+      ],
+      "files": [
+        { "file": "ReVolt Bass Drive-0001.namz", "settings": { "Gain": "60" }, "lag_samples": 0,
+          "epochs": 800, "esr": 0.02012436 },
+        { "file": "ReVolt Bass Drive-0002.namz", "settings": { "Gain": "90" }, "lag_samples": 0,
+          "epochs": 800, "esr": 0.02920738 },
+        { "file": "ReVolt Bass Drive-0003.namz", "settings": { "Gain": "120" }, "lag_samples": 0,
+          "epochs": 800, "esr": 0.03622354 },
+        { "file": "ReVolt Bass Drive-0004.namz", "settings": { "Gain": "150" }, "lag_samples": 0,
+          "epochs": 800, "esr": 0.04189651 },
+        { "file": "ReVolt Bass Drive-0005.namz", "settings": { "Gain": "180" }, "lag_samples": 0,
+          "epochs": 800, "esr": 0.04768528 },
+        { "file": "ReVolt Bass Drive-0006.namz", "settings": { "Gain": "210" }, "lag_samples": 0,
+          "epochs": 800, "esr": 0.07432051 },
+        { "file": "ReVolt Bass Drive-0007.namz", "settings": { "Gain": "240" }, "lag_samples": 0,
+          "epochs": 800, "esr": 0.07221707 },
+        { "file": "ReVolt Bass Drive-0008.namz", "settings": { "Gain": "270" }, "lag_samples": 0,
+          "epochs": 800, "esr": 0.09814666 },
+        { "file": "ReVolt Bass Drive-0009.namz", "settings": { "Gain": "300" }, "lag_samples": 0,
+          "epochs": 800, "esr": 0.08797109 },
+        { "file": "ReVolt Bass Drive-0001.namz", "settings": { "Gain": "30" }, "input_db": -3.0,
+          "lag_samples": 0, "epochs": 800, "esr": 0.02012436 },
+        { "file": "ReVolt Bass Drive-0001.namz", "settings": { "Gain": "0" }, "input_db": -6.0,
+          "lag_samples": 0, "epochs": 800, "esr": 0.02012436 }
+      ],
+      "tone": [
+        {
+          "name": "Bass", "sweep": 300, "placement": "post",
+          "reference": "150", "default": "150",
+          "sections": [
+            { "type": "low_shelf", "hz": 80.0, "q": 0.71, "range_db": [-15.0, 7.0] }
+          ]
+        },
+        {
+          "name": "Mid", "sweep": 300, "placement": "post",
+          "reference": "150", "default": "150",
+          "sections": [
+            { "type": "bell", "hz": 620.0, "q": 1.0, "range_db": [-10.0, 10.0] }
+          ]
+        },
+        {
+          "name": "Treble", "sweep": 300, "placement": "post",
+          "reference": "150", "default": "150",
+          "sections": [
+            { "type": "high_shelf", "hz": 2500.0, "q": 0.71, "range_db": [-17.0, 6.0] }
+          ]
+        }
+      ]
+    }
+  ]
+}
