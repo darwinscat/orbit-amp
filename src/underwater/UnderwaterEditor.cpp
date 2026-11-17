@@ -393,6 +393,9 @@ UnderwaterEditor::UnderwaterEditor (AmpProcessor& p)
     bindTravel (blend, params::ampBlend, [] (float v) { return v; }, [] (float t) { return t; },
                 [this] (float v) { blendValue->set (percent (v)); });
     sayLeverAs (blend, "BLEND", [this] { return percent (getParam (params::ampBlend)); });
+    // ...and a right click on it, the AMP's menu, as OrbitBass's: BLEND's crossover, 80 to 250 Hz, and the clean leg's
+    // polarity (the owner, 17.11).
+    blend.onMenu = [this] { bass::showAmpMenu (amp.apvts, &blend); };
     const char* effectIds[] { params::octaveAmount, params::chorusAmount, params::reverbMix };
     const char* effectNames[] { "OCTAVE", "CHORUS", "REVERB" };
     for (size_t i = 0; i < 3; ++i)
