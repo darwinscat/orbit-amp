@@ -55,7 +55,7 @@ namespace
     {
         Ink ink;
         ink.words  = juce::Colour (0xffb9a6ff);
-        ink.values = juce::Colour (0xfff2eff8);
+        ink.values = juce::Colour (0xffd5e2e7);     // a pale cold grey-blue, the panel's metal under the sea's light (17.11)
         ink.edge   = juce::Colour (0xaa000000);
         return ink;
     }
@@ -68,8 +68,12 @@ namespace
     /** THE READINGS UNDER THE CONTROLS a size further down and quieter than the values' white (the owner, 17.11: they
         stood out over everything else on the panel). */
     const float px11 = stage::px13 * 11.0f / 13.0f;
-    const juce::Colour readingInk { 0xffc4bed2 };
-    const juce::Colour makerInk { 0xffd3cedd };     // the maker's words on the plates, quieter than the titles
+    const juce::Colour readingInk { 0xffa9b9c1 };
+    const juce::Colour makerInk { 0xffc9d6dc };     // the maker's words on the plates, a shade under the values
+
+    /** THE CONTROLS' NAMES in the cabin's own pale (the owner, 17.11: white, as DRIVE and POWERED BY, in the cabin's tone),
+        not the family's lilac — that stays for the words of a state: the lever's places, the switches' positions. */
+    const juce::Colour nameInk { 0xffd5e2e7 };
     const juce::Colour keyCap { 0xff22222e }, keyRim { 0xff8b6cff };
     const juce::Colour ringLight { 0xff8b6cff };    // the rings round the knobs: the family's violet
 
@@ -238,10 +242,10 @@ void Cabin::paintStatic (juce::Graphics& g, float scale) const
     const auto ink = cabinInk();
     print (g, "DRIVE", { drive.x, nameY }, px15, ink.values);
     const bool dark = onScreen && blendDark != nullptr && blendDark();      // a picture taken shows it lit
-    print (g, "BLEND", { blendSlot.getCentreX(), nameY }, px12, dark ? ink.at (ink.words, 0.35f) : ink.words);
+    print (g, "BLEND", { blendSlot.getCentreX(), nameY }, px12, dark ? ink.at (nameInk, 0.35f) : nameInk);
     const char* effects[] { "OCTAVE", "CHORUS", "REVERB" };
     for (size_t i = 0; i < effectX.size(); ++i)
-        printInto (g, effects[i], { effectX[i], nameY }, 80.0f, px12, ink.words);
+        printInto (g, effects[i], { effectX[i], nameY }, 80.0f, px12, nameInk);
 }
 
 /** THE PLAYING CHANNEL'S TONES' NAMES over their knobs. */
@@ -249,7 +253,7 @@ void Cabin::paintStrips (juce::Graphics& g, float) const
 {
     const auto ink = cabinInk();
     for (const auto& t : strips.tones)
-        ink.label (g, t.name, t.label.withSizeKeepingCentre (t.label.getWidth() + 40.0f, t.label.getHeight()), px12, ink.words);
+        ink.label (g, t.name, t.label.withSizeKeepingCentre (t.label.getWidth() + 40.0f, t.label.getHeight()), px12, nameInk);
 }
 
 //==============================================================================
