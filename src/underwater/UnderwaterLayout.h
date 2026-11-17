@@ -62,13 +62,13 @@ inline constexpr float nameY = 778.0f;
 inline constexpr float inX = 92.0f, outX = 1580.0f;                 // IN's and OUT's middles, their readings centred there
 
 // IN: the trim's fader at the outer edge, the meter toward the middle, GATE's slot under them.
-inline const juce::Rectangle<float> inFaderSlot = socket (70.0f, 844.3f, 16.0f, 67.5f);
-inline const juce::Rectangle<float> inMeterSlot = socket (114.0f, 844.3f, 14.0f, 67.5f);
+inline const juce::Rectangle<float> inFaderSlot = socket (70.0f, 834.3f, 16.0f, 67.5f);
+inline const juce::Rectangle<float> inMeterSlot = socket (114.0f, 834.3f, 14.0f, 67.5f);
 inline const juce::Rectangle<float> gateSlot    = socket (92.0f, 907.0f, 92.0f, 26.0f);
 
 // OUT: its mirror.
-inline const juce::Rectangle<float> outMeterSlot = socket (1558.0f, 844.3f, 14.0f, 67.5f);
-inline const juce::Rectangle<float> outFaderSlot = socket (1602.0f, 844.3f, 16.0f, 67.5f);
+inline const juce::Rectangle<float> outMeterSlot = socket (1558.0f, 834.3f, 14.0f, 67.5f);
+inline const juce::Rectangle<float> outFaderSlot = socket (1602.0f, 834.3f, 16.0f, 67.5f);
 inline const juce::Rectangle<float> limiterSlot  = socket (1580.0f, 907.0f, 92.0f, 26.0f);
 
 inline constexpr float faderWidth = 40.0f;          // a column fader's box round its slot
@@ -108,6 +108,6 @@ inline const juce::Rectangle<float> fingersSlot = socket (1354.0f, 898.6f, 52.0f
 
 // THE READINGS, a row under each group of controls.
 inline constexpr float valueY = 901.0f, driveValueY = 916.5f;
-inline constexpr float levelValueY = 884.5f;    // IN's and OUT's under their slots, over GATE and LIMIT, as every reading is under
+inline constexpr float levelValueY = 881.0f;    // IN's and OUT's under their slots, over GATE and LIMIT, as every reading is under
 
 } // namespace orbitamp::underwater::layout
