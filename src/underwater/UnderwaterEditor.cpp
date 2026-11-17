@@ -237,8 +237,8 @@ void Cabin::paintStatic (juce::Graphics& g, float scale) const
     print (g, "DARWIN'S CAT", makerNamePlate.getCentre(), px13, makerInk);
 
     // The panels' titles.
-    printFromLeft (g, "TUNER", tunerTitle, px13, titleInk);
-    printFromLeft (g, "KEYS", keysTitle, px13, titleInk);
+    printFromLeft (g, "TUNER", tunerTitle, px12, titleInk);     // the top row's two a size down (the owner, 17.11)
+    printFromLeft (g, "KEYS", keysTitle, px12, titleInk);
     print (g, "IN", inTitle, px13, titleInk);
     printFromLeft (g, "AMP", ampTitle, px13, titleInk);
     printFromLeft (g, "TONE", toneTitle, px13, titleInk);
