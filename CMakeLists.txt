@@ -985,6 +985,14 @@ target_link_libraries(orbitamp_pack_zip PRIVATE
     juce::juce_recommended_config_flags
     juce::juce_recommended_warning_flags)
 
+# The packs' crossover clean matches (namz 5.2's files[].clean_match), fitted once and written into a pack's rig.json
+# by tools/CleanMatchFit.cpp, which says how — so an amp that plays the crossover has them at load instead of fitting
+# them there (CapturedBlock::askFit). Run by hand on a pack's folder when its models change; no build runs it:
+#   cmake --build build --target orbitamp_clean_match
+#   build/orbitamp_clean_match "resources/set/Devices/Ampeg SGT-DI.orbitrig" ...
+add_executable(orbitamp_clean_match EXCLUDE_FROM_ALL tools/CleanMatchFit.cpp)
+target_link_libraries(orbitamp_clean_match PRIVATE felitronics::rigplayer felitronics::nam)
+
 set(ORBITAMP_SET_ZIPPED "${CMAKE_CURRENT_BINARY_DIR}/set/Devices")
 file(GLOB ORBITAMP_SET_FOLDERS LIST_DIRECTORIES true CONFIGURE_DEPENDS "${ORBITAMP_SET_DIR}/Devices/*.orbitrig")
 set(ORBITAMP_SET_PACKS "")
