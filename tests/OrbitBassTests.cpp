@@ -6529,6 +6529,11 @@ int ORBITAMP_GATE_MAIN()
                                    Case { &products::orbitAmp(), params::gateThreshold, params::gateOn, -64.0f, false } })
             {
                 auto t = make (*k.product);
+                // BLEND's clean match is fitted inside the processor's own timer here, one capture a tick (no pool in the
+                // gates): on a slow runner one fit outlasted the single click's wait (windows-11-arm, 18.11). A host fits
+                // them off the message thread; here they finish before any click is timed.
+                for (int i = 0; i < 200 && t->preamp.cleanMatchPending(); ++i)
+                    t->pumpDeviceWork();
                 std::unique_ptr<juce::AudioProcessorEditor> ed (t->createEditor());
                 auto* rail = railOf (*ed, k.id);
                 const juce::String name = juce::String (k.product == &bass ? "OrbitBass's " : "OrbitAmp's ") + k.id;
