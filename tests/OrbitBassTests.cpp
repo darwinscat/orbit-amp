@@ -729,10 +729,20 @@ int ORBITAMP_GATE_MAIN()
         check (value (a, params::preampOn) > 0.5f && value (a, params::cabOn) > 0.5f && value (a, params::limiterOn) > 0.5f,
                "the amp, the cabinet and the limiter on");
 
+        // Its list (CMakeLists.txt: ORBITBASS_SET): the SGT-DI, then the ReVolt Bass's three (the owner, 17.11) — opening on the
+        // SGT-DI, the first.
         const auto packs = device::DeviceLibrary::scan (bass.name, device::DeviceLibrary::ampSlot);
-        check (packs.size() == 1 && packs.getReference (0).rigId == "sgt-di-19a4"
-                   && packs.getReference (0).bundled && juce::roundToInt (value (a, params::preampDevice)) == 0,
-               "it plays its one pack, the Ampeg SGT-DI (" + juce::String (packs.size()) + " in its list)");
+        juce::StringArray ids;
+        bool allBundled = true;
+        for (const auto& p : packs)
+        {
+            ids.add (p.rigId);
+            allBundled = allBundled && p.bundled;
+        }
+        check (packs.size() == 4 && ids.contains ("sgt-di-19a4") && ids.contains ("revolt-bass-clean-0fba")
+                   && ids.contains ("revolt-bass-dirt-e9d4") && ids.contains ("revolt-bass-drive-2655") && allBundled
+                   && packs.getReference (juce::roundToInt (value (a, params::preampDevice))).rigId == "sgt-di-19a4",
+               "it plays its four packs, the SGT-DI and the ReVolt Bass's three, and opens on the SGT-DI (" + ids.joinIntoString (", ") + ")");
         check (a.getTailLengthSeconds() >= 8.0 && a.getTailLengthSeconds() <= 30.0,
                "its tail counts the echo and the room, which a player may add while a host keeps the first answer ("
                    + juce::String (a.getTailLengthSeconds(), 2) + " s)");
@@ -1052,16 +1062,29 @@ int ORBITAMP_GATE_MAIN()
                    "BLEND is not told from another thread's pump");
             blended->pumpDeviceWork();
             check (juce::approximatelyEqual (blended->preamp.crossoverAmountTold(), 0.7f)
-                       && std::abs (blended->preamp.crossoverHzTold() - 250.0f) < 0.5f && blended->preamp.crossoverInvertTold(),
-                   "...the message thread's tells the player all three: 70 %, 250 Hz, inverted");
+                       && std::abs (blended->preamp.crossoverHzTold() - 250.0f) < 0.5f && ! blended->preamp.crossoverInvertTold(),
+                   "...the message thread's tells the player 70 % and 250 Hz, and never the old INVERT: the pack's polarity is the truth");
             const auto hi = play (*blended, blocks, false);
             check (worstApart (hi.l, heard.l) > 1.0e-3f, "...and BLEND turned up is heard");
             set (*blended, params::ampBlendHz, 80.0f);
             const auto lo = play (*blended, blocks, false);
-            set (*blended, params::ampBlendInvert, 0.0f);
-            const auto straight = play (*blended, blocks, false);
-            check (worstApart (lo.l, hi.l) > 1.0e-3f && worstApart (straight.l, lo.l) > 1.0e-3f,
-                   "...and its frequency and its polarity are heard too");
+            check (worstApart (lo.l, hi.l) > 1.0e-3f, "...and its frequency is heard too");
+
+            // ...and the old INVERT not: two amps alike from their first block, at BLEND 30 % and 80 Hz, one with INVERT on —
+            // the same sound, sample for sample (17.11: the clean leg's polarity is the pack's alone).
+            const auto playWith = [&] (float invert)
+            {
+                auto t = asBefore();
+                set (*t, params::cabOn, 0.0f);
+                set (*t, params::ampBlend, 0.3f);
+                set (*t, params::ampBlendHz, 80.0f);
+                set (*t, params::ampBlendInvert, invert);
+                t->pumpDeviceWork();
+                return play (*t, blocks, false);
+            };
+            const float invertHeard = worstApart (playWith (1.0f).l, playWith (0.0f).l);
+            check (invertHeard < 1.0e-6f, "...and the old INVERT not: an amp with it on plays what one with it off does ("
+                                              + juce::String (invertHeard, 9) + " apart)");
         }
 
         // The cabinets in, on the same IR's bytes, at the CAB's MIX 100 %: the cabinet alone — the same stage, its IR
@@ -5679,7 +5702,7 @@ int ORBITAMP_GATE_MAIN()
                 { "DELAY",    { params::delayOn, params::delaySync, params::delayDiv, params::delayTimeMs, params::delayHostTempo, params::delayBpm,
                                 params::delayRepeats, params::delayDark, params::delayOffset } },
                 { "REVERB",   { params::reverbOn, params::reverbType, params::reverbDecay, params::reverbPredelay } },
-                { "AMP",      { params::preampOn, params::ampBlendHz, params::ampBlendInvert, params::bassHpfOn, params::bassHpf, params::bassHpfHz5,
+                { "AMP",      { params::preampOn, params::ampBlendHz, params::bassHpfOn, params::bassHpf, params::bassHpfHz5,
                                 params::bassHpfHz4, params::bassLpfOn, params::bassLpf, params::bassLpfHzFingers, params::bassLpfHzSlap } },
                 { "CAB IR",   { params::cabOn, params::cabMix, params::cabTrimOn, params::cabTrim } } };
             const auto& all = t->getParameters();
@@ -5964,7 +5987,7 @@ int ORBITAMP_GATE_MAIN()
             { "OCTAVE",   params::octaveOn, [] (auto& s) { return bass::octaveMenu (s); }, {} },
             { "ENVELOPE", params::filterOn, [] (auto& s) { return bass::filterMenu (s); },
               { "MODE >", "DIRECTION >", "RESONANCE >", "CLEAN LOWS >" } },
-            { "AMP",      params::preampOn, [] (auto& s) { return bass::ampMenu (s); },    { "BLEND CROSSOVER >", "INVERT POLARITY", "HPF >", "LPF >" } },
+            { "AMP",      params::preampOn, [] (auto& s) { return bass::ampMenu (s); },    { "BLEND CROSSOVER >", "HPF >", "LPF >" } },
             { "CHORUS",   params::chorusOn, [] (auto& s) { return bass::chorusMenu (s); }, {} },
             { "DELAY",    params::delayOn,  [] (auto& s) { return bass::delayMenu (s); },
               { "SYNC", "DIVISION >", "TIME (FREE) >", "HOST TEMPO", "BPM >", "REPEATS >", "DARK >", "OFFSET >" } },
@@ -6506,6 +6529,11 @@ int ORBITAMP_GATE_MAIN()
                                    Case { &products::orbitAmp(), params::gateThreshold, params::gateOn, -64.0f, false } })
             {
                 auto t = make (*k.product);
+                // BLEND's clean match is fitted inside the processor's own timer here, one capture a tick (no pool in the
+                // gates): on a slow runner one fit outlasted the single click's wait (windows-11-arm, 18.11). A host fits
+                // them off the message thread; here they finish before any click is timed.
+                for (int i = 0; i < 200 && t->preamp.cleanMatchPending(); ++i)
+                    t->pumpDeviceWork();
                 std::unique_ptr<juce::AudioProcessorEditor> ed (t->createEditor());
                 auto* rail = railOf (*ed, k.id);
                 const juce::String name = juce::String (k.product == &bass ? "OrbitBass's " : "OrbitAmp's ") + k.id;

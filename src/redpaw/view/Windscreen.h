@@ -70,6 +70,16 @@ public:
     /** TURBO: the second channel of the pedal, twice the speed. */
     void setTurbo (bool on);
     bool isTurbo() const noexcept { return turboWanted.load(); }
+    /** PARK, where the product's lever has it (Drive::setPark): the bass amp's, everything bypassed. The vehicle
+        stands — the 1993 landscape too — and the world does what it does for one standing still. Applied on the
+        thread that drives, as the gear is. */
+    void setPark (bool on) { parkWanted.store (on); }
+    bool isParked() const noexcept { return parkWanted.load(); }
+    /** WHETHER THE VIEW DRAWS THE CABIN ITSELF: true only while the GPU mode is running, attached and drawing, and
+        its world drew its cabin's picture over the view in the last frame (Drive::drawsCabin). Whenever it is
+        false — the CPU's landscape, the still, a GPU that would not start, the pictures not in yet — the face
+        paints its cabin itself. The parent is repainted when it changes. Message thread. */
+    bool drawsCabin() const noexcept;
 
     /** The wipers' speed (Drive::setWipers), where the face has keys for it. */
     void setWipers (int speed) { wipersWanted.store (speed); }
@@ -164,6 +174,9 @@ public:
     void setPicture (std::function<juce::Image()> picture);
 
     void paint (juce::Graphics&) override;
+    /** A press is the glass's only where the world says it is (Drive::glassAt): a world under the whole stage
+        leaves the panel's metal around its window to the face, so a drag there does not steer. */
+    bool hitTest (int x, int y) override;
     void resized() override;
     void mouseDown (const juce::MouseEvent&) override;
     void mouseDrag (const juce::MouseEvent&) override;
@@ -209,6 +222,9 @@ private:
     // The inputs, shared with the GL thread.
     std::atomic<int> gearWanted { 1 };
     std::atomic<bool> turboWanted { false };
+    std::atomic<bool> parkWanted { false };
+    std::atomic<bool> cabinShared { false };     // the drive drew its cabin in the last frame (GL thread writes)
+    bool cabinSeen = false;                      // ...as the parent was last repainted for
     std::atomic<int> wipersWanted { 1 }, lightsWanted { 0 };
     std::function<worlds::Ear::Heard()> hearing;
     std::function<bool()> lit;

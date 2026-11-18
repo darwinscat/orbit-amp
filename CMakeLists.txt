@@ -225,7 +225,13 @@ set(FELITRONICS_WITH_PFFFT ON CACHE BOOL "orbit-amp's cabinet convolver uses the
 # the player without it, byte for byte, for one atomic load a block. Its one change to what plays: a slot's
 # alignment delay moves through a 10 ms crossfade while it is heard, where it used to wait for silence — the
 # set's twelve packs carry no alignment, so for them nothing moves. It needs namz v5.0.0, pinned with it below.
-set(ORBITAMP_GUITAR_TAG "v0.8.0" CACHE STRING "felitronics-guitar-core release tag (fetched when no local checkout)")
+#
+# v0.12.0 brings the crossover blend's clean match (AlignmentTable's measureCleanMatch, CrossoverBlend's two
+# all-passes): BLEND's clean leg turned with each capture's low end, measured by CapturedBlock when a pack loads.
+# A player told no match plays as v0.8.0 did, bit for bit. On the way: v0.9.0 and v0.10.0 add the BassChain module
+# (the site's; not built here), v0.11.0 plays a pack's own high- and low-pass (namz v5.1.0's chain[].high_pass /
+# low_pass) — no pack of ours carries them, so nothing moves. It needs namz v5.1.0, pinned with it below.
+set(ORBITAMP_GUITAR_TAG "v0.12.0" CACHE STRING "felitronics-guitar-core release tag (fetched when no local checkout)")
 set(ORBITAMP_GUITAR_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../felitronics-guitar-core"
     CACHE PATH "Local felitronics-guitar-core checkout (used if present); else the pinned release is fetched")
 
@@ -293,15 +299,15 @@ endif()
 #
 # THE TWO PINS MOVE TOGETHER. The tag here is FORCEd over the NAM module's own, so guitar-core's pin
 # never reaches this build — and since guitar-core v0.7.0 a fetched namz is held to FELITRONICS_NAMZ_COMMIT,
-# the commit of the tag the NAM module pins (v5.0.0's, 717ca2d, by default). This tag is guitar-core
-# v0.8.0's own, so the two agree and the commit is left at its default. A guitar-core bump moves this tag
+# the commit of the tag the NAM module pins (v5.1.0's, 0c5fcb0, by default). This tag is guitar-core
+# v0.12.0's own, so the two agree and the commit is left at its default. A guitar-core bump moves this tag
 # to that release's namz pin in the same commit: a tag left behind stops the configure, naming both
 # commits. A namz bump made HERE alone, ahead of guitar-core, FORCEs FELITRONICS_NAMZ_COMMIT to the new
 # tag's commit beside it — a tag moved without its commit stops the configure the same way. The local
 # checkout (ORBITAMP_NAMZ_SRC) is not held to either, and is taken whenever it exists: on a namz older
 # than v5.0.0 the pack player stops compiling (no `input_lag_samples`, no `hz_by`) — keep it on v5.0.0 or
 # later, or empty the override.
-set(ORBITAMP_NAMZ_TAG "v5.0.0" CACHE STRING "namz release tag CI builds against (no local checkout)")
+set(ORBITAMP_NAMZ_TAG "v5.1.0" CACHE STRING "namz release tag CI builds against (no local checkout)")
 set(FELITRONICS_NAMZ_TAG "${ORBITAMP_NAMZ_TAG}" CACHE STRING "" FORCE)
 
 FetchContent_MakeAvailable(felitronics_core)
@@ -1014,17 +1020,19 @@ endforeach()
 add_custom_target(OrbitAmpSetPacks DEPENDS ${ORBITAMP_SET_PACKS})
 
 # THE BASS'S PACKS, which no guitar amp plays — a guitar amp's packs and a bass amp's never cross, as their
-# cabinets do not (resources/cabinets.txt). OrbitBass plays them and opens on the first; RedGrooveBass's two
-# channels, B15 and SVT, are the SGT-DI's two voices (src/redgroove/RedGrooveLineup.cpp).
-set(ORBITBASS_SET   "Ampeg SGT-DI")
+# cabinets do not (resources/cabinets.txt). OrbitBass plays them all and opens on the first, the SGT-DI; RedGrooveBass's two
+# channels, B15 and SVT, are the SGT-DI's two voices (src/redgroove/RedGrooveLineup.cpp). DeepGrooveBass's three, CLEAN,
+# DIRT and DRIVE, are the Two Notes ReVolt Bass's three channels, a pack each (src/underwater/UnderwaterLineup.cpp).
+set(ORBITBASS_SET   "Ampeg SGT-DI" "Two Notes ReVolt Bass Clean" "Two Notes ReVolt Bass Dirt" "Two Notes ReVolt Bass Drive")
 set(REDGROOVEBASS_SET "Ampeg SGT-DI")
+set(DEEPGROOVEBASS_SET "Two Notes ReVolt Bass Clean" "Two Notes ReVolt Bass Dirt" "Two Notes ReVolt Bass Drive")
 
 # WHAT ORBITAMP PLAYS: every pack in resources/set/Devices but the bass's — every folder there, zipped — the
 # X88-IR's, the IR-X's, the ReVolt's and the V4's, each one file in the family's folder whichever amps play it. A
 # guitar pack added there is OrbitAmp's from the next build on, with nobody to remember to list it; a pack the
 # tree keeps but OrbitAmp should not play has no place in resources/set/Devices, or is a bass amp's.
 set(ORBITAMP_PLAYS ${ORBITAMP_SET_NAMES})
-list(REMOVE_ITEM ORBITAMP_PLAYS ${ORBITBASS_SET} ${REDGROOVEBASS_SET})
+list(REMOVE_ITEM ORBITAMP_PLAYS ${ORBITBASS_SET} ${REDGROOVEBASS_SET} ${DEEPGROOVEBASS_SET})
 
 # WHAT EACH OTHER AMP PLAYS of the set, said once — its row in THE AMPS names it by these.
 set(CATPITAMP_SET   "Soldano X88-IR Normal" "Soldano X88-IR Altered" "Soldano X88-IR Crunch" "Soldano X88-IR Overdrive")
@@ -1405,6 +1413,25 @@ set(REDGROOVE_VIEW_SOURCES
 if(NOT MSVC)
     set_source_files_properties(src/redgroove/view/WalkerWorld.cpp PROPERTIES COMPILE_OPTIONS "-ffp-contract=off")
 endif()
+# The bass amp's cabin, the bathyscaphe DC-744's: the sea floor of an ocean world (src/underwater/view), handed to
+# the windscreen as an UnderwaterDrive, the cabin's panel drawn over it by the GPU as its last pass. Its world and
+# its matrices are matched to their prototype (sea-gl.js) number for number, with the walker's JS built-ins (Js in
+# WalkerWorld.cpp), so compiled without contraction too.
+set(UNDERWATER_VIEW_SOURCES
+    src/underwater/view/UnderwaterWorld.cpp
+    src/underwater/view/UnderwaterGl.cpp
+    src/redgroove/view/WalkerWorld.cpp)
+if(NOT MSVC)
+    set_source_files_properties(src/underwater/view/UnderwaterWorld.cpp src/underwater/view/UnderwaterGl.cpp
+        PROPERTIES COMPILE_OPTIONS "-ffp-contract=off")
+endif()
+# ...and the cabin's art it draws (src/underwater/view/UnderwaterArt.h): the dashboard, its sea layer and the passing
+# bathyscaphe's atlas as WebP made from the renders in resources/underwater/source (resources/underwater/README.txt
+# says how: lossy colour, the alpha lossless and exact, the sea layer at half size), and the atlas's table,
+# sprites.txt, as plain text. Not built into any binary: the installer lays them out once, in the factory folder's
+# Faces/DeepGrooveBass, and they are read from there at run time (src/face/Renders.h, UNDERWATER_ART_DIR), decoded
+# with libwebp.
+set(UNDERWATER_ART_SOURCES src/underwater/view/UnderwaterArt.cpp)
 
 # A world's demo: a bare window with the windscreen in it over one world — the sea's in the canopy's
 # shape — for looking at it and measuring it. Built only when asked for by name. No audio.
@@ -1429,6 +1456,11 @@ view_demo(amberpaw_view_demo "AmberPawViewDemo" SOURCES ${REDPAW_VIEW_SOURCES} $
     DEFINITIONS ORBITAMP_VIEW_DEMO_TITAN=1)
 view_demo(walker_view_demo   "WalkerViewDemo"   SOURCES ${REDPAW_VIEW_SOURCES} ${REDGROOVE_VIEW_SOURCES}
     DEFINITIONS ORBITAMP_VIEW_DEMO_WALKER=1)
+view_demo(underwater_view_demo "UnderwaterViewDemo" SOURCES ${REDPAW_VIEW_SOURCES} ${UNDERWATER_VIEW_SOURCES} ${UNDERWATER_ART_SOURCES} src/face/Renders.cpp
+    DEFINITIONS ORBITAMP_VIEW_DEMO_UNDERWATER=1)
+target_link_libraries(underwater_view_demo PRIVATE felitronics::appkit_webp)
+# The demo has no factory folder: the art is read from the source tree unless UNDERWATER_ART_DIR says otherwise.
+target_compile_definitions(underwater_view_demo PRIVATE ORBITAMP_UNDERWATER_ART_DEFAULT="${CMAKE_CURRENT_SOURCE_DIR}/resources/underwater")
 
 # The sea's CPU half against the prototype it was ported from: the start, five scripted flights, the
 # gears, Saturn, the wipers' panes. JUCE-free, links only the world.
@@ -1444,6 +1476,17 @@ target_include_directories(walker_world_test PRIVATE src)
 target_compile_features(walker_world_test PRIVATE cxx_std_20)
 target_compile_definitions(walker_world_test PRIVATE
     WALKER_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/walker/walker-world.txt")
+
+# The sea floor's world against its prototype, sea-gl.js, number for number: the hashes, the textures, the meshes,
+# the floor's height, the drive at each gear, steered and parked, the jellyfish frame by frame, the passing
+# bathyscaphe, an attack — compared with the prototype's own dump (tests/fixtures/underwater) — and the sprites'
+# table and the cabin's window as the drive reads them. JUCE-free, links only the world (and the walker's Js).
+add_executable(underwater_world_test tests/UnderwaterWorldTests.cpp src/underwater/view/UnderwaterWorld.cpp src/redgroove/view/WalkerWorld.cpp)
+target_include_directories(underwater_world_test PRIVATE src)
+target_compile_features(underwater_world_test PRIVATE cxx_std_20)
+target_compile_definitions(underwater_world_test PRIVATE
+    UNDERWATER_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/underwater/underwater-world.txt"
+    UNDERWATER_SPRITES="${CMAKE_CURRENT_SOURCE_DIR}/resources/underwater/sprites.txt")
 
 # THE ROVER'S FACE IS WORN BY MORE THAN ONE PRODUCT (src/redpaw/RedPawSkin.h): what every rover is made
 # of is said once here — the renders by the file names the face asks for, as bake-art made them, the
@@ -1528,6 +1571,35 @@ set(REDGROOVEBASS_SOURCES
     src/ui/CabWindow.cpp             # the bass's cabinets, drawn — OrbitBass's window, Ampeg's pile
     ${REDPAW_VIEW_SOURCES}           # the windscreen the rovers look through ...
     ${REDGROOVE_VIEW_SOURCES})       # ... looking out on the walker's forest
+
+# THE BATHYSCAPHE'S FACE (src/underwater): the family's console on the bathyscaphe's dashboard, the sea floor under the
+# whole of it. The world's art — the dashboard, its sea layer, the passing bathyscaphe's atlas and its table — laid out in
+# the factory folder and read at run time (src/underwater/view/UnderwaterArt.h), the face painting the same dashboard
+# where the world does not; the knobs and the faders' cap the walker's renders, its own where resources/underwater/face
+# has one, the helicopter's otherwise, with its mark and its MIDI list.
+set(DEEPGROOVEBASS_RENDERS
+    "${CMAKE_CURRENT_SOURCE_DIR}/resources/underwater/dashboard.webp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/resources/underwater/sea.webp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/resources/underwater/atlas.webp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/resources/underwater/sprites.txt")
+file(GLOB underwater_own CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/resources/underwater/face/*")
+foreach(render IN ITEMS mark.svg midi.txt knob-drive.webp knob-tone.webp fader-cap.webp)
+    if("${CMAKE_CURRENT_SOURCE_DIR}/resources/underwater/face/${render}" IN_LIST underwater_own)
+        list(APPEND DEEPGROOVEBASS_RENDERS "${CMAKE_CURRENT_SOURCE_DIR}/resources/underwater/face/${render}")
+    else()
+        list(APPEND DEEPGROOVEBASS_RENDERS "${CMAKE_CURRENT_SOURCE_DIR}/resources/amberpaw/${render}")
+    endif()
+endforeach()
+set(DEEPGROOVEBASS_SOURCES
+    ${FACE_SOURCES}
+    src/redgroove/RedGrooveControls.cpp     # the walker's lever, switches, cabinet slider and readings
+    src/underwater/UnderwaterEditor.cpp
+    src/underwater/UnderwaterFaceArt.cpp
+    src/underwater/UnderwaterLineup.cpp
+    src/ui/CabWindow.cpp             # the bass's cabinets, drawn
+    ${REDPAW_VIEW_SOURCES}           # the windscreen the rovers look through ...
+    ${UNDERWATER_VIEW_SOURCES}       # ... looking out on the sea floor
+    ${UNDERWATER_ART_SOURCES})
 
 # ----------------------------------------------------------------------------
 # THE AMPS — the family's table, one row an amp (THE FAMILY says what a row says).
@@ -1622,6 +1694,20 @@ add_amp(RedGrooveBass CODE Rgrv    BY_NAME    BASS
         ${AMP_ENGINE_LIBRARIES}
         juce::juce_opengl            # the dome, on the GPU
     SET       ${REDGROOVEBASS_SET})
+
+# DeepGrooveBass — the bathyscaphe DC-744, a bass amp in its sphere over the sea floor (src/underwater)
+# — the family's console over the bass's chain (Chain::bass), driven as channels: three, CLEAN, DIRT and DRIVE, its
+# gears, PARK the amp's bypass; Darwin's Cat's own cabinets. Not in the family's release, and asked for by name.
+add_amp(DeepGrooveBass CODE Dgrv   BY_NAME    BASS
+    ART       ${DEEPGROOVEBASS_RENDERS}
+    SOURCES   ${DEEPGROOVEBASS_SOURCES}
+    LIBRARIES
+        OrbitAmpData                 # the family's mark, the notice, the disclaimer — BinaryData::*
+        OrbitAmpShaders              # the sea's shaders
+        felitronics::appkit_webp     # the world's art, decoded
+        ${AMP_ENGINE_LIBRARIES}
+        juce::juce_opengl            # the sea, on the GPU
+    SET       ${DEEPGROOVEBASS_SET})
 
 # ----------------------------------------------------------------------------
 # THE FACES' GATES — in the gates binary, with every other (THE GATES BINARY, below); amp_console builds an amp
@@ -1733,6 +1819,9 @@ gate_in_binary(input-level       tests/InputLevelTests.cpp)
 # The boost's level: while an amp's boost is on — OrbitAmp's BOOST key, the rovers' TURBO, the cockpit's TURBO
 # push — the amp leaves that much louder, ramped, exactly, ahead of the limiter; with it off not at all.
 gate_in_binary(boost-level       tests/BoostLevelTests.cpp)
+# The amp's bypass: the host's, in no state; out, the input as it came in and as late, bit for bit on both planes;
+# back in, what an amp never taken out plays.
+gate_in_binary(bypass            tests/BypassTests.cpp)
 
 # AN AMP'S GATES, the same two for the cockpit and every rover, run as that amp — what tells one amp from
 # another, the gates read in tests/AmpGate.h. Its channels with no window at all — as many as CHANNELS says,
@@ -1751,6 +1840,12 @@ gate_in_binary(redgroove-channel tests/AmpChannelTests.cpp  PRODUCT RedGrooveBas
 gate_in_binary(redgroove-set     tests/AmpSetTests.cpp      PRODUCT RedGrooveBass CHANNELS 2)
 # ...and the walker's face, its window made and never shown: what its own controls turn, and the tone left alone.
 gate_in_binary(redgroove-face    tests/RedGrooveFaceTests.cpp PRODUCT RedGrooveBass)
+gate_in_binary(deepgroove-channel tests/AmpChannelTests.cpp  PRODUCT DeepGrooveBass CHANNELS 3)
+gate_in_binary(deepgroove-set    tests/AmpSetTests.cpp      PRODUCT DeepGrooveBass CHANNELS 3)
+# ...and the bathyscaphe's face, its window made and never shown: the lever's PARK the amp's bypass over the three gears,
+# each gear's BLEND and CLEAN's held, COMP's threshold and what the bathyscaphe holds of it, CLEAN's two tones in the
+# outer sockets and the frozen one between them, each socket's reading its own knob's.
+gate_in_binary(deepgroove-face   tests/DeepGrooveFaceTests.cpp PRODUCT DeepGrooveBass)
 
 # ORBITBASS'S CHAIN, headless: where a fresh one stands (the gate off, the HPF on at 25 Hz, the LPF off, mono,
 # its one temporary pack), the strip's arrows in its order (GATE, AMP, CAB, LIMIT), the delay and the reverb
@@ -1760,12 +1855,13 @@ gate_in_binary(orbitbass         tests/OrbitBassTests.cpp   PRODUCT OrbitBass
                DEFINES "ORBITBASS_STEP2B=\"${CMAKE_CURRENT_SOURCE_DIR}/tests/golden/orbitbass-step2b.f32\"")
 
 # AN AMP WITH NO FACTORY FOLDER — copied off a zip without it, or the folder deleted: it plays, and says where
-# the folder belongs instead of opening an empty face (src/ui/FactoryMissing.h). OrbitAmp, the cockpit and the
-# rovers' dashboard, which FrostPawAmp and AmberPawAmp wear too.
+# the folder belongs instead of opening an empty face (src/ui/FactoryMissing.h). OrbitAmp, the cockpit, the
+# rovers' dashboard, which FrostPawAmp and AmberPawAmp wear too, the walker's and the bathyscaphe's.
 gate_in_binary(nofactory         tests/NoFactoryTests.cpp   PRODUCT OrbitAmp     NO_FACTORY)
 gate_in_binary(catpit-nofactory  tests/NoFactoryTests.cpp   PRODUCT CatpitAmp    NO_FACTORY)
 gate_in_binary(redpaw-nofactory  tests/NoFactoryTests.cpp   PRODUCT RedPawAmp    NO_FACTORY)
 gate_in_binary(redgroove-nofactory tests/NoFactoryTests.cpp  PRODUCT RedGrooveBass NO_FACTORY)
+gate_in_binary(deepgroove-nofactory tests/NoFactoryTests.cpp PRODUCT DeepGrooveBass NO_FACTORY)
 
 # ORBITAMP'S FACE AS THE SITE GETS IT (src/ui/WebFaceplate.h): a fresh OrbitAmp writes the kit, and the kit
 # builds the face back — its own format, every place on the stage, the hull the poster less its places.

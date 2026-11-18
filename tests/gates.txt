@@ -77,6 +77,12 @@ redgroove-channel  orbitamp_gates  REDGROOVE_GATE_OWNS_HOME=1
 redgroove-face     orbitamp_gates
 redgroove-nofactory orbitamp_gates
 
+# ...and the bathyscaphe's, over its three gears on the bass's chain, and its face: the lever's PARK, BLEND, COMP, the tones.
+deepgroove-set      orbitamp_gates
+deepgroove-channel  orbitamp_gates  DEEPGROOVE_GATE_OWNS_HOME=1
+deepgroove-face     orbitamp_gates
+deepgroove-nofactory orbitamp_gates
+
 # Every amp in one binary: all of them side by side in one process, each its own product (src/Product.h).
 family             orbitamp_gates
 
@@ -89,3 +95,6 @@ input-level        orbitamp_gates
 
 # The boost's level: louder by it while each amp's boost is on, ramped and exact, ahead of the limiter; off, bit for bit.
 boost-level        orbitamp_gates
+
+# The amp's bypass: the host's and in no state; out, the input as it came in, as late, bit for bit; back in, the amp.
+bypass             orbitamp_gates

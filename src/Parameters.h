@@ -578,7 +578,8 @@ inline constexpr float chorusCrossoverItems[] { 200.0f, 250.0f, 300.0f, 400.0f, 
 /** BLEND, in the AMP: the capture's share against the clean input below a frequency (RigPlayer's crossover
     blend, told 1 - this) — 1 is the capture alone, as every MIX on the bass is its block alone at the top (the owner,
     03.11). A new id since it turned: a state saved the other way round falls to the default instead. The frequency
-    and the polarity in its menu. */
+    in its menu. INVERT is a parameter no more told anything (17.11): the clean leg's polarity is each pack's own
+    (files[].polarity), and a state that kept INVERT on must not flip it back; it stays for the states that name it. */
 inline constexpr const char* ampBlend       = "amp_blend_wet";
 inline constexpr const char* ampBlendHz     = "amp_blend_hz";
 inline constexpr const char* ampBlendInvert = "amp_blend_invert";
@@ -756,10 +757,21 @@ struct Opening
     float compAmount = 0.5f;
     bool  bassLpfOn  = false;
 
+    // ...and what the bass's strip holds where a product holds it otherwise than the walker and OrbitBass: DeepGrooveBass's
+    // COMP off, its ENVELOPE out of the strip and its room in it (the owner, 16.11: its effects are OCTAVE, CHORUS and
+    // REVERB) — the parameters declaring it, so a fresh instance stands where the lineup holds it.
+    bool  compOn        = true;
+    bool  filterPresent = true;
+    bool  reverbPresent = false;
+
     // WHERE THE AMP'S MIDDLE OPENS: its console's first bell's frequency — 400 Hz on every amp but the basses, whose MID
     // FREQ opens at 1 kHz (RedGrooveBass's: the owner, 02.11; OrbitBass's: 10.11). A default, not a hold: the player moves it, and
     // INIT and a double click bring it back here (engineDefault leaves it its declared default).
     float midHz = 400.0f;
+
+    // WHERE THE AMP'S BLEND OPENS (ampBlend), where the product's opening channel says other than the capture alone:
+    // DeepGrooveBass opens on DIRT, at 80/20 (channels::Lineup::Channel::blend). A default, not a hold.
+    float ampBlend = 1.0f;
 
     // WHAT THE BOOST ADDS OUT OF THE BOX (boostLevel): the family's +3, AmberPawAmp's 0 (channels::Lineup::boostLevel). A
     // default, not a hold: the boost's menu moves it, and INIT brings it back here (engineDefault leaves it its declared

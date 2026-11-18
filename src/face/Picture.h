@@ -68,9 +68,19 @@ protected:
     /** Where the history's signs are, so that a step of it repaints no more than that. */
     virtual juce::Rectangle<int> historyArea() const { return getLocalBounds(); }
 
+    /** WHAT THE LAYER WAS PAINTED FOR, where a face's picture is not always the same: a layer painted for another
+        answer is painted again at the next paint. The underwater cabin's says whether its world draws the panel
+        itself (UnderwaterEditor). Every other face's never changes. */
+    virtual int layerState() const { return 0; }
+
+    /** True while paintStatic paints the layer the screen shows; false while it paints staticImage, which is the
+        whole picture whatever the screen shows. */
+    bool onScreen = false;
+
 private:
     juce::Image layer;
     float layerScale = 0.0f;
+    int layerStateSeen = 0;
 };
 
 } // namespace orbitamp::face

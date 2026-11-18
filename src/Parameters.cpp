@@ -58,12 +58,13 @@ namespace
     /** COMP's parameters, the bass's and the guitar's alike but for the character it opens on: on in the strip, its
         BLEND at half — or where the product's Opening says — its threshold at -24 dB and its ratio at 4:1 (the owner,
         31.10). */
-    void addCompParameters (juce::AudioProcessorValueTreeState::ParameterLayout& layout, int character, float blend = 0.5f)
+    void addCompParameters (juce::AudioProcessorValueTreeState::ParameterLayout& layout, int character, float blend = 0.5f,
+                            bool on = true)
     {
         using Bool   = juce::AudioParameterBool;
         using Choice = juce::AudioParameterChoice;
         using Float  = juce::AudioParameterFloat;
-        layout.add (std::make_unique<Bool>   (juce::ParameterID { compOn, 1 },        "Comp", true),
+        layout.add (std::make_unique<Bool>   (juce::ParameterID { compOn, 1 },        "Comp", on),
                     std::make_unique<Float>  (juce::ParameterID { compAmount, 1 },    "Comp Mix",
                                               juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), blend),
                     std::make_unique<Choice> (juce::ParameterID { compAttack, 1 },    "Comp Attack",    compAttacks, 1),
@@ -98,7 +99,7 @@ void addBassParameters (juce::AudioProcessorValueTreeState::ParameterLayout& lay
         return juce::NormalisableRange<float> (lo, hi, 0.1f, std::log (0.5f) / std::log ((centre - lo) / (hi - lo)));
     };
 
-    addCompParameters (layout, compCharacters.indexOf ("Opto"), opening.compAmount);   // on OPTO (the owner, 02.11)
+    addCompParameters (layout, compCharacters.indexOf ("Opto"), opening.compAmount, opening.compOn);   // on OPTO (the owner, 02.11)
 
     // The three effects: in the strip, their sliders at 0 — present, and doing nothing until one is moved. The menus'
     // defaults are the modules' own.
@@ -126,15 +127,15 @@ void addBassParameters (juce::AudioProcessorValueTreeState::ParameterLayout& lay
                                           hz (200.0f, 500.0f, 300.0f), 200.0f));
 
     // IN THE STRIP OR NOT (Parameters.h): the three effects in, the echo and the room out — a player adds them through
-    // the strip's checklist.
+    // the strip's checklist — unless the product's Opening says otherwise (DeepGrooveBass: no ENVELOPE, the room in).
     layout.add (std::make_unique<Bool> (juce::ParameterID { octavePresent, 1 }, "Octave In Strip", true),
-                std::make_unique<Bool> (juce::ParameterID { filterPresent, 1 }, "Envelope In Strip", true),
+                std::make_unique<Bool> (juce::ParameterID { filterPresent, 1 }, "Envelope In Strip", opening.filterPresent),
                 std::make_unique<Bool> (juce::ParameterID { chorusPresent, 1 }, "Chorus In Strip", true),
                 std::make_unique<Bool> (juce::ParameterID { delayPresent, 1 },  "Delay In Strip", false),
-                std::make_unique<Bool> (juce::ParameterID { reverbPresent, 1 }, "Reverb In Strip", false));
+                std::make_unique<Bool> (juce::ParameterID { reverbPresent, 1 }, "Reverb In Strip", opening.reverbPresent));
 
     layout.add (std::make_unique<Float> (juce::ParameterID { ampBlend, 1 },       "Amp Blend",
-                                         juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 1.0f),
+                                         juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), opening.ampBlend),
                 std::make_unique<Float> (juce::ParameterID { ampBlendHz, 1 },     "Amp Blend Hz",
                                          hz (ampBlendMinHz, ampBlendMaxHz, ampBlendDefaultHz), ampBlendDefaultHz),
                 std::make_unique<Bool>  (juce::ParameterID { ampBlendInvert, 1 }, "Amp Blend Invert", false));

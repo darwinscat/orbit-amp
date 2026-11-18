@@ -1,4 +1,4 @@
-Amps: all
+Amps: OrbitAmp, CatpitAmp, RedPawAmp, FrostPawAmp, AmberPawAmp
 
 ### Fixed
 - A cabinet IR longer than 1.41 s at 48 kHz, picked while the cabinet is out of the chain, now plays alone from

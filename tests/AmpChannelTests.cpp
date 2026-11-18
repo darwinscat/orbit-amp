@@ -4,7 +4,7 @@
 // Gate for AN AMP'S CHANNELS WITH NO WINDOW (channels/Engine.h, over the product's lineup): the
 // product's channels on its packs — the X88-IR's four in the cockpit, the Friedman IR-X's two on Mars,
 // the ReVolt Guitar's three on the ice moon, the Victory V4's over Titan, the walker's B15 and SVT on the Ampeg
-// SGT-DI — as many as it plays:
+// SGT-DI, the bathyscaphe's CLEAN, DIRT and DRIVE on the ReVolt Bass — as many as it plays:
 // GATE_CHANNELS, which the build says for
 // each (CMakeLists.txt: amp_console). A plug-in's window is shut for most of its life, and what a host
 // can reach then is the processor's parameters: so a channel has to be something the processor does
@@ -38,7 +38,7 @@
 //
 // It reads the amp's packs from where the amp reads them, and lays the build's set out there first, as
 // the amp does. Every amp over the channels' engine runs it as itself — CatpitAmp, RedPawAmp,
-// FrostPawAmp, AmberPawAmp (CMakeLists.txt: amp_console), each as AmpGate.h knows it.
+// FrostPawAmp, AmberPawAmp, RedGrooveBass, DeepGrooveBass (CMakeLists.txt: amp_console), each as AmpGate.h knows it.
 
 #include "GateMain.h"
 #include "AmpGate.h"
@@ -149,14 +149,16 @@ int ORBITAMP_GATE_MAIN()
     // Treble. A knob past the list names nothing.
     // ...BUT ON THE BASS'S STANDARD (product.bass) the knobs are the pack's DIALS where it states a tone (the owner,
     // 03.11) — the SGT-DI's Bass, Mid and Treble, its places 0, 1 and 3 — with its frequency knob (Freq, place 2) and
-    // its switches (Ultra Lo and Ultra Hi, places 4 and 5) asked for apart; on a pack with no tone of its own they are
-    // the standard's three, the AMP's console's low shelf, first bell and high shelf, and none a tone of the pack's.
+    // its switches (Ultra Lo and Ultra Hi, places 4 and 5) asked for apart; the ReVolt Bass's Clean its Bass and Treble,
+    // places 0 and 1, its Dirt and Drive Bass, Mid and Treble, 0 to 2, with no frequency knob and no switch; on a pack
+    // with no tone of its own they are the standard's three, the AMP's console's low shelf, first bell and high shelf,
+    // and none a tone of the pack's.
     {
         const auto listOf = [] (const juce::String& capture) -> juce::StringArray
         {
             if (capture.startsWith ("v4-copper"))                                    return { "Tone", "Treble", "Middle", "Bass", "Bass cut" };
             if (capture.startsWith ("v4-sheriff") || capture.startsWith ("v4-kraken")) return { "Bass", "Middle", "Treble", "Bright" };
-            if (capture.startsWith ("revolt-clean"))                                 return { "Bass", "Treble" };
+            if (capture.startsWith ("revolt-clean") || capture.startsWith ("revolt-bass-clean")) return { "Bass", "Treble" };
             if (capture.startsWith ("revolt-") || capture.startsWith ("sgt-di"))     return { "Bass", "Mid", "Treble" };
             return { "Bass", "Middle", "Treble" };
         };
@@ -164,7 +166,9 @@ int ORBITAMP_GATE_MAIN()
         struct BassTone { std::vector<int> dials; int frequency = -1; std::vector<int> switches; };
         const auto bassToneOf = [] (const juce::String& capture) -> std::optional<BassTone>
         {
-            if (capture.startsWith ("sgt-di")) return BassTone { { 0, 1, 3 }, 2, { 4, 5 } };
+            if (capture.startsWith ("sgt-di"))            return BassTone { { 0, 1, 3 }, 2, { 4, 5 } };
+            if (capture.startsWith ("revolt-bass-clean")) return BassTone { { 0, 1 }, -1, {} };
+            if (capture.startsWith ("revolt-bass-"))      return BassTone { { 0, 1, 2 }, -1, {} };
             return std::nullopt;     // no tone of its own: the bass's standard's three
         };
         const juce::StringArray standard { params::eqLoDb (0), params::eqBellDb (0, 0), params::eqHiDb (0) };
@@ -185,7 +189,7 @@ int ORBITAMP_GATE_MAIN()
             if (product.bass)
             {
                 found = found && channels.tonesOf (c).size() == (own.has_value() ? own->dials.size() : 0)
-                              && channels.frequencyOf (c) == (own.has_value() ? params::preampMeasured (own->frequency) : juce::String());
+                              && channels.frequencyOf (c) == (own.has_value() && own->frequency >= 0 ? params::preampMeasured (own->frequency) : juce::String());
                 for (int w = 0; w < 3; ++w)
                     found = found && channels.toneSwitchOf (c, w) == (own.has_value() && w < (int) own->switches.size()
                                                                           ? params::preampMeasured (own->switches[(size_t) w]) : juce::String());
@@ -196,13 +200,13 @@ int ORBITAMP_GATE_MAIN()
 
     // THE MIDI TONE CONTROLLERS FIND THEIR KNOBS BY NAME (Channels::toneNamed), as midi.txt lists them —
     // 24 the Bass, 25 the Middle or Mid, 26 the Treble — wherever the pack puts them: on the Copper its
-    // fourth, third and second knobs; on the ReVolt's Clean the Middle is no knob at all.
+    // fourth, third and second knobs; on the ReVolt's Clean, guitar's and bass's, the Middle is no knob at all.
     {
         using Band = channels::Channels::Band;
         const auto placesOf = [] (const juce::String& capture) -> std::array<int, 3>
         {
             if (capture.startsWith ("v4-copper"))    return { 3, 2, 1 };
-            if (capture.startsWith ("revolt-clean")) return { 0, -1, 1 };
+            if (capture.startsWith ("revolt-clean") || capture.startsWith ("revolt-bass-clean")) return { 0, -1, 1 };
             return { 0, 1, 2 };
         };
         bool named = true;
@@ -272,7 +276,8 @@ int ORBITAMP_GATE_MAIN()
     }
 
     // NO PARK, on any product: the rover's lever is its gears and nothing more, and no switch of the
-    // product's own takes the whole amp out of the sound.
+    // product's own takes the whole amp out of the sound. The bathyscaphe's lever has a PARK over its gears, and it is
+    // the amp's bypass — the host's (AmpProcessor::bypassParameter), in no state — not a parameter of the product's.
     {
         bool none = true;
         for (auto* p : amp->getParameters())
@@ -926,14 +931,24 @@ int ORBITAMP_GATE_MAIN()
     }
 
     // THE BASS'S GEARS (product.bass), each an amp of its own (Lineup::kept): DRIVE, BLEND, BASS, MIDDLE, TREBLE and
-    // MIDDLE's frequency, COMP's threshold, OCTAVE, ENVELOPE, CHORUS and DI/CAB come back on the gear they were left
-    // on, and a gear never pulled since INIT opens on its own; the instrument and the hand — 5 STR / 4 STR, FINGERS /
-    // SLAP — are the player's on every gear. The face coming up again and again (Engine::setUpChain, as the console
-    // calls it each time) leaves the tone where the player put it. And INIT gives what the product holds
-    // (Lineup::pinned) — COMP on, all of the signal through it at 4:1 on OPTO, OCTAVE, ENVELOPE and CHORUS in the
-    // strip and on, both cuts on, no delay and no room — as the face coming up does after a host moved any of it.
+    // MIDDLE's frequency, COMP's threshold, OCTAVE, ENVELOPE, CHORUS and DI/CAB — those of them the product has
+    // (product.console) — come back on the gear they were left on, and a gear never pulled since INIT opens on its own;
+    // the instrument and the hand — 5 STR / 4 STR, FINGERS / SLAP — are the player's on every gear. The face coming up
+    // again and again (Engine::setUpChain, as the console calls it each time) leaves the tone where the player put it.
+    // And INIT gives what the product holds (Lineup::pinned) — COMP on, all of the signal through it at 4:1 on OPTO,
+    // OCTAVE and CHORUS in the strip and on, ENVELOPE too where it has one, both cuts on, no delay, and the room in the
+    // strip and on where the product has it there and none in it where not — as the face coming up does after a host
+    // moved any of it. Each gear's BLEND opens where the product's table says, and a gear that holds it there
+    // (Lineup::Channel::blendHeld) stands there pulled again, whatever a host left it at.
     if (product.bass)
     {
+        const auto& console = product.console;
+        // The two gears the controls are left on: the first two with a BLEND of their own to leave — a gear that holds
+        // its BLEND brings it back where it holds it, which is the next check's.
+        int a = -1, b = -1;
+        for (int c = 0; c < (int) played.size() && b < 0; ++c)
+            if (! played[(size_t) c].blendHeld)
+                (a < 0 ? a : b) = c;
         auto* hpf = amp->apvts.getParameter (params::bassHpf);
         auto* lpf = amp->apvts.getParameter (params::bassLpf);
         // ...its tones as its knobs turn them (Channels::toneOf): the pack's dials, its frequency knob and its switches where
@@ -941,12 +956,14 @@ int ORBITAMP_GATE_MAIN()
         // MIDDLE's frequency on a pack with none.
         juce::StringArray kept { params::preampGain, params::ampBlend };
         for (int t = 0; t < 3; ++t)
-            kept.add (channels.toneOf (0, t));
-        kept.add (channels.frequencyOf (0).isNotEmpty() ? channels.frequencyOf (0) : juce::String (params::eqBellHz (0, 0)));
+            kept.add (channels.toneOf (a, t));
+        if (console.middleFrequency)
+            kept.add (channels.frequencyOf (a).isNotEmpty() ? channels.frequencyOf (a) : juce::String (params::eqBellHz (0, 0)));
         for (int w = 0; w < 3; ++w)
-            if (const auto id = channels.toneSwitchOf (0, w); id.isNotEmpty())
+            if (const auto id = channels.toneSwitchOf (a, w); id.isNotEmpty())
                 kept.add (id);
-        kept.addArray (juce::StringArray { params::compThreshold, params::octaveAmount, params::filterAmount, params::chorusAmount, params::cabMix });
+        kept.addArray (juce::StringArray { params::compThreshold, params::octaveAmount, console.envelope ? params::filterAmount : "",
+                                           params::chorusAmount, console.diCab ? params::cabMix : "" });
         kept.removeEmptyStrings();
         jassert (kept.size() <= 13);    // left 0.07 apart from 0.12 and from 0.85, every one inside 0..1
         const auto at  = [&amp] (const juce::String& id) { auto* p = amp->apvts.getParameter (id); return p != nullptr ? p->getValue() : -1.0f; };
@@ -982,17 +999,50 @@ int ORBITAMP_GATE_MAIN()
         presets.init();
         ticks();
 
-        engine.go (0);
+        // EACH GEAR'S BLEND where it opens, after INIT; and where a gear holds it, there whatever a host left it at.
+        {
+            bool opens = true;
+            juce::StringArray said;
+            for (int c = 0; c < channels.count(); ++c)
+            {
+                engine.go (c);
+                opens = opens && std::abs (plain (params::ampBlend) - played[(size_t) c].blend) < 1.0e-4f;
+                said.add (juce::String (channels.lineup().channels[(size_t) c].name) + " " + juce::String (plain (params::ampBlend), 2));
+            }
+            check (opens, "after INIT each gear opens its BLEND where its own opens (" + said.joinIntoString (", ") + ")");
+
+            int held = -1;
+            for (int c = 0; c < channels.count() && held < 0; ++c)
+                if (played[(size_t) c].blendHeld)
+                    held = c;
+            if (held >= 0)
+            {
+                const int other = held == 0 ? 1 : 0;
+                engine.go (held);
+                put (params::ampBlend, 0.4f);       // a host's, while the gear plays: its record keeps it
+                engine.go (other);
+                engine.go (held);
+                check (std::abs (plain (params::ampBlend) - played[(size_t) held].blend) < 1.0e-4f,
+                       juce::String (channels.lineup().channels[(size_t) held].name) + ", which has no BLEND of its own, pulled again stands at "
+                           + juce::String (played[(size_t) held].blend, 2) + ", where a host left it at 0.40 (" + juce::String (plain (params::ampBlend), 2) + ")");
+            }
+            else
+                check.skip ("a gear with no BLEND of its own stands where it holds it, whatever a host left it at",
+                            "every gear of the " + ours + "'s has a BLEND of its own");
+            presets.init();
+            ticks();
+        }
+
+        engine.go (a);
         const auto first = leave (0.12f, 0.07f);
         put (params::bassHpf, 1.0f);        // 4 STR
         put (params::bassLpf, 1.0f);        // SLAP
-        engine.go (1);
-        check (differsFrom (first), "a bass's gear never pulled since INIT opens on its own DRIVE, BLEND, tones, MIDDLE's frequency, its pack's switches, COMP, effects and DI/CAB, not the other gear's");
+        engine.go (b);
+        check (a >= 0 && b >= 0 && differsFrom (first), console.opensOwn);
         const auto second = leave (0.85f, -0.07f);
-        engine.go (0);
-        check (standsAs (first), "each gear comes back with the DRIVE, BLEND, BASS, MIDDLE, TREBLE, MIDDLE's frequency, ULTRA LO and HI, COMP threshold, OCTAVE, ENVELOPE, CHORUS and DI/CAB it was left with ("
-                                     + kept.joinIntoString (" ") + ")");
-        engine.go (1);
+        engine.go (a);
+        check (standsAs (first), console.keeps + juce::String (" (") + kept.joinIntoString (" ") + ")");
+        engine.go (b);
         check (standsAs (second), "...and so does the other");
         check (juce::roundToInt (plain (params::bassHpf)) == (int) params::BassHpf::four && juce::roundToInt (plain (params::bassLpf)) == (int) params::BassLpf::slap,
                "...while 5 STR / 4 STR and FINGERS / SLAP stand as the player threw them, on every gear");
@@ -1009,12 +1059,13 @@ int ORBITAMP_GATE_MAIN()
             return on (params::compOn) && std::abs (plain (params::compAmount) - 0.75f) < 1.0e-4f && std::abs (plain (params::compRatio) - 4.0f) < 1.0e-3f
                 && character != nullptr && character->getCurrentValueAsText() == "Opto"
                 && on (params::octavePresent) && on (params::octaveOn)
-                && on (params::filterPresent) && on (params::filterOn)
+                && (console.envelope ? on (params::filterPresent) && on (params::filterOn) : ! on (params::filterPresent))
                 && on (params::chorusPresent) && on (params::chorusOn)
                 && on (params::bassHpfOn) && on (params::bassLpfOn)
-                && ! on (params::delayPresent) && ! on (params::reverbPresent);
+                && ! on (params::delayPresent)
+                && (console.room ? on (params::reverbPresent) && on (params::reverbOn) : ! on (params::reverbPresent));
         };
-        check (holds(), "INIT gives COMP on, three quarters of the signal through it at 4:1 on OPTO, OCTAVE, ENVELOPE and CHORUS in the strip and on, both cuts on, no delay and no room");
+        check (holds(), console.holds);
         // ...and every gear's tone flat: the standard's three at 0 dB, or the pack's dials where their travel is none — the
         // reference each band is flat at (felitronics::rigplayer::travelOf).
         bool flat = true;
@@ -1025,6 +1076,8 @@ int ORBITAMP_GATE_MAIN()
             const auto dials = channels.tonesOf (c);
             for (int t = 0; t < 3; ++t)
             {
+                if (channels.toneOf (c, t).isEmpty())       // a knob the pack has no tone for: the ReVolt Bass's Clean has two
+                    continue;
                 const float v = plain (channels.toneOf (c, t));
                 const double off = t < (int) dials.size() ? felitronics::rigplayer::travelOf (dials[(size_t) t], (double) v) : (double) v;
                 if (std::abs (off) >= 1.0e-4)
@@ -1038,7 +1091,7 @@ int ORBITAMP_GATE_MAIN()
         put (params::compRatio, 0.9f);
         put (params::compAmount, 0.3f);
         put (params::chorusPresent, 0.0f);
-        put (params::reverbPresent, 1.0f);
+        put (params::reverbPresent, console.room ? 0.0f : 1.0f);
         engine.setUpChain (channels.adopt());
         check (holds(), "...and the face coming up gives them again, where a host left them anywhere else");
         ticks();

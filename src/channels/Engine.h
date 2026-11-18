@@ -71,6 +71,7 @@ public:
 
     void pump() override;
     void stateLanded() override;
+    std::optional<float> heldBlend() const override;
 
     /** The face, when it is open: the engine has moved a channel or taken a state as its own, and
         what the window shows may be behind. */

@@ -32,6 +32,7 @@
 #include "worlds/Ear.h"
 
 #include <felitronics/analysis/RollingSpectrumTap.h>
+#include <felitronics/core/DryAligner.h>
 #include <felitronics/chorus/BassChorus.h>
 #include <felitronics/envfilter/EnvelopeFilter.h>
 #include <felitronics/octave/Octaver.h>
@@ -42,6 +43,8 @@
 #include <felitronics/dynamics/NoiseGate.h>
 #include <felitronics/reverb/AmpReverb.h>
 #include <synth/State.h>
+
+#include <optional>
 namespace cabir::synth { class PairRenderer; }                  // the bass's own cabinets, as cab-ir-generator says one
 #include "core/SpaceTap.h"
 #include <juce_audio_processors/juce_audio_processors.h>
@@ -65,6 +68,11 @@ struct ProductEngine
     /** The state changed under the processor — a session opened, a register recalled, a step of the
         history taken. Said from inside the landing itself: it may look, and must not write. */
     virtual void stateLanded() = 0;
+
+    /** BLEND AS THE PLAYING CHANNEL HOLDS IT, where it holds one (channels::Lineup::Channel::blendHeld): what the player is
+        told whatever BLEND's parameter says — a host's automation, a session landing on that channel. None: the
+        parameter's. Any thread a prepare runs on: it reads atomics and a lineup fixed at build. */
+    virtual std::optional<float> heldBlend() const { return {}; }
 };
 
 /** The plugin shell. Deliberately thin: the chain (preamp -> EQ -> delay -> reverb -> cabinet) lands
@@ -261,6 +269,13 @@ public:
         opened from it was reading back whatever the last host had shrunk it to, and once anything
         shrank it the value stuck. A wanted size and a current size are two different facts. */
     static constexpr float preferredScale = 1.0f;
+
+    /** THE AMP'S BYPASS (the owner, 11.11): the whole amp out, the guitar through as it came in. A parameter of the
+        processor's own and not of the state: a host's bypass is this one (getBypassParameter), and no preset, register,
+        undo or session carries it — a preset recalled never takes the amp out, and a window opens with the amp in. The
+        faces' switch: the power sign on OrbitAmp's footer, the POWERED BY plate in every cockpit. */
+    juce::AudioParameterBool& bypassParameter() noexcept { return *bypass; }
+    juce::AudioProcessorParameter* getBypassParameter() const override { return bypass; }
 
     /** The captured blocks, addressed by number, so the aim, the name pump and the seed can all walk
         them the same way. There is one — the preamp — and the walk stays a walk, so a block that
@@ -1745,6 +1760,13 @@ private:
         so a link asks for its own by name. */
     core::BypassFade         blockFade[params::numChainRows];
     juce::AudioBuffer<float> fadeDry;
+
+    /** The amp's bypass (bypassParameter): the parameter, the processor's (addParameter); the input as it came in, held
+        as late as the amp makes everything else (DryAligner, its planes taken as `bypassIn`); and its crossfade. */
+    juce::AudioParameterBool*     bypass = nullptr;
+    felitronics::core::DryAligner bypassDry;
+    core::BypassFade              bypassFade;
+    int                           bypassIn = 1;
 
     /** One per captured block: the delay a BYPASSED block still has to carry, so the chain does
         not arrive early the moment somebody stands a rate-matching model down. Only runs when the

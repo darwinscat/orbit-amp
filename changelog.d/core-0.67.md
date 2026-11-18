@@ -1,4 +1,4 @@
-Amps: all
+Amps: OrbitAmp, CatpitAmp, RedPawAmp, FrostPawAmp, AmberPawAmp
 
 ### Dependencies
 - felitronics-core v0.67.0 (from v0.62.0). The cabinet's convolver keeps only the memory its IR needs instead of

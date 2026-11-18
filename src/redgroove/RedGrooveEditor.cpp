@@ -517,6 +517,16 @@ RedGrooveEditor::RedGrooveEditor (AmpProcessor& p)
                 [] (float t) { return t * params::compThresholdMin; }, [&compValue] (float db) { compValue.set (dbWhole (db)); });
     bindTravel (blend, params::ampBlend, [] (float v) { return v; }, [] (float t) { return t; },
                 [&blendValue] (float v) { blendValue.set (percent (v)); });
+    // ...and a right click on BLEND, its crossover, 80 to 250 Hz, one level as DeepGrooveBass's (the owner, 17.11): the
+    // clean leg's polarity is the pack's to say (files[].polarity), not a hand's.
+    blend.onMenu = [this]
+    {
+        bass::Menu m;
+        m.items.addSectionHeader ("BLEND CROSSOVER");
+        bass::addSteps (m, m.items, amp.apvts, params::ampBlendHz,
+                        { 80.0f, 100.0f, 120.0f, 150.0f, 180.0f, 200.0f, 250.0f }, bass::hzWord);
+        bass::show (std::move (m), &blend);
+    };
     // CAB / DI: the cabinet at the head, the DI at the foot — the cabinet's share up its travel.
     bindTravel (diCab, params::cabMix, [] (float v) { return v / 100.0f; }, [] (float t) { return t * 100.0f; }, {});
     const char* effectIds[] { params::octaveAmount, params::filterAmount, params::chorusAmount };

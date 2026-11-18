@@ -6,6 +6,78 @@ version of their own (installer/bass.ini; the guitar amps keep theirs in CHANGEL
 format follows [Keep a Changelog](https://keepachangelog.com/), and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [0.3.0] — 2026-11-17 — DeepGrooveBass, the bathyscaphe, and BLEND's low end in phase
+
+### Every amp
+
+#### Added
+- **Bypass, the host's.** The whole amp out and the bass or guitar through as it came in, crossfaded, held as late as the
+  amp plays so nothing jumps, and the tuner still listening. It is the host's bypass, and no preset, A/B/C/D register or
+  undo step carries it: a preset never switches the amp off. DeepGrooveBass's lever has it as its top place, PARK.
+- **The standalone lists the interface's inputs by number, each with its meter.** A right click on the INPUT column (or
+  the settings menu's INPUT, IN) shows IN 1 to IN n of the interface, and the one the amp plays is lit. A plucked
+  string moves the meter of the input it is plugged into, so the guitar plays from IN 4 without repatching and without
+  ticking inputs in Audio/MIDI Settings. A click plays that input. A Shift-click adds a second, and the amp plays the
+  two together at half each, which combs a DI with a mic. In STEREO a click sets the left amp's input and a Shift-click
+  the right one's. The menu stays open while you pluck. The choice is kept for each interface by its name, apart for
+  STEREO, and comes back with the interface. An interface seen for the first time keeps playing what it played, and
+  every one of its inputs opens for the list. Inside a host the menu keeps Left, Right and L+R, which the host's
+  routing feeds.
+- **Which input the amp plays: Left, Right or L+R.** With a DI in one input of the interface and a cabinet's mic in
+  the other, the guitar plays from either without moving a cable. L+R plays the two at half each (a DI and a mic
+  together comb). The choice is in the menu of the INPUT column, and in the settings menu's INPUT; in STEREO both
+  inputs play, each through its own amp, as before. It belongs to the session, not to the sound: a session keeps
+  it, a preset, the A/B registers and INIT never change it. A new instance plays the left, as every amp did.
+
+#### Fixed
+- **BLEND's low end no longer dips.** BLEND's clean leg is now lined up with each capture. Every bass capture carries how
+  late it answers its input and whether it answers it inverted, and when a pack loads each capture's clean leg is also
+  matched to the way its low end turns, read off the capture itself in the background, a tenth of a second a capture.
+  Before, the low end thinned between the clean leg and the capture: at 50/50 on the ReVolt Bass Dirt by up to 16 dB
+  around 35 Hz, on the SGT-DI by 2.5 dB at 30 Hz, on the ReVolt Bass Drive by 2 dB. Now BLEND sums its low end within
+  half a decibel from 30 to 260 Hz.
+- A cabinet IR longer than 1.41 s at 48 kHz, picked while the cabinet is out of the chain, now plays alone from
+  the first sample when the cabinet comes back; it used to finish its crossfade from the cabinet before.
+
+#### Dependencies
+- **felitronics-appkit v0.25.0**: the input picker the standalones list their inputs with, moved there from the cab
+  builders so that the builders and the amps share it.
+- **felitronics-guitar-core v0.12.0** (from v0.8.0): the crossover blend's clean match. **namz v5.1.0** with it.
+- **cab-ir-generator v0.5.0**, the builders' first release on JUCE 9: the cabinets, their panel and their presets
+  are as they were.
+- felitronics-core v0.67.0 (from v0.62.0). The cabinet's convolver keeps only the memory its IR needs instead of
+  its whole 5 s, and an IR longer than 1.41 s at 48 kHz (0.70 s at 96 kHz) is convolved in smaller steps, which
+  plays within float noise of before. The echo plays exactly as before; with REPEATS at 0 the plug-in no longer
+  tells the host about echo tail that is not there.
+- **JUCE 9.0.5**, up from 8.0.17: every amp, its plug-ins and its app are built on it.
+
+### OrbitBass
+
+#### Added
+- **The Two Notes ReVolt Bass.** Its three channels, CLEAN, DIRT and DRIVE, a capture each, join the SGT-DI in the device
+  list. OrbitBass still opens on the SGT-DI.
+
+#### Removed
+- **INVERT POLARITY in the AMP menu.** BLEND's clean leg now takes each capture's own polarity, so there is nothing left
+  to flip. A session saved with it on plays as the capture says.
+
+### RedGrooveBass
+
+#### Added
+- **BLEND's crossover on a right click.** Where BLEND's clean lows give way to the capture, 80 to 250 Hz, picked from
+  BLEND's own menu, as on DeepGrooveBass.
+
+### DeepGrooveBass
+
+#### Added
+- **DeepGrooveBass, the bathyscaphe.** A bass amp in a glass sphere over the floor of an alien ocean, jellyfish drifting
+  past and answering the bass, the sea's light moving on the panel. Three gears on the lever — CLEAN, DIRT and DRIVE,
+  the three channels of a Two Notes ReVolt Bass, a capture each — and PARK above them: the whole amp out, the sea parked.
+  COMP is one fader, its threshold, its squeeze in a column beside it; DRIVE; BLEND on DIRT and DRIVE, keeping the low
+  end clean under a crossover set from its menu (80–250 Hz), DIRT opening at 80/20 and DRIVE at 90/10; BASS and TREBLE
+  on CLEAN, BASS, MID and TREBLE on the others; OCTAVE, CHORUS and a room; the bass's dozen of drawn cabinets on a
+  slider, a cabinet per gear; 5 STR / 4 STR and FINGERS / SLAP; the tuner, GATE and LIMIT, the keys and A/B/C/D.
+
 ## [0.2.1] - 2026-11-12 - JUCE's security release
 
 ### Every amp

@@ -1,4 +1,4 @@
-Amps: all
+Amps: OrbitAmp, CatpitAmp, RedPawAmp, FrostPawAmp, AmberPawAmp
 
 ### Added
 - **Which input the amp plays: Left, Right or L+R.** With a DI in one input of the interface and a cabinet's mic in

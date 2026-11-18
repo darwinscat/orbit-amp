@@ -15,15 +15,22 @@
 // quality ladder, as --fixed does alone), --quit=seconds ends the run. The guitar (worlds/Play.h): --play=peak picks a
 // note of that peak (linear) every second, ringing down, for watching the world answer; --hit=peak takes the STILL at the
 // instant such a note is picked. --lights throws both searchlights on, where the world has them. Built three times: as RedPaw's windscreen over the Plains, (ORBITAMP_VIEW_DEMO_ICE) as
-// FrostPaw's over the ice, (ORBITAMP_VIEW_DEMO_TITAN) as the canopy over Titan's sea, and (ORBITAMP_VIEW_DEMO_WALKER) as the
-// walker's dome over the glowing forest, the whole cabin's stage — each in its product's gears unless --gears says otherwise. The
+// FrostPaw's over the ice, (ORBITAMP_VIEW_DEMO_TITAN) as the canopy over Titan's sea, (ORBITAMP_VIEW_DEMO_WALKER) as the
+// walker's dome over the glowing forest, the whole cabin's stage, and (ORBITAMP_VIEW_DEMO_UNDERWATER) as the bathyscaphe's
+// cabin over the sea floor, the whole stage with the panel drawn over it — each in its product's gears unless --gears says otherwise. The
 // walker starts where its world starts it unless --at says otherwise, walks to --bpm=beats a minute where given, and puts its
 // horizon --horizon=fraction of the frame from the top (the cabin's 0.40 unless said); for matching its prototype's stills,
 // --bass=level holds a low note through the walk and --strike=seconds strikes an attack that long before its end.
-// --glass=WxH sizes the glass, any world's.
+// --glass=WxH sizes the glass, any world's. The sea floor parks with --park (P toggles it), sends a bathyscaphe past
+// --sub=seconds from the start (the prototype's setPassFirst), strikes an attack --strike=seconds before the drive's
+// end, and after the drive takes one step of no time, as the prototype's first frame does (cabin.html?t=...); --cabin keeps
+// the cabin the world draws itself in the STILL too, so --still writes the frame as it is seen live.
 
 #include "Windscreen.h"
-#if ORBITAMP_VIEW_DEMO_WALKER
+#if ORBITAMP_VIEW_DEMO_UNDERWATER
+ #include "../../underwater/view/UnderwaterArt.h"
+ #include "../../underwater/view/UnderwaterDrive.h"
+#elif ORBITAMP_VIEW_DEMO_WALKER
  #include "../../redgroove/view/WalkerDrive.h"
 #elif ORBITAMP_VIEW_DEMO_TITAN
  #include "../../amberpaw/view/TitanDrive.h"
@@ -35,12 +42,13 @@
 
 #include <juce_gui_extra/juce_gui_extra.h>
 
+#include <cstdlib>
 #include <iostream>
 
 namespace
 {
-   #if ORBITAMP_VIEW_DEMO_WALKER
-    constexpr int glassWidth = 1672, glassHeight = 941, lineHeight = 26;    // the dome's whole stage: the view is behind all of it
+   #if ORBITAMP_VIEW_DEMO_WALKER || ORBITAMP_VIEW_DEMO_UNDERWATER
+    constexpr int glassWidth = 1672, glassHeight = 941, lineHeight = 26;    // the cabin's whole stage: the view is behind all of it
    #elif ORBITAMP_VIEW_DEMO_TITAN
     constexpr int glassWidth = 1672, glassHeight = 418, lineHeight = 26;    // the cabin's whole canopy, not a rover's windscreen
    #else
@@ -50,7 +58,9 @@ namespace
     using Mode = orbitamp::redpaw::Windscreen::Mode;
 
     /** The product's gears, as its lever has them (redpaw/RedPawLineup.h): the demo has no lineup. */
-   #if ORBITAMP_VIEW_DEMO_WALKER
+   #if ORBITAMP_VIEW_DEMO_UNDERWATER
+    constexpr int productGears = 3;     // the bass amp's lever: CLEAN, DIRT, DRIVE
+   #elif ORBITAMP_VIEW_DEMO_WALKER
     constexpr int productGears = 2;     // RedGrooveBass
    #elif ORBITAMP_VIEW_DEMO_TITAN
     constexpr int productGears = 4;     // the Titan face
@@ -74,6 +84,7 @@ namespace
         void setGear (int g) override                                 { inner->setGear (g); }
         void setTurbo (bool on) override                              { inner->setTurbo (on); }
         void setSteer (float amount) override                         { inner->setSteer (amount); }
+        void setPark (bool on) override                               { inner->setPark (on); }
         void setTempo (double bpm) override                           { inner->setTempo (bpm); }
         void setWipers (int speed) override                           { inner->setWipers (speed); }
         void setLights (bool l, bool r) override                      { inner->setLights (l, r); }
@@ -96,10 +107,58 @@ namespace
         int frameWidth() const noexcept override                      { return inner->frameWidth(); }
         int frameHeight() const noexcept override                     { return inner->frameHeight(); }
         void setRepeats (int times) override                          { inner->setRepeats (times); }
+        bool drawsCabin() const override                              { return inner->drawsCabin(); }
+        void setCabin (bool drawn) override                           { inner->setCabin (drawn); }
+        bool glassAt (float x, float y) const override                { return inner->glassAt (x, y); }
 
     private:
         std::unique_ptr<orbitamp::redpaw::Drive> inner;
         float peak;
+    };
+
+    /** A DRIVE WHOSE CABIN STAYS DRAWN, for --cabin: the STILL is the live frame, panel and all. Everything else is the
+        drive's own. */
+    class WithCabin final : public orbitamp::redpaw::Drive
+    {
+    public:
+        explicit WithCabin (std::unique_ptr<orbitamp::redpaw::Drive> d) : inner (std::move (d)) {}
+
+        void setCabin (bool) override                                 { inner->setCabin (true); }
+
+        const char* name() const noexcept override                   { return inner->name(); }
+        int numGears() const noexcept override                        { return inner->numGears(); }
+        void setGear (int g) override                                 { inner->setGear (g); }
+        void setTurbo (bool on) override                              { inner->setTurbo (on); }
+        void setSteer (float amount) override                         { inner->setSteer (amount); }
+        void setPark (bool on) override                               { inner->setPark (on); }
+        void setTempo (double bpm) override                           { inner->setTempo (bpm); }
+        void setWipers (int speed) override                           { inner->setWipers (speed); }
+        void setLights (bool l, bool r) override                      { inner->setLights (l, r); }
+        void hear (float p, float k) override                         { inner->hear (p, k); }
+        void setLit (bool on) override                                { inner->setLit (on); }
+        void step (double dt) override                                { inner->step (dt); }
+        void settle (int g, bool t) override                          { inner->settle (g, t); }
+        void placeAt (double x, double z, double h) override          { inner->placeAt (x, z, h); }
+        void setClock (double seconds, double metres) override        { inner->setClock (seconds, metres); }
+        float speed() const noexcept override                         { return inner->speed(); }
+        float speedFor (int g, bool t) const noexcept override        { return inner->speedFor (g, t); }
+        Ease ease() const noexcept override                           { return inner->ease(); }
+        orbitamp::redpaw::Mars1993::Look look1993() const noexcept override { return inner->look1993(); }
+        std::string landmarks (double metres) const override         { return inner->landmarks (metres); }
+        bool create() override                                        { return inner->create(); }
+        std::string error() const override                           { return inner->error(); }
+        void destroy() override                                       { inner->destroy(); }
+        void render (int w, int h, float sc, uint32_t target, int x, int y) override { inner->render (w, h, sc, target, x, y); }
+        float gpuMillis() const noexcept override                     { return inner->gpuMillis(); }
+        bool readFrame (std::vector<uint8_t>& rgba, int& w, int& h) override { return inner->readFrame (rgba, w, h); }
+        int frameWidth() const noexcept override                      { return inner->frameWidth(); }
+        int frameHeight() const noexcept override                     { return inner->frameHeight(); }
+        void setRepeats (int times) override                          { inner->setRepeats (times); }
+        bool drawsCabin() const override                              { return inner->drawsCabin(); }
+        bool glassAt (float x, float y) const override                { return inner->glassAt (x, y); }
+
+    private:
+        std::unique_ptr<orbitamp::redpaw::Drive> inner;
     };
 
     struct Args
@@ -112,7 +171,8 @@ namespace
         float play = 0.0f, hit = 0.0f;
         double bpm = 0, horizon = 0.40, bass = 0, strike = -1;
         int glassW = glassWidth, glassH = glassHeight;
-        bool lights = false;
+        bool lights = false, park = false, cabin = false;
+        double sub = -1;
         juce::String stillFile;
 
         explicit Args (const juce::StringArray& args)
@@ -140,6 +200,9 @@ namespace
                 else if (a.startsWith ("--play="))   play = value.getFloatValue();
                 else if (a.startsWith ("--hit="))    hit = value.getFloatValue();
                 else if (a == "--lights")            lights = true;
+                else if (a == "--park")              park = true;
+                else if (a == "--cabin")             cabin = true;
+                else if (a.startsWith ("--sub="))    sub = value.getDoubleValue();
                 else if (a.startsWith ("--bpm="))    bpm = value.getDoubleValue();
                 else if (a.startsWith ("--horizon=")) horizon = value.getDoubleValue();
                 else if (a.startsWith ("--bass="))   bass = value.getDoubleValue();
@@ -153,7 +216,26 @@ namespace
         /** The drive, placed and driven as asked before the view takes it. */
         std::unique_ptr<orbitamp::redpaw::Drive> makeDrive() const
         {
-           #if ORBITAMP_VIEW_DEMO_WALKER
+           #if ORBITAMP_VIEW_DEMO_UNDERWATER
+            // No factory folder here: the cabin's art from the source tree, unless UNDERWATER_ART_DIR names a folder.
+            if (juce::SystemStats::getEnvironmentVariable ("UNDERWATER_ART_DIR", {}).isEmpty())
+            {
+               #if JUCE_WINDOWS
+                _putenv_s ("UNDERWATER_ART_DIR", ORBITAMP_UNDERWATER_ART_DEFAULT);
+               #else
+                setenv ("UNDERWATER_ART_DIR", ORBITAMP_UNDERWATER_ART_DEFAULT, 1);
+               #endif
+            }
+            std::unique_ptr<orbitamp::redpaw::Drive> d = std::make_unique<orbitamp::underwater::UnderwaterDrive> (orbitamp::underwater::shippedArt());
+            constexpr bool ownStart = true;     // the sea floor's world has its own start
+            d->setPark (park);
+            if (sub >= 0)
+            {
+                auto& sea = static_cast<orbitamp::underwater::UnderwaterDrive&> (*d).sea();
+                d->settle (gear, turbo);
+                sea.setPassFirst (sea.state().time + sub);
+            }
+           #elif ORBITAMP_VIEW_DEMO_WALKER
             std::unique_ptr<orbitamp::redpaw::Drive> d = std::make_unique<orbitamp::redgroove::WalkerDrive> (gears, horizon);
             constexpr bool ownStart = true;     // the walker's world has its own start
            #elif ORBITAMP_VIEW_DEMO_TITAN
@@ -163,7 +245,7 @@ namespace
            #else
             std::unique_ptr<orbitamp::redpaw::Drive> d = std::make_unique<orbitamp::redpaw::PlainsDrive> (gears);
            #endif
-           #if ! ORBITAMP_VIEW_DEMO_WALKER
+           #if ! ORBITAMP_VIEW_DEMO_WALKER && ! ORBITAMP_VIEW_DEMO_UNDERWATER
             constexpr bool ownStart = false;
            #endif
             d->setGear (gear); d->setTurbo (turbo); d->setLights (lights, lights); d->setTempo (bpm);
@@ -183,6 +265,8 @@ namespace
                 auto& walker = static_cast<orbitamp::redgroove::WalkerDrive&> (*d).walker();
                 d->settle (gear, turbo);
                 walker.setBass (bass);
+               #elif ORBITAMP_VIEW_DEMO_UNDERWATER
+                d->settle (gear, turbo);       // made in the gear and PARK asked for, as the prototype's view is
                #endif
                 for (int i = 0, n = juce::roundToInt ((striking ? driveSeconds - strike : driveSeconds) * 60); i < n; ++i)
                     d->step (1.0 / 60);
@@ -193,6 +277,14 @@ namespace
                     for (int i = 0, n = juce::roundToInt (strike * 60); i < n; ++i)
                         d->step (1.0 / 60);
                 }
+               #elif ORBITAMP_VIEW_DEMO_UNDERWATER
+                if (striking)
+                {
+                    static_cast<orbitamp::underwater::UnderwaterDrive&> (*d).sea().hit (1.0);
+                    for (int i = 0, n = juce::roundToInt (strike * 60); i < n; ++i)
+                        d->step (1.0 / 60);
+                }
+                d->step (0.0);                  // the prototype's first frame after its advance: a step of no time
                #endif
             }
             d->setRepeats (stress);
@@ -203,7 +295,9 @@ namespace
                 std::cout << d->landmarks (findMetres);
             }
             if (hit > 0.0f)
-                return std::make_unique<Picked> (std::move (d), hit);
+                d = std::make_unique<Picked> (std::move (d), hit);
+            if (cabin)
+                d = std::make_unique<WithCabin> (std::move (d));
             return d;
         }
     };
@@ -217,6 +311,7 @@ namespace
         {
             view.setGear (args.gear);
             view.setTurbo (args.turbo);
+            view.setPark (args.park);
             view.setRenderScale (args.scale);
             view.setFrameRateCap (args.cap);
             view.steer (args.steer);
@@ -259,6 +354,7 @@ namespace
             const auto c = k.getTextCharacter();
             if (c >= '1' && c < '1' + view.numGears()) { view.setGear (c - '0'); return true; }
             if (c == 't' || c == 'T') { view.setTurbo (! view.isTurbo()); return true; }
+            if (c == 'p' || c == 'P') { view.setPark (! view.isParked()); return true; }
             if (c == 'm' || c == 'M')
             {
                 view.setMode (view.mode() == Mode::gpu ? Mode::cpu : view.mode() == Mode::cpu ? Mode::still : Mode::gpu);
@@ -284,7 +380,7 @@ namespace
         void timerCallback() override
         {
             const auto status = view.statusLine() + "   cap " + juce::String (view.frameRateCap());
-            line.setText (status + "      1.." + juce::String (view.numGears()) + " gear   T turbo   arrows / drag steer   M mode   S scale   F cap", juce::dontSendNotification);
+            line.setText (status + "      1.." + juce::String (view.numGears()) + " gear   T turbo   P park   arrows / drag steer   M mode   S scale   F cap", juce::dontSendNotification);
             if (args.report && (++ticks % 4) == 0)
                 std::cout << status << std::endl;
             const auto write = [this] (const juce::Image& image)
@@ -310,7 +406,9 @@ namespace
     class Demo final : public juce::JUCEApplication
     {
     public:
-       #if ORBITAMP_VIEW_DEMO_WALKER
+       #if ORBITAMP_VIEW_DEMO_UNDERWATER
+        const juce::String getApplicationName() override    { return "Bathyscaphe cabin"; }
+       #elif ORBITAMP_VIEW_DEMO_WALKER
         const juce::String getApplicationName() override    { return "RedGrooveBass dome"; }
        #elif ORBITAMP_VIEW_DEMO_TITAN
         const juce::String getApplicationName() override    { return "Titan canopy"; }

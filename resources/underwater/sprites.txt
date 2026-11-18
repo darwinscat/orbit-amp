@@ -1,0 +1,226 @@
+# DC-745 sprites: 32 headings, cells 768 x 432 px, 99.89 px per metre, atlas 8 x 4, the sub centred; h = nose direction on the screen seen from above (0 toward the viewer, 90 right, 180 away, 270 left); camera 6 deg below level
+# lamp lines: name, lens x y on the cell (px from the top left), beam dx dy on the screen (unit), toward (how much the beam points at the viewer, -1..1)
+cell  0 h   0.0 sub_h000.0.png
+  lamp sub_boom_lamp_-1         251.5  142.3   0.401  0.916   0.941
+  lamp sub_boom_lamp_1          516.5  142.3  -0.401  0.916   0.941
+  lamp sub_bank_0               302.1   77.4   0.000  1.000   0.907
+  lamp sub_bank_1               332.1   77.4   0.000  1.000   0.907
+  lamp sub_bank_2               435.9   77.4   0.000  1.000   0.907
+  lamp sub_bank_3               465.9   77.4   0.000  1.000   0.907
+cell  1 h  11.2 sub_h011.2.png
+  lamp sub_boom_lamp_-1         317.5  140.3   0.701  0.713   0.897
+  lamp sub_boom_lamp_1          577.3  145.7   0.139  0.990   0.950
+  lamp sub_bank_0               339.5   76.1   0.367  0.930   0.890
+  lamp sub_bank_1               368.9   76.7   0.367  0.930   0.890
+  lamp sub_bank_2               470.8   78.8   0.367  0.930   0.890
+  lamp sub_bank_3               500.2   79.4   0.367  0.930   0.890
+cell  2 h  22.5 sub_h022.5.png
+  lamp sub_boom_lamp_-1         386.1  139.6   0.825  0.565   0.821
+  lamp sub_boom_lamp_1          630.8  150.2   0.578  0.816   0.924
+  lamp sub_bank_0               378.6   75.5   0.608  0.794   0.842
+  lamp sub_bank_1               406.3   76.7   0.608  0.794   0.842
+  lamp sub_bank_2               502.3   80.9   0.608  0.794   0.842
+  lamp sub_bank_3               529.9   82.1   0.608  0.794   0.842
+cell  3 h  33.8 sub_h033.8.png
+  lamp sub_boom_lamp_-1         454.5  140.4   0.879  0.477   0.715
+  lamp sub_boom_lamp_1          674.8  155.7   0.774  0.633   0.865
+  lamp sub_bank_0               417.9   75.8   0.737  0.676   0.763
+  lamp sub_bank_1               442.8   77.6   0.737  0.676   0.763
+  lamp sub_bank_2               529.2   83.6   0.737  0.676   0.763
+  lamp sub_bank_3               554.1   85.4   0.737  0.676   0.763
+cell  4 h  45.0 sub_h045.0.png
+  lamp sub_boom_lamp_-1         520.2  142.5   0.904  0.428   0.583
+  lamp sub_boom_lamp_1          707.6  162.1   0.856  0.516   0.773
+  lamp sub_bank_0               455.9   76.9   0.804  0.595   0.657
+  lamp sub_bank_1               477.1   79.1   0.804  0.595   0.657
+  lamp sub_bank_2               550.6   86.8   0.804  0.595   0.657
+  lamp sub_bank_3               571.8   89.0   0.804  0.595   0.657
+cell  5 h  56.2 sub_h056.2.png
+  lamp sub_boom_lamp_-1         580.7  145.9   0.915  0.403   0.430
+  lamp sub_boom_lamp_1          727.9  168.9   0.893  0.449   0.654
+  lamp sub_bank_0               491.2   78.8   0.839  0.544   0.528
+  lamp sub_bank_1               507.8   81.4   0.839  0.544   0.528
+  lamp sub_bank_2               565.5   90.4   0.839  0.544   0.528
+  lamp sub_bank_3               582.2   93.0   0.839  0.544   0.528
+cell  6 h  67.5 sub_h067.5.png
+  lamp sub_boom_lamp_-1         633.7  150.5   0.919  0.395   0.262
+  lamp sub_boom_lamp_1          735.1  176.1   0.911  0.413   0.511
+  lamp sub_bank_0               522.3   81.3   0.857  0.516   0.380
+  lamp sub_bank_1               533.8   84.2   0.857  0.516   0.380
+  lamp sub_bank_2               573.5   94.2   0.857  0.516   0.380
+  lamp sub_bank_3               585.0   97.1   0.857  0.516   0.380
+cell  7 h  78.8 sub_h078.8.png
+  lamp sub_boom_lamp_-1         677.0  156.1   0.916  0.401   0.086
+  lamp sub_boom_lamp_1          728.7  183.3   0.918  0.397   0.350
+  lamp sub_bank_0               548.1   84.4   0.862  0.507   0.220
+  lamp sub_bank_1               554.0   87.5   0.862  0.507   0.220
+  lamp sub_bank_2               574.2   98.1   0.862  0.507   0.220
+  lamp sub_bank_3               580.1  101.2   0.862  0.507   0.220
+cell  8 h  90.0 sub_h090.0.png
+  lamp sub_boom_lamp_-1         709.1  162.5   0.907  0.420  -0.092
+  lamp sub_boom_lamp_1          709.1  190.2   0.918  0.396   0.177
+  lamp sub_bank_0               567.6   88.0   0.859  0.512   0.054
+  lamp sub_bank_1               567.6   91.1   0.859  0.512   0.054
+  lamp sub_bank_2               567.6  102.0   0.859  0.512   0.054
+  lamp sub_bank_3               567.6  105.1   0.859  0.512   0.054
+cell  9 h 101.2 sub_h101.2.png
+  lamp sub_boom_lamp_-1         728.7  169.4   0.892  0.453  -0.265
+  lamp sub_boom_lamp_1          677.0  196.5   0.913  0.409  -0.001
+  lamp sub_bank_0               580.1   91.9   0.846  0.533  -0.113
+  lamp sub_bank_1               574.2   95.0   0.846  0.533  -0.113
+  lamp sub_bank_2               554.0  105.6   0.846  0.533  -0.113
+  lamp sub_bank_3               548.1  108.7   0.846  0.533  -0.113
+cell 10 h 112.5 sub_h112.5.png
+  lamp sub_boom_lamp_-1         735.1  176.5   0.865  0.501  -0.426
+  lamp sub_boom_lamp_1          633.7  202.1   0.901  0.434  -0.177
+  lamp sub_bank_0               585.0   96.0   0.823  0.567  -0.273
+  lamp sub_bank_1               573.5   98.9   0.823  0.567  -0.273
+  lamp sub_bank_2               533.8  108.9   0.823  0.567  -0.273
+  lamp sub_bank_3               522.3  111.8   0.823  0.567  -0.273
+cell 11 h 123.8 sub_h123.8.png
+  lamp sub_boom_lamp_-1         727.9  183.7   0.822  0.570  -0.569
+  lamp sub_boom_lamp_1          580.7  206.7   0.880  0.474  -0.345
+  lamp sub_bank_0               582.2  100.1   0.786  0.619  -0.420
+  lamp sub_bank_1               565.5  102.7   0.786  0.619  -0.420
+  lamp sub_bank_2               507.8  111.7   0.786  0.619  -0.420
+  lamp sub_bank_3               491.2  114.3   0.786  0.619  -0.420
+cell 12 h 135.0 sub_h135.0.png
+  lamp sub_boom_lamp_-1         707.6  190.5   0.748  0.663  -0.688
+  lamp sub_boom_lamp_1          520.2  210.1   0.847  0.532  -0.498
+  lamp sub_bank_0               571.8  104.1   0.726  0.688  -0.549
+  lamp sub_bank_1               550.6  106.3   0.726  0.688  -0.549
+  lamp sub_bank_2               477.1  114.0   0.726  0.688  -0.549
+  lamp sub_bank_3               455.9  116.2   0.726  0.688  -0.549
+cell 13 h 146.2 sub_h146.2.png
+  lamp sub_boom_lamp_-1         674.8  196.9   0.621  0.783  -0.780
+  lamp sub_boom_lamp_1          454.5  212.3   0.791  0.611  -0.630
+  lamp sub_bank_0               554.1  107.8   0.631  0.776  -0.655
+  lamp sub_bank_1               529.2  109.5   0.631  0.776  -0.655
+  lamp sub_bank_2               442.8  115.5   0.631  0.776  -0.655
+  lamp sub_bank_3               417.9  117.3   0.631  0.776  -0.655
+cell 14 h 157.5 sub_h157.5.png
+  lamp sub_boom_lamp_-1         630.8  202.4   0.406  0.914  -0.839
+  lamp sub_boom_lamp_1          386.1  213.0   0.696  0.718  -0.736
+  lamp sub_bank_0               529.9  111.0   0.483  0.875  -0.734
+  lamp sub_bank_1               502.3  112.2   0.483  0.875  -0.734
+  lamp sub_bank_2               406.3  116.4   0.483  0.875  -0.734
+  lamp sub_bank_3               378.6  117.6   0.483  0.875  -0.734
+cell 15 h 168.8 sub_h168.8.png
+  lamp sub_boom_lamp_-1         577.3  206.9   0.086  0.996  -0.865
+  lamp sub_boom_lamp_1          317.5  212.3   0.530  0.848  -0.812
+  lamp sub_bank_0               500.2  113.7   0.269  0.963  -0.783
+  lamp sub_bank_1               470.8  114.3   0.269  0.963  -0.783
+  lamp sub_bank_2               368.9  116.4   0.269  0.963  -0.783
+  lamp sub_bank_3               339.5  117.1   0.269  0.963  -0.783
+cell 16 h 180.0 sub_h180.0.png
+  lamp sub_boom_lamp_-1         516.5  210.3  -0.262  0.965  -0.856
+  lamp sub_boom_lamp_1          251.5  210.3   0.262  0.965  -0.856
+  lamp sub_bank_0               465.9  115.8   0.000  1.000  -0.799
+  lamp sub_bank_1               435.9  115.8   0.000  1.000  -0.799
+  lamp sub_bank_2               332.1  115.8   0.000  1.000  -0.799
+  lamp sub_bank_3               302.1  115.8   0.000  1.000  -0.799
+cell 17 h 191.2 sub_h191.2.png
+  lamp sub_boom_lamp_-1         450.5  212.3  -0.530  0.848  -0.812
+  lamp sub_boom_lamp_1          190.7  206.9  -0.086  0.996  -0.865
+  lamp sub_bank_0               428.5  117.1  -0.269  0.963  -0.783
+  lamp sub_bank_1               399.1  116.4  -0.269  0.963  -0.783
+  lamp sub_bank_2               297.2  114.3  -0.269  0.963  -0.783
+  lamp sub_bank_3               267.8  113.7  -0.269  0.963  -0.783
+cell 18 h 202.5 sub_h202.5.png
+  lamp sub_boom_lamp_-1         381.9  213.0  -0.696  0.718  -0.736
+  lamp sub_boom_lamp_1          137.2  202.4  -0.406  0.914  -0.839
+  lamp sub_bank_0               389.4  117.6  -0.483  0.875  -0.734
+  lamp sub_bank_1               361.7  116.4  -0.483  0.875  -0.734
+  lamp sub_bank_2               265.7  112.2  -0.483  0.875  -0.734
+  lamp sub_bank_3               238.1  111.0  -0.483  0.875  -0.734
+cell 19 h 213.8 sub_h213.8.png
+  lamp sub_boom_lamp_-1         313.5  212.3  -0.791  0.611  -0.630
+  lamp sub_boom_lamp_1           93.2  196.9  -0.621  0.783  -0.780
+  lamp sub_bank_0               350.1  117.3  -0.631  0.776  -0.655
+  lamp sub_bank_1               325.2  115.5  -0.631  0.776  -0.655
+  lamp sub_bank_2               238.8  109.5  -0.631  0.776  -0.655
+  lamp sub_bank_3               213.9  107.8  -0.631  0.776  -0.655
+cell 20 h 225.0 sub_h225.0.png
+  lamp sub_boom_lamp_-1         247.8  210.1  -0.847  0.532  -0.498
+  lamp sub_boom_lamp_1           60.4  190.5  -0.748  0.663  -0.688
+  lamp sub_bank_0               312.1  116.2  -0.726  0.688  -0.549
+  lamp sub_bank_1               290.9  114.0  -0.726  0.688  -0.549
+  lamp sub_bank_2               217.4  106.3  -0.726  0.688  -0.549
+  lamp sub_bank_3               196.2  104.1  -0.726  0.688  -0.549
+cell 21 h 236.2 sub_h236.2.png
+  lamp sub_boom_lamp_-1         187.3  206.7  -0.880  0.474  -0.345
+  lamp sub_boom_lamp_1           40.1  183.7  -0.822  0.570  -0.569
+  lamp sub_bank_0               276.8  114.3  -0.786  0.619  -0.420
+  lamp sub_bank_1               260.2  111.7  -0.786  0.619  -0.420
+  lamp sub_bank_2               202.5  102.7  -0.786  0.619  -0.420
+  lamp sub_bank_3               185.8  100.1  -0.786  0.619  -0.420
+cell 22 h 247.5 sub_h247.5.png
+  lamp sub_boom_lamp_-1         134.3  202.1  -0.901  0.434  -0.177
+  lamp sub_boom_lamp_1           32.9  176.5  -0.865  0.501  -0.426
+  lamp sub_bank_0               245.7  111.8  -0.823  0.567  -0.273
+  lamp sub_bank_1               234.2  108.9  -0.823  0.567  -0.273
+  lamp sub_bank_2               194.5   98.9  -0.823  0.567  -0.273
+  lamp sub_bank_3               183.0   96.0  -0.823  0.567  -0.273
+cell 23 h 258.8 sub_h258.8.png
+  lamp sub_boom_lamp_-1          91.0  196.5  -0.913  0.409  -0.001
+  lamp sub_boom_lamp_1           39.3  169.4  -0.892  0.453  -0.265
+  lamp sub_bank_0               219.9  108.7  -0.846  0.533  -0.113
+  lamp sub_bank_1               214.0  105.6  -0.846  0.533  -0.113
+  lamp sub_bank_2               193.8   95.0  -0.846  0.533  -0.113
+  lamp sub_bank_3               187.9   91.9  -0.846  0.533  -0.113
+cell 24 h 270.0 sub_h270.0.png
+  lamp sub_boom_lamp_-1          58.9  190.2  -0.918  0.396   0.177
+  lamp sub_boom_lamp_1           58.9  162.5  -0.907  0.420  -0.092
+  lamp sub_bank_0               200.4  105.1  -0.859  0.512   0.054
+  lamp sub_bank_1               200.4  102.0  -0.859  0.512   0.054
+  lamp sub_bank_2               200.4   91.1  -0.859  0.512   0.054
+  lamp sub_bank_3               200.4   88.0  -0.859  0.512   0.054
+cell 25 h 281.2 sub_h281.2.png
+  lamp sub_boom_lamp_-1          39.3  183.3  -0.918  0.397   0.350
+  lamp sub_boom_lamp_1           91.0  156.1  -0.916  0.401   0.086
+  lamp sub_bank_0               187.9  101.2  -0.862  0.507   0.220
+  lamp sub_bank_1               193.8   98.1  -0.862  0.507   0.220
+  lamp sub_bank_2               214.0   87.5  -0.862  0.507   0.220
+  lamp sub_bank_3               219.9   84.4  -0.862  0.507   0.220
+cell 26 h 292.5 sub_h292.5.png
+  lamp sub_boom_lamp_-1          32.9  176.1  -0.911  0.413   0.511
+  lamp sub_boom_lamp_1          134.3  150.5  -0.919  0.395   0.262
+  lamp sub_bank_0               183.0   97.1  -0.857  0.516   0.380
+  lamp sub_bank_1               194.5   94.2  -0.857  0.516   0.380
+  lamp sub_bank_2               234.2   84.2  -0.857  0.516   0.380
+  lamp sub_bank_3               245.7   81.3  -0.857  0.516   0.380
+cell 27 h 303.8 sub_h303.8.png
+  lamp sub_boom_lamp_-1          40.1  168.9  -0.893  0.449   0.654
+  lamp sub_boom_lamp_1          187.3  145.9  -0.915  0.403   0.430
+  lamp sub_bank_0               185.8   93.0  -0.839  0.544   0.528
+  lamp sub_bank_1               202.5   90.4  -0.839  0.544   0.528
+  lamp sub_bank_2               260.2   81.4  -0.839  0.544   0.528
+  lamp sub_bank_3               276.8   78.8  -0.839  0.544   0.528
+cell 28 h 315.0 sub_h315.0.png
+  lamp sub_boom_lamp_-1          60.4  162.1  -0.856  0.516   0.773
+  lamp sub_boom_lamp_1          247.8  142.5  -0.904  0.428   0.583
+  lamp sub_bank_0               196.2   89.0  -0.804  0.595   0.657
+  lamp sub_bank_1               217.4   86.8  -0.804  0.595   0.657
+  lamp sub_bank_2               290.9   79.1  -0.804  0.595   0.657
+  lamp sub_bank_3               312.1   76.9  -0.804  0.595   0.657
+cell 29 h 326.2 sub_h326.2.png
+  lamp sub_boom_lamp_-1          93.2  155.7  -0.774  0.633   0.865
+  lamp sub_boom_lamp_1          313.5  140.4  -0.879  0.477   0.715
+  lamp sub_bank_0               213.9   85.4  -0.737  0.676   0.763
+  lamp sub_bank_1               238.8   83.6  -0.737  0.676   0.763
+  lamp sub_bank_2               325.2   77.6  -0.737  0.676   0.763
+  lamp sub_bank_3               350.1   75.8  -0.737  0.676   0.763
+cell 30 h 337.5 sub_h337.5.png
+  lamp sub_boom_lamp_-1         137.2  150.2  -0.578  0.816   0.924
+  lamp sub_boom_lamp_1          381.9  139.6  -0.825  0.565   0.821
+  lamp sub_bank_0               238.1   82.1  -0.608  0.794   0.842
+  lamp sub_bank_1               265.7   80.9  -0.608  0.794   0.842
+  lamp sub_bank_2               361.7   76.7  -0.608  0.794   0.842
+  lamp sub_bank_3               389.4   75.5  -0.608  0.794   0.842
+cell 31 h 348.8 sub_h348.8.png
+  lamp sub_boom_lamp_-1         190.7  145.7  -0.139  0.990   0.950
+  lamp sub_boom_lamp_1          450.5  140.3  -0.701  0.713   0.897
+  lamp sub_bank_0               267.8   79.4  -0.367  0.930   0.890
+  lamp sub_bank_1               297.2   78.8  -0.367  0.930   0.890
+  lamp sub_bank_2               399.1   76.7  -0.367  0.930   0.890
+  lamp sub_bank_3               428.5   76.1  -0.367  0.930   0.890

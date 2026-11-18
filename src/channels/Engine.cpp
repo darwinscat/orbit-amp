@@ -41,13 +41,18 @@ void Engine::opening (const Lineup& lineup, params::Opening& o)
         o.reverbMix = *first.reverbMix;
     if (lineup.boostLevel.has_value())
         o.boostLevel = *lineup.boostLevel;
+    if (first.blend.has_value())
+        o.ampBlend = *first.blend;
 
     // ...and what the lineup holds where it is, said where the Opening has a place for it (Lineup::pinned) — the
     // rest of what it pins is held where the parameter opens anyway.
     for (const auto& pin : lineup.pinned)
     {
-        if (pin.param == params::compAmount) o.compAmount = pin.value;
-        if (pin.param == params::bassLpfOn)  o.bassLpfOn  = pin.value > 0.5f;
+        if (pin.param == params::compAmount)    o.compAmount    = pin.value;
+        if (pin.param == params::bassLpfOn)     o.bassLpfOn     = pin.value > 0.5f;
+        if (pin.param == params::compOn)        o.compOn        = pin.value > 0.5f;
+        if (pin.param == params::filterPresent) o.filterPresent = pin.value > 0.5f;
+        if (pin.param == params::reverbPresent) o.reverbPresent = pin.value > 0.5f;
     }
 }
 
@@ -97,6 +102,16 @@ bool Engine::makeOwn()
     if (unseen)
         setUpChain (channels.adopt());
     return unseen;
+}
+
+/** The playing channel's BLEND where its lineup holds it (Lineup::Channel::blendHeld). */
+std::optional<float> Engine::heldBlend() const
+{
+    const auto& line = channels.lineup();
+    const auto& own = line.channels[(size_t) juce::jlimit (0, line.count() - 1, channels.active())];
+    if (own.blendHeld && own.blend.has_value())
+        return own.blend;
+    return {};
 }
 
 void Engine::stateLanded()

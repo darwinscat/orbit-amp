@@ -726,6 +726,10 @@ void Channels::hold (int channel)
     for (const auto& s : switchesOf (channel))
         if (s.held)
             set (params::selectorId (params::preampId, s.slot), (float) s.opening);
+
+    // A gear that holds its BLEND (Lineup::Channel::blendHeld) stands there whatever its record says.
+    if (const auto& own = line.channels[(size_t) memoryOf (juce::jlimit (0, count() - 1, channel))]; own.blendHeld && own.blend.has_value())
+        set (params::ampBlend, *own.blend);
 }
 
 bool Channels::adopt()
@@ -976,6 +980,8 @@ float Channels::defaultOf (int channel, const juce::String& paramId) const
         return *own.reverbMix;
     if (paramId == params::delayMix)
         return own.delayMix;
+    if (paramId == params::ampBlend && own.blend.has_value())     // the channel's own BLEND, where it opens one elsewhere
+        return *own.blend;
     for (const auto& s : switchesOf (channel))     // a switch of its pack where the pack opens it, or where the channel holds it
         if (paramId == params::selectorId (params::preampId, s.slot))
             return (float) s.opening;

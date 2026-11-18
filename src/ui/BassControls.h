@@ -367,12 +367,11 @@ inline Menu reverbMenu (juce::AudioProcessorValueTreeState& state, Menu m = {})
     return m;
 }
 
-/** The AMP's: where BLEND's clean lows give way to the capture and the clean leg's polarity; the HPF and the LPF, their
+/** The AMP's: where BLEND's clean lows give way to the capture (the clean leg's polarity is the pack's, 17.11); the HPF and the LPF, their
     switches and their frequencies as under the switches on the face. */
 inline Menu ampMenu (juce::AudioProcessorValueTreeState& state, Menu m = {})
 {
     addStepsMenu (m, state, params::ampBlendHz, "BLEND CROSSOVER", { 80.0f, 100.0f, 120.0f, 150.0f, 180.0f, 200.0f, 250.0f }, hzWord);
-    addToggle (m, m.items, state, params::ampBlendInvert, "INVERT POLARITY");
     juce::PopupMenu hpf, lpf;
     addToggle (m, hpf, state, params::bassHpfOn, "HPF ON");
     addHpf (m, hpf, state);

@@ -1,4 +1,4 @@
-Amps: all
+Amps: OrbitAmp, CatpitAmp, RedPawAmp, FrostPawAmp, AmberPawAmp
 
 ### Added
 - **The standalone lists the interface's inputs by number, each with its meter.** A right click on the INPUT column (or
