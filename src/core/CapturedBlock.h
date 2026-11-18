@@ -562,7 +562,9 @@ public:
         {
             while (auto job = player.takeLoadJob())
                 player.deliver (RigPlayer::run (std::move (*job)));
-                if (onLanded) onLanded();
+
+            // Once a pump, after every job: here a model lands inside the pump itself.
+            if (onLanded) onLanded();
             serveFit (nullptr);
             return;
         }
@@ -922,8 +924,14 @@ private:
         measureCleanMatch fits each capture a delay, a polarity and two all-passes from its own response at a handful
         of tones, and the player turns the clean leg through them (RigPlayer::setAlignment).
 
-        Nothing of it is in the pack: it is read off the models, here, whenever a block whose host plays the crossover
-        loads one. ONE CAPTURE A JOB, on the pump's pool — about a tenth of a second of inference each — so a model the
+        THE PACK'S OWN FIRST. A pack may carry its captures' matches, fitted once when it was built (namz 5.2's
+        `files[].clean_match`; the set's bass packs by tools/CleanMatchFit.cpp, the fit below call for call), and the
+        player reads them at load (AlignmentTable::fromDevice). A pack whose every capture has one is fitted nothing:
+        it plays its matches from the first block, and cleanMatchPending() is false at once. A capture without one is
+        fitted here, and what is fitted never replaces a match the pack states (applyFit).
+
+        The rest is read off the models, here, whenever a block whose host plays the crossover loads a pack that does
+        not carry them. ONE CAPTURE A JOB, on the pump's pool — about a tenth of a second of inference each — so a model the
         law asks for never waits behind a whole pack's fitting; each match is handed to the player as it lands, on the
         message thread. A pack's matches are kept for the session by its file and date, so a channel switched back to
         has them at once. A fit of a pack no longer loaded (fitGen) lands nowhere. With no pool (a test, an offline
@@ -945,8 +953,17 @@ private:
     {
         fitQueue.clear();
         fitFound.clear();
+        packMatches.clear();
 
         if (! crossoverPlayed || loadedPack == nullptr || ! player.loaded())
+            return;
+
+        // The matches the pack states, read as the player read them at load. Every distinct capture has one: nothing to
+        // fit, and nothing from a session's earlier fit of this file to lay over them.
+        const auto& stage = player.stage();
+        packMatches = felitronics::rigplayer::AlignmentTable::fromDevice (stage.device).cleanMatchByFile;
+        if (std::all_of (stage.device.files.begin(), stage.device.files.end(),
+                         [this] (const namz::rig::FileEntry& f) { return f.id.empty() || packMatches.count (f.id) > 0; }))
             return;
 
         fitKey = loadedPack->location.getFullPathName() + "|" + juce::String (loadedPack->modified.toMilliseconds());
@@ -958,10 +975,9 @@ private:
             return;
         }
 
-        const auto& stage = player.stage();
         for (const auto& f : stage.device.files)
         {
-            if (f.id.empty() || std::any_of (fitQueue.begin(), fitQueue.end(),
+            if (f.id.empty() || packMatches.count (f.id) > 0 || std::any_of (fitQueue.begin(), fitQueue.end(),
                                              [&f] (const FitAsk& a) { return a.one.files.front().id == f.id; }))
                 continue;
 
@@ -973,9 +989,6 @@ private:
             a.start = player.alignment();
             fitQueue.push_back (std::move (a));
         }
-
-        if (fitQueue.empty())
-            fitCache[fitKey] = {};
     }
 
     static CleanMatches fitOne (const FitAsk& a)
@@ -1038,11 +1051,14 @@ private:
             fitCache[fitKey] = fitFound;
     }
 
-    /** The player's own table — the pack's readings — with the matches in it. */
+    /** The player's own table — the pack's readings — with the matches in it: the pack's own as it states them, the
+        fitted ones for the captures it states none for. A fit never lands over a match of the pack's. */
     void applyFit (const CleanMatches& matches)
     {
         auto table = player.alignment();
-        table.cleanMatchByFile = matches;
+        table.cleanMatchByFile = packMatches;
+        for (const auto& [id, m] : matches)
+            table.cleanMatchByFile.emplace (id, m);
         player.setAlignment (std::move (table));
     }
 
@@ -1050,6 +1066,7 @@ private:
     std::vector<FitAsk> fitQueue;                                     // the loaded pack's captures still to fit
     bool fitInFlight = false;                                         // one of them is out on the pool
     CleanMatches fitFound;                                            // what has landed for the loaded pack
+    CleanMatches packMatches;                                         // what the loaded pack states itself, never fitted over
     juce::String fitKey;                                              // the pack file they belong to: its path and date
     std::map<juce::String, CleanMatches> fitCache;                    // fitted packs, by that key, for the session
     int fitGen = 0;                                                   // bumped by every select()
