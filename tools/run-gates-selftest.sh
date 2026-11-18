@@ -91,8 +91,12 @@ says() { block "$1" | grep -qF -- "$2"; }
 says_line() { block "$1" | grep -qxF -- "$2"; }
 silent_on() { ! says "$1" "$2"; }
 no_probes() { ! $windows || silent_on fail "--- the file itself ---"; }
-late_on_time() { if $windows; then says late "^ gate late timed out"; else says late "   ok (" && silent_on late "timed out"; fi; }
-if $windows; then reds="5 of 7" named="fail sleepy hang lost late"; else reds="4 of 7" named="fail sleepy hang lost"; fi
+# On Windows taskkill and the TERM race for `late`: either may get there first (CI, 18.11: the TERM did), so there
+# both endings are right; anywhere else it must be taken as ended.
+late_ended() { says late "   ok (" && silent_on late "timed out"; }
+late_on_time() { if $windows; then late_ended || says late "^ gate late timed out"; else late_ended; fi; }
+reds="4 of 7" named="fail sleepy hang lost"
+if $windows && ! late_ended; then reds="5 of 7" named="fail sleepy hang lost late"; fi
 order="$(sed -n 's/^-- gate: //p' "$out" | tr '\n' ' ')"
 
 fails=0
