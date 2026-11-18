@@ -16,6 +16,15 @@
 #
 # Every gate runs, red or green, and the run fails at the end if any was red: the ones after the first red
 # have something to say too.
+#
+# A TIME LIMIT FOR EVERY GATE, AND A WORD WHILE IT RUNS. A gate once hung on a Windows runner for two and a
+# half hours, silent — its output goes to a file and is shown when it ends — until the job's own limit
+# killed the whole run. Now a gate has ORBITAMP_GATE_TIMEOUT_MIN minutes (30 unless said): past them it is
+# killed with everything it started, its output so far is shown, it counts red and the next gate runs.
+# Every ORBITAMP_GATE_HEARTBEAT_MIN minutes (5 unless said) a gate still running says so, with the last
+# line it printed. 0 turns either off. ORBITAMP_GATE_TIMEOUT_SEC and ORBITAMP_GATE_HEARTBEAT_SEC, in
+# seconds, win over the minutes: they are for tools/run-gates-selftest.sh, which proves all of this on
+# tiny script gates.
 set -euo pipefail
 
 BUILD="${1:?usage: run-gates.sh <build-dir> [config]}"
@@ -27,6 +36,53 @@ GATES="$(dirname "$LIST")"
 
 windows=false
 case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) windows=true ;; esac
+
+seconds_of() {   # seconds_of <minutes variable> <seconds variable> <default minutes>
+  local v="${!2:-}" unit=1 from="$2"
+  if [ -z "$v" ]; then v="${!1:-$3}" unit=60 from="$1"; fi
+  case "$v" in ''|*[!0-9]*) echo "run-gates.sh: $from=$v — a whole number, please (0 turns it off)" >&2; return 1 ;; esac
+  echo $((10#$v * unit))
+}
+limit="$(seconds_of ORBITAMP_GATE_TIMEOUT_MIN ORBITAMP_GATE_TIMEOUT_SEC 30)" || exit 1
+beat="$(seconds_of ORBITAMP_GATE_HEARTBEAT_MIN ORBITAMP_GATE_HEARTBEAT_SEC 5)" || exit 1
+in_words() { if [ $(($1 % 60)) -eq 0 ]; then echo "$(($1 / 60)) min"; else echo "$1 s"; fi; }
+
+# The last line a gate printed that says something, cut to fit one line of the run's log. A line redrawn
+# with carriage returns counts as its newest frame.
+last_line() {
+  local line
+  # shellcheck disable=SC2016   # a sed script, not an expansion
+  line="$(tail -n 20 "$1" 2>/dev/null | LC_ALL=C tr '\r' '\n' \
+          | LC_ALL=C sed -n '/[^[:space:]]/h; ${x;s/^[[:space:]]*//;p;}' | LC_ALL=C cut -c 1-150)" || true
+  echo "${line:-(nothing yet)}"
+}
+
+# A gate that ran out of time goes WITH EVERYTHING IT STARTED: it runs in a process group of its own, and
+# the whole group is signalled — TERM, then KILL for whatever is still there after three seconds. On
+# Windows a native program never sees an MSYS signal, so there the tree is killed the Windows way first:
+# taskkill /T from the Windows pid of the subshell the gate runs under, which is the parent of all of it.
+kill_gate() {   # kill_gate <pid>
+  local pid="$1" i=0
+  if $windows && [ -r "/proc/$pid/winpid" ]; then
+    taskkill //F //T //PID "$(cat "/proc/$pid/winpid")" > /dev/null 2>&1 || true
+  fi
+  kill -TERM -- "-$pid" 2>/dev/null || kill -TERM "$pid" 2>/dev/null || true
+  while kill -0 -- "-$pid" 2>/dev/null && [ "$i" -lt 30 ]; do sleep 0.1 2>/dev/null || sleep 1; i=$((i + 1)); done
+  kill -KILL -- "-$pid" 2>/dev/null || true
+  kill -KILL "$pid" 2>/dev/null || true
+}
+
+# Still running, and still OURS: bash's own table of the jobs it started, not `kill -0`, which says yes to
+# whatever process has since been given the same pid.
+ours() { jobs -rp | grep -qx "$1"; }
+
+# The gate's own process group no longer hears a Ctrl-C or a cancelled job, so the run passes it on: a gate
+# never outlives the run that started it.
+gate_pid=
+trap '[ -z "$gate_pid" ] || ! ours "$gate_pid" || { kill_gate "$gate_pid"; } 2>/dev/null' EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 # Why a gate that would not even start did not, on Windows. 127 out of bash, from a file that
 # demonstrably exists and printed nothing, is bash's exec emulation giving up — it cannot tell us WHY.
@@ -62,7 +118,8 @@ windows_probes() {
 # only ever tell you that something is wrong.
 run_gate() {   # run_gate <name> <binary> [VAR=value ...]
   local name="$1" bin="$2"; shift 2
-  local log="$GATES/$name.log" home code=0 started=$SECONDS
+  local log="$GATES/$name.log" ended="$GATES/$name.exit" home code=0 started=$SECONDS pid elapsed polls=0
+  local next_beat="$beat" how=ended
   echo "-- gate: $name"
   if [ ! -f "$bin" ]; then
     echo "   NOT FOUND: $bin — was it built? (cmake --build $BUILD --target Family_Gates)"; return 1
@@ -70,25 +127,81 @@ run_gate() {   # run_gate <name> <binary> [VAR=value ...]
   echo "   $bin${*:+  ($*)}"
   home="$(mktemp -d "$GATES/home-$name.XXXXXX")"
   mkdir -p "$home/Library/Application Support"
+  rm -f "$ended"; : > "$log"
 
   # Both streams, and to a FILE: printf to a pipe is block-buffered, so a process that dies before it
   # flushes tells you nothing at all — which is exactly what `chain` once did. The status is captured on
   # the line that RUNS it: after an `if`, `$?` is the status of the `if` itself — 0 when the condition was
   # false and there is no else — which once reported a crashed gate as "exited 0".
+  # IN THE BACKGROUND, in a process group of its own (set -m), so the loop below can watch the clock and
+  # kill it with all it started. As it ends, its status is written to <name>.exit, and the loop waits for
+  # that file rather than for the pid alone: the pid of a gate that ended goes back to the system.
+  set -m
   (
-    cd "$home"
-    unset XDG_CONFIG_HOME XDG_DATA_HOME XDG_CACHE_HOME XDG_STATE_HOME
-    export HOME="$home" CFFIXED_USER_HOME="$home"
-    if $windows; then export ORBITAMP_GATE_HOME="$(cygpath -m "$home")"; fi
-    for kv in "$@"; do export "${kv?}"; done
-    exec "$bin"
-  ) > "$log" 2>&1 || code=$?
+    code=0
+    (
+      cd "$home"
+      unset XDG_CONFIG_HOME XDG_DATA_HOME XDG_CACHE_HOME XDG_STATE_HOME
+      export HOME="$home" CFFIXED_USER_HOME="$home"
+      if $windows; then export ORBITAMP_GATE_HOME="$(cygpath -m "$home")"; fi
+      for kv in "$@"; do export "${kv?}"; done
+      exec "$bin"
+    ) < /dev/null > "$log" 2>&1 || code=$?
+    echo "$code" > "$ended"
+    exit "$code"
+  ) &
+  pid=$! gate_pid=$!
+  set +m
+
+  # A tenth of a second at first, so a quick gate costs no more than it did; every second after that.
+  # It ends one of three ways: the gate ended (its status is in <name>.exit), its time ran out, or the
+  # subshell it runs under was killed from outside before it could write a status.
+  while [ ! -f "$ended" ]; do
+    if ! ours "$pid"; then [ -f "$ended" ] || how=lost; break; fi
+    elapsed=$((SECONDS - started))
+    if [ "$limit" -gt 0 ] && [ "$elapsed" -ge "$limit" ]; then how=timeout; break; fi
+    if [ "$beat" -gt 0 ] && [ "$elapsed" -ge "$next_beat" ]; then
+      echo "   ... $name still running ($((elapsed / 60)) min), last line: $(last_line "$log")"
+      next_beat=$((next_beat + beat))
+    fi
+    if [ "$polls" -lt 20 ]; then sleep 0.1 2>/dev/null || sleep 1; else sleep 1; fi
+    polls=$((polls + 1))
+  done 2>/dev/null   # bash 3.2 announces a killed subshell on stderr, whole; the verdict below says it
+  case "$how" in
+    ended) wait "$pid" || code=$? ;;
+    timeout)
+      { kill_gate "$pid"; wait "$pid"; } 2>/dev/null || true   # bash 3.2 announces the kill on stderr
+      # It may have ended on its own in the very moment its time ran out: then it ended, with its status.
+      if [ -f "$ended" ]; then
+        how=ended code="$(cat "$ended")"
+        case "$code" in ''|*[!0-9]*) code=1 ;; esac
+      fi ;;
+    lost)
+      # Its group outlives the subshell while the gate is in it, so the group's id is still the gate's.
+      wait "$pid" 2>/dev/null || code=$?
+      kill -KILL -- "-$pid" 2>/dev/null || true ;;
+  esac
+  gate_pid=
   cat "$log"
+  if [ "$how" = timeout ]; then
+    # No Windows probes here: they run the gate again, with no limit, and it has just shown it hangs.
+    echo "   ^ gate $name timed out after $(in_words "$limit") and was killed, with all it started; the last it said:"
+    if [ -s "$log" ]; then
+      tail -n 5 "$log" | LC_ALL=C tr '\r' '\n' | sed -n '/[^[:space:]]/p' | tail -n 5 | LC_ALL=C cut -c 1-200 | sed 's/^/   | /'
+    else echo "   | (nothing at all)"; fi
+    return 1
+  fi
+  if [ "$how" = lost ]; then
+    echo "   ^ gate $name ended without a status: what it ran under was killed from outside (exit $code, $((SECONDS - started)) s)"
+    return 1
+  fi
   if [ "$code" -eq 0 ]; then
     echo "   ok ($((SECONDS - started)) s)"; return 0
   fi
   echo "   ^ gate $name exited $code ($((SECONDS - started)) s)"
-  if $windows; then windows_probes "$bin"; fi
+  # The probes only for what they are for, a gate that never started: 127, or not a word printed. They
+  # run it four times more with no limit, and a gate that ran and said why it failed needs none of that.
+  if $windows && { [ "$code" -eq 127 ] || [ ! -s "$log" ]; }; then windows_probes "$bin"; fi
   return 1
 }
 

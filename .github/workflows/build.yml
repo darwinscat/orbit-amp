@@ -17,6 +17,7 @@ on:
       - 'resources/**'
       - 'tests/**'
       - 'tools/run-gates.sh'
+      - 'tools/run-gates-selftest.sh'
       - 'installer/family.ini'
       - '.github/workflows/build.yml'
   push:
@@ -41,6 +42,12 @@ jobs:
       SCCACHE_GHA_ENABLED: "true"
     steps:
       - uses: actions/checkout@v7
+
+      # The gate runner itself, on tiny script gates, before anything is built: its time limit kills a hung
+      # gate with all it started, on Windows too (tools/run-gates-selftest.sh). Seconds, not a build.
+      - name: Gate runner self-test
+        shell: bash
+        run: tools/run-gates-selftest.sh
 
       # Ninja invokes cl.exe directly, so it needs the MSVC toolchain on PATH.
       - name: MSVC dev environment (vcvars for Ninja)

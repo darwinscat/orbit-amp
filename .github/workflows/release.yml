@@ -7,6 +7,10 @@ name: release
 # every job builds and packs the one its FAMILY_INI names, and the basses' release is never the Latest.
 # A manual run (workflow_dispatch) builds the SAME artifacts but does NOT create a release unless
 # dry_run=false, so you can download + test installers from the run page without publishing.
+# HOW A RELEASE IS MADE (the owner, 18.11.2026): merge the PR, then ONE manual run on main with dry_run=false.
+# It builds every system, runs every gate and signs; only when all of it is green does the `release` job publish,
+# and `gh release create --target $GITHUB_SHA` makes the tag on the very commit this run checked. A red run
+# publishes nothing: fix it by a PR and run again. A tag pushed by hand still works, but builds everything again.
 #
 #   • macOS   → one signed + notarized .pkg, universal, and no zip: VST3 + AU + CLAP + Standalone  [self-hosted runner]
 #   • Windows → one Inno Setup .exe (x64), and a .zip for x64 and for arm64: VST3 + CLAP + Standalone
@@ -382,14 +386,14 @@ jobs:
             out/*
 
   symbols:
-    # THE SYMBOLS OF A PUBLISHED RELEASE, KEPT FOR GOOD. The run's symbols-* artifacts live 90 days; a tagged
+    # THE SYMBOLS OF A PUBLISHED RELEASE, KEPT FOR GOOD. The run's symbols-* artifacts live 90 days; a published
     # release's go to the family's private archive as well, one folder a version — releases/vX.Y.Z/, each
-    # artifact a folder in it, as downloaded. Tagged releases only: a manual run, dry or not, keeps its
-    # artifacts and nothing more. The archive's sftp address is the repository variable SYMBOLS_SFTP (the
+    # artifact a folder in it, as downloaded. Published releases only, by a tag push or a manual run with
+    # dry_run=false: a dry run keeps its artifacts and nothing more. The archive's sftp address is the repository variable SYMBOLS_SFTP (the
     # archive takes sftp and nothing else); the signing runner holds the key it admits. A release whose
     # archiving fails is still published — the artifacts stay on the run for 90 days, to upload by hand.
     needs: [ version, release ]
-    if: ${{ github.event_name == 'push' }}
+    if: ${{ github.event_name == 'push' || github.event.inputs.dry_run == 'false' }}
     runs-on: [self-hosted, macOS, signing]
     timeout-minutes: 60
     steps:
