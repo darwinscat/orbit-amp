@@ -231,7 +231,10 @@ set(FELITRONICS_WITH_PFFFT ON CACHE BOOL "orbit-amp's cabinet convolver uses the
 # A player told no match plays as v0.8.0 did, bit for bit. On the way: v0.9.0 and v0.10.0 add the BassChain module
 # (the site's; not built here), v0.11.0 plays a pack's own high- and low-pass (namz v5.1.0's chain[].high_pass /
 # low_pass) — no pack of ours carries them, so nothing moves. It needs namz v5.1.0, pinned with it below.
-set(ORBITAMP_GUITAR_TAG "v0.12.0" CACHE STRING "felitronics-guitar-core release tag (fetched when no local checkout)")
+#
+# v0.13.0 reads a capture's clean match from the pack (namz v5.2.0's files[].clean_match): the bass packs carry
+# theirs (tools/CleanMatchFit.cpp), so CapturedBlock fits nothing at load for them. It needs namz v5.2.0.
+set(ORBITAMP_GUITAR_TAG "v0.13.0" CACHE STRING "felitronics-guitar-core release tag (fetched when no local checkout)")
 set(ORBITAMP_GUITAR_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../felitronics-guitar-core"
     CACHE PATH "Local felitronics-guitar-core checkout (used if present); else the pinned release is fetched")
 
@@ -299,15 +302,15 @@ endif()
 #
 # THE TWO PINS MOVE TOGETHER. The tag here is FORCEd over the NAM module's own, so guitar-core's pin
 # never reaches this build — and since guitar-core v0.7.0 a fetched namz is held to FELITRONICS_NAMZ_COMMIT,
-# the commit of the tag the NAM module pins (v5.1.0's, 0c5fcb0, by default). This tag is guitar-core
-# v0.12.0's own, so the two agree and the commit is left at its default. A guitar-core bump moves this tag
+# the commit of the tag the NAM module pins (v5.2.0's, b140a05, by default). This tag is guitar-core
+# v0.13.0's own, so the two agree and the commit is left at its default. A guitar-core bump moves this tag
 # to that release's namz pin in the same commit: a tag left behind stops the configure, naming both
 # commits. A namz bump made HERE alone, ahead of guitar-core, FORCEs FELITRONICS_NAMZ_COMMIT to the new
 # tag's commit beside it — a tag moved without its commit stops the configure the same way. The local
 # checkout (ORBITAMP_NAMZ_SRC) is not held to either, and is taken whenever it exists: on a namz older
 # than v5.0.0 the pack player stops compiling (no `input_lag_samples`, no `hz_by`) — keep it on v5.0.0 or
 # later, or empty the override.
-set(ORBITAMP_NAMZ_TAG "v5.1.0" CACHE STRING "namz release tag CI builds against (no local checkout)")
+set(ORBITAMP_NAMZ_TAG "v5.2.0" CACHE STRING "namz release tag CI builds against (no local checkout)")
 set(FELITRONICS_NAMZ_TAG "${ORBITAMP_NAMZ_TAG}" CACHE STRING "" FORCE)
 
 FetchContent_MakeAvailable(felitronics_core)
