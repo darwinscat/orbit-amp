@@ -17,6 +17,7 @@
 
 #include <juce_events/juce_events.h>
 
+#include <algorithm>
 #include <cmath>
 #include <complex>
 #include <cstdio>
@@ -592,13 +593,17 @@ int ORBITAMP_GATE_MAIN()
     //
     // The blend sums HP4(device) + LP4((1 - amount)·device + amount·clean). The packs line the clean leg up by their
     // captures' own lag and polarity, which leaves it sliding out of phase where a capture's low end turns — the
-    // ReVolt Bass's coupling caps — and the low sum dipped there. A block whose host plays the crossover fits each
-    // capture a clean match at load (CapturedBlock::askFit) and the dip closes. Read at 15 tones, 30 - 260 Hz, the
+    // ReVolt Bass's coupling caps — and the low sum dipped there. Each capture's clean match closes the dip: the packs
+    // carry it (namz 5.2's clean_match, written by tools/CleanMatchFit.cpp), and a block whose host plays the crossover
+    // plays it from the load on, fitting nothing (CapturedBlock::askFit); a pack that does not carry it is fitted at
+    // load, as before. Read at 15 tones, 30 - 260 Hz, the
     // crossover at 150 Hz, at 50/50 and 80/20 (the device's share first): the device's response D (amount 0), the clean
     // leg's C (from amount 1, its high half taken out), and the sum Y at the amount — against the two bands' levels
     // added as if they met in phase. REAL is the block as it plays (its own clean level); MATCHED gives the clean leg the
-    // device's level, 40 - 150 Hz, as the offline reading did. BEFORE is a block whose host never played the crossover
-    // (the pack's readings alone), AFTER one that did, both through the same pack files.
+    // device's level, 40 - 150 Hz, as the offline reading did. BEFORE is a block whose host never played the crossover,
+    // the pack's matches taken out (its readings alone), AFTER one that did, both through the same pack files. And
+    // FITTED HERE is the pack with its matches taken out of its manifest, fitted at load: the pack's matches must be
+    // that fit, capture for capture — a capture the fit beats nothing on carrying its own reading — and sound as it.
     {
         std::printf ("\nthe bass packs' crossover blend, before and after the clean match:\n");
         const double tones[] { 30, 35, 41.2, 46, 55, 62, 73.4, 82.4, 98, 110, 130, 150, 180, 220, 260 };
@@ -645,12 +650,36 @@ int ORBITAMP_GATE_MAIN()
             return r;
         };
 
-        Block plain (orbitamp::device::DeviceLibrary::Slot::preamp), fitted (orbitamp::device::DeviceLibrary::Slot::preamp);
-        plain.prepare (sampleRate, blockSize, 1);
-        fitted.prepare (sampleRate, blockSize, 1);
-        fitted.setCrossover (0.0f, (float) fc, false);       // its host plays the crossover: every pack it loads is fitted
-        plain.rescan ("OrbitBass", 0);
-        fitted.rescan ("OrbitBass", 0);
+        constexpr auto slot = orbitamp::device::DeviceLibrary::Slot::preamp;
+        Block plain (slot), fitted (slot), here (slot), partial (slot);
+        for (auto* blk : { &plain, &fitted, &here, &partial })
+        {
+            blk->prepare (sampleRate, blockSize, 1);
+            if (blk != &plain)
+                blk->setCrossover (0.0f, (float) fc, false);   // its host plays the crossover: every pack it loads is matched
+            blk->rescan ("OrbitBass", 0);
+        }
+
+        // A pack as one that does not carry the field: its manifest's clean_match taken out — every capture's, or one's.
+        const auto strip = [] (Block& blk, int index, const std::string& only)
+        {
+            for (auto& st : blk.packs.getReference (index).rig.chain)
+                for (auto& f : st.device.files)
+                    if (only.empty() || f.id == only)
+                        f.cleanMatch.reset();
+        };
+        const auto sameHz = [] (double x, double y) { return ! (x < y) && ! (x > y); };
+        const auto sameMatch = [&sameHz] (const felitronics::rigplayer::CleanMatch& x, const felitronics::rigplayer::CleanMatch& y)
+        {
+            return x.lag == y.lag && x.inverted == y.inverted && sameHz (x.allpassHz[0], y.allpassHz[0]) && sameHz (x.allpassHz[1], y.allpassHz[1]);
+        };
+        const auto pumpFits = [&] (Block& blk)
+        {
+            int pumps = 0;
+            for (; blk.cleanMatchPending() && pumps < 1000; ++pumps)
+                (void) run (blk, 0.0, 220.0, 0.1f, 1);
+            return pumps;
+        };
 
         struct Want { const char* name; double bound; };      // the worst |dip| allowed after, REAL, both amounts
         const Want wants[] { { "Two Notes ReVolt Bass Dirt", 1.0 }, { "Two Notes ReVolt Bass Drive", 1.0 }, { "Ampeg SGT-DI", 1.0 } };
@@ -668,24 +697,75 @@ int ORBITAMP_GATE_MAIN()
             }
 
             plain.select (at);
+            {
+                auto table = plain.player.alignment();       // BEFORE: the pack's readings, its matches taken out
+                table.cleanMatchByFile.clear();
+                plain.player.setAlignment (std::move (table));
+            }
             fitted.select (at);
-            plain.setGain (5.0f, true);
-            fitted.setGain (5.0f, true);
+            const bool fitNone = ! fitted.cleanMatchPending();   // the pack's own matches: nothing to fit
+            const auto packOwn = fitted.player.alignment().cleanMatchByFile;
+            std::vector<std::string> ids;                      // the stage's distinct captures
+            for (const auto& f : fitted.player.stage().device.files)
+                if (! f.id.empty() && std::find (ids.begin(), ids.end(), f.id) == ids.end())
+                    ids.push_back (f.id);
+
+            strip (here, at, {});                             // FITTED HERE: the pack without the field, fitted at load
+            here.select (at);
+            const bool hereAsked = here.cleanMatchPending();
+            for (auto* blk : { &plain, &fitted, &here })
+                blk->setGain (5.0f, true);
             const auto t0 = juce::Time::getMillisecondCounterHiRes();
-            int pumps = 0;
-            for (; fitted.cleanMatchPending() && pumps < 1000; ++pumps)
-                (void) run (fitted, 0.0, 220.0, 0.1f, 1);
+            const int herePumps = pumpFits (here);
             const double fitMs = juce::Time::getMillisecondCounterHiRes() - t0;
+            const auto hereFit = here.player.alignment().cleanMatchByFile;
+
+            // The pack's match of every capture is the fit's — or, where the fit beats nothing, the capture's reading.
+            juce::String differs;
+            for (const auto& id : ids)
+            {
+                const auto own = packOwn.find (id);
+                const auto fit = hereFit.find (id);
+                const auto& t = here.player.alignment();
+                felitronics::rigplayer::CleanMatch reading;
+                if (const auto lag = t.absoluteLagByFile.find (id); lag != t.absoluteLagByFile.end())
+                    reading.lag = lag->second;
+                reading.inverted = t.invertedByFile.count (id) > 0 && t.invertedByFile.at (id);
+                if (own == packOwn.end())
+                    differs << id << ": none in the pack; ";
+                else if (! sameMatch (own->second, fit != hereFit.end() ? fit->second : reading))
+                    differs << id << ": lag " << own->second.lag << " ap " << juce::String (own->second.allpassHz[0], 3) << "+"
+                            << juce::String (own->second.allpassHz[1], 3) << (fit != hereFit.end() ? " vs the fit's" : " vs its reading") << "; ";
+            }
+
+            // One capture's match taken out: that one is fitted, alone, and the pack's own stay as it states them.
+            juce::String one;
+            for (const auto& id : ids)
+                if (one.isEmpty() && packOwn.count (id) > 0 && packOwn.at (id).allpassHz[0] > 0.0)
+                    one = id;
+            strip (partial, at, one.toStdString());
+            partial.select (at);
+            const int partialPumps = pumpFits (partial);
+            const auto& partialTable = partial.player.alignment().cleanMatchByFile;
+            bool partialKept = partialTable.size() == packOwn.size();
+            for (const auto& [id, m] : packOwn)
+                partialKept = partialKept && partialTable.count (id) > 0 && sameMatch (partialTable.at (id), m);
 
             const auto before = read (plain, false);
             const auto after = read (fitted, true);
+            const auto fittedHere = read (here, true);
+            double apart = 0.0;                                 // the pack's matches against the fit, worst tone, dB
+            for (int a = 0; a < 2; ++a)
+                for (int k = 0; k < numTones; ++k)
+                    apart = std::max ({ apart, std::abs (after.real[a][k] - fittedHere.real[a][k]),
+                                        std::abs (after.matched[a][k] - fittedHere.matched[a][k]) });
 
             juce::String fits;
             for (const auto& [id, m] : fitted.player.alignment().cleanMatchByFile)
                 fits << "  " << id << ": lag " << m.lag << (m.inverted ? " inv" : "") << " ap "
                      << juce::String (m.allpassHz[0], 0) << "+" << juce::String (m.allpassHz[1], 0) << "\n";
-            std::printf ("\n%s — %d captures fitted in %.0f ms:\n%s", want.name, (int) fitted.player.alignment().cleanMatchByFile.size(),
-                         fitMs, fits.toRawUTF8());
+            std::printf ("\n%s — %d captures matched by the pack (fitted at load without it: %d in %.0f ms):\n%s", want.name,
+                         (int) packOwn.size(), (int) hereFit.size(), fitMs, fits.toRawUTF8());
             std::printf ("  tone Hz           ");
             for (const double f : tones) std::printf ("%6.0f", f);
             std::printf ("\n");
@@ -710,8 +790,20 @@ int ORBITAMP_GATE_MAIN()
                 for (int k = 0; k < numTones; ++k)
                     notWorse = notWorse && after.real[a][k] >= before.real[a][k] - 0.25;
 
-            report (juce::String ("clean match fitted: ") + want.name, ! fitted.cleanMatchPending(),
-                    juce::String (fitted.player.alignment().cleanMatchByFile.size()) + " of its captures matched");
+            report (juce::String ("the pack's matches, nothing fitted: ") + want.name,
+                    fitNone && packOwn.size() == ids.size() && ! fitted.cleanMatchPending(),
+                    juce::String (packOwn.size()) + " of " + juce::String ((int) ids.size()) + " captures"
+                        + (fitNone ? "" : ", a fit queued"));
+            report (juce::String ("without them, fitted at load: ") + want.name,
+                    hereAsked && ! here.cleanMatchPending() && ! hereFit.empty(),
+                    juce::String ((int) hereFit.size()) + " matched in " + juce::String (herePumps) + " pumps");
+            report (juce::String ("the pack's matches are that fit: ") + want.name, differs.isEmpty(),
+                    differs.isEmpty() ? juce::String ((int) ids.size()) + " captures, exactly" : differs);
+            report (juce::String ("and sound as it: ") + want.name, apart <= 0.01,
+                    "worst tone " + juce::String (apart, 4) + " dB apart, 15 tones x 2, real and matched");
+            report (juce::String ("one taken out, it alone fitted: ") + want.name,
+                    one.isNotEmpty() && partialPumps == 1 && partialKept && ! partial.cleanMatchPending(),
+                    one + ": " + juce::String (partialPumps) + " fit(s), the pack's own " + (partialKept ? "kept" : "NOT kept"));
             report (juce::String ("no tone worse with it: ") + want.name, notWorse, "after >= before - 0.25 dB, real, 15 tones x 2");
             report (juce::String ("low sum within ") + juce::String (want.bound, 1) + " dB: " + want.name,
                     std::min (worst[1][0][0], worst[1][0][1]) >= -want.bound,
