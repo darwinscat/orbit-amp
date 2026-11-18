@@ -14,7 +14,7 @@
 # that is a red too.
 set -euo pipefail
 
-BOUND=30
+BOUND=60   # a green run takes ~10 s; Windows forks slowly and three gates time out there
 here="$(cd "$(dirname "$0")" && pwd)"
 script="${1:-$here/run-gates.sh}"
 [ -f "$script" ] || { echo "run-gates-selftest.sh: no $script" >&2; exit 1; }
