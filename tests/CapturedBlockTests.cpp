@@ -673,6 +673,16 @@ int ORBITAMP_GATE_MAIN()
         {
             return x.lag == y.lag && x.inverted == y.inverted && sameHz (x.allpassHz[0], y.allpassHz[0]) && sameHz (x.allpassHz[1], y.allpassHz[1]);
         };
+        // THE FIT, ON ANOTHER MACHINE. The packs were fitted on one; every row of the CI fits them again, through NAM
+        // inference that differs by a hair per platform and an argmax over cells that nearly tie (the packs hold corner
+        // pairs one ulp apart) — so a fit elsewhere may land an ulp or a cell away, or a sample later, with the sound the
+        // same. Fitted numbers are never compared exactly across machines: a match is the fit's when its polarity is and
+        // its lag is within two samples, and the corners are judged by what they do (the blend, "and sound as it").
+        // Machine-independent numbers stay exact: the pack's matches as the player reads them, and the pack's own kept.
+        const auto closeMatch = [] (const felitronics::rigplayer::CleanMatch& x, const felitronics::rigplayer::CleanMatch& y)
+        {
+            return x.inverted == y.inverted && std::abs (x.lag - y.lag) <= 2;
+        };
         const auto pumpFits = [&] (Block& blk)
         {
             int pumps = 0;
@@ -706,9 +716,23 @@ int ORBITAMP_GATE_MAIN()
             const bool fitNone = ! fitted.cleanMatchPending();   // the pack's own matches: nothing to fit
             const auto packOwn = fitted.player.alignment().cleanMatchByFile;
             std::vector<std::string> ids;                      // the stage's distinct captures
+            bool readBack = true;                              // the player's match of each, exactly as the pack states it
             for (const auto& f : fitted.player.stage().device.files)
+            {
                 if (! f.id.empty() && std::find (ids.begin(), ids.end(), f.id) == ids.end())
                     ids.push_back (f.id);
+                if (f.cleanMatch)
+                {
+                    felitronics::rigplayer::CleanMatch stated;
+                    stated.lag = f.cleanMatch->lagSamples;
+                    stated.inverted = f.cleanMatch->polarity == -1;
+                    for (std::size_t s = 0; s < f.cleanMatch->allpassHz.size() && s < 2; ++s)
+                        stated.allpassHz[s] = f.cleanMatch->allpassHz[s];
+                    readBack = readBack && packOwn.count (f.id) > 0 && sameMatch (packOwn.at (f.id), stated);
+                }
+                else
+                    readBack = false;
+            }
 
             strip (here, at, {});                             // FITTED HERE: the pack without the field, fitted at load
             here.select (at);
@@ -733,9 +757,9 @@ int ORBITAMP_GATE_MAIN()
                 reading.inverted = t.invertedByFile.count (id) > 0 && t.invertedByFile.at (id);
                 if (own == packOwn.end())
                     differs << id << ": none in the pack; ";
-                else if (! sameMatch (own->second, fit != hereFit.end() ? fit->second : reading))
-                    differs << id << ": lag " << own->second.lag << " ap " << juce::String (own->second.allpassHz[0], 3) << "+"
-                            << juce::String (own->second.allpassHz[1], 3) << (fit != hereFit.end() ? " vs the fit's" : " vs its reading") << "; ";
+                else if (const auto& other = fit != hereFit.end() ? fit->second : reading; ! closeMatch (own->second, other))
+                    differs << id << ": lag " << own->second.lag << (own->second.inverted ? " inv" : "") << " vs " << other.lag
+                            << (other.inverted ? " inv" : "") << (fit != hereFit.end() ? " (the fit's)" : " (its reading)") << "; ";
             }
 
             // One capture's match taken out: that one is fitted, alone, and the pack's own stay as it states them.
@@ -747,14 +771,19 @@ int ORBITAMP_GATE_MAIN()
             partial.select (at);
             const int partialPumps = pumpFits (partial);
             const auto& partialTable = partial.player.alignment().cleanMatchByFile;
-            bool partialKept = partialTable.size() == packOwn.size();
+            bool partialKept = partialTable.size() == packOwn.size();   // the pack's own untouched, bit for bit; the one refitted
             for (const auto& [id, m] : packOwn)
-                partialKept = partialKept && partialTable.count (id) > 0 && sameMatch (partialTable.at (id), m);
+                partialKept = partialKept && partialTable.count (id) > 0
+                           && (id == one.toStdString() ? closeMatch (partialTable.at (id), m) : sameMatch (partialTable.at (id), m));
 
             const auto before = read (plain, false);
             const auto after = read (fitted, true);
             const auto fittedHere = read (here, true);
-            double apart = 0.0;                                 // the pack's matches against the fit, worst tone, dB
+            // The pack's matches against the fit, worst tone, dB. What a fit elsewhere may do moves it little — every capture's
+            // lag 2 samples off, or its corners one cell up, at most 0.09 dB (the ReVolt Bass Drive) — and a wrong match much:
+            // every lag 20 samples late at least 0.56 dB, every polarity flipped at least 21 dB (measured on these packs, 18.11).
+            constexpr double soundsAsIt = 0.2;
+            double apart = 0.0;
             for (int a = 0; a < 2; ++a)
                 for (int k = 0; k < numTones; ++k)
                     apart = std::max ({ apart, std::abs (after.real[a][k] - fittedHere.real[a][k]),
@@ -790,6 +819,8 @@ int ORBITAMP_GATE_MAIN()
                 for (int k = 0; k < numTones; ++k)
                     notWorse = notWorse && after.real[a][k] >= before.real[a][k] - 0.25;
 
+            report (juce::String ("the pack's matches read back as stated: ") + want.name, readBack,
+                    "every entry's clean_match, bit for bit");
             report (juce::String ("the pack's matches, nothing fitted: ") + want.name,
                     fitNone && packOwn.size() == ids.size() && ! fitted.cleanMatchPending(),
                     juce::String (packOwn.size()) + " of " + juce::String ((int) ids.size()) + " captures"
@@ -798,12 +829,27 @@ int ORBITAMP_GATE_MAIN()
                     hereAsked && ! here.cleanMatchPending() && ! hereFit.empty(),
                     juce::String ((int) hereFit.size()) + " matched in " + juce::String (herePumps) + " pumps");
             report (juce::String ("the pack's matches are that fit: ") + want.name, differs.isEmpty(),
-                    differs.isEmpty() ? juce::String ((int) ids.size()) + " captures, exactly" : differs);
-            report (juce::String ("and sound as it: ") + want.name, apart <= 0.01,
-                    "worst tone " + juce::String (apart, 4) + " dB apart, 15 tones x 2, real and matched");
+                    differs.isEmpty() ? juce::String ((int) ids.size()) + " captures: their polarity, the lag within 2" : differs);
+            report (juce::String ("and sound as it: ") + want.name, apart <= soundsAsIt,
+                    "worst tone " + juce::String (apart, 4) + " dB apart (at most " + juce::String (soundsAsIt, 1)
+                        + "), 15 tones x 2, real and matched");
             report (juce::String ("one taken out, it alone fitted: ") + want.name,
                     one.isNotEmpty() && partialPumps == 1 && partialKept && ! partial.cleanMatchPending(),
                     one + ": " + juce::String (partialPumps) + " fit(s), the pack's own " + (partialKept ? "kept" : "NOT kept"));
+            // ...and the tolerance itself, on the pack's own first match: an ulp on a corner and a sample on the lag are the
+            // fit's, a flipped polarity or a lag 20 samples off are not.
+            if (&want == &wants[0] && ! packOwn.empty())
+            {
+                const auto m = packOwn.begin()->second;
+                auto nudged = m, flipped = m, late = m;
+                nudged.allpassHz[0] = std::nextafter (nudged.allpassHz[0], 1.0e9);
+                nudged.lag += 1;
+                flipped.inverted = ! flipped.inverted;
+                late.lag += 20;
+                report ("the fit's tolerance: an ulp and a sample, no more",
+                        ! sameMatch (nudged, m) && closeMatch (nudged, m) && ! closeMatch (flipped, m) && ! closeMatch (late, m),
+                        "nudged in, polarity flipped out, 20 samples late out");
+            }
             report (juce::String ("no tone worse with it: ") + want.name, notWorse, "after >= before - 0.25 dB, real, 15 tones x 2");
             report (juce::String ("low sum within ") + juce::String (want.bound, 1) + " dB: " + want.name,
                     std::min (worst[1][0][0], worst[1][0][1]) >= -want.bound,

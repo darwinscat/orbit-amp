@@ -966,7 +966,7 @@ private:
                          [this] (const namz::rig::FileEntry& f) { return f.id.empty() || packMatches.count (f.id) > 0; }))
             return;
 
-        fitKey =loadedPack->location.getFullPathName() + "|" + juce::String (loadedPack->modified.toMilliseconds());
+        fitKey = loadedPack->location.getFullPathName() + "|" + juce::String (loadedPack->modified.toMilliseconds());
 
         if (const auto hit = fitCache.find (fitKey); hit != fitCache.end())
         {
@@ -989,9 +989,6 @@ private:
             a.start = player.alignment();
             fitQueue.push_back (std::move (a));
         }
-
-        if (fitQueue.empty())
-            fitCache[fitKey] = {};
     }
 
     static CleanMatches fitOne (const FitAsk& a)
