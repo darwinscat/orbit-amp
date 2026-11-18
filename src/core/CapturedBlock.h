@@ -562,7 +562,9 @@ public:
         {
             while (auto job = player.takeLoadJob())
                 player.deliver (RigPlayer::run (std::move (*job)));
-                if (onLanded) onLanded();
+
+            // Once a pump, after every job: here a model lands inside the pump itself.
+            if (onLanded) onLanded();
             serveFit (nullptr);
             return;
         }
