@@ -3,12 +3,15 @@
 #
 # Usage: tools/run-gates-selftest.sh [run-gates.sh to test]      (the one next to this script unless said)
 #
-# Five gates, in this order: one passes, one fails with a code of its own, one sleeps past the limit and
-# says nothing, one prints and then hangs, one passes after all of them. With a limit of three seconds the
-# run must show the two that ran out of time killed — and everything they started — with their output so
-# far and heartbeats while they ran, the failing one red with its code, the passing ones green, the order
-# kept, and end with exit 1. A runner without the limit never ends on its own: the test gives it BOUND
-# seconds, then kills it, and that is a red too.
+# Seven gates, in this order: one passes, one fails with a code of its own, one sleeps past the limit and
+# says nothing, one prints (the last line redrawn with carriage returns) and then hangs, one has what it
+# runs under killed from outside, one ends in the very moment its time runs out, one passes after all of
+# them. With a limit of three seconds the run must show the two that ran out of time killed — and
+# everything they started — with their output so far and heartbeats while they ran, the one that lost its
+# runner red at once, the one that ended at the limit taken as ended, the failing one red with its code
+# (and on Windows, having said why, no probes), the passing ones green, the order kept, and end with exit
+# 1. A runner without the limit never ends on its own: the test gives it BOUND seconds, then kills it, and
+# that is a red too.
 set -euo pipefail
 
 BOUND=30
@@ -36,9 +39,16 @@ native=; if $windows; then native='exec ping -n 300 127.0.0.1 > /dev/null'; fi
 gate pass   GREETING=hi 'echo "pass: hello, $GREETING"; echo "pass: home $HOME"'
 gate fail   - 'echo "fail: found 3 problems"; exit 3'
 gate sleepy - "echo \$\$ > '$pids/sleepy'; sleep 300 & echo \$! > '$pids/sleepy-child'; wait"
-gate hang   - "echo 'hang: step 1'; echo 'hang: step 2, waiting for a device'; echo \$\$ > '$pids/hang'
+gate hang   - "echo 'hang: step 1'; echo 'hang: step 2, waiting for a device'
+printf 'hang: waiting, 1 of 3\\rhang: waiting, 3 of 3\\n'; echo \$\$ > '$pids/hang'
 $native
 sleep 300 & echo \$! > '$pids/hang-child'; wait"
+gate lost   - "echo 'lost: losing what I run under'; echo \$\$ > '$pids/lost'
+sleep 300 & echo \$! > '$pids/lost-child'; kill -KILL \$PPID; wait"
+# Ending at the limit, made exact: told to stop, it writes the status as its runner would have, and ends.
+# On Windows taskkill comes first and gives it no say, so there it simply times out.
+gate late   - "trap 'echo 0 > \"$work/build/gates/late.exit\"; exit 0' TERM; echo 'late: working to the last moment'
+echo \$\$ > '$pids/late'; sleep 300 & echo \$! > '$pids/late-child'; wait"
 gate after  - 'echo "after: still here"'
 
 # The run, in a process group of its own, so that a runner that never ends can be killed whole.
@@ -78,6 +88,11 @@ block() {   # block <gate>: what the run printed for that gate
 }
 both_there() { test -s "$pids/$1" && test -s "$pids/$2"; }
 says() { block "$1" | grep -qF -- "$2"; }
+says_line() { block "$1" | grep -qxF -- "$2"; }
+silent_on() { ! says "$1" "$2"; }
+no_probes() { ! $windows || silent_on fail "--- the file itself ---"; }
+late_on_time() { if $windows; then says late "^ gate late timed out"; else says late "   ok (" && silent_on late "timed out"; fi; }
+if $windows; then reds="5 of 7" named="fail sleepy hang lost late"; else reds="4 of 7" named="fail sleepy hang lost"; fi
 order="$(sed -n 's/^-- gate: //p' "$out" | tr '\n' ' ')"
 
 fails=0
@@ -87,7 +102,7 @@ check() {   # check <what> <command...>
 }
 check "the run ended on its own, within $BOUND s"           test "$bounded" = false
 check "exit code 1"                                         test "$rc" = 1
-check "the gates in their order"                            test "$order" = "pass fail sleepy hang after "
+check "the gates in their order"                            test "$order" = "pass fail sleepy hang lost late after "
 check "pass: its environment reached it"                    says pass "pass: hello, hi"
 check "pass: a home of its own"                             says pass "pass: home $work/build/gates/home-pass."
 check "pass: green"                                         says pass "   ok ("
@@ -99,11 +114,16 @@ check "sleepy: timed out"                                   says sleepy "^ gate 
 check "sleepy: said to have said nothing"                   says sleepy "   | (nothing at all)"
 check "hang: it started"                                    test -s "$pids/hang"
 check "hang: its output so far shown"                       says hang "hang: step 2, waiting for a device"
-check "hang: a heartbeat with its last line"                says hang "... hang still running (0 min), last line: hang: step 2, waiting for a device"
+check "hang: a heartbeat with its last line, newest frame"  says_line hang "   ... hang still running (0 min), last line: hang: waiting, 3 of 3"
 check "hang: timed out, its last lines after the verdict"   says hang "   | hang: step 2, waiting for a device"
+check "fail: having said why, no Windows probes"           no_probes
+check "lost: it started"                                    both_there lost lost-child
+check "lost: its output shown"                              says lost "lost: losing what I run under"
+check "lost: red at once, ended without a status"           says lost "^ gate lost ended without a status"
+check "late: ended at the limit, taken as ended"            late_on_time
 check "after: ran, green"                                   says after "   ok ("
-check "the summary: those three red, of five"               grep -qF "== gates: 3 of 5 red" "$out"
-check "the summary names them"                              grep -qE "red .* fail sleepy hang$" "$out"
+check "the summary: $reds red"                            grep -qF "== gates: $reds red" "$out"
+check "the summary names them"                              grep -qE "red .* $named\$" "$out"
 check "nothing the timed-out gates started is left"         test "$left" = false
 
 # Whatever the runner left behind is killed here, so a red run of the test leaves nothing either.
