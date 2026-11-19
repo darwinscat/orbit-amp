@@ -692,7 +692,7 @@ int ORBITAMP_GATE_MAIN()
         };
 
         struct Want { const char* name; double bound; };      // the worst |dip| allowed after, REAL, both amounts
-        const Want wants[] { { "Two Notes ReVolt Bass Dirt", 1.0 }, { "Two Notes ReVolt Bass Drive", 1.0 }, { "Ampeg SGT-DI", 1.0 } };
+        const Want wants[] { { "Two Notes ReVolt Bass Clean", 1.0 }, { "Two Notes ReVolt Bass Dirt", 1.0 }, { "Two Notes ReVolt Bass Drive", 1.0 }, { "Ampeg SGT-DI", 1.0 } };
 
         for (const auto& want : wants)
         {
