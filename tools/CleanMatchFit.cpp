@@ -6,15 +6,16 @@
 // once instead of fitting it at every load (CapturedBlock::askFit). Run by hand on the tree's folders
 // (resources/set/Devices/<name>.orbitrig) when a pack's models change; nobody else needs it.
 //
-// THE FIT IS THE AMP'S, call for call: the pack's manifest read as DeviceLibrary reads it, its first NAM stage as
-// RigPlayer::load plays it, the player's table for that stage (AlignmentTable::fromDevice) as the start, the stage's
-// own input level, and each DISTINCT file fitted alone at the rate the amp fits a model that states none
-// (felitronics::rigplayer::measureCleanMatch, as CapturedBlock::fitOne calls it). A match already in the pack is no
-// starting point — measureCleanMatch sets it aside — so a second run fits the same and changes nothing.
+// THE FIT IS GUITAR-CORE'S: felitronics::rigplayer::fitPackCleanMatches (rigplayer/PackCleanMatch.h), the one function
+// the capture app's exporter calls too. The pack's manifest is read as DeviceLibrary reads it and its first NAM stage
+// handed over as RigPlayer::load plays it; the function fits each DISTINCT file alone from the player's table for that
+// stage, at the rate the amp fits a model that states none (CapturedBlock::fitRate), as CapturedBlock::fitOne does. A
+// match already in the pack is no starting point, so a second run fits the same and changes nothing.
 //
-// EVERY FILE GETS ONE. Where the fit beats nothing (measureCleanMatch states no match for it), the match written is
-// the file's own reading — its `input_lag_samples` and `polarity`, no all-passes — which a player taps the clean leg
-// by anyway: the same sound, and the pack says "fitted" instead of "not measured", so an amp fits nothing for it.
+// EVERY FILE GETS ONE, or the pack none. Where the fit beats nothing, the match written is what it started from — the
+// lag and polarity a player taps the clean leg by with no match, no all-passes: the same sound, and the pack says
+// "fitted" instead of "not measured", so an amp fits nothing for it. A match the format does not read is refused,
+// naming the file, and nothing is written.
 //
 // ONLY THE KEY MOVES. The packs are laid out by hand (namz's writer wraps their lines elsewhere), so the manifest is
 // not written again: each file entry's text gets its `clean_match` as the entry's last member, on a line of its own
@@ -22,17 +23,16 @@
 // nothing else moved — the edited manifest loads, every entry reads back exactly the match intended, and the two
 // documents are the same JSON once `clean_match` is taken out of both.
 
-#include <felitronics/nam/NamStage.h>
-#include <felitronics/rigplayer/AlignmentTable.h>
+#include <felitronics/rigplayer/PackCleanMatch.h>
 #include <namz_rig_load.h>
 #include <namz_rig_write.h>
 #include <nlohmann/json.hpp>
 
-#include <cmath>
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
+#include <map>
 #include <optional>
 #include <sstream>
 #include <string>
@@ -137,18 +137,6 @@ namespace
         return s + " }";
     }
 
-    // What the format reads (NAMZ-FORMAT.md, clean_match): a lag 0 to 48000, a polarity of one, at most two corners,
-    // each finite and at least 1 Hz. A match outside it would be dropped by every reader, so it is never written.
-    bool readable (const namz::rig::FileEntry::CleanMatch& m)
-    {
-        if (m.lagSamples < 0 || m.lagSamples > namz::rig::kMaxLagSamples) return false;
-        if (m.polarity != 1 && m.polarity != -1) return false;
-        if (m.allpassHz.size() > 2) return false;
-        for (const double hz : m.allpassHz)
-            if (! std::isfinite (hz) || hz < namz::rig::kMinCleanMatchHz) return false;
-        return true;
-    }
-
     bool same (const std::optional<namz::rig::FileEntry::CleanMatch>& a, const namz::rig::FileEntry::CleanMatch& b)
     {
         return a && a->lagSamples == b.lagSamples && a->polarity == b.polarity && a->allpassHz == b.allpassHz;
@@ -197,56 +185,18 @@ namespace
             return std::vector<std::byte> (p, p + bytes.size());
         };
 
-        // The player's table for this stage, as RigPlayer::load makes it and CapturedBlock hands it to the fit; and the
-        // same without the pack's matches, for the readings an unfitted file states.
-        const auto start = rp::AlignmentTable::fromDevice (stage->device);
-        auto readings = start;
-        readings.cleanMatchByFile.clear();
+        // Every entry's match, or why not — the stage left as it came then, and nothing written.
+        namz::rig::Stage fitted = *stage;
+        if (const auto why = rp::fitPackCleanMatches (fitted, source, fitRate); ! why.empty()) return fail (pack, why);
 
         std::map<std::string, namz::rig::FileEntry::CleanMatch> want;
         std::printf ("%s (input_db %.2f)\n", pack.filename().string().c_str(), stage->inputDb);
-        for (const auto& f : stage->device.files)
-        {
-            if (f.id.empty()) return fail (pack, "a file entry with no file");
-            if (want.count (f.id) > 0) continue;
-
-            // The bytes must load: a file the fit could not read must not be stated as fitted.
-            const auto bytes = source (f.id);
-            felitronics::nam::NamStage probe;
-            probe.prepare (fitRate, 512);
-            if (bytes.empty() || ! probe.loadModelFromMemory (bytes.data(), bytes.size()))
-                return fail (pack, f.id + " does not load");
-            const double ownRate = probe.modelSampleRate();
-
-            namz::rig::Device one = stage->device;
-            one.files = { f };
-            const auto found = rp::measureCleanMatch (one, source, start, stage->inputDb, fitRate);
-
-            namz::rig::FileEntry::CleanMatch m;
-            const char* how = "fitted";
-            if (const auto hit = found.find (f.id); hit != found.end())
+        for (const auto& f : fitted.device.files)
+            if (want.count (f.id) == 0 && f.cleanMatch)
             {
-                m.lagSamples = hit->second.lag;
-                m.polarity = hit->second.inverted ? -1 : 1;
-                for (const double hz : hit->second.allpassHz)
-                    if (hz > 0.0) m.allpassHz.push_back (hz);
+                want[f.id] = *f.cleanMatch;
+                std::printf ("  %-32s %s\n", f.id.c_str(), spell (*f.cleanMatch).c_str());
             }
-            else
-            {
-                // Nothing beats the file's own reading: that is its match. It must be stated whole, as the player
-                // would tap the clean leg by it — an absolute lag and a polarity, not a lag against another file.
-                if (! f.inputLagSamples || ! f.polarity) return fail (pack, f.id + ": no fit and no input_lag_samples / polarity to state");
-                m.lagSamples = readings.lagOf (f.id, fitRate, fitRate);
-                const auto inv = readings.invertedByFile.find (f.id);
-                m.polarity = inv != readings.invertedByFile.end() && inv->second ? -1 : 1;
-                how = "its reading";
-            }
-            if (! readable (m)) return fail (pack, f.id + ": the match is outside what the format reads: " + spell (m));
-
-            std::printf ("  %-32s %6.0f Hz  %-12s %s\n", f.id.c_str(), ownRate > 0.0 ? ownRate : fitRate, how, spell (m).c_str());
-            if (! (ownRate > 0.0)) std::printf ("    (states no rate: fitted at %.0f Hz, as the amp fits it)\n", fitRate);
-            want[f.id] = m;
-        }
 
         // Every entry of the stage, in the text: `{ "file": "<id>", ...`. One stage, every entry found, none twice.
         struct Edit { std::size_t at, cut; std::string put; };

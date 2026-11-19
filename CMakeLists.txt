@@ -234,7 +234,12 @@ set(FELITRONICS_WITH_PFFFT ON CACHE BOOL "orbit-amp's cabinet convolver uses the
 #
 # v0.13.0 reads a capture's clean match from the pack (namz v5.2.0's files[].clean_match): the bass packs carry
 # theirs (tools/CleanMatchFit.cpp), so CapturedBlock fits nothing at load for them. It needs namz v5.2.0.
-set(ORBITAMP_GUITAR_TAG "v0.13.0" CACHE STRING "felitronics-guitar-core release tag (fetched when no local checkout)")
+#
+# v0.14.0 fits that match by one function for every side that builds a pack (rigplayer's fitPackCleanMatches, which
+# tools/CleanMatchFit.cpp calls), and lines up two captures that play inverted against each other by their real
+# delay (bestLag by the correlation's size, not its sign). The set's packs all state their lags, so nothing they play
+# moves; namz stays v5.2.0.
+set(ORBITAMP_GUITAR_TAG "v0.14.0" CACHE STRING "felitronics-guitar-core release tag (fetched when no local checkout)")
 set(ORBITAMP_GUITAR_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../felitronics-guitar-core"
     CACHE PATH "Local felitronics-guitar-core checkout (used if present); else the pinned release is fetched")
 
@@ -303,7 +308,7 @@ endif()
 # THE TWO PINS MOVE TOGETHER. The tag here is FORCEd over the NAM module's own, so guitar-core's pin
 # never reaches this build — and since guitar-core v0.7.0 a fetched namz is held to FELITRONICS_NAMZ_COMMIT,
 # the commit of the tag the NAM module pins (v5.2.0's, b140a05, by default). This tag is guitar-core
-# v0.13.0's own, so the two agree and the commit is left at its default. A guitar-core bump moves this tag
+# v0.14.0's own, so the two agree and the commit is left at its default. A guitar-core bump moves this tag
 # to that release's namz pin in the same commit: a tag left behind stops the configure, naming both
 # commits. A namz bump made HERE alone, ahead of guitar-core, FORCEs FELITRONICS_NAMZ_COMMIT to the new
 # tag's commit beside it — a tag moved without its commit stops the configure the same way. The local
