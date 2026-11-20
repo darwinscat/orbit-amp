@@ -1822,8 +1822,8 @@ add_amp(DeepGrooveBass CODE Dgrv   BY_NAME    BASS
 # MetalAmp, a working name — the ENGL E530 preamp's face in the metal world's cabin (src/metal): the family's console
 # over the guitar's chain, driven as channels: four, CLEAN GAIN LO and HI, LEAD GAIN LO and HI, PARK the amp's bypass;
 # the V4's packs as a stand-in sound, the guitar's TOP 12 drawn. Not in the family's release, and asked for by name. Its
-# icon AmberPawAmp's until its own is drawn.
-add_amp(MetalAmp      CODE Mtla    BY_NAME    ICON AmberPawAmp
+# icon its own (the owner's pick, 20.11): an orange lightning bolt striking a giant anvil.
+add_amp(MetalAmp      CODE Mtla    BY_NAME
     ART       ${METALAMP_RENDERS}
     ART_FOLDERS ${METALAMP_ART_FOLDERS}
     SOURCES   ${METALAMP_SOURCES}
