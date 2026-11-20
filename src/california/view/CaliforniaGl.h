@@ -43,7 +43,9 @@ namespace orbitamp::california
     inner level's square (which they discard), and the post pass, while the dashboard's gain holds, only inside the
     windshield's box and the pendant's swing (outside them the finished frame keeps the dashboard it has) — none of
     it changing a pixel that shows. The quality ladder's
-    rungs are UnderwaterWorld::Quality's, as the prototype's. The projection — a constant half-width tangent, the
+    rungs are UnderwaterWorld::Quality's, as the prototype's; the bottom one leaves out besides the oaks past about
+    600 m and the flowers' outer band (fading as the ladder fades), and gives the instance buffers new storage for
+    each draw. The projection — a constant half-width tangent, the
     height from the aspect, the centre sheared — is set with setLens. Draws into frames of its own, then blits the
     finished one to the frame buffer it is given. GLSL 1.50 core in the app, GLSL ES 3.00 on the web
     (src/shaders/Gpu.h). GL thread only. */
