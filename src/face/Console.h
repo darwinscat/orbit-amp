@@ -142,6 +142,10 @@ public:
         const char* limiterWord = "LIMITER";                // what LIMITER's door says: RedGrooveBass's says LIMIT, as its plate has room for
         float readingPx = stage::px11;                      // what CPU and MEM are written at...
         bool readingsFit = false;                           // ...set condensed into their boxes, as tall, where wider (Legend::fit)
+        juce::Colour readingInk {};                         // the version, PRESET, CPU and MEM in this, where they stand on a light
+                                                            // panel; transparent writes them in the words' ink (Look::ink)
+        bool presetNamed = false;                           // PRESET followed by the playing preset's name, set condensed
+                                                            // into its box where wider (readingsFit)
         bool tunerStrip = false;                            // the tuner in one low line (TunerFace::setStrip)...
         TunerFace::Dial tunerDial {};                       // ...or a needle over a dial the picture paints, where it has a reach
         bool tunerMenuOnClick = false;                      // ...and a click on it opens its menu, rather than switching it
@@ -394,6 +398,8 @@ private:
 
     const juce::String midiCommands;
     const Ink ink;
+    /** What the version, PRESET, CPU and MEM are written in: the place's own ink, or the words' at 0.85. */
+    juce::Colour readingColour() const { return places.readingInk.isTransparent() ? ink.at (ink.words, 0.85f) : places.readingInk; }
 
     ArtKnob drive;
     std::array<std::unique_ptr<ArtKnob>, Channels::maxTones> tones;

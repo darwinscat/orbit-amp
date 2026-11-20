@@ -50,12 +50,6 @@ inline constexpr std::array<juce::Point<float>, 8> seatInside {{
 inline const juce::Rectangle<float> logoBox = makerPlate.withSizeKeepingCentre (124.0f * 0.86f, 108.0f * 0.86f);
 inline const juce::Rectangle<float> flameBox { 726.0f, 540.0f, 220.0f, 228.0f };
 
-// PRESET and the version left, MEM and CPU right, on the frame's rail over the middle panel.
-inline const juce::Rectangle<float> presetPlace  { 552.0f, 658.0f, 116.0f, 26.0f };
-inline const juce::Rectangle<float> versionPlace { 670.0f, 658.0f, 76.0f, 26.0f };
-inline const juce::Rectangle<float> memoryPlace  { 912.0f, 658.0f, 124.0f, 26.0f };
-inline const juce::Rectangle<float> loadPlace    { 1050.0f, 658.0f, 80.0f, 26.0f };
-
 // THE KEYS: UNDO and REDO wider, then A B C D; each cap 3 px inside its well.
 inline constexpr float keyRowY = 719.0f, keyHeight = 36.0f, keyInset = 3.0f;
 inline constexpr std::array<float, 6> keyX { 1232.0f, 1322.0f, 1399.0f, 1463.0f, 1527.0f, 1591.0f };
@@ -106,12 +100,21 @@ inline const juce::Rectangle<float> fx1Slot    = socket (1036.0f, 833.0f, 16.0f,
 inline const juce::Rectangle<float> fx2Slot    = socket (1096.0f, 833.0f, 16.0f, 88.0f);
 inline const juce::Rectangle<float> reverbSlot = socket (1156.0f, 833.0f, 16.0f, 88.0f);
 
-// THE CABINET: its screen, the slider across it a notch a cabinet; under it the picture, the playing cabinet's name along
-// its top and the amp at work under that (face/Monitor.h).
+// THE CABINET: its screen (sock_cab_screen), the slider across it a notch a cabinet, and the playing cabinet's name in the
+// gap over it, in the label band, squeezed into the screen's width where wider; under it the picture (sock_cab_picture),
+// the service readings on its glass (the owner, 20.11) — no spectrum, which could not be seen there anyway.
 inline const juce::Rectangle<float> cabinetScreen  = socket (1354.0f, 806.0f, 244.0f, 34.0f);
 inline const juce::Rectangle<float> cabinetControl = cabinetScreen.reduced (12.0f, 0.0f);
+inline const juce::Rectangle<float> cabinetName    = socket (cabinetScreen.getCentreX(), bandY, cabinetScreen.getWidth() - 8.0f, 26.0f);
 inline const juce::Rectangle<float> cabinetPicture = socket (1354.0f, 875.0f, 244.0f, 88.0f);
-inline const juce::Rectangle<float> cabinetName    = cabinetPicture.withHeight (24.0f).translated (0.0f, 2.0f);
-inline const juce::Rectangle<float> monitorBand    = cabinetPicture.withTrimmedTop (26.0f).reduced (6.0f, 4.0f);
+
+// THE READINGS on the picture's glass, two lines centred in it, 34 apart: PRESET and the playing preset's name with the
+// version at the line's right end; MEM and CPU under them. Each at the face's reading size, 13 px at 1x.
+inline constexpr float readingLineGap = 34.0f;
+inline constexpr float readingTopY = 875.0f - 0.5f * readingLineGap, readingLowY = 875.0f + 0.5f * readingLineGap;
+inline const juce::Rectangle<float> presetPlace  { 1244.0f, readingTopY - 13.0f, 132.0f, 26.0f };
+inline const juce::Rectangle<float> versionPlace { 1380.0f, readingTopY - 13.0f, 84.0f, 26.0f };
+inline const juce::Rectangle<float> memoryPlace  { 1244.0f, readingLowY - 13.0f, 120.0f, 26.0f };
+inline const juce::Rectangle<float> loadPlace    { 1376.0f, readingLowY - 13.0f, 88.0f, 26.0f };
 
 } // namespace orbitamp::metal::layout

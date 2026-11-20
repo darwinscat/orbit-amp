@@ -30,7 +30,9 @@
 #include "device/FactorySet.h"
 #include "face/Console.h"
 #include "face/Controls.h"
+#include "face/Monitor.h"
 #include "face/Sheet.h"
+#include "redgroove/RedGrooveControls.h"
 #include "metal/MetalControls.h"
 #include "metal/MetalLayout.h"
 #include "metal/MetalLineup.h"
@@ -79,6 +81,22 @@ namespace
         std::function<void (juce::Component&)> walk = [&] (juce::Component& c)
         {
             if (auto* k = dynamic_cast<Kind*> (&c); k != nullptr && k->isVisible() && area.contains (k->getBounds().toFloat().getCentre()))
+                out.push_back (k);
+            for (auto* child : c.getChildren())
+                walk (*child);
+        };
+        walk (in);
+        return out;
+    }
+
+    /** ...and every one placed there, showing or not: MEM is hidden in a host, where the process's memory is the host's. */
+    template <typename Kind>
+    std::vector<Kind*> placedIn (juce::Component& in, juce::Rectangle<float> area)
+    {
+        std::vector<Kind*> out;
+        std::function<void (juce::Component&)> walk = [&] (juce::Component& c)
+        {
+            if (auto* k = dynamic_cast<Kind*> (&c); k != nullptr && area.contains (k->getBounds().toFloat().getCentre()))
                 out.push_back (k);
             for (auto* child : c.getChildren())
                 walk (*child);
@@ -180,7 +198,7 @@ int ORBITAMP_GATE_MAIN()
     const auto rigOf   = [&amp] (int pack) { return pack >= 0 && pack < amp->preamp.packs.size() ? amp->preamp.packs.getReference (pack).rigId : juce::String(); };
 
     std::unique_ptr<juce::AudioProcessorEditor> face (amp->createEditor());
-    const juce::StringArray own { "lever", "note", "comp", "squeeze", "fx1", "fx2", "reverb", "gate", "limiter", "cabinet", "screen", "logo" };
+    const juce::StringArray own { "lever", "note", "comp", "squeeze", "fx1", "fx2", "reverb", "gate", "limiter", "cabinet", "logo" };
     bool all = face != nullptr;
     for (const auto& id : own)
         all = all && named (*face, id) != nullptr;
@@ -379,6 +397,32 @@ int ORBITAMP_GATE_MAIN()
         fx2->getInterceptsMouseClicks (takes, children);
     check (fx2 != nullptr && ! fx2->isEnabled() && ! takes, "FX 2 is dark, and takes no hand");
 
+    // THE CABINET'S SCREEN: the playing cabinet's name alone, no CAB:, in the gap over the slider; the picture under it no
+    // spectrum but the service readings, PRESET and the version over MEM and CPU, two lines centred in its glass; nothing of
+    // them left round the maker's plate.
+    {
+        const auto names = showingIn<redgroove::Readout> (*face, layout::cabinetScreen.withY (layout::cabinetScreen.getY() - 40.0f).withHeight (40.0f));
+        auto expected = channels.slotName (channels.cabinetSlot());
+        expected = expected.fromFirstOccurrenceOf (": ", false, false);
+        const auto said = names.size() == 1 ? names[0]->says() : juce::String();
+        check (names.size() == 1 && said == expected && ! said.containsIgnoreCase ("CAB:")
+                   && names[0]->getBounds().toFloat().getBottom() <= layout::cabinetScreen.getY() + 1.0f,
+               "the cabinet's name alone over the slider, no CAB: \"" + said + "\" (" + expected + ")");
+
+        auto readings = placedIn<face::Legend> (*face, layout::cabinetPicture);
+        std::sort (readings.begin(), readings.end(), [] (auto* a, auto* b) { return a->getY() != b->getY() ? a->getY() < b->getY() : a->getX() < b->getX(); });
+        juce::Rectangle<float> spread;
+        for (auto* r : readings)
+            spread = spread.isEmpty() ? r->getBounds().toFloat() : spread.getUnion (r->getBounds().toFloat());
+        const bool twoLines = readings.size() == 4 && readings[0]->getY() == readings[1]->getY() && readings[2]->getY() == readings[3]->getY()
+                           && readings[2]->getY() - readings[0]->getY() >= 30 && layout::cabinetPicture.contains (spread)
+                           && std::abs (spread.getCentreY() - layout::cabinetPicture.getCentreY()) < 2.0f;
+        check (twoLines, "...the picture under it four readings in two lines centred in its glass: " + juce::String ((int) readings.size()));
+        check (findOf<face::Monitor> (*face) == nullptr, "...and no spectrum on it, nor any view of the amp at work");
+        const juce::Rectangle<float> rail { 540.0f, 640.0f, 600.0f, 60.0f };
+        check (placedIn<face::Legend> (*face, rail).empty(), "...and none of the readings round the maker's plate any more");
+    }
+
     // A STILL: the face whole, the cat silver at rest and crimson in flames under the hand.
     auto* logo = dynamic_cast<metal::CatLogo*> (named (*face, "logo"));
     const auto stageScale = (float) face->getWidth() / layout::width;
@@ -414,6 +458,29 @@ int ORBITAMP_GATE_MAIN()
             shoot ("metal-face-keys-hover-2x.png", tag != nullptr ? area.getUnion (tag->getBounds().toFloat().expanded (12.0f)) : area);
             keys[0]->onHover (false);
         }
+    }
+
+    // ...and, where the stills are asked for, the window as the standalone shows it — MEM read beside CPU on the cabinet's
+    // picture, which a host's window leaves out (Console::timerCallback) — from an amp made as the standalone's: the face at
+    // 1x, and the cabinet's screen at twice the stage.
+    if (juce::SystemStats::getEnvironmentVariable ("METAL_FACE_STILLS", {}).isNotEmpty())
+    {
+        juce::AudioProcessor::setTypeOfNextNewPlugin (juce::AudioProcessor::wrapperType_Standalone);
+        auto alone = std::make_unique<AmpProcessor> (ORBITAMP_GATE_PRODUCT());
+        juce::AudioProcessor::setTypeOfNextNewPlugin (juce::AudioProcessor::wrapperType_Undefined);
+        alone->inlineLoads = true;
+        std::unique_ptr<juce::AudioProcessorEditor> window (alone->createEditor());
+        for (int i = 0; i < 15; ++i)
+            settle();
+        if (window != nullptr)
+        {
+            const auto s = (float) window->getWidth() / layout::width;
+            const auto cab = layout::cabinetName.getUnion (layout::cabinetPicture).expanded (24.0f, 14.0f);
+            writeStill (window->createComponentSnapshot (window->getLocalBounds(), true, 1.0f), "metal-face-standalone-1x.png");
+            writeStill (window->createComponentSnapshot ((cab * s).toNearestInt(), true, 2.0f / s), "metal-face-cab-2x.png");
+        }
+        window.reset();
+        alone.reset();
     }
 
     face.reset();

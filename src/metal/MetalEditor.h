@@ -6,7 +6,6 @@
 #include "MetalControls.h"
 
 #include "../face/Console.h"
-#include "../face/Monitor.h"
 #include "../redgroove/RedGrooveControls.h"
 #include "../redpaw/view/Windscreen.h"
 
@@ -45,9 +44,9 @@ private:
     the tone strip and the key strip, as many as the playing pack has, the six keys of the history and the registers, IN
     and OUT, the tuner, the maker's plate; what it has not: the REVERB, DELAY and CAB plates and the HPF and LPF keys. What
     is its own over it: the lever, PARK over the four channels, its stops glyphs; COMP's fader and its squeeze; FX 1 (the
-    delay's amount), FX 2 (nothing yet, dark) and REVERB; GATE's and LIMITER's buttons; the cabinet's slider in its screen
-    and, under it, its name and the amp at work; the cat in the maker's plate, silver, and crimson in flames under the
-    hand. */
+    delay's amount), FX 2 (nothing yet, dark) and REVERB; GATE's and LIMITER's buttons; the cabinet's slider in its screen,
+    its name over it, and the service readings — PRESET, the version, MEM and CPU — on the picture under it; the cat in the
+    maker's plate, silver, and crimson in flames under the hand. */
 class MetalEditor final : public face::Console,
                           private juce::OpenGLRenderer
 {
@@ -109,13 +108,11 @@ private:
     // GATE AND LIMITER: buttons in the plate's wells, each what the console's door was — its menu on a click.
     WordButton gateButton { "Gate" }, limiterButton { "Limiter" };
 
-    // THE CABINET: the slider in its screen, a notch a cabinet of the TOP 12; its name over the picture, and the amp at work
-    // under it — the view the machine chose, a right click picks another.
+    // THE CABINET: the slider in its screen, a notch a cabinet of the TOP 12, its name in the gap over it; the picture under
+    // it carries the service readings (Places: preset, version, memory, load).
     redgroove::CabinetScreen cabinet;
-    face::Monitor screen;
     void hearSlot (int notch);
     void chooseSlot (int notch);
-    bool pictureRightClicked (juce::Point<int> onStage) override;
     int dragAt = -1;
 
     // THE CAT in the maker's plate, live over the plate.

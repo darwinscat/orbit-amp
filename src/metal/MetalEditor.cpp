@@ -34,7 +34,6 @@ namespace
         order of Windscreen::Mode, and what the menu calls each. */
     const juce::Identifier landscapeKey { "landscape" };
     const juce::Identifier frameRateKey { "landscape_fps" };
-    const juce::Identifier screenKey    { "screen" };
     const juce::StringArray landscapeWords { "world", "1993", "still" };
     const juce::StringArray landscapeNames { "The metal world", "1993", "Still" };
 
@@ -155,6 +154,8 @@ namespace
         p.load    = loadPlace;
         p.readingsFit = true;
         p.readingPx = px13;
+        p.readingInk = cabinInk().values;   // light on the picture's dark glass, as the cabinet's name over it
+        p.presetNamed = true;
         return p;
     }
 
@@ -225,7 +226,6 @@ MetalEditor::MetalEditor (AmpProcessor& p)
              layout::leverBox.getPosition()),
       park (p.bypassParameter(), [this] (float v) { showPark (v > 0.5f); }, nullptr),
       cabinet (cabinInk(), FaceArt::of().faderCap, layout::faderCapLength, layout::faderCapSquash),
-      screen (p),
       logo (layout::flameBox, layout::logoBox, { layout::seatRim.begin(), layout::seatRim.end() },
             { layout::seatInside.begin(), layout::seatInside.end() })
 {
@@ -372,16 +372,16 @@ MetalEditor::MetalEditor (AmpProcessor& p)
     limiterButton.onClick = [this] { showOutputMenu(); };
     limiterButton.setComponentID ("limiter");
 
-    // THE CABINET'S SLIDER in its screen: a notch a cabinet of the TOP 12, as the bathyscaphe's of the bass's dozen; over the
-    // picture under it the cabinet that plays by its name — the slot's under the hand while it moves the slider, OFF while
-    // the cabinet is out of the sound. A right click on it lists them (Console::showDrawnCabs).
+    // THE CABINET'S SLIDER in its screen: a notch a cabinet of the TOP 12, as the bathyscaphe's of the bass's dozen; in the
+    // gap over it the cabinet that plays by its name alone — the slot's under the hand while it moves the slider, CABINET OFF
+    // while the cabinet is out of the sound. A right click on it lists them (Console::showDrawnCabs).
     cabinet.name = [this]
     {
         auto words = dragAt >= 0 ? channels.slotName (dragAt)
-                                 : ! channels.cabinetOn() ? juce::String ("OFF") : channels.slotName (channels.cabinetSlot());
+                                 : ! channels.cabinetOn() ? juce::String ("CABINET OFF") : channels.slotName (channels.cabinetSlot());
         if (const auto head = words.upToFirstOccurrenceOf (": ", false, false); words.contains (": ") && head.isNotEmpty() && head.containsOnly ("0123456789"))
             words = words.fromFirstOccurrenceOf (": ", false, false);
-        return "CAB: " + words;
+        return words;
     };
     cabinet.notches = channels.cabinetSlots();
     cabinet.notch   = [this] { return channels.cabinetSlot(); };
@@ -394,14 +394,6 @@ MetalEditor::MetalEditor (AmpProcessor& p)
     cabinet.setComponentID ("cabinet");
     cabinet.label = &readout (layout::cabinetName);
     cabinet.refresh();
-
-    // ...and the amp at work under its name: the view the machine chose, SPECTRUM until then (a right click picks another).
-    addToStage (screen);
-    screen.setBounds (layout::monitorBand.toNearestInt());
-    screen.setBand (screen.getLocalBounds().toFloat());
-    screen.show ((Monitor::View) juce::jlimit (1, (int) Monitor::View::numViews - 1,
-                                               (int) prefs::store (amp.product()).get (screenKey, (int) Monitor::View::spectrum)));
-    screen.setComponentID ("screen");
 
     // LEARN — from GATE's menu, or a double click on its lamp — takes the tuner's glass while it runs.
     addToStage (learnGlass);
@@ -551,24 +543,6 @@ bool MetalEditor::channelKey (const juce::KeyPress& key)
     return true;
 }
 
-/** A right click on the cabinet's picture: the views of the amp at work, the one up ticked. */
-bool MetalEditor::pictureRightClicked (juce::Point<int> onStage)
-{
-    if (! layout::cabinetPicture.contains (onStage.toFloat()))
-        return false;
-    juce::PopupMenu menu;
-    menu.addSectionHeader ("PICTURE");
-    for (int i = (int) Monitor::View::spectrum; i < (int) Monitor::View::numViews; ++i)
-        addChoice (menu, Monitor::names()[i], (int) screen.shown() == i, [i] (Console& e)
-        {
-            auto& self = static_cast<MetalEditor&> (e);
-            self.screen.show ((Monitor::View) i);
-            prefs::store (self.amp.product()).set (screenKey, i);
-        });
-    menu.showMenuAsync (juce::PopupMenu::Options().withMousePosition());
-    return true;
-}
-
 //==============================================================================
 /** THE CABIN'S OWN PART OF THE SITE'S DEMO (Console::webExtras), in the walker's words and no others, as the bathyscaphe's:
     under places.json's "world", the box the world is drawn in — the whole stage, the plate's alpha its window — and every
@@ -667,8 +641,9 @@ void MetalEditor::webExtras (const juce::File& dir, juce::DynamicObject& kit, ju
         auto* c = new Obj();
         c->setProperty ("box", rect (boxOf (cabinet)));
         c->setProperty ("shows", "a slider across the screen, a notch a cabinet of the lineup's (lineup.cabinets, cabSteps), the fader "
-                                 "cap's render its cap; the playing cabinet's name over the picture under it (readings: cabinet); "
-                                 "a right click lists them");
+                                 "cap's render its cap; the playing cabinet's name in the gap over it (readings: cabinet); a right "
+                                 "click lists them. The picture under it carries the console's own readings, PRESET with the "
+                                 "preset's name and the version, MEM and CPU (places: preset, version, memory, load)");
         world.setProperty ("cabinetScreen", c);
     }
     {
@@ -677,8 +652,8 @@ void MetalEditor::webExtras (const juce::File& dir, juce::DynamicObject& kit, ju
         {
             auto* v = new Obj();
             v->setProperty ("id", "cabinet"); v->setProperty ("box", rect (boxOf (*cabinet.label)));
-            v->setProperty ("format", "CAB: <the cabinet's name, the TOP 12's number left out>; the slot's under the hand while "
-                                      "it moves the slider; CAB: OFF while the cabinet is out of the sound");
+            v->setProperty ("format", "<the cabinet's name, the TOP 12's number left out>; the slot's under the hand while it "
+                                      "moves the slider; CABINET OFF while the cabinet is out of the sound");
             readings.add (juce::var (v));
         }
         world.setProperty ("readings", readings);
