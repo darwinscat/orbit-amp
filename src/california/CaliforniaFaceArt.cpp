@@ -25,7 +25,7 @@ const FaceArt& FaceArt::of()
     {
         FaceArt a;
         a.bg        = load ("dashboard.webp");
-        a.pendant   = load ("pendant.webp");
+        a.pendant   = load ("dashboard_pendant.webp");
         a.knobDrive = load ("knob-drive.webp");
         a.knobTone  = load ("knob-tone.webp");
         a.faderCap  = load ("fader-cap.webp");

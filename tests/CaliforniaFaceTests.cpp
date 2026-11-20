@@ -12,7 +12,11 @@
 //   - COMP's fader the threshold alone, DELAY's and REVERB's their shares; VOLUME and PHASER dark, taking no hand; what
 //     the van holds (Lineup::pinned) — COMP in the strip and on at 3/4, 4:1, OPTO; the delay and the room on;
 //   - every pictogram has its spot, which names it;
-//   - a still of the face renders: the cream panel painted, a pictogram's ink on it.
+//   - a still of the face renders: the cream panel painted, a pictogram's ink on it;
+//   - THE WORLD BEHIND THE GLASS is California (CaliforniaDrive), in the channel's gear — CLEAN 1, DIRTY 2 — and parked
+//     at PARK; every file it reads lies in the factory folder's Faces/CaliforniaAmp as the build lays it out
+//     (CaliforniaShipped.h, the check california_world_test makes of resources/california), and the face's pendant is
+//     the world's, dashboard_pendant.webp.
 //
 // Each control is found by the name the face gives it. main() returns 0 when every check held.
 
@@ -22,7 +26,11 @@
 #include "channels/Engine.h"
 #include "device/DeviceLibrary.h"
 #include "face/Controls.h"
+#include "california/CaliforniaFaceArt.h"
 #include "california/CaliforniaLayout.h"
+#include "device/FactorySet.h"
+#include "redpaw/view/Windscreen.h"
+#include "CaliforniaShipped.h"
 
 #include <cmath>
 #include <cstdio>
@@ -46,6 +54,17 @@ namespace
         if (c != nullptr)
             c->getInterceptsMouseClicks (self, children);
         return c != nullptr && c->isEnabled() && self;
+    }
+
+    template <typename T>
+    T* findOf (juce::Component& in)
+    {
+        if (auto* t = dynamic_cast<T*> (&in))
+            return t;
+        for (auto* child : in.getChildren())
+            if (auto* found = findOf<T> (*child))
+                return found;
+        return nullptr;
     }
 
     float brightness (juce::Colour c) { return (c.getFloatRed() + c.getFloatGreen() + c.getFloatBlue()) / 3.0f; }
@@ -126,6 +145,43 @@ int ORBITAMP_GATE_MAIN()
         face->keyPressed (juce::KeyPress ('2'));
         settle();
         check (! out() && channels.active() == 1 && lever->getPlace() == 2, "the 2 key pulls DIRTY");
+    }
+
+    // THE WORLD BEHIND THE GLASS: California, in the channel's gear, parked at PARK.
+    {
+        auto* view = findOf<redpaw::Windscreen> (*face);
+        const auto line = [view] { return view != nullptr ? view->statusLine() : juce::String ("no view"); };
+        check (view != nullptr && line().startsWith ("GPU  California"), "the world behind the glass is California (" + line() + ")");
+        if (lever != nullptr)
+        {
+            lever->setPlace (1, false, true);
+            settle();
+            check (line().contains ("gear 1") && ! line().contains ("PARK"), "...on CLEAN in its first gear (" + line() + ")");
+            lever->setPlace (2, false, true);
+            settle();
+            check (line().contains ("gear 2") && ! line().contains ("PARK"), "...on DIRTY in its second (" + line() + ")");
+            lever->setPlace (0, false, true);
+            settle();
+            check (line().contains ("gear 2 PARK"), "...and parked at PARK, the gear kept (" + line() + ")");
+            lever->setPlace (2, false, true);
+            settle();
+        }
+
+        const auto dir = device::FactorySet::location().getChildFile ("Faces").getChildFile (ORBITAMP_PRODUCT_NAME);
+        const auto has = [&dir] (const std::string& rel) { return dir.getChildFile (rel).getSize() > 16; };
+        const auto read = [&dir] (const std::string& rel)
+        {
+            juce::MemoryBlock bytes;
+            dir.getChildFile (rel).loadFileAsData (bytes);
+            return bytes.getSize() == 0 ? std::string() : std::string (static_cast<const char*> (bytes.getData()), bytes.getSize());
+        };
+        const auto lost = california::shipped::missing (has, read);
+        juce::StringArray words;
+        for (const auto& w : lost)
+            words.add (w);
+        check (lost.empty(), "the world finds every file it reads in " + dir.getFullPathName()
+                                 + (lost.empty() ? juce::String() : ": not " + words.joinIntoString (", ")));
+        check (california::FaceArt::of().pendant.isValid(), "the face's pendant is the world's, dashboard_pendant.webp, laid out beside it");
     }
 
     // THE TONES BY NAME: each socket's knob turns the playing channel's tone of its name, wherever its pack lists it.

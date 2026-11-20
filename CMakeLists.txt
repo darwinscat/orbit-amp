@@ -631,7 +631,8 @@ endfunction()
 # face, its name, its number and what it carries.
 #
 #   add_amp(<Name>  CODE <code>  [BY_NAME]  [ICON <Amp>]
-#           SOURCES <files...>  LIBRARIES <targets...>  [ART <files...>]  [SET <packs...>]  [WHOLE_SHELF])
+#           SOURCES <files...>  LIBRARIES <targets...>  [ART <files...>]  [ART_FOLDERS <folders...>]
+#           [SET <packs...>]  [WHOLE_SHELF])
 #
 #   <Name>      the target, the PRODUCT_NAME and the stem of every bundle it builds; in lower case, its
 #               bundle id and its CLAP id, com.darwinscat.<name>; and its icon, resources/icon/<Name>-*.
@@ -648,6 +649,8 @@ endfunction()
 #   SOURCES     what it is compiled from; LIBRARIES what it links, ahead of JUCE's recommended flags.
 #   ART         its renders, in the factory folder's Faces/<Name>, each under its own file's name, where its
 #               face reads them (src/face/Renders.h).
+#   ART_FOLDERS folders of its art laid out whole, each as a folder of its own name in Faces/<Name>, every
+#               file in it at the same path under it: a world's finds/, say (Faces/<Name>/finds/...).
 #   SET         the packs it plays, by their folders' names in the tree's set (THE SET), less `.orbitrig` —
 #               at the factory folder's top, zipped.
 #   WHOLE_SHELF the whole cabinet shelf, the folders the cabinet catalog gives OrbitAmp alone with Darwin's
@@ -762,7 +765,7 @@ function(export_entry_points_only)
 endfunction()
 
 function(add_amp name)
-    cmake_parse_arguments(PARSE_ARGV 1 AMP "BY_NAME;WHOLE_SHELF;BASS" "CODE;ICON" "SOURCES;LIBRARIES;ART;SET")
+    cmake_parse_arguments(PARSE_ARGV 1 AMP "BY_NAME;WHOLE_SHELF;BASS" "CODE;ICON" "SOURCES;LIBRARIES;ART;ART_FOLDERS;SET")
     string(TOLOWER "${name}" id)
     set(iconOf "${name}")
     if(AMP_ICON)
@@ -866,6 +869,15 @@ function(add_amp name)
         get_filename_component(base "${render}" NAME)
         list(APPEND files "${render}")
         list(APPEND at "Faces/${name}/${base}")
+    endforeach()
+    foreach(folder IN LISTS AMP_ART_FOLDERS)
+        get_filename_component(top "${folder}" NAME)
+        file(GLOB_RECURSE inside CONFIGURE_DEPENDS RELATIVE "${folder}" "${folder}/*")
+        list(SORT inside)
+        foreach(rel IN LISTS inside)
+            list(APPEND files "${folder}/${rel}")
+            list(APPEND at "Faces/${name}/${top}/${rel}")
+        endforeach()
     endforeach()
     foreach(pack IN LISTS AMP_SET)
         if(NOT pack IN_LIST ORBITAMP_SET_NAMES)
@@ -1662,12 +1674,15 @@ set(DEEPGROOVEBASS_SOURCES
 # it, embedded (resources/california/fonts, the OFL beside it). Its dashboard and the peace pendant made WebP from catbay's
 # renders (resources/california/README.txt), laid out in the factory folder's Faces/CaliforniaAmp and read at run time
 # (CALIFORNIA_ART_DIR); the knobs and the faders' cap its own where resources/california/face has one, the helicopter's
-# otherwise, with its mark and its MIDI list. Its world comes later (feat/california-world): until then the Mars plains
-# run behind the glass and the face paints the cabin itself.
+# otherwise, with its mark and its MIDI list. Its world, California (src/california/view), reads the same dashboard and
+# pendant, and label.webp and finds/ beside them, from the same folder (CALIFORNIAAMP_ART_FOLDERS: finds/ laid out
+# whole); the face paints the dashboard and the pendant itself whenever the world does not draw them.
 set(CALIFORNIAAMP_RENDERS
     "${CMAKE_CURRENT_SOURCE_DIR}/resources/california/dashboard.webp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/resources/california/pendant.webp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/resources/california/pendant.txt")
+    "${CMAKE_CURRENT_SOURCE_DIR}/resources/california/dashboard_pendant.webp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/resources/california/dashboard_pendant.txt"
+    "${CMAKE_CURRENT_SOURCE_DIR}/resources/california/label.webp")
+set(CALIFORNIAAMP_ART_FOLDERS "${CMAKE_CURRENT_SOURCE_DIR}/resources/california/finds")
 file(GLOB california_own CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/resources/california/face/*")
 foreach(render IN ITEMS mark.svg midi.txt knob-drive.webp knob-tone.webp fader-cap.webp)
     if("${CMAKE_CURRENT_SOURCE_DIR}/resources/california/face/${render}" IN_LIST california_own)
@@ -1686,7 +1701,9 @@ set(CALIFORNIAAMP_SOURCES
     src/california/CaliforniaGlyphs.cpp
     src/california/CaliforniaLineup.cpp
     src/ui/CabWindow.cpp             # the cabinets, drawn
-    ${REDPAW_VIEW_SOURCES})          # the windscreen the rovers look through, on the Mars plains until the van's world
+    ${REDPAW_VIEW_SOURCES}           # the windscreen the rovers look through ...
+    ${CALIFORNIA_VIEW_SOURCES}       # ... looking out on California's golden hills
+    ${CALIFORNIA_ART_SOURCES})
 
 # ----------------------------------------------------------------------------
 # THE AMPS — the family's table, one row an amp (THE FAMILY says what a row says).
@@ -1802,11 +1819,13 @@ add_amp(DeepGrooveBass CODE Dgrv   BY_NAME    BASS
 # (installer/family.ini), and asked for by name. Its icon AmberPawAmp's, for now.
 add_amp(CaliforniaAmp CODE Clfa    BY_NAME    ICON AmberPawAmp
     ART       ${CALIFORNIAAMP_RENDERS}
+    ART_FOLDERS ${CALIFORNIAAMP_ART_FOLDERS}
     SOURCES   ${CALIFORNIAAMP_SOURCES}
     LIBRARIES
         OrbitAmpData                 # the family's mark, the notice, the disclaimer — BinaryData::*
         CaliforniaData               # Shrikhand's letters
         OrbitAmpShaders              # the view's shaders
+        felitronics::appkit_webp     # the world's art, decoded
         ${AMP_ENGINE_LIBRARIES}
         juce::juce_opengl            # the view, on the GPU
     SET       ${CALIFORNIAAMP_SET})

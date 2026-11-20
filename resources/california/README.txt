@@ -37,8 +37,10 @@ Sizes, PNG -> WebP: dashboard 9.77 MB -> 1.19 MB; pendant 64 KB -> 38 KB; dish 1
 
 THE FACE'S OWN (CaliforniaAmp, src/california): sockets.txt is the cabin's socket table as catbay handed it; face/
 holds what the face has of its own (its MIDI list); the knobs and the faders' cap are AmberPawAmp's renders until it
-has its own (CMakeLists.txt). The face paints dashboard.webp and the pendant hanging still whenever the world does not
-draw the cabin itself.
+has its own (CMakeLists.txt). The face reads the world's dashboard.webp and dashboard_pendant.webp (one pendant, its box
+in dashboard_pendant.txt) and paints them, the pendant hanging still, whenever the world does not draw the cabin itself.
+The build lays out all of it but sockets.txt, fonts/ and this file in the factory folder's Faces/CaliforniaAmp, finds/
+as a folder with every file at the same path (add_amp's ART_FOLDERS).
 
 fonts/Shrikhand-Latin.ttf is a European Latin subset of Shrikhand (Jonny Pinhorn, SIL Open Font License 1.1,
 fonts/Shrikhand-OFL.txt; no Reserved Font Name), cut from catbay's assets/fonts/Shrikhand-Regular.ttf with

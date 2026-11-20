@@ -1,3 +1,0 @@
-# the pendant sprite: its box on the stage (x0 y0 x1 y1, stage px) and the pivot it swings about (x y)
-box 858.5 145.0 952.0 409.0
-pivot 906.8 147.3

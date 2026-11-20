@@ -7,7 +7,8 @@
 #include "CaliforniaLayout.h"
 #include "CaliforniaLineup.h"
 
-#include "../redpaw/view/PlainsDrive.h"
+#include "view/CaliforniaArt.h"
+#include "view/CaliforniaDrive.h"
 #include "../ui/CabWindow.h"
 #include "../ui/FactoryMissing.h"
 #include "../ui/Prefs.h"
@@ -195,8 +196,8 @@ void Cabin::paintStatic (juce::Graphics& g, float scale) const
     using namespace layout;
     using namespace stage;
 
-    // The panel, unless the world is drawing it — and always in a picture taken. The pendant hangs still under the mirror
-    // until the world swings it.
+    // The panel, unless the world is drawing it — and always in a picture taken. Painted here, the pendant hangs still under
+    // the mirror; the world swings its own.
     const bool worldHasIt = onScreen && worldDrawsPanel != nullptr && worldDrawsPanel();
     const auto& art = FaceArt::of();
     if (art.bg.isValid() && ! worldHasIt)
@@ -520,11 +521,11 @@ CaliforniaEditor::~CaliforniaEditor()
     gl.detach();
 }
 
-/** THE WORLD BEHIND THE GLASS: until the van's own exists, the Mars plains (redpaw::PlainsDrive), a gear a channel. */
+/** THE WORLD BEHIND THE GLASS: California, 1967 (view/CaliforniaDrive.h), its art read from the factory folder's
+    Faces/CaliforniaAmp (view/CaliforniaArt.h) — CLEAN its first gear, DIRTY its second, PARK the van on the shoulder. */
 std::unique_ptr<redpaw::Drive> CaliforniaEditor::makeDrive()
 {
-    // SEAM: the California world's CaliforniaDrive goes here (feat/california-world).
-    return std::make_unique<redpaw::PlainsDrive> (lineup().count());
+    return std::make_unique<CaliforniaDrive> (shippedArt());
 }
 
 CaliforniaEditor::Spot& CaliforniaEditor::spot (juce::Rectangle<float> onStage, const juce::String& name, std::function<void()> onClick)
@@ -686,8 +687,7 @@ bool CaliforniaEditor::channelKey (const juce::KeyPress& key)
     the channels drive in, the three tone sockets and their rings, the five columns — COMP, VOLUME, DELAY, PHASER and
     REVERB, the two dark ones moving nothing — COMP's squeeze, the cabinet's screen and the one reading, the cabinet's
     name. Each channel's own sockets go into the lineup's "face" (the console's key). THE STILL: the view's first frame,
-    the whole stage at twice its size, the first a poster's frame brings. Until the California world is ported the view is
-    the Mars plains (makeDrive), and so are the still and the posters. */
+    the whole stage at twice its size, the first a poster's frame brings: the California world (makeDrive), as the posters. */
 void CaliforniaEditor::webExtras (const juce::File& dir, juce::DynamicObject& kit, juce::DynamicObject& world)
 {
     using Obj = juce::DynamicObject;
@@ -882,8 +882,8 @@ void CaliforniaEditor::webExtras (const juce::File& dir, juce::DynamicObject& ki
                               then (frame);
                           });
     };
-    webPoses.live = "the view's first frame for the place: the Mars plains (redpaw::PlainsDrive), the stand-in until the California "
-                    "world is ported, on the GPU from its start, at the place's gear (PARK parked), settled, nothing stepped (t = 0); "
+    webPoses.live = "the view's first frame for the place: the California world (california::CaliforniaDrive), "
+                    "on the GPU from its start, at the place's gear (PARK parked), settled, nothing stepped (t = 0); "
                     "the top poster is the place the app opens at";
     webPoses.still = [this] (int) { return webStill; };
     webPoses.window = layout::view;

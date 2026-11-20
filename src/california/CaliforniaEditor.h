@@ -24,7 +24,8 @@ namespace orbitamp::california
     Drawn over the view, under the controls, and never takes a click.
 
     THE PANEL IS THE WORLD'S TO DRAW while it draws it (Windscreen::drawsCabin), as the bathyscaphe's is: the California
-    world will light it. Until then — and whenever it does not, and in every picture taken of it — it is painted here. */
+    world draws the dashboard and swings the pendant. Whenever it does not, and in every picture taken of it, they are
+    painted here, the pendant hanging still. */
 class Cabin final : public face::Picture
 {
 public:

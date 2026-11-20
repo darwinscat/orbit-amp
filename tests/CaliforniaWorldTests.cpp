@@ -15,6 +15,7 @@
 // `california_world_test [fixture [files dir]]` compares. Returns non-zero on any failure. JUCE-free, like the code under test.
 
 #include "california/view/CaliforniaWorld.h"
+#include "CaliforniaShipped.h"
 
 #include <algorithm>
 #include <array>
@@ -535,10 +536,8 @@ namespace
 
 namespace
 {
-    /** THE FILES THE GPU'S HALF READS AT RUN TIME (CaliforniaGl::makeArt, as the prototype's view loads them), all in
-        resources/california as the installer lays them out (CaliforniaArt.h): the cabin's, every sprite's atlas and
-        table, the signs', the flags', the chalk's, and every mesh with its table and each texture its table names —
-        the prototype's .png read as .webp — each table one its parser takes. */
+    /** THE FILES THE GPU'S HALF READS AT RUN TIME, all in resources/california as the installer lays them out
+        (CaliforniaShipped.h says which; the van's face gate asks the same of the factory folder). */
     void shippedFiles()
     {
         namespace fs = std::filesystem;
@@ -553,30 +552,10 @@ namespace
             std::ifstream in (fs::path (artDir) / rel, std::ios::binary);
             return std::string ((std::istreambuf_iterator<char> (in)), std::istreambuf_iterator<char>());
         };
-        const auto webp = [] (std::string name) { return name.size() > 4 && name.compare (name.size() - 4, 4, ".png") == 0 ? name.substr (0, name.size() - 4) + ".webp" : name; };
-        const auto need = [&] (bool ok, const std::string& what) { if (! ok) { ++failures; std::printf ("FAIL shipped: %s\n", what.c_str()); } };
-        for (const char* f : { "dashboard.webp", "dashboard_pendant.webp", "label.webp" })
-            need (has (f), f);
-        need (W::parsePendantBox (read ("dashboard_pendant.txt")).has_value(), "dashboard_pendant.txt: a box and a pivot");
-        W w;
-        w.build();
-        std::vector<std::string> sprites { "dish" }, meshes { "van3d/van", "saucer3d/saucer", "yellowsub3d/yellowsub" };
-        for (const auto& sp : w.spritePlaces())
-            if (sp.mesh.empty()) sprites.push_back (sp.name);
-            else if (std::find (meshes.begin(), meshes.end(), sp.mesh) == meshes.end()) meshes.push_back (sp.mesh);
-        for (const auto& s : sprites)
-            need (has ("finds/" + s + "/atlas.webp") && W::parseSpriteTable (read ("finds/" + s + "/sprites.txt")).scale > 0, "the sprite " + s);
-        need (has ("finds/signs/atlas.webp") && ! W::parseSigns (read ("finds/signs/signs.txt")).empty(), "the signs");
-        need (has ("finds/flags/atlas.webp") && ! W::parseFlagCells (read ("finds/flags/flags.txt"), 576, 256).empty(), "the flags");
-        need (has ("finds/chalk/atlas.webp") && ! W::parseChalk (read ("finds/chalk/chalk.txt"), 2048, 1024).empty(), "the chalk");
-        for (const auto& m : meshes)
+        for (const auto& what : orbitamp::california::shipped::missing (has, read))
         {
-            const auto bytes = read ("finds/" + m + ".mesh");
-            need (W::parseCbMesh (reinterpret_cast<const uint8_t*> (bytes.data()), bytes.size()).has_value(), "the mesh " + m);
-            const auto dir = m.substr (0, m.find_last_of ('/') + 1);
-            for (const auto& tex : W::parseMeshInfo (read ("finds/" + m + ".txt")).textures)
-                if (! tex.empty())
-                    need (has ("finds/" + dir + webp (tex)), "the texture " + dir + tex);
+            ++failures;
+            std::printf ("FAIL shipped: %s\n", what.c_str());
         }
     }
 }
