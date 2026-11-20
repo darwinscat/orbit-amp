@@ -76,6 +76,10 @@ public:
     explicit CaliforniaGl (CaliforniaWorld& w) : world (&w) {}
 
     void setArt (Art a) { art = std::move (a); }
+    /** The art again once the GPU's half is made, between two frames: each part not on the GPU yet is read from it —
+        a file that has come since (the site's files arrive while the world runs) — and the parts already in are kept,
+        none of them read again. Before create(), the same as setArt. GL thread only. */
+    void takeArt (Art a);
     /** The projection: the half-width's tangent (constant over any aspect) and where the view's centre sits (NDC). */
     void setLens (double tanHalfWidth, double centreShear) noexcept { tanH = tanHalfWidth; shear = centreShear; }
 
@@ -90,6 +94,9 @@ public:
     /** Whether the cabin is drawn: asked for (setCabin), and its dashboard is on the GPU. */
     bool drawsCabin() const noexcept { return cabinOn && texDash != 0; }
     void setCabin (bool on) noexcept { cabinOn = on; }
+    /** The pendant swung over the glass even while the cabin is not drawn: for a page that lays a plate of its own over
+        the view, the pendant left out of it (the site's). Off in the app, where the face paints it hanging still. */
+    void setPendant (bool on) noexcept { pendantAlone = on; }
 
     float gpuMillis() const noexcept { return gpuMs; }
     bool readFrame (std::vector<std::uint8_t>& rgba, int& w, int& h);
@@ -105,7 +112,7 @@ private:
     CaliforniaWorld* world;
     Art art;
     double tanH = CaliforniaWorld::tanH, shear = 0;
-    bool cabinOn = true;
+    bool cabinOn = true, pendantAlone = false;
 
     struct Program
     {
@@ -120,7 +127,7 @@ private:
     std::uint32_t texDash = 0, texPend = 0, texLabel = 0, texSigns = 0, texFlags = 0, texChalk = 0;
     std::optional<CaliforniaWorld::V4> glassBox;                  // the windshield's box, fractions of the picture
     std::optional<CaliforniaWorld::PendantBox> pendBox;
-    struct Sprite { std::uint32_t tex = 0; CaliforniaWorld::SpriteTable t; std::array<int, 2> size { 1, 1 }; bool in = false; };
+    struct Sprite { std::uint32_t tex = 0; CaliforniaWorld::SpriteTable t; std::array<int, 2> size { 1, 1 }; bool tabled = false, in = false; };
     std::map<std::string, Sprite> sprites;                        // "dish", and the sprite places without a mesh
     struct MeshGpu
     {
@@ -136,6 +143,8 @@ private:
     std::vector<CaliforniaWorld::Sign> signTable;
     int signAtlasW = 0, signAtlasH = 0;
     std::vector<CaliforniaWorld::V4> flagCells;
+    int flagAtlasW = 0, flagAtlasH = 0;
+    bool labelIn = false;
     std::vector<CaliforniaWorld::ChalkDrawing> chalkTable;
     std::vector<std::string> came;
     bool tablesRead = false;
@@ -178,8 +187,8 @@ private:
 
     bool compile (Program&, const char* vertexPath, const char* fragmentPath, const char* what, const std::vector<shaders::Written>& written = {});
     void makeTextures();
-    void makeArt();
-    void loadMesh (const std::string& key, const std::string& base, const std::vector<CaliforniaWorld::V2>& parts);
+    void makeArt (bool fresh);
+    bool loadMesh (const std::string& key, const std::string& base, const std::vector<CaliforniaWorld::V2>& parts);
     void applyTables();
     void makeBuffers();
     bool ensureFrame (int w, int h, int cw, int ch);

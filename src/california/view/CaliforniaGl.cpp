@@ -186,7 +186,7 @@ bool CaliforniaGl::create()
     }
     makeTextures();
     makeBuffers();
-    makeArt();
+    makeArt (true);
 
     // The frame timer: a timer query where the driver has one. Asked once; an error means no.
     while (glGetError() != GL_NO_ERROR) {}
@@ -235,6 +235,7 @@ void CaliforniaGl::destroy()
     del (fbo, glDeleteFramebuffers); del (fboOut, glDeleteFramebuffers);
     fbW = fbH = outW = outH = 0;
     glassBox.reset(); pendBox.reset();
+    labelIn = false;
     quality = {};
     lastFrameMs = -1.0;
     if (query[0] != 0) glDeleteQueries ((GLsizei) query.size(), query.data());
@@ -286,15 +287,15 @@ void CaliforniaGl::makeTextures()
     glBindTexture (GL_TEXTURE_2D, 0);
 }
 
-void CaliforniaGl::loadMesh (const std::string& key, const std::string& base, const std::vector<V2>& parts)
+bool CaliforniaGl::loadMesh (const std::string& key, const std::string& base, const std::vector<V2>& parts)
 {
-    if (! art.bytes)
-        return;
+    if (! art.bytes || meshes.count (key) != 0)     // none to read, or on the GPU already
+        return false;
     const auto info = W::parseMeshInfo (art.text ? art.text (base + ".txt") : std::string());
     const auto bytes = art.bytes (base + ".mesh");
     const auto cb = W::parseCbMesh (bytes.data(), bytes.size(), parts);
     if (! cb)
-        return;
+        return false;
     MeshGpu m;
     glGenVertexArrays (1, &m.vao);
     glBindVertexArray (m.vao);
@@ -320,13 +321,17 @@ void CaliforniaGl::loadMesh (const std::string& key, const std::string& base, co
             if (! info.textures[i].empty())
                 m.tex[i] = pictureTexture (art.picture (dir + info.textures[i]), false, true);
     meshes[key] = std::move (m);
+    return true;
 }
 
-void CaliforniaGl::makeArt()
+void CaliforniaGl::makeArt (bool fresh)
 {
+    // Each part is read while it is not on the GPU yet: all of them as the GPU's half is made (`fresh`), then what has
+    // come since (takeArt). What the world was told is told again only when something came.
+    bool took = fresh;
     // THE CABIN: the dashboard straight, no mips (the stage's own size), the windshield's box from its alpha; the
     // pendant straight, with mips; its box and pivot.
-    if (art.dashboard)
+    if (art.dashboard && texDash == 0)
     {
         const auto dash = art.dashboard();
         texDash = pictureTexture (dash, false, false);
@@ -335,55 +340,83 @@ void CaliforniaGl::makeArt()
         else
             gpu::note ("california: the dashboard did not come; the face paints the panel");
     }
-    if (art.pendant)
+    if (art.pendant && texPend == 0)
         texPend = pictureTexture (art.pendant(), false, true);
-    pendBox = W::parsePendantBox (art.pendantBox);
-    // The CENSORED word, straight; a clear texel when there is none, so the post pass reads nothing from it.
-    if (art.label)
-        texLabel = pictureTexture (art.label(), false, false);
+    if (! pendBox)
+        pendBox = W::parsePendantBox (art.pendantBox);
+    // The CENSORED word, straight; a clear texel while there is none, so the post pass reads nothing from it.
+    if (art.label && ! labelIn)
+        if (const auto t = pictureTexture (art.label(), false, false); t != 0)
+        {
+            if (texLabel != 0)
+                glDeleteTextures (1, &texLabel);
+            texLabel = t;
+            labelIn = true;
+        }
     if (texLabel == 0)
         texLabel = pictureTexture (Picture { 1, 1, { 0, 0, 0, 0 } }, false, false);
 
     // THE FINDS' FILES, as the prototype's view takes them in: the signs' atlas and table, the sprites (premultiplied,
     // with mips), the flags' cloth, the chalk, and the meshes.
-    signTable.clear(); flagCells.clear(); chalkTable.clear(); came.clear();
-    signAtlasW = signAtlasH = 0;
+    if (fresh)
+    {
+        signTable.clear(); flagCells.clear(); chalkTable.clear(); came.clear();
+        signAtlasW = signAtlasH = 0;
+        flagAtlasW = flagAtlasH = 0;
+    }
     const auto picture = [this] (const std::string& path) { return art.picture ? art.picture (path) : Picture {}; };
     const auto text = [this] (const std::string& path) { return art.text ? art.text (path) : std::string(); };
-    signTable = W::parseSigns (text ("signs/signs.txt"));
-    if (const auto atlas = picture ("signs/atlas.png"); (texSigns = pictureTexture (atlas, false, true)) != 0)
-    { signAtlasW = atlas.width; signAtlasH = atlas.height; }
+    if (signTable.empty())
+        took |= ! (signTable = W::parseSigns (text ("signs/signs.txt"))).empty();
+    if (texSigns == 0)
+        if (const auto atlas = picture ("signs/atlas.png"); (texSigns = pictureTexture (atlas, false, true)) != 0)
+        { signAtlasW = atlas.width; signAtlasH = atlas.height; took = true; }
     std::vector<std::string> spriteNames { "dish" };
     for (const auto& sp : world->spritePlaces())
         if (sp.mesh.empty())
             spriteNames.push_back (sp.name);
     for (const auto& name : spriteNames)
     {
-        Sprite s;
-        const auto atlas = picture (name + "/atlas.png");
-        s.tex = pictureTexture (atlas, true, true);
-        s.size = { std::max (1, atlas.width), std::max (1, atlas.height) };
-        const auto table = text (name + "/sprites.txt");
-        if (! table.empty())
-            s.t = W::parseSpriteTable (table);
-        s.in = s.tex != 0 && ! table.empty() && s.t.scale > 0;
+        auto& s = sprites[name];
         if (s.in)
+            continue;
+        if (s.tex == 0)
+        {
+            const auto atlas = picture (name + "/atlas.png");
+            s.tex = pictureTexture (atlas, true, true);
+            s.size = { std::max (1, atlas.width), std::max (1, atlas.height) };
+        }
+        if (! s.tabled)
+            if (const auto table = text (name + "/sprites.txt"); ! table.empty())
+            {
+                s.t = W::parseSpriteTable (table);
+                s.tabled = true;
+            }
+        s.in = s.tex != 0 && s.tabled && s.t.scale > 0;
+        if (s.in)
+        {
             came.push_back (name);
-        sprites[name] = std::move (s);
+            took = true;
+        }
     }
-    if (const auto atlas = picture ("flags/atlas.png"); (texFlags = pictureTexture (atlas, false, true)) != 0)
-        flagCells = W::parseFlagCells (text ("flags/flags.txt"), atlas.width, atlas.height);
-    if (const auto atlas = picture ("chalk/atlas.png"); atlas.valid())
-    {
-        chalkTable = W::parseChalk (text ("chalk/chalk.txt"), atlas.width, atlas.height);
-        if (! chalkTable.empty())
-            texChalk = pictureTexture (atlas, false, true);
-        if (texChalk == 0)
-            chalkTable.clear();
-    }
-    loadMesh ("van", "van3d/van", {});
-    loadMesh ("saucer", "saucer3d/saucer", {});
-    loadMesh ("yellowsub3d/yellowsub", "yellowsub3d/yellowsub", {});
+    if (texFlags == 0)
+        if (const auto atlas = picture ("flags/atlas.png"); (texFlags = pictureTexture (atlas, false, true)) != 0)
+        { flagAtlasW = atlas.width; flagAtlasH = atlas.height; }
+    if (texFlags != 0 && flagCells.empty())
+        took |= ! (flagCells = W::parseFlagCells (text ("flags/flags.txt"), flagAtlasW, flagAtlasH)).empty();
+    if (texChalk == 0)
+        if (const auto atlas = picture ("chalk/atlas.png"); atlas.valid())
+        {
+            chalkTable = W::parseChalk (text ("chalk/chalk.txt"), atlas.width, atlas.height);
+            if (! chalkTable.empty())
+                texChalk = pictureTexture (atlas, false, true);
+            if (texChalk == 0)
+                chalkTable.clear();
+            took |= texChalk != 0;
+        }
+    took |= loadMesh ("van", "van3d/van", {});
+    took |= loadMesh ("saucer", "saucer3d/saucer", {});
+    took |= loadMesh ("yellowsub3d/yellowsub", "yellowsub3d/yellowsub", {});
     // each file once (several places may share one, a row of things split into its parts)
     std::vector<std::string> order;
     std::map<std::string, std::vector<const W::SpritePlace*>> byMesh;
@@ -399,13 +432,23 @@ void CaliforniaGl::makeArt()
         for (const auto* sp : byMesh[file])
             if (sp->hasPart && std::find (parts.begin(), parts.end(), sp->part) == parts.end())
                 parts.push_back (sp->part);
-        loadMesh (file, file, parts);
-        if (meshes.count (file) != 0)
+        if (loadMesh (file, file, parts))
+        {
             for (const auto* sp : byMesh[file])
                 came.push_back (sp->name);
+            took = true;
+        }
     }
     tablesRead = true;
-    applyTables();
+    if (took)
+        applyTables();
+}
+
+void CaliforniaGl::takeArt (Art a)
+{
+    art = std::move (a);
+    if (post.id != 0)               // made: what has come is read now; else create() reads it all
+        makeArt (false);
 }
 
 void CaliforniaGl::applyTables()
@@ -1493,8 +1536,8 @@ void CaliforniaGl::drawScene (int rw, int rh, int cw, int ch)
         for (const GLenum unit : { GL_TEXTURE4, GL_TEXTURE5, GL_TEXTURE6, GL_TEXTURE13, GL_TEXTURE14 })
         { glActiveTexture (unit); glBindTexture (GL_TEXTURE_2D, 0); }
     }
-    // The pendant over it all.
-    if (cabin && texPend != 0 && pendBox)
+    // The pendant over it all: with the cabin, or alone over the glass for a plate laid over the view without it.
+    if ((cabin || pendantAlone) && texPend != 0 && pendBox)
     {
         glEnable (GL_BLEND); glBlendFunc (GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
         const auto& p = pendant;
