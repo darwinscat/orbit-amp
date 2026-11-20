@@ -114,8 +114,11 @@ public:
     static double jupEl() noexcept;
     static double jupAz();
     static const JupFrame& jupFrame();
-    struct SunMap { double top, bottom, dusk, deep, contact, win, winSep, softTop, softPull; V2 gate, night, adapt, cabin; double graze; };
-    static constexpr SunMap sunMap { 17 * deg, 11 * deg, 40 * deg, 4.6 * deg, 0.06, 0.35, 40 * deg, 20 * deg, 3 * deg,
+    /** The Sun's map from the knobs (io-world.js SUN_MAP): the Sun's height at DRIVE 0 (top) and 1 (bottom, under the
+        skyline), the DRIVE where it crosses the skyline (horizon: 0.65 since 20.11, the owner's "9 o'clock full day, 12 still
+        day, 3 dark, 5 the darkest"; it was 0.5), its rate a unit of DRIVE there (dusk), and BLEND's eclipse and window. */
+    struct SunMap { double top, bottom, horizon, dusk, deep, contact, win, winSep, softTop, softPull; V2 gate, night, adapt, cabin; double graze; };
+    static constexpr SunMap sunMap { 17 * deg, 11 * deg, 0.65, 40 * deg, 4.6 * deg, 0.06, 0.35, 40 * deg, 20 * deg, 3 * deg,
                                      { -3.6 * deg, -2.6 * deg }, { -4 * deg, 7 * deg }, { -11 * deg, 7 * deg }, { -0.2 * deg, 5 * deg }, 4 * deg };
     /** The Sun: its look (sunLook) and its way (sunSolve), as the prototype's object has them. */
     struct Sun
@@ -123,7 +126,12 @@ public:
         double sep = 0, vis = 0; V3 hue {}; double light = 0, flat = 0, graze = 0, ring = 0, depth = 0, u = 0, eclAir = 0, eclExpo = 0, eclDark = 0;
         V3 dir {}; double el = 0, az = 0, eA = 0, gate = 0, night = 0, dark = 0, airglow = 0, expo = 1, cabin = 0;
     };
-    static double sunHeightAt (double drive) noexcept;
+    /** The Sun's height over the skyline DRIVE asks (radians): a cubic each side of SunMap::horizon, flat at noon (DRIVE
+        0) and at the deepest night (1), at the rate dusk where it crosses (C1). The day lasts to 0.65: 14.9 degrees at
+        0.2, 5.9 at 0.5 (a low Sun, still day), 0 at 0.65, -6.3 at 0.8 (the full night), -11 at 1. With the horizon at 0.5
+        it is the old map exactly. */
+    static double sunHeightAt (double drive, const SunMap& map) noexcept;
+    static double sunHeightAt (double drive) noexcept { return sunHeightAt (drive, sunMap); }
     static double sunSepAt (double blend) noexcept;
     static Sun sunLook (double sep, double late);
     static Sun sunSolve (double drive, double blend);
@@ -262,6 +270,8 @@ public:
     struct Light { V3 dir {}, key {}; double k = 1; V3 adir {}, amb {}; };
     struct Ring { double level = 0, t = 0; };
     static Ring ringLevel (const Sun& sp);
+    /** Jupiter's shine on the land (unexposed): as full as its phase, never under a fifth of the full Jupiter's (the owner,
+        20.11: a little soft light stays at BLEND 0); the night's adaptation on it. Jupiter's own disc is not this. */
     static V3 jupShineOf (const Sun& sp);
     static Light surfaceLight (const Sun& sp);
     /** The skyline's elevation toward an azimuth from the eye (the ground out to the far cut, falling with the

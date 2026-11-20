@@ -28,7 +28,8 @@ namespace orbitamp::io
 
     The SansAmp RBI's lever: CRUISE SLOW and CRUISE FAST are the gears 1 and 2 (no TURBO), and PARK pulls the rover onto
     the shoulder (the amp bypassed; the world goes on as it is). THE AMP'S KNOBS ARE THE WORLD'S INPUTS: setDrive (the
-    time of day), setBlend (Jupiter's phase, down to the eclipse at 0), setPresence (the sulphur snow), each 0..1 and
+    time of day: day to 0.65, the knob's 12 o'clock a low Sun, 3 o'clock night, 5 o'clock the darkest; IoWorld::SunMap),
+    setBlend (Jupiter's phase, down to the eclipse at 0, its light on the land never under a fifth), setPresence (the sulphur snow), each 0..1 and
     eased by the world (IoWorld::setKnob); cabinDark is how dark the cabin is (1 - cabinDay: the dark plate's share), for
     the face's night glow. The bass heard is the attack answer, as the sea's is: an onset in its level is a hit — the
     aurora flares, the nearest vents puff, the dosimeter kicks, the volcanoes take their share. No steering: the rover

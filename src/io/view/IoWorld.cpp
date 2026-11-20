@@ -337,11 +337,12 @@ const IoWorld::JupFrame& IoWorld::jupFrame()
     }();
     return f;
 }
-double IoWorld::sunHeightAt (double drive) noexcept
+double IoWorld::sunHeightAt (double drive, const SunMap& M) noexcept
 {
-    const auto& M = sunMap;
-    const double y = 0.5 - clamp (drive, 0, 1), H = y >= 0 ? M.top : M.bottom, r = M.dusk / H, a = std::abs (y);
-    return sign (y) * H * (r * a + (12 - 4 * r) * a * a + (4 * r - 16) * a * a * a);
+    const double y = M.horizon - clamp (drive, 0, 1);
+    const bool up = y >= 0;
+    const double H = up ? M.top : M.bottom, span = up ? M.horizon : 1 - M.horizon, k = M.dusk * span / H, u = std::abs (y) / span;
+    return sign (y) * H * (k * u + (3 - 2 * k) * u * u + (k - 2) * u * u * u);
 }
 double IoWorld::sunSepAt (double blend) noexcept
 {
