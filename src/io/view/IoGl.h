@@ -116,7 +116,7 @@ private:
         mutable std::unordered_map<const char*, int> at;
         int u (const char* name) const;
     };
-    Program ground, groundH, groundF, groundSh, rock, rockSh, structP, structSh, mesh, meshSh, sky, plume, pvol, snow, post;
+    Program half, ground, groundH, groundF, groundSh, rock, rockSh, structP, structSh, mesh, meshSh, sky, plume, pvol, snow, post;
 
     std::uint32_t texBase = 0, texDetail = 0, texNoise = 0, texCells = 0, texRoad = 0, texFeat = 0, texHist = 0;
     std::uint32_t texDash = 0, texDashDark = 0;
@@ -139,6 +139,8 @@ private:
     std::uint32_t fboOut = 0, fboOutColour = 0;             // the finished frame
     int fbW = 0, fbH = 0, outW = 0, outH = 0, subW = 0, subH = 0;   // the view's pixels, the finished frame's, the scene's frame
     std::array<int, 2> sceneAt {};              // where the scene's frame sits in the view's (the window's box)
+    std::uint32_t fboHalf = 0, texHalf = 0, rbHalf = 0;   // at the ladder's foot: the plumes' bodies at half the scene's pixels
+    int halfW = 0, halfH = 0;
     bool outerKept = false;                     // the plates outside the window's box are in the finished frame...
     double keptDark = -1.0;                     // ...as this dark share drew them
     bool floatTarget = true;

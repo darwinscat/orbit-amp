@@ -191,7 +191,8 @@ bool IoGl::create()
         || ! compile (plume, "io/plume.vert", "io/plume.frag", "plume")
         || ! compile (pvol, "io/pvol.vert", "io/pvol.frag", "plume's body")
         || ! compile (snow, "io/snow.vert", "io/snow.frag", "snow")
-        || ! compile (post, "io/post.vert", "io/post.frag", "post"))
+        || ! compile (post, "io/post.vert", "io/post.frag", "post")
+        || ! compile (half, "io/post.vert", "io/half.frag", "half-size bodies"))
     {
         destroy();
         return false;
@@ -234,6 +235,7 @@ void IoGl::destroy()
     del (vboEmpty, glDeleteBuffers); del (vaoEmpty, glDeleteVertexArrays);
     for (auto* t : { &texBase, &texDetail, &texNoise, &texCells, &texRoad, &texFeat, &texHist, &texDash, &texDashDark, &fboColour, &sh0.tex, &sh1.tex })
         del (*t, glDeleteTextures);
+    del (texHalf, glDeleteTextures); del (rbHalf, glDeleteRenderbuffers); del (fboHalf, glDeleteFramebuffers); halfW = halfH = 0;
     del (fboDepth, glDeleteRenderbuffers); del (fboOutColour, glDeleteRenderbuffers);
     del (fbo, glDeleteFramebuffers); del (fboOut, glDeleteFramebuffers); del (sh0.fbo, glDeleteFramebuffers); del (sh1.fbo, glDeleteFramebuffers);
     sh0 = {}; sh1 = {};
@@ -246,7 +248,7 @@ void IoGl::destroy()
     if (query[0] != 0) glDeleteQueries ((GLsizei) query.size(), query.data());
     query.fill (0);
     queriesWork = false; queriesPending = 0; queryNext = 0;
-    for (auto* p : { &ground, &groundH, &groundF, &groundSh, &rock, &rockSh, &structP, &structSh, &mesh, &meshSh, &sky, &plume, &pvol, &snow, &post })
+    for (auto* p : { &half, &ground, &groundH, &groundF, &groundSh, &rock, &rockSh, &structP, &structSh, &mesh, &meshSh, &sky, &plume, &pvol, &snow, &post })
     {
         if (p->id != 0) glDeleteProgram (p->id);
         p->id = 0;
@@ -998,6 +1000,34 @@ void IoGl::drawScene (int rw, int rh, int cw, int ch)
     if (! skips ("plumes") && ! skips ("volumes") && ! F.volumes.empty())
     {
         const int n = (int) F.volumes.size(), nIn = F.volumesInside;
+        // AT THE LADDER'S FOOT (in the app: WebGL 2 blits no depth between sizes) the bodies are shaded at half the
+        // scene's pixels, against its depth taken down to that size, and laid over the scene
+        const bool halved = ! gpu::web && Q.level >= 2 && ! skips ("full-bodies");
+        if (halved)
+        {
+            const int hw = (subW + 1) / 2, hh = (subH + 1) / 2;
+            if (fboHalf == 0) { glGenFramebuffers (1, &fboHalf); glGenTextures (1, &texHalf); glGenRenderbuffers (1, &rbHalf); }
+            if (hw != halfW || hh != halfH)
+            {
+                glBindTexture (GL_TEXTURE_2D, texHalf);
+                glTexImage2D (GL_TEXTURE_2D, 0, GL_RGBA16F, hw, hh, 0, GL_RGBA, GL_HALF_FLOAT, nullptr);
+                glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR); glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+                glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE); glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+                glBindTexture (GL_TEXTURE_2D, 0);
+                glBindRenderbuffer (GL_RENDERBUFFER, rbHalf); glRenderbufferStorage (GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, hw, hh);
+                glBindRenderbuffer (GL_RENDERBUFFER, 0);
+                glBindFramebuffer (GL_FRAMEBUFFER, fboHalf);
+                glFramebufferTexture2D (GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texHalf, 0);
+                glFramebufferRenderbuffer (GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, rbHalf);
+                halfW = hw; halfH = hh;
+            }
+            glBindFramebuffer (GL_READ_FRAMEBUFFER, fbo); glBindFramebuffer (GL_DRAW_FRAMEBUFFER, fboHalf);
+            glBlitFramebuffer (0, 0, subW, subH, 0, 0, hw, hh, GL_DEPTH_BUFFER_BIT, GL_NEAREST);
+            glBindFramebuffer (GL_FRAMEBUFFER, fboHalf);
+            glDisable (GL_SCISSOR_TEST);
+            glClearColor (0, 0, 0, 0); glClear (GL_COLOR_BUFFER_BIT);
+            glViewport (-sceneAt[0] / 2, -sceneAt[1] / 2, (rw + 1) / 2, (rh + 1) / 2);
+        }
         glUseProgram (pvol.id); setCommon (pvol);
         glUniform1i (pvol.u ("uNoise"), 2); glUniform1i (pvol.u ("uHist"), 10);
         glBindBuffer (GL_ARRAY_BUFFER, volBuf.inst);
@@ -1005,17 +1035,30 @@ void IoGl::drawScene (int rw, int rh, int cw, int ch)
         glBindVertexArray (volBuf.vao);
         glEnable (GL_CULL_FACE);
         // those round the eye first (their back faces, no depth test), then the rest far to near (front faces, tested)
-        if (nIn > 0) { glCullFace (GL_FRONT); glDisable (GL_DEPTH_TEST); glDrawArraysInstanced (GL_TRIANGLES, 0, 36, nIn); glEnable (GL_DEPTH_TEST); }
+        if (nIn > 0) { glCullFace (GL_FRONT); glDisable (GL_DEPTH_TEST); glDrawArraysInstanced (GL_TRIANGLES, 0, 60, nIn); glEnable (GL_DEPTH_TEST); }
         if (n > nIn)
         {
             glCullFace (GL_BACK);
             // the instance offset: the attributes re-pointed past the insiders
             const GLuint loc[3] { locV0, locV1, locV2 };
             for (int i = 0; i < 3; ++i) glVertexAttribPointer (loc[i], 4, GL_FLOAT, GL_FALSE, 48, offset (nIn * 48 + i * 16));
-            glDrawArraysInstanced (GL_TRIANGLES, 0, 36, n - nIn);
+            glDrawArraysInstanced (GL_TRIANGLES, 0, 60, n - nIn);
             for (int i = 0; i < 3; ++i) glVertexAttribPointer (loc[i], 4, GL_FLOAT, GL_FALSE, 48, offset (i * 16));
         }
         glDisable (GL_CULL_FACE);
+        if (halved)
+        {
+            glBindFramebuffer (GL_FRAMEBUFFER, fbo);
+            glViewport (0, 0, subW, subH);
+            glDisable (GL_DEPTH_TEST);
+            glUseProgram (half.id); glBindVertexArray (vaoEmpty);
+            glActiveTexture (GL_TEXTURE4); glBindTexture (GL_TEXTURE_2D, texHalf); glUniform1i (half.u ("uHalf"), 4);
+            glDrawArrays (GL_TRIANGLES, 0, 3);
+            glBindTexture (GL_TEXTURE_2D, 0);
+            glEnable (GL_DEPTH_TEST);
+            glViewport (-sceneAt[0], -sceneAt[1], rw, rh);
+            if (box) glEnable (GL_SCISSOR_TEST);
+        }
     }
     if (! skips ("plumes"))
     {
