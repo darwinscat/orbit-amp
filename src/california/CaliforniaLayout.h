@@ -37,7 +37,6 @@ inline juce::Rectangle<float> socket (float cx, float cy, float w, float h)
 inline const juce::Rectangle<float> pendant = juce::Rectangle<float>::leftTopRightBottom (858.5f, 145.0f, 952.0f, 409.0f);
 
 // THE TOP ROW.
-inline constexpr float topTitleY = 684.0f;
 inline const juce::Rectangle<float> tunerScreen = socket (267.0f, 718.0f, 446.0f, 38.0f);
 inline constexpr float forkX = 64.0f, forkY = 718.0f, forkScale = 1.15f;     // the tuning fork at the screen's left end
 inline constexpr float tunerLeftInset = 34.0f;                                 // ...the tuner's strip right of it
@@ -50,11 +49,16 @@ inline const juce::Rectangle<float> emblemMark = socket (836.0f, 699.0f, 74.0f, 
 inline const juce::Rectangle<float> poweredByPlate = socket (648.0f, 716.0f, 196.0f, 30.0f);
 inline const juce::Rectangle<float> makerNamePlate = socket (1024.0f, 716.0f, 196.0f, 30.0f);
 
-// PRESET, the version, MEM and CPU: over the two plates, on the van's body between the top panels.
-inline const juce::Rectangle<float> presetPlace  { 552.0f, topTitleY - 14.0f, 116.0f, 28.0f };
-inline const juce::Rectangle<float> versionPlace { 670.0f, topTitleY - 14.0f, 76.0f, 28.0f };
-inline const juce::Rectangle<float> memoryPlace  { 926.0f, topTitleY - 14.0f, 120.0f, 28.0f };
-inline const juce::Rectangle<float> loadPlace    { 1050.0f, topTitleY - 14.0f, 72.0f, 28.0f };
+// THE READINGS along the top of the van (the owner, 20.11): the cream band over the cab, y 0..51 on dashboard.webp, its
+// lower edge at y 52 where the orange starts; "Make Love" hangs over it at x 152..638 and "Not War" at x 1034..1522,
+// from y 6 down. PRESET and the preset's name in the band's free left end, MEM and CPU in its middle between the two
+// plates (over the mirror's stem), the version in its right end; in the panels' ink.
+inline constexpr float bandY = 26.0f;                                   // the words' middle in the band
+inline const juce::Rectangle<float> band { 0.0f, 0.0f, 1672.0f, 52.0f };
+inline const juce::Rectangle<float> presetPlace  { 12.0f, bandY - 13.0f, 136.0f, 26.0f };
+inline const juce::Rectangle<float> memoryPlace  { 733.0f, bandY - 13.0f, 122.0f, 26.0f };
+inline const juce::Rectangle<float> loadPlace    { 863.0f, bandY - 13.0f, 76.0f, 26.0f };
+inline const juce::Rectangle<float> versionPlace { 1534.0f, bandY - 13.0f, 128.0f, 26.0f };
 
 // KEYS: UNDO and REDO wider, then A B C D.
 inline constexpr float keyRowY = 719.0f, keyHole = 36.0f;

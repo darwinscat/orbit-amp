@@ -457,7 +457,7 @@ Console::Console (AmpProcessor& p, std::unique_ptr<Picture> pic, const Places& w
     about.setBrandTypeface (theme::displayTypeface());
     addChildComponent (about);
     version.upper = false;
-    version.valueColour = ink.at (ink.words, 0.85f);
+    version.valueColour = readingColour();
     version.set ({}, "v" + amp.updateChecker().currentVersion());
     version.onClick = [this] { about.showAbout (this); };
     stage.addAndMakeVisible (version);
@@ -465,7 +465,7 @@ Console::Console (AmpProcessor& p, std::unique_ptr<Picture> pic, const Places& w
 
     // CPU. A click opens what the number is made of — the window OrbitAmp's footer opens from its DSP
     // figure.
-    load.nameColour = ink.at (ink.words, 0.85f);
+    load.nameColour = readingColour();
     load.fromLeft = true;
     load.fit = places.readingsFit;
     load.onClick = [this] { showLoad(); };
@@ -473,7 +473,7 @@ Console::Console (AmpProcessor& p, std::unique_ptr<Picture> pic, const Places& w
     load.setBounds (box (places.load));
 
     // MEM. A reading and nothing else: a click there is a click on the panel.
-    memory.nameColour = memory.valueColour = ink.at (ink.words, 0.85f);
+    memory.nameColour = memory.valueColour = readingColour();
     memory.fromLeft = true;
     memory.fit = places.readingsFit;
     memory.setInterceptsMouseClicks (false, false);
@@ -481,8 +481,10 @@ Console::Console (AmpProcessor& p, std::unique_ptr<Picture> pic, const Places& w
     memory.setBounds (box (places.memory));
 
     // PRESET.
-    presetDoor.valueColour = ink.at (ink.words, 0.85f);
-    presetDoor.set ({}, "PRESET");
+    presetDoor.valueColour = readingColour();
+    presetDoor.nameColour = readingColour();
+    presetDoor.fit = places.presetNamed && places.readingsFit;
+    presetDoor.set (places.presetNamed ? "PRESET" : juce::String(), places.presetNamed ? presets.current() : juce::String ("PRESET"));
     presetDoor.onClick = [this] { showPresetMenu(); };
     stage.addAndMakeVisible (presetDoor);
     presetDoor.setBounds (box (places.preset));
@@ -1641,13 +1643,17 @@ void Console::timerCallback()
 {
     version.setDot (amp.updateChecker().updateAvailable());
     presetDoor.setDot (presets.changed());
+    if (places.presetNamed)
+        presetDoor.set ("PRESET", presets.current());
     drive.settle();     // in steps it stands on a capture, and the pack under it may be another now
 
-    // The load turns warm as it climbs — OrbitAmp's thresholds: a number noticed when it starts to matter.
+    // The load turns warm as it climbs — OrbitAmp's thresholds: a number noticed when it starts to matter. Written on a
+    // light panel (Places::readingInk) it warms from its own ink toward the state's, the values' ink there being light.
     const float percent = amp.dspLoadPercent();
+    const bool onPanel = ! places.readingInk.isTransparent();
     const auto warmth = percent > 80.0f ? ink.state
-                      : percent > 50.0f ? ink.values
-                                        : ink.at (ink.words, 0.85f);
+                      : percent > 50.0f ? (onPanel ? places.readingInk.interpolatedWith (ink.state, 0.5f) : ink.values)
+                                        : readingColour();
     if (warmth != load.valueColour)
     {
         load.valueColour = warmth;

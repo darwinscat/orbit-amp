@@ -165,6 +165,8 @@ namespace
         p.load    = loadPlace;
         p.readingsFit = true;
         p.readingPx = px13;
+        p.readingInk = glyphs::ink;      // on the cream band along the top
+        p.presetNamed = true;
         return p;
     }
 
@@ -205,8 +207,16 @@ void Cabin::paintStatic (juce::Graphics& g, float scale) const
     if (art.pendant.isValid() && ! worldHasIt)
         g.drawImage (art.pendant, pendant);
 
-    // The family's cat, cut into the maker's plate; DARWIN'S CAT and POWERED BY on the blank plates either side of it.
-    engraveMark (g, emblemMark, scale);
+    // The family's cat, cut into the maker's plate — its cap orange (view/CaliforniaCap.h), the cat on it in the van's
+    // cream, the cut's wall a soft shade and its lip the cap's light; DARWIN'S CAT and POWERED BY on the blank plates
+    // either side of it.
+    MarkInk catInk;
+    catInk.floorTop    = glyphs::capFill;
+    catInk.floorBottom = juce::Colour (0xffeadcc2);
+    catInk.shadow      = 0.45f;
+    catInk.lip         = 0.35f;
+    catInk.lipLight    = juce::Colour (0xffffe2bc);
+    engraveMark (g, emblemMark, scale, catInk);
     const auto plates = plateInk();
     const auto onPlate = [&g, &plates] (const juce::String& words, juce::Rectangle<float> plate)
     {

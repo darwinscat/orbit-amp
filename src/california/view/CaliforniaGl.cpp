@@ -5,6 +5,7 @@
 // doubles, f32 where it stores into a Float32Array, the walker's Js for its Math. Built with -ffp-contract=off.
 
 #include "CaliforniaGl.h"
+#include "CaliforniaCap.h"
 
 #include "../../redgroove/view/WalkerWorld.h"     // Js
 #include "../../shaders/Shaders.h"
@@ -333,7 +334,9 @@ void CaliforniaGl::makeArt (bool fresh)
     // pendant straight, with mips; its box and pivot.
     if (art.dashboard && texDash == 0)
     {
-        const auto dash = art.dashboard();
+        auto dash = art.dashboard();
+        if (dash.valid())
+            cap::paintRgba (dash.rgba.data(), dash.width, dash.height);     // the maker's cap orange, as the face paints it
         texDash = pictureTexture (dash, false, false);
         if (texDash != 0)
             glassBox = W::glassBounds (dash.rgba.data(), dash.width, dash.height, 2);

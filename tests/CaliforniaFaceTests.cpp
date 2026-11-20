@@ -32,8 +32,10 @@
 #include "redpaw/view/Windscreen.h"
 #include "CaliforniaShipped.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <functional>
 #include <memory>
 
 namespace
@@ -276,6 +278,52 @@ int ORBITAMP_GATE_MAIN()
         check (still.isValid() && brightness (panel) > 0.75f && brightness (wedge) < 0.35f,
                "a still of the face renders: the cream panel (" + panel.toDisplayString (false) + ") and GAIN's wedge on it in ink ("
                    + wedge.toDisplayString (false) + ")");
+
+        // THE MAKER'S CAP orange (the owner, 20.11), left of the cat where the cap is bare; and the cat on it in cream.
+        const auto cap = at (785.0f, 699.0f);
+        check (cap.getFloatRed() - cap.getFloatBlue() > 0.4f && cap.getFloatRed() - cap.getFloatGreen() > 0.15f,
+               "the maker's cap is painted orange (" + cap.toDisplayString (false) + ")");
+        int cream = 0;
+        for (float y = layout::emblemMark.getY(); y < layout::emblemMark.getBottom(); y += 1.0f)
+            for (float x = layout::emblemMark.getX(); x < layout::emblemMark.getRight(); x += 1.0f)
+                if (const auto c = at (x, y); brightness (c) > 0.8f && c.getFloatRed() - c.getFloatBlue() < 0.15f)
+                    ++cream;
+        check (cream > 200, "...and the cat on it is cream (" + juce::String (cream) + " cream pixels in its box)");
+
+        // THE READINGS along the top of the van (the owner, 20.11): PRESET and its preset's name at the cream band's left
+        // end, MEM and CPU in its middle, the version at its right end, in the panels' ink; none left over the plates.
+        const auto count = [&at] (juce::Rectangle<float> box, auto&& wanted)
+        {
+            int n = 0;
+            for (float y = box.getY(); y < box.getBottom(); y += 1.0f)
+                for (float x = box.getX(); x < box.getRight(); x += 1.0f)
+                    n += wanted (at (x, y)) ? 1 : 0;
+            return n;
+        };
+        const auto inked = [] (juce::Colour c) { return brightness (c) < 0.45f; };
+        // ...counted in the band's free stretches (clear of the plates, x 152..638 and 1034..1522), wherever the boxes stand.
+        const auto words = [&] (float from, float to) { return count (juce::Rectangle<float>::leftTopRightBottom (from, layout::bandY - 7.0f, to, layout::bandY + 7.0f), inked); };
+        const int left = words (0.0f, 150.0f), middle = words (640.0f, 1032.0f), right = words (1524.0f, 1672.0f);
+        check (left > 40 && middle > 40 && right > 30, "PRESET is written at the top band's left, MEM and CPU in its middle, the version at its right, in the panels' ink ("
+                                                         + juce::String (left) + ", " + juce::String (middle) + " and " + juce::String (right) + " inked pixels)");
+        std::vector<juce::Component*> legends;
+        const std::function<void (juce::Component&)> gather = [&] (juce::Component& in)
+        {
+            if (dynamic_cast<face::Legend*> (&in) != nullptr)
+                legends.push_back (&in);
+            for (auto* child : in.getChildren())
+                gather (*child);
+        };
+        gather (*face);
+        const auto overPlates = juce::Rectangle<float>::leftTopRightBottom (540.0f, 664.0f, 1130.0f, 700.0f).toNearestInt();
+        int over = 0, inBand = 0;
+        for (auto* l : legends)
+            over += l->getBounds().intersects (overPlates) ? 1 : 0;
+        for (const auto& place : { layout::presetPlace, layout::memoryPlace, layout::loadPlace, layout::versionPlace })
+            inBand += layout::band.contains (place) && std::any_of (legends.begin(), legends.end(), [&place] (juce::Component* l)
+                                                                     { return l->getBounds() == place.toNearestInt(); }) ? 1 : 0;
+        check (over == 0 && inBand == 4, "...their four boxes inside the band, none over the plates where they stood (" + juce::String (inBand)
+                                             + " in the band, " + juce::String (over) + " over the plates)");
     }
 
     face.reset();
