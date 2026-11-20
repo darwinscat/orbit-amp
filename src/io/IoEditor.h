@@ -161,6 +161,10 @@ private:
     bool channelKey (const juce::KeyPress&) override;
     void stripsLaid (const face::Strips&) override { bindTones (channels.active()); }
 
+    // FOR THE SITE (Console::webExtras): the rover's map in places.json's existing keys, and its posters.
+    void webExtras (const juce::File& dir, juce::DynamicObject& kit, juce::DynamicObject& world) override;
+    juce::Image webStill;           // the site's still: the view's first frame, the first a poster brings
+
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (IoEditor)
 };
 

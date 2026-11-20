@@ -672,6 +672,240 @@ bool IoEditor::channelKey (const juce::KeyPress& key)
 }
 
 //==============================================================================
+/** THE ROVER'S OWN PART OF THE SITE'S DEMO (Console::webExtras), in the keys the family's faces have written already and no
+    others — what they cannot carry (the pictograms, the B612 words, the night's glow, the dosimeter) the kit's README
+    says: under places.json's "world", the box the view is drawn in (the whole stage: the picture's alpha is its
+    windscreen), the lever and its three places — PARK, SLOW, FAST — the gears the two speeds drive in, the four knobs —
+    PRESENCE and the three tones — and their rings, the five columns — COMP, BLEND, OCTAVE, CHORUS and REVERB — COMP's
+    squeeze, the cuts' two switches, the cabinet's screen and the one reading, the cabinet's name. Each channel's own
+    sockets go into the lineup's "face" (the console's key). THE STILL: the view's first frame, the whole stage at twice
+    its size, the first a poster's frame brings. Until the Io world is ported the view is the Mars plains (makeDrive), and
+    so are the still and the posters. */
+void IoEditor::webExtras (const juce::File& dir, juce::DynamicObject& kit, juce::DynamicObject& world)
+{
+    using Obj = juce::DynamicObject;
+    using Band = Channels::Band;
+    const auto rect = [] (juce::Rectangle<float> r)
+    {
+        auto* o = new Obj();
+        o->setProperty ("x", r.getX()); o->setProperty ("y", r.getY());
+        o->setProperty ("w", r.getWidth()); o->setProperty ("h", r.getHeight());
+        return juce::var (o);
+    };
+    const auto point = [] (juce::Point<float> p) { auto* o = new Obj(); o->setProperty ("x", p.x); o->setProperty ("y", p.y); return juce::var (o); };
+    const auto boxOf = [] (const juce::Component& c) { return c.getBoundsInParent().toFloat(); };
+    const auto list = [] (std::initializer_list<juce::var> items) { juce::Array<juce::var> a; for (const auto& v : items) a.add (v); return juce::var (a); };
+    const auto colour = [] (juce::Colour c) { return juce::String::formatted ("#%02x%02x%02x%02x", c.getRed(), c.getGreen(), c.getBlue(), c.getAlpha()); };
+
+    world.setProperty ("windscreen", rect (layout::view));
+    world.setProperty ("gears", channels.count());
+    {
+        juce::Array<juce::var> gears;       // SLOW the first gear, FAST the second (showSelector); PARK parks; no TURBO
+        for (int c = 0; c < channels.count(); ++c)
+            gears.add (c + 1);
+        world.setProperty ("channelGears", gears);
+    }
+
+    // THE LEVER: its places top to bottom — PARK, then the two speeds — the slot it runs in, and where each place's sign
+    // stands beside it (P's centre, the triangles' centres): signs, not words, all three in the cabin.
+    {
+        auto* l = new Obj();
+        l->setProperty ("box", rect (boxOf (lever)));
+        l->setProperty ("slotX", layout::leverX);
+        const juce::Point<float> signsAt[] { { layout::leverSignX, layout::parkBaseline - 7.5f },
+                                             { layout::leverSignX, layout::leverStops[1] },
+                                             { layout::leverSignX, layout::leverStops[2] } };
+        const char* words[] { "PARK", "SLOW", "FAST" };
+        juce::Array<juce::var> stops, names;
+        for (size_t i = 0; i < layout::leverStops.size() && i < std::size (signsAt); ++i)
+        {
+            stops.add (layout::leverStops[i]);
+            auto* n = new Obj();
+            n->setProperty ("name", words[i]); n->setProperty ("at", point (signsAt[i]));
+            names.add (juce::var (n));
+        }
+        l->setProperty ("stops", stops);
+        l->setProperty ("names", names);
+        l->setProperty ("capWidth", redgroove::ChannelLever::capWidth);
+        l->setProperty ("capHeight", redgroove::ChannelLever::capHeight);
+        l->setProperty ("does", "place 0 PARK: the amp's bypass (the plug-in's own bypass parameter), the speed kept; "
+                                "place i (1, 2): channel i - 1 (the lineup's SLOW and FAST, a pair over one memory: one sound), "
+                                "its gear i, the amp back in");
+        world.setProperty ("lever", l);
+    }
+
+    // THE KNOBS, PRESENCE AND THE TONES, BASS, MIDDLE AND TREBLE: each the playing channel's tone of that name; and the
+    // rings, DRIVE's (the console's drive) and theirs, in Io's paint.
+    const char* knobNames[] { "PRESENCE", "BASS", "MIDDLE", "TREBLE" };
+    const std::pair<Kind, layout::GlyphAt> knobSigns[] { { Kind::presence, layout::presenceGlyph }, { Kind::bass, layout::toneGlyphs[0] },
+                                                         { Kind::middle, layout::toneGlyphs[1] }, { Kind::treble, layout::toneGlyphs[2] } };
+    constexpr Band toneBands[] { Band::bass, Band::middle, Band::treble };
+    {
+        juce::Array<juce::var> a;
+        for (size_t s = 0; s < tones.size(); ++s)
+        {
+            auto* v = new Obj();
+            v->setProperty ("id", juce::String (knobNames[s]).toLowerCase()); v->setProperty ("name", knobNames[s]);
+            v->setProperty ("box", rect (boxOf (*tones[s]))); v->setProperty ("sprite", "knob-tone");
+            v->setProperty ("travel", s == presenceSocket
+                ? "the playing channel's tone named Presence (lineup.channels[c].face.tones, by text): its parameter's 0..1 over "
+                  "its min..max; a channel with none (the stand-in's): the knob frozen at noon (0.5), alpha 0.4, its ring too, no hand"
+                : "the playing channel's tone of this name (lineup.channels[c].face.tones, by text): its parameter's 0..1 over its "
+                  "min..max; a channel with none: the knob frozen at noon (0.5), alpha 0.4, its ring too, no hand");
+            a.add (juce::var (v));
+        }
+        world.setProperty ("knobs", a);
+
+        auto* r = new Obj();
+        r->setProperty ("inset", layout::ringInset); r->setProperty ("width", layout::ringWidth); r->setProperty ("driveWidth", layout::driveRingWidth);
+        r->setProperty ("sockets", list ({ juce::var ("drive"), juce::var ("presence"), juce::var ("tones") }));
+        world.setProperty ("rings", r);
+
+        auto* ring = new Obj();
+        ring->setProperty ("from", KnobRing::from);
+        ring->setProperty ("sweep", KnobRing::sweep);
+        ring->setProperty ("light", colour (ringLight));
+        ring->setProperty ("rest", colour (KnobRing::restOf (ringLight)));
+        ring->setProperty ("litAlpha", KnobRing::litAlpha);
+        ring->setProperty ("litAlphaHand", KnobRing::litAlphaHand);
+        ring->setProperty ("glowAlpha", KnobRing::glowAlpha);
+        ring->setProperty ("glowAlphaHand", KnobRing::glowAlphaHand);
+        ring->setProperty ("glowRadius", KnobRing::glowRadius);
+        ring->setProperty ("glowRadiusHand", KnobRing::glowRadiusHand);
+        ring->setProperty ("rimOfKnob", KnobRing::rimOfKnob);
+        ring->setProperty ("rimAlpha", KnobRing::rimAlpha);
+        world.setProperty ("knobRing", juce::var (ring));
+    }
+
+    // EACH CHANNEL'S SOCKETS, in the lineup's "face": the rover lays no row of the console's tone knobs, so the console
+    // wrote none. Here each socket the channel has a tone for by name (as bindTones binds it): the knob's box, its
+    // pictogram's box — the pictogram in the cabin, no icon of its own — its name, the pack's tone and its parameter. A
+    // socket missing from a channel's list stands frozen on it.
+    if (auto* line = kit.getProperty ("lineup").getDynamicObject())
+        if (auto* all = line->getProperty ("channels").getArray())
+            for (int c = 0; c < all->size() && c < channels.count(); ++c)
+                if (auto* f = all->getReference (c).getProperty ("face", {}).getDynamicObject())
+                {
+                    const auto names = channels.toneNamesOf (c);
+                    juce::Array<juce::var> knobs;
+                    for (size_t s = 0; s < tones.size(); ++s)
+                    {
+                        const int t = s == presenceSocket ? names.indexOf ("Presence", true) : channels.toneNamed (c, toneBands[s - 1]);
+                        if (t < 0)
+                            continue;
+                        const auto& [sign, at] = knobSigns[s];
+                        auto* k = new Obj();
+                        k->setProperty ("box", rect (boxOf (*tones[s])));
+                        k->setProperty ("label", rect (glyphs::boxOf (sign, centreOf (at), at.scale)));
+                        k->setProperty ("icon", juce::var());
+                        k->setProperty ("text", knobNames[s]);
+                        k->setProperty ("tone", t);
+                        k->setProperty ("param", channels.toneOf (c, t));
+                        knobs.add (juce::var (k));
+                    }
+                    f->setProperty ("tones", knobs);
+                }
+
+    // THE COLUMNS, left to right: COMP's threshold, BLEND, and the three effects' amounts.
+    {
+        struct F { const char* id; const char* name; const face::ColumnFader* c; const char* param; const char* travel; const char* reading; };
+        const F faders[] {
+            { "comp",   "COMP",   &comp,   params::compThreshold, "travel = threshold / -48 dB: 0 dB at the foot, -48 dB at the head", "whole dB" },
+            { "blend",  "BLEND",  &blend,  params::ampBlend,      "the value, 0..1, bottom to top", "percent" },
+            { "octave", "OCTAVE", &octave, params::octaveAmount,  "the value, 0..1, bottom to top", "percent" },
+            { "chorus", "CHORUS", &chorus, params::chorusAmount,  "the value, 0..1, bottom to top", "percent" },
+            { "reverb", "REVERB", &reverb, params::reverbMix,     "the value / 100, bottom to top", "percent" } };
+        juce::Array<juce::var> a;
+        for (const auto& f : faders)
+        {
+            auto* v = new Obj();
+            v->setProperty ("id", f.id); v->setProperty ("name", f.name); v->setProperty ("box", rect (boxOf (*f.c)));
+            v->setProperty ("sprite", "fader-cap"); v->setProperty ("capLength", layout::faderCapLength);
+            v->setProperty ("param", f.param); v->setProperty ("travel", f.travel); v->setProperty ("reading", f.reading);
+            a.add (juce::var (v));
+        }
+        world.setProperty ("columns", a);
+    }
+
+    // COMP'S SQUEEZE: its gain reduction as a column filling down, its full span.
+    {
+        auto* g = new Obj();
+        g->setProperty ("box", rect (boxOf (squeeze))); g->setProperty ("slot", rect (layout::compGrSlot)); g->setProperty ("across", false);
+        g->setProperty ("rangeDb", redgroove::GrColumn::rangeDb); g->setProperty ("reads", "COMP's gain reduction in dB (AmpProcessor::compGrDb)");
+        world.setProperty ("squeeze", g);
+    }
+
+    // THE CUTS' SWITCHES: two positions each, the one it stands at lit; the parameter's value is the position. Their words
+    // either side are the cabin's (B612, in cabin.webp): the switches write none.
+    {
+        struct S { const char* id; const redgroove::SlideSwitch* sw; const char* left; const char* right; const char* param; };
+        const S cuts[] { { "lowCut", &lowCut, "5STR", "4STR", params::bassHpf }, { "highCut", &highCut, "FING", "SLAP", params::bassLpf } };
+        juce::Array<juce::var> a;
+        for (const auto& w : cuts)
+        {
+            auto* v = new Obj();
+            const auto box = boxOf (*w.sw);
+            v->setProperty ("id", w.id); v->setProperty ("box", rect (box)); v->setProperty ("slot", rect (w.sw->slot + box.getPosition()));
+            v->setProperty ("words", list ({ juce::var (w.left), juce::var (w.right) }));
+            v->setProperty ("param", w.param); v->setProperty ("values", list ({ 0, 1 }));
+            a.add (juce::var (v));
+        }
+        world.setProperty ("switches", a);
+    }
+
+    // THE CABINET'S SCREEN: its slider; and the one reading, the playing cabinet's name over it.
+    {
+        auto* c = new Obj();
+        c->setProperty ("box", rect (boxOf (cabinet)));
+        c->setProperty ("shows", "the cabinet's slider lying across the screen: a notch each of the bass's dozen (lineup.cabinets, cabSteps), "
+                                 "heard at the notch nearest the cap while it moves, kept where it settles");
+        world.setProperty ("cabinetScreen", c);
+
+        auto* v = new Obj();
+        v->setProperty ("id", "cabinet"); v->setProperty ("box", rect (boxOf (*cabinetLabel)));
+        v->setProperty ("format", "the playing cabinet's name, the dozen's number left out: 8x10 STACK; OFF while the cabinet is out");
+        world.setProperty ("readings", list ({ juce::var (v) }));
+        world.setProperty ("readingPx", stage::px13);
+    }
+
+    kit.setProperty ("window", rect (layout::view));
+    kit.setProperty ("stills", list ({ juce::var ("still.webp") }));
+
+    // THE POSTERS: the rover as it opens, and one for each place of the lever — PARK, SLOW, FAST — through the glass the
+    // view's first frame there. The lever stood at once where the rover opens: when the window first comes up it is still
+    // easing there from PARK, and the top poster would catch it half way.
+    webPoses.count = (int) layout::leverStops.size();
+    webPoses.opening = parked ? 0 : channels.active() + 1;
+    lever.setPlace (webPoses.opening, false, false);
+    webPoses.standAt = [this] (int at)
+    {
+        lever.onPlace (at);
+        lever.setPlace (at, false, false);
+    };
+    webStill = {};
+    webPoses.firstFrame = [this, dir] (int, std::function<void (juce::Image)> done)
+    {
+        const auto box = layout::view * 2.0f;
+        view->firstFrame (makeDrive(), juce::roundToInt (box.getWidth()), juce::roundToInt (box.getHeight()),
+                          [this, dir, then = std::move (done)] (juce::Image frame)
+                          {
+                              if (frame.isValid() && ! webStill.isValid())
+                              {
+                                  webStill = frame;
+                                  writeForWeb (dir.getChildFile ("still.webp"), webStill);
+                              }
+                              then (frame);
+                          });
+    };
+    webPoses.live = "the view's first frame for the place: the Mars plains (redpaw::PlainsDrive), the stand-in until the Io world is "
+                    "ported, on the GPU from its start, at the place's gear (PARK parked), settled, nothing stepped (t = 0); the top "
+                    "poster is the place the app opens at";
+    webPoses.still = [this] (int) { return webStill; };
+    webPoses.window = layout::view;
+    webPoses.hidden = { view.get() };
+}
+
+//==============================================================================
 /** What the window shows — the view on the GPU, the 1993 landscape on the CPU, or the still — and how often; whether the
     view answers the bass; and full screen. The machine's, kept with its settings. */
 void IoEditor::addWindowSections (juce::PopupMenu& menu)
