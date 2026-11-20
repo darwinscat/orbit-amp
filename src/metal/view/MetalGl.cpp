@@ -867,16 +867,19 @@ void MetalGl::drawScene (int rw, int rh, int cw, int ch)
             glUniform2f (p.u ("uTanHalf"), (float) th, (float) tv); glUniform1f (p.u ("uShear"), (float) shear); glUniform1f (p.u ("uPxAng"), (float) pxAng);
             glUniform1f (p.u ("uAurT"), (float) std::fmod (s.aurora, 100000.0)); glUniform1f (p.u ("uFlat"), (float) Q.flat);
             {
-                // the curtains' terms that vary only with the aurora's clock, in floats as the shader had them
+                // the curtains' terms that vary only with the aurora's clock, in floats as the shader had them. The fine
+                // waver's and the ripples' phases are the sums of a speed that sways both ways (0.9 sin (0.031 T + k), 0.45 sin
+                // (0.023 T + 0.7 k)), so their pace stays what it is at the start; the prototype wrote them T times the sway,
+                // whose pace grows with T, until minutes in the edge flickered and in the storm ran into a blur.
                 const float T = (float) std::fmod (s.aurora, 100000.0);
                 std::array<float, 16> A {}, B {};
                 for (int k = 0; k < 4; ++k)
                 {
                     const float fk = (float) k;
                     A[(size_t) k * 4]     = 0.004f * std::sin (T * 0.05f + fk * 1.7f);
-                    A[(size_t) k * 4 + 1] = T * 0.9f * std::sin (T * 0.031f + fk);
+                    A[(size_t) k * 4 + 1] = -(0.9f / 0.031f) * std::cos (T * 0.031f + fk);
                     A[(size_t) k * 4 + 2] = 0.010f * std::sin (T * 0.11f + fk * 2.3f);
-                    A[(size_t) k * 4 + 3] = T * 0.45f * std::sin (T * 0.023f + fk * 0.7f);
+                    A[(size_t) k * 4 + 3] = -(0.45f / 0.023f) * std::cos (T * 0.023f + fk * 0.7f);
                     B[(size_t) k * 4]     = 0.8f + 0.2f * std::sin (T * 0.13f + fk * 1.9f);
                 }
                 glUniform4fv (p.u ("uCurtA[0]"), 4, A.data()); glUniform4fv (p.u ("uCurtB[0]"), 4, B.data());
