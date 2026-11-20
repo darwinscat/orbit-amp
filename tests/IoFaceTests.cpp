@@ -20,7 +20,7 @@
 //     and BLEND's places over their ranges reach the drive as the time of day and Jupiter's phase, PRESENCE's the sulphur
 //     snow — 0.2 as the face opens, 1.0 with the knob turned full — and a state saved with PRESENCE full and restored over
 //     another brings it back, the parameter and the world's snow both; the face's night glow follows how dark the world says the cabin is (IoDrive::cabinDark) — dark at
-//     DRIVE's end, the day at its start; and the world finds every file it reads where the build lays them out, the
+//     DRIVE's start, the day at its end; and the world finds every file it reads where the build lays them out, the
 //     factory folder's Faces/IoBass (io::shippedArt): both plates, a mesh and its table for every variant of the finds,
 //     the skylight's pit radius.
 //
@@ -442,11 +442,12 @@ int ORBITAMP_GATE_MAIN()
             return std::pair<float, float> { d != nullptr ? d->cabinDark() : -1.0f, io->cabinDark() };
         };
         const auto step = [] (float share) { return (float) juce::roundToInt (share * (float) io::Cabin::darkSteps) / (float) io::Cabin::darkSteps; };
-        const auto night = darkAt (10.0f), noon = darkAt (0.0f);
+        // DRIVE turned up is the day (the owner, 20.11): its foot the night, its head the highest Sun.
+        const auto night = darkAt (0.0f), noon = darkAt (10.0f);
         check (night.first > 0.5f && juce::approximatelyEqual (night.second, step (night.first))
                    && noon.first < 0.2f && juce::approximatelyEqual (noon.second, step (noon.first)),
-               "the night glow follows the world: the cabin " + juce::String (night.first, 3) + " dark at DRIVE 10, the face "
-                   + juce::String (night.second, 3) + "; " + juce::String (noon.first, 3) + " at DRIVE 0, the face " + juce::String (noon.second, 3));
+               "the night glow follows the world: the cabin " + juce::String (night.first, 3) + " dark at DRIVE 0, the face "
+                   + juce::String (night.second, 3) + "; " + juce::String (noon.first, 3) + " at DRIVE 10, the face " + juce::String (noon.second, 3));
     }
 
     // THE WORLD'S FILES, as the build lays them out: what io::shippedArt reads from the factory folder's Faces/IoBass.
