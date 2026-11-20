@@ -5,10 +5,10 @@ plate_powered        plate     648.0  716.0  196.0   30.0
 sock_bass            knob      694.0  846.0   80.0   80.0
 sock_cab_picture     picture  1354.0  875.0  244.0   88.0
 sock_cab_screen      screen   1354.0  806.0  244.0   34.0
-sock_comp            fader     331.0  850.0   16.0   67.0
-sock_comp_gr         meter     356.0  850.0   14.0   67.0
-sock_fx1             fader     993.0  850.0   16.0   67.0
-sock_fx2             fader    1068.0  850.0   16.0   67.0
+sock_comp            fader     331.0  860.5   16.0   88.0
+sock_comp_gr         meter     356.0  860.5   14.0   88.0
+sock_fx1             fader     993.0  860.5   16.0   88.0
+sock_fx2             fader    1068.0  860.5   16.0   88.0
 sock_gain            knob      465.0  850.0  112.0  112.0
 sock_gate            button     92.0  907.0   92.0   26.0
 sock_in_fader        fader      70.0  824.0   16.0   88.0
@@ -27,7 +27,7 @@ sock_limiter         button   1580.0  907.0   92.0   26.0
 sock_middle          knob      784.0  846.0   80.0   80.0
 sock_out_fader       fader    1602.0  824.0   16.0   88.0
 sock_out_meter       meter    1558.0  824.0   14.0   88.0
-sock_reverb          fader    1143.0  850.0   16.0   67.0
+sock_reverb          fader    1143.0  860.5   16.0   88.0
 sock_treble          knob      874.0  846.0   80.0   80.0
 sock_tuner_screen    screen    267.0  718.0  446.0   38.0
-sock_volume          fader     564.0  850.0   16.0   67.0
+sock_volume          fader     564.0  860.5   16.0   88.0

@@ -211,6 +211,12 @@ juce::Rectangle<int> Cabin::historyArea() const
     return juce::Rectangle<float> (keyX.front() - 50.0f, keyRowY - 26.0f, keyX.back() - keyX.front() + 100.0f, 52.0f).toNearestInt();
 }
 
+juce::Image Cabin::withoutPendant (float scale) const
+{
+    const juce::ScopedValueSetter<bool> leftOut (pendantLeftOut, true);
+    return staticImage (scale);
+}
+
 void Cabin::paintStatic (juce::Graphics& g, float scale) const
 {
     using namespace layout;
@@ -222,7 +228,7 @@ void Cabin::paintStatic (juce::Graphics& g, float scale) const
     const auto& art = FaceArt::of();
     if (art.bg.isValid() && ! worldHasIt)
         g.drawImage (art.bg, juce::Rectangle<float> (0.0f, 0.0f, width, height));
-    if (art.pendant.isValid() && ! worldHasIt)
+    if (art.pendant.isValid() && ! worldHasIt && ! pendantLeftOut)
         g.drawImage (art.pendant, pendant);
 
     // The family's cat, cut into the maker's plate — its cap orange (view/CaliforniaCap.h), the cat on it in the van's
@@ -882,6 +888,11 @@ void CaliforniaEditor::webExtras (const juce::File& dir, juce::DynamicObject& ki
 
     kit.setProperty ("window", rect (layout::view));
     kit.setProperty ("stills", list ({ juce::var ("still.webp") }));
+
+    // THE PLATE FOR THE SITE'S SWINGING PENDANT: cabin.webp with the pendant left out (Cabin::withoutPendant), at its three
+    // sizes — cabin-swing.webp, cabin-swing@1x.webp, cabin-swing@half.webp — for a page that lays it over a view swinging
+    // its own pendant (the live view, california-wasm). The README names it; places.json keeps the family's keys alone.
+    web::writeThreeSizes (dir, "cabin-swing", cabin().withoutPendant (2.0f), "cabinSwing", web::halfCabinQuality);
 
     // THE POSTERS: the van as it opens, and one for each place of the lever — PARK, CLEAN, DIRTY — through the glass the
     // view's first frame there.

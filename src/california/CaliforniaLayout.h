@@ -92,15 +92,17 @@ inline const juce::Rectangle<float> leverBox { 188.0f, 797.0f, 56.0f, 112.0f };
 inline constexpr float leverGlyphX = 276.0f, leverGlyphScale = 1.2f;
 inline constexpr float parkLetterX = 268.0f, parkLetterBaseline = 825.5f, parkLetterSize = 21.0f;
 
-inline const juce::Rectangle<float> compSlot   = socket (331.0f, 850.0f, 16.0f, 67.0f);
-inline const juce::Rectangle<float> compGrSlot = socket (356.0f, 850.0f, 14.0f, 67.0f);
+// COMP's, its squeeze's, VOLUME's and the effects' slots are as long as IN's and OUT's (catbay 5503ec6): 88, their tops
+// where they were, at 816.5 — the pictograms over them did not move.
+inline const juce::Rectangle<float> compSlot   = socket (331.0f, 860.5f, 16.0f, 88.0f);
+inline const juce::Rectangle<float> compGrSlot = socket (356.0f, 860.5f, 14.0f, 88.0f);
 inline constexpr float compGlyphX = 340.0f;
 
 inline const juce::Point<float> gain { 465.0f, 850.0f };
 inline constexpr float gainSocket = 112.0f, gainKnob = 97.0f;
 inline constexpr float gainGlyphY = 776.0f;
 
-inline const juce::Rectangle<float> volumeSlot = socket (564.0f, 850.0f, 16.0f, 67.0f);
+inline const juce::Rectangle<float> volumeSlot = socket (564.0f, 860.5f, 16.0f, 88.0f);
 inline constexpr float volumeGlyphX = 566.0f;
 
 // TONE: three sockets, BASS, MIDDLE and TREBLE — each the playing channel's tone of that name.
@@ -110,7 +112,7 @@ inline constexpr float toneY = 846.0f, toneSocket = 80.0f, toneKnob = 66.0f;
 // THE EFFECTS: DELAY, PHASER and REVERB, a vertical fader in each slot.
 inline constexpr std::array<float, 3> effectX { 993.0f, 1068.0f, 1143.0f };
 inline constexpr std::array<float, 3> effectGlyphX { 996.0f, 1071.0f, 1143.0f };
-inline constexpr float effectY = 850.0f, effectSlotHeight = 67.0f, effectFaderWidth = 44.0f;
+inline constexpr float effectY = 860.5f, effectSlotHeight = 88.0f, effectFaderWidth = 44.0f;
 
 // THE PICTOGRAMS OVER THE KNOBS AND THE FADERS: their row, and how large.
 inline constexpr float glyphY = 785.0f, glyphScale = 1.35f, smallGlyphScale = 1.3f;

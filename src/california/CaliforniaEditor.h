@@ -31,7 +31,14 @@ class Cabin final : public face::Picture
 public:
     std::function<bool()> worldDrawsPanel;
 
+    /** THE PLATE FOR A PENDANT SWUNG UNDER IT (the site's cabin-swing.webp): the whole picture as staticImage paints it,
+        the pendant left out — where it hung, the dashboard's own glass, transparent but for its tint and the mirror's
+        foot — so that a view swinging its own pendant under the plate shows it through. */
+    juce::Image withoutPendant (float scale) const;
+
 private:
+    mutable bool pendantLeftOut = false;
+
     void paintStatic (juce::Graphics&, float scale) const override;
     juce::Colour signInk() const override { return glyphs::ink; }
     juce::Rectangle<int> historyArea() const override;

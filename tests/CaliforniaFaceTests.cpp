@@ -12,6 +12,9 @@
 //   - COMP's fader the threshold alone, DELAY's and REVERB's their shares; VOLUME and PHASER dark, taking no hand; what
 //     the van holds (Lineup::pinned) — COMP in the strip and on at 3/4, 4:1, OPTO; the delay and the room on;
 //   - every pictogram has its spot, which names it;
+//   - COMP, its squeeze, VOLUME, DELAY, PHASER and REVERB in slots 88 long, their tops at 816.5 (catbay 5503ec6), the
+//     pictograms over the faders where they stood;
+//   - the plate for a swinging pendant (Cabin::withoutPendant, the kit's cabin-swing.webp) is the cabin less its pendant;
 //   - a still of the face renders: the cream panel painted, a pictogram's ink on it;
 //   - THE WORLD BEHIND THE GLASS is California (CaliforniaDrive), in the channel's gear — CLEAN 1, DIRTY 2 — and parked
 //     at PARK; every file it reads lies in the factory folder's Faces/CaliforniaAmp as the build lays it out
@@ -26,6 +29,7 @@
 #include "channels/Engine.h"
 #include "device/DeviceLibrary.h"
 #include "face/Controls.h"
+#include "california/CaliforniaEditor.h"
 #include "california/CaliforniaFaceArt.h"
 #include "california/CaliforniaLayout.h"
 #include "device/FactorySet.h"
@@ -265,6 +269,67 @@ int ORBITAMP_GATE_MAIN()
                 missing.add (s);
         check (missing.isEmpty(), "every pictogram has a spot that names it" + (missing.isEmpty() ? juce::String() : ": not " + missing.joinIntoString (", ")));
     }
+
+    // THE SLOTS AS LONG AS IN'S AND OUT'S (catbay 5503ec6): COMP's fader and its squeeze, VOLUME, DELAY, PHASER and REVERB
+    // each in a slot 88 long, its top at 816.5 where the shorter slot's was; each control's box on whole pixels round its
+    // slot, the squeeze's 4 in from either end as the meters are; and each fader's pictogram where it stood, in its row
+    // just over the top.
+    {
+        struct Slot { const char* id; juce::Rectangle<float> slot; float inset; };
+        const auto effect = [] (size_t i) { return juce::Rectangle<float> (16.0f, layout::effectSlotHeight).withCentre ({ layout::effectX[i], layout::effectY }); };
+        const Slot slots[] { { "comp", layout::compSlot, 0.0f }, { "squeeze", layout::compGrSlot, 4.0f }, { "volume", layout::volumeSlot, 0.0f },
+                             { "delay", effect (0), 0.0f }, { "phaser", effect (1), 0.0f }, { "reverb", effect (2), 0.0f } };
+        juce::StringArray wrong, signs;
+        for (const auto& s : slots)
+        {
+            auto* c = named (*face, s.id);
+            const auto box = c != nullptr ? c->getBounds().toFloat().expanded (0.0f, s.inset) : juce::Rectangle<float>();
+            if (s.slot.getHeight() != 88.0f || s.slot.getY() != 816.5f || box.getHeight() != 88.0f
+                || std::abs (box.getY() - s.slot.getY()) > 0.5f || std::abs (box.getCentreX() - s.slot.getCentreX()) > 0.5f)
+                wrong.add (juce::String (s.id) + " slot " + s.slot.toString() + ", box " + box.toString());
+            if (s.inset > 0.0f || c == nullptr)
+                continue;
+            auto* sign = named (*face, juce::String ("sign-") + s.id);
+            if (sign == nullptr || std::abs (sign->getBounds().toFloat().getCentreY() - layout::glyphY) > 1.0f
+                || sign->getBottom() > c->getY() || c->getY() - sign->getBottom() > 24)
+                signs.add (juce::String (s.id) + (sign != nullptr ? " " + sign->getBounds().toString() : juce::String()));
+        }
+        check (wrong.isEmpty(), "COMP, its squeeze, VOLUME, DELAY, PHASER and REVERB stand in slots 88 long, their tops at 816.5"
+                                    + (wrong.isEmpty() ? juce::String() : ": not " + wrong.joinIntoString ("; ")));
+        check (signs.isEmpty(), "...each fader's pictogram where it stood, in its row just over its top"
+                                    + (signs.isEmpty() ? juce::String() : ": not " + signs.joinIntoString ("; ")));
+    }
+
+    // THE PLATE FOR A SWINGING PENDANT (the site's cabin-swing.webp): the cabin's picture with the pendant left out — every
+    // pixel outside the pendant's box the cabin's own, and where the pendant hung, solid, the glass now, never thicker.
+    if (auto* cabin = findOf<california::Cabin> (*face))
+    {
+        const auto plate = cabin->staticImage (2.0f), swing = cabin->withoutPendant (2.0f);
+        const auto box = (layout::pendant * 2.0f).getSmallestIntegerContainer();
+        int outside = 0, cleared = 0, thicker = 0;
+        if (plate.isValid() && swing.isValid() && plate.getBounds() == swing.getBounds())
+        {
+            const juce::Image::BitmapData a (plate, juce::Image::BitmapData::readOnly), b (swing, juce::Image::BitmapData::readOnly);
+            for (int y = 0; y < a.height; ++y)
+                for (int x = 0; x < a.width; ++x)
+                {
+                    const auto p = a.getPixelColour (x, y), q = b.getPixelColour (x, y);
+                    if (! box.contains (x, y))
+                        outside += p != q ? 1 : 0;
+                    else
+                    {
+                        cleared += p.getAlpha() > 230 && q.getAlpha() < 26 ? 1 : 0;
+                        thicker += q.getAlpha() > p.getAlpha() + 1 ? 1 : 0;
+                    }
+                }
+        }
+        check (swing.isValid() && outside == 0 && cleared > 5000 && thicker == 0,
+               "the plate for a swinging pendant is the cabin with the pendant taken out (" + juce::String (cleared)
+                   + " of its solid pixels now glass, " + juce::String (outside) + " changed outside its box, "
+                   + juce::String (thicker) + " thicker in it)");
+    }
+    else
+        check (false, "the van's cabin is on the face");
 
     // A STILL: the face painted, its cream panel and a pictogram's ink on it.
     {
