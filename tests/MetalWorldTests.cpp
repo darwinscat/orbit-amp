@@ -708,6 +708,13 @@ namespace
         check (found.meshOf.size() == 16 && meshesThere == 16, "shipped: the eight meshes and the groves' eight guitars are found and there");
         check (found.letters.censored.has_value() && ! found.bannersTxt.empty() && found.credits.size() == 8 && found.credits[0].find ("LasquetiSpice") != std::string::npos,
                "shipped: the CENSORED cell, the banners' table, eight credits (the lava crawler's file has none), the dragon's first");
+        // What a late batch of files is judged by (MetalDrive::takeArt, MetalGl::takeArt): the shipped finds bring the
+        // world something, no files bring it nothing, and a batch with the plates alone brings no finds.
+        M::Art plates;
+        plates.bytes = [dir] (const std::string& path) { return path.rfind ("dashboard", 0) == 0 ? bytesOf (fs::path (dir) / path) : std::vector<std::uint8_t> {}; };
+        plates.list = [] (const std::string&) { return std::vector<std::string> {}; };
+        check (found.brings() && ! M::find (M::Art {}).brings() && ! M::find (plates).brings(),
+               "shipped: the finds bring the world something; no files, or the plates alone, bring it nothing");
     }
 }
 

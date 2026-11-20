@@ -362,6 +362,30 @@ bool MetalGl::loadMesh (const std::string& key, const std::vector<std::uint8_t>&
 
 void MetalGl::makeArt()
 {
+    makePlates();
+    makeFinds();
+    glBindBuffer (GL_ARRAY_BUFFER, 0);
+}
+
+void MetalGl::takeArt (Art a, Found f)
+{
+    art = std::move (a);
+    if (texDash == 0)
+    {
+        makePlates();
+        outerKept = false;          // the plate outside the window's box is drawn anew
+    }
+    if (! found.brings() && f.brings())
+    {
+        found = std::move (f);
+        makeFinds();
+    }
+    art = {};
+    glBindBuffer (GL_ARRAY_BUFFER, 0);
+}
+
+void MetalGl::makePlates()
+{
     // THE CABIN'S PLATES: premultiplied with their mips; the window's box the union of both plates' clear pixels.
     if (art.picture)
     {
@@ -386,6 +410,10 @@ void MetalGl::makeArt()
             glassBox = box; hasGlassBox = any && texDash != 0;
         }
     }
+}
+
+void MetalGl::makeFinds()
+{
     // THE BURNING LETTERS: the owner's pictures packed into the atlas found (find), the word CENSORED among them.
     if (art.picture && found.letters.width > 0 && ! found.letters.pieces.empty())
     {
@@ -450,7 +478,6 @@ void MetalGl::makeArt()
             }
         }
     }
-    glBindBuffer (GL_ARRAY_BUFFER, 0);
 }
 
 void MetalGl::makeBuffers()

@@ -35,7 +35,9 @@
 // world: `calls (view, say, own)`, which adds its calls to the view, each saying what it wants as a message of its
 // own; and `own (own)`, made where the world is drawn, at once, which is handed the module once it is made (`made
 // (M)`, before anything is built; what it gives back is waited for before the renderer is made) and each of those
-// messages (`said (m)`), and told when the view is destroyed (`gone ()`).
+// messages (`said (m)`), told after each frame it draws (`frame ()`, where it has one) and when the view is destroyed
+// (`gone ()`). It is handed what the page is told too (`own (own, post)`): a message of its own posted so goes to the
+// page, to the function `calls` gives back, if it gives one (the metal world's lightning, metal-view.js).
 //
 // The canvas lies over the windscreen's box. It renders at the screen's pixels (at most twice the CSS size) and
 // comes down to 0.75 and 0.5 of that by itself when frames run late, climbing back when they have room; it stops
@@ -66,7 +68,7 @@ const viewAttributes = { antialias: false, alpha: false, depth: false, stencil: 
 function worldDrawn (canvas, options, post, world)
 {
     const { gears = 2, test = null, place = null, hold = false } = options;
-    const own = world.own ? world.own (options.own || {}) : null;     // the world's own, as its file has it
+    const own = world.own ? world.own (options.own || {}, post) : null;   // the world's own, as its file has it
     let gear = options.gear ?? 1, turbo = !! options.turbo;
     let wipers = options.wipers ?? 0, lights = options.lights || [false, false];
     let cssW = options.cssW || 0, cssH = options.cssH || 0, dpr = options.dpr || 1;
@@ -121,6 +123,7 @@ function worldDrawn (canvas, options, post, world)
         size ();
         if (M._view_hear) { M._view_hear (news ? heard : t - heardAt < 0.1 ? lastHeard : 0); heard = 0; news = false; }
         M._view_frame (width, height, dt, steer);
+        if (own && own.frame) own.frame ();
         if (! drawn) { drawn = true; post ({ type: 'ready' }); }
     }
     function run () { if (ready && active && ! failed && ! test && ! frame) { last = 0; frame = raf (tick); } }
@@ -161,6 +164,7 @@ function worldDrawn (canvas, options, post, world)
             // The first frame, settled, drawn with no step and kept until the page starts the view.
             size ();
             M._view_draw (width, height);
+            if (own && own.frame) own.frame ();
             drawn = true;
             post ({ type: 'ready' });
         }
@@ -245,7 +249,7 @@ function createWorldView (canvas, world, url, { steer = false, onFallback = () =
                                                 gears = 2, gear = 1, turbo = false, wipers = 0, lights = [false, false],
                                                 place = null, test = null, worker = true, hold = false, own = null } = {})
 {
-    let failed = false, quality = VIEW_RUNGS[0], settleReady = null, gone = () => {};
+    let failed = false, quality = VIEW_RUNGS[0], settleReady = null, gone = () => {}, told = null;
     const readyPromise = new Promise (r => { settleReady = r; });
     function said (m)
     {
@@ -254,6 +258,7 @@ function createWorldView (canvas, world, url, { steer = false, onFallback = () =
         else if (m.type === 'quality')  quality = m.value;
         else if (m.type === 'frame')    onFrame ({ width: m.width, height: m.height, data: m.data });
         else if (m.type === 'gone')     gone ();
+        else if (told)                  told (m);       // the world's own, to its calls
     }
 
     const measured = () => ({ cssW: canvas.clientWidth, cssH: canvas.clientHeight, dpr: Math.min (2, globalThis.devicePixelRatio || 1) });
@@ -342,7 +347,7 @@ function createWorldView (canvas, world, url, { steer = false, onFallback = () =
         /** What is played: the amp's input's peak since the last call, linear (1 = full scale). */
         view.hear = peak => send ({ type: 'hear', peak: Math.abs (+peak || 0) });
     }
-    if (world.calls) world.calls (view, send, own);
+    if (world.calls) told = world.calls (view, send, own) || null;
     return view;
 }
 
