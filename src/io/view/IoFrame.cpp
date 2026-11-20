@@ -355,6 +355,19 @@ IoWorld::Frame IoWorld::frame()
     F.sunV = { dot3 (F.sun, basis.r), dot3 (F.sun, basis.u), -dot3 (F.sun, basis.f) };
     return F;
 }
+std::optional<V3> IoWorld::inkAt (const uint8_t* rgba, int w, int h, double hx, double hy, double R)
+{
+    double r = 0, g = 0, b = 0; int n = 0;
+    for (int y = (int) std::floor (hy - R); y <= (int) std::ceil (hy + R); ++y)
+        for (int x = (int) std::floor (hx - R); x <= (int) std::ceil (hx + R); ++x)
+            if (x >= 0 && y >= 0 && x < w && y < h && hyp (x + 0.5 - hx, y + 0.5 - hy) <= R)
+            {
+                const size_t i = ((size_t) y * (size_t) w + (size_t) x) * 4;
+                r += rgba[i]; g += rgba[i + 1]; b += rgba[i + 2]; ++n;
+            }
+    if (n == 0) return {};
+    return V3 { r / n / 255, g / n / 255, b / n / 255 };
+}
 
 //==============================================================================
 // THE ROCKS' MESH (io-gl.js rockMesh): an icosahedron split once, its corners pushed in and out by a hash

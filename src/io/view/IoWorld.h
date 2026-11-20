@@ -273,6 +273,9 @@ public:
     static V2 needle (double doseValue, double fromDeg = 210, double toDeg = -30) noexcept;
     /** The box round a plate's see-through pixels (fractions: x0, y0, x1, y1, y down), or none (the glass). */
     static std::optional<std::array<double, 4>> glassBounds (const uint8_t* rgba, int w, int h, int margin);
+    /** A plate's ink round a point (io-gl.js setOverlay: the dosimeter's hub as the plate paints it): the mean of the
+        straight RGBA pixels whose centres lie within r px of (x, y), as sRGB 0..1; none when no pixel does. */
+    static std::optional<V3> inkAt (const uint8_t* rgba, int w, int h, double x, double y, double r);
 
     /** WHAT THE RENDERER UPLOADS FOR A FRAME (io-gl.js drawScene's CPU part, in its order): places relative to the
         camera's cell (ccx, ccz). Not const: the hardware's lists round the rover are rebuilt as it crosses a cell (the
@@ -297,6 +300,9 @@ public:
         std::array<std::vector<std::array<float, 12>>, 3> emitters;            // the plumes', the fountains', the puffs' particles
     };
     Frame frame();
+    /** The hardware round the rover by variant, as the last frame() left it (io-gl.js structs[v].list): what the
+        finds' meshes are drawn from, one by one. */
+    const std::array<std::vector<Structure>, numVariants>& hardwareNear() const noexcept { return near_; }
     static constexpr double farCut = 3400.0, sh0Half = 130.0, sh0Ahead = 110.0, rockReach = 85.0, sunI = 2.1;
     static constexpr int maxEmit = 24, maxRocks = 700;
 

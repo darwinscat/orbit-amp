@@ -1515,12 +1515,32 @@ set(IO_VIEW_SOURCES
 if(NOT MSVC)
     set_source_files_properties(src/io/view/IoWorld.cpp src/io/view/IoFrame.cpp PROPERTIES COMPILE_OPTIONS "-ffp-contract=off")
 endif()
+# ...on the GPU behind the rover's cabin (IoGl), handed to the windscreen as an IoDrive: its matrices and light frames
+# matched to the prototype too, so compiled without contraction; the cabin's Glass is the sea's (UnderwaterWorld). The
+# cabin's two plates and the finds' meshes (resources/io, src/io/view/IoArt.h) are read at run time from the factory
+# folder's Faces/IoBass (IO_ART_DIR), never built into a binary; the plates decoded with libwebp.
+set(IO_GL_SOURCES
+    src/io/view/IoGl.cpp
+    src/underwater/view/UnderwaterWorld.cpp)
+if(NOT MSVC)
+    set_source_files_properties(src/io/view/IoGl.cpp PROPERTIES COMPILE_OPTIONS "-ffp-contract=off")
+endif()
+set(IO_ART_SOURCES src/io/view/IoArt.cpp src/underwater/view/UnderwaterArt.cpp)
+view_demo(io_view_demo "IoViewDemo" SOURCES ${REDPAW_VIEW_SOURCES} ${IO_VIEW_SOURCES} ${IO_GL_SOURCES} ${IO_ART_SOURCES} src/face/Renders.cpp
+    DEFINITIONS ORBITAMP_VIEW_DEMO_IO=1)
+target_link_libraries(io_view_demo PRIVATE felitronics::appkit_webp)
+# The demo has no factory folder: the art is read from the source tree unless IO_ART_DIR says otherwise.
+target_compile_definitions(io_view_demo PRIVATE ORBITAMP_IO_ART_DEFAULT="${CMAKE_CURRENT_SOURCE_DIR}/resources/io")
+
 add_executable(io_world_test tests/IoWorldTests.cpp ${IO_VIEW_SOURCES})
 target_include_directories(io_world_test PRIVATE src)
 target_compile_features(io_world_test PRIVATE cxx_std_20)
 target_compile_definitions(io_world_test PRIVATE
     IO_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/io/io-world.txt"
-    IO_FILES="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/io/files")
+    IO_FILES="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/io/files"
+    IO_ART="${CMAKE_CURRENT_SOURCE_DIR}/resources/io")
+# ...and the art it reads at run time (resources/io): the plates' window and the dosimeter's ink, the finds' meshes.
+target_link_libraries(io_world_test PRIVATE felitronics::appkit_webp)
 
 # THE ROVER'S FACE IS WORN BY MORE THAN ONE PRODUCT (src/redpaw/RedPawSkin.h): what every rover is made
 # of is said once here — the renders by the file names the face asks for, as bake-art made them, the

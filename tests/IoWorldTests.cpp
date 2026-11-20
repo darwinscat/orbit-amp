@@ -16,6 +16,9 @@
 // (tests/fixtures/io/files). Returns non-zero on any failure. JUCE-free, like the code under test.
 
 #include "io/view/IoWorld.h"
+#ifdef IO_ART
+ #include <webp/decode.h>
+#endif
 
 #include <algorithm>
 #include <cmath>
@@ -516,6 +519,51 @@ namespace
     }
 }
 
+// THE ART THE WORLD READS AT RUN TIME (resources/io, as the factory folder lays it out): each find's mesh whole and in a
+// variant of its own, the skylight's pit from its table, and the two plates — their window the clear glass the README
+// measured (x 122.5-1549.5, y 73-601.5 stage px: 245-3099, 146-1203 on the plates at 2x, widened by 4 stage px, the union of
+// both), their alpha exact, and the dosimeter's hub ink as the plates paint it (sRGB about 0.046, 0.035, 0.02 in both).
+#ifdef IO_ART
+std::string textOf (const fs::path& p) { const auto b = bytesOf (p); return std::string (b.begin(), b.end()); }
+void shippedArt()
+{
+    const fs::path art = IO_ART;
+    std::vector<int> roles;
+    for (const char* dir : { "mast3d", "dish3d", "module3d", "lander3d", "station3d", "rover3d", "base3d", "tubebase3d", "observatory3d", "plant3d" })
+    {
+        const std::string name = std::string (dir).substr (0, std::string (dir).size() - 2);
+        const auto bytes = bytesOf (art / "finds" / dir / (name + ".mesh"));
+        const auto mesh = W::readMesh (bytes.data(), bytes.size());
+        check (mesh.ok && mesh.nv > 0 && mesh.ni > 0 && bytes.size() >= 16 + (size_t) mesh.nv * 40 + (size_t) mesh.ni * 4, (std::string ("art: ") + dir + "'s mesh").c_str());
+        roles.push_back (W::roleOf (dir));
+        check (W::creditOf (textOf (art / "finds" / dir / (name + ".txt"))) == std::nullopt, (std::string ("art: ") + dir + " is our own").c_str());
+    }
+    for (int v = 0; v < W::numVariants; ++v)
+        check (std::count (roles.begin(), roles.end(), v) == 1, "art: every variant has its one mesh");
+    const auto pit = W::pitRadiusOf (textOf (art / "finds" / "tubebase3d" / "tubebase.txt"));
+    check (pit && std::abs (*pit - 13.0) < 1e-9, "art: the skylight's pit radius is 13 m");
+
+    std::optional<std::array<double, 4>> box;
+    for (const char* plate : { "dashboard.webp", "dashboard_dark.webp" })
+    {
+        const auto bytes = bytesOf (art / plate);
+        int w = 0, h = 0;
+        uint8_t* px = bytes.empty() ? nullptr : WebPDecodeRGBA (bytes.data(), bytes.size(), &w, &h);
+        check (px != nullptr && w == 3344 && h == 1882, (std::string ("art: ") + plate + " is the stage at 2x").c_str());
+        if (px == nullptr) continue;
+        const auto b = W::glassBounds (px, w, h, (int) std::ceil (4.0 * w / 1672));
+        if (b) box = box ? std::array<double, 4> { std::min ((*box)[0], (*b)[0]), std::min ((*box)[1], (*b)[1]), std::max ((*box)[2], (*b)[2]), std::max ((*box)[3], (*b)[3]) } : *b;
+        const double k = w / 1672.0;
+        const auto ink = W::inkAt (px, w, h, 119.2 * k, 564.9 * k, std::max (1.0, 0.8 * k));
+        check (ink && std::abs ((*ink)[0] - 0.046) < 0.012 && std::abs ((*ink)[1] - 0.035) < 0.012 && std::abs ((*ink)[2] - 0.02) < 0.012,
+               (std::string ("art: the dosimeter's hub ink on ") + plate).c_str());
+        WebPFree (px);
+    }
+    check (box && std::abs ((*box)[0] * 3344 - 237) < 0.5 && std::abs ((*box)[1] * 1882 - 138) < 0.5 && std::abs ((*box)[2] * 3344 - 3107) < 0.5
+           && std::abs ((*box)[3] * 1882 - 1211) < 0.5, "art: the window's box is the clear glass, widened by 4 stage px");
+}
+#endif
+
 int main (int argc, char** argv)
 {
     readFixture (argc > 1 ? argv[1] : IO_FIXTURE);
@@ -527,6 +575,9 @@ int main (int argc, char** argv)
     findsEntries (files);
     compare();
     ownChecks();
+   #ifdef IO_ART
+    shippedArt();
+   #endif
     if (failures == 0)
         std::printf ("io_world_test: all passed\n");
     return failures == 0 ? 0 : 1;

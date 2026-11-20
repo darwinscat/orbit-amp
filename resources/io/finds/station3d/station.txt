@@ -1,0 +1,9 @@
+# station: a mesh for the world to draw in 3D. A volcano-monitoring station: a 7 m guyed mast with its sensor boom, dish and beacon (kind 3: blink it), the finned RTG on its skid, the seismometer dome; the footprint centre at the origin, on z = 0. Weathered as it stands (sulphur crust on what faces up); kinds 0 painted, 1 metal, 2 glass, 3 lamp. credit: none: our own model (Darwin's Cat), no one else's assets
+# station.mesh: magic CBMESH1, uint32 vertices, uint32 indices; per vertex 40 B: float32 pos xyz (m, z up,
+#   the footprint's centre on the ground at 0), float32 normal xyz, float32 uv, uint8 rgb (display sRGB),
+#   uint8 kind (0 painted, 1 metal, 2 glass, 3 lamp), uint8 texture (0 none, else a row below), 3 pad;
+#   then uint32 indices, 3 per triangle. A textured face: colour and alpha from the texture, cut under 0.5.
+front -y
+vertices 2188
+triangles 1352
+bytes 103760
