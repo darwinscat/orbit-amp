@@ -1504,6 +1504,24 @@ target_compile_definitions(underwater_world_test PRIVATE
     UNDERWATER_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/underwater/underwater-world.txt"
     UNDERWATER_SPRITES="${CMAKE_CURRENT_SOURCE_DIR}/resources/underwater/sprites.txt")
 
+# Io's world (the SansAmp RBI bass's: the surface of Jupiter's volcanic moon, src/io/view), its CPU half matched to its
+# prototype (io-world.js and io-gl.js's CPU part) number for number with the walker's JS built-ins (Js in
+# WalkerWorld.cpp), so compiled without contraction; against the prototype's own dump (tests/fixtures/io), the
+# finds' readers on the copies of its small files (tests/fixtures/io/files). JUCE-free, links only the world.
+set(IO_VIEW_SOURCES
+    src/io/view/IoWorld.cpp
+    src/io/view/IoFrame.cpp
+    src/redgroove/view/WalkerWorld.cpp)
+if(NOT MSVC)
+    set_source_files_properties(src/io/view/IoWorld.cpp src/io/view/IoFrame.cpp PROPERTIES COMPILE_OPTIONS "-ffp-contract=off")
+endif()
+add_executable(io_world_test tests/IoWorldTests.cpp ${IO_VIEW_SOURCES})
+target_include_directories(io_world_test PRIVATE src)
+target_compile_features(io_world_test PRIVATE cxx_std_20)
+target_compile_definitions(io_world_test PRIVATE
+    IO_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/io/io-world.txt"
+    IO_FILES="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/io/files")
+
 # THE ROVER'S FACE IS WORN BY MORE THAN ONE PRODUCT (src/redpaw/RedPawSkin.h): what every rover is made
 # of is said once here — the renders by the file names the face asks for, as bake-art made them, the
 # sources, the libraries — and each product adds its own skin's file and its own renders. The lamps a
