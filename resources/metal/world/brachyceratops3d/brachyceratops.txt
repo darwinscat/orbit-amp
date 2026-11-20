@@ -1,0 +1,9 @@
+# brachy: a mesh for the world to draw in 3D. A ceratopsian skeleton in steel, 18 m long; credit: "Brachyceratops | reference model (GT)" by Idea, CC0, https://sketchfab.com/3d-models/991e709c87cb4f73af18ac87459885c1 (decimated, scaled, made steel)
+# brachy.mesh: magic CBMESH1, uint32 vertices, uint32 indices; per vertex 40 B: float32 pos xyz (m, z up,
+#   the footprint's centre on the ground at 0), float32 normal xyz, float32 uv, uint8 rgb (display sRGB),
+#   uint8 kind (0 painted, 1 metal, 2 glass, 3 lamp), uint8 texture (0 none, else a row below), 3 pad;
+#   then uint32 indices, 3 per triangle. A textured face: colour and alpha from the texture, cut under 0.5.
+front -y
+vertices 14255
+triangles 12000
+bytes 714216

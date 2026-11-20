@@ -1,0 +1,9 @@
+# fossil: a mesh for the world to draw in 3D. Half sunk: its lowest third is below z = 0; credit: "Dragon Skull 2" and "Stylized Dragon Skull" by Jungle Jim, CC BY 4.0, https://sketchfab.com/3d-models/dragon-skull-2-ba4939ca6aad41c18b6309757d9940bd and https://sketchfab.com/3d-models/stylized-dragon-skull-0ff623c31586458abef515668f30e168 (decimated, made steel)
+# fossil.mesh: magic CBMESH1, uint32 vertices, uint32 indices; per vertex 40 B: float32 pos xyz (m, z up,
+#   the footprint's centre on the ground at 0), float32 normal xyz, float32 uv, uint8 rgb (display sRGB),
+#   uint8 kind (0 painted, 1 metal, 2 glass, 3 lamp), uint8 texture (0 none, else a row below), 3 pad;
+#   then uint32 indices, 3 per triangle. A textured face: colour and alpha from the texture, cut under 0.5.
+front -y
+vertices 4569
+triangles 9000
+bytes 290776

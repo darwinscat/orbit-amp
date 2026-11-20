@@ -17,6 +17,7 @@
 // furnished with what the fixture says the finds bring. Returns non-zero on any failure. JUCE-free, like the code under
 // test.
 
+#include "metal/view/MetalFound.h"
 #include "metal/view/MetalWorld.h"
 
 #include <algorithm>
@@ -106,6 +107,23 @@ namespace
             fixture[label] = e;
         }
     }
+    /** An environment variable's value, or `otherwise` when it is not set (MSVC's _dupenv_s: its getenv warns, C4996). */
+    std::string environment (const char* name, const char* otherwise)
+    {
+       #if defined (_MSC_VER)
+        char* value = nullptr;
+        size_t length = 0;
+        if (_dupenv_s (&value, &length, name) != 0 || value == nullptr)
+            return otherwise;
+        std::string out (value);
+        std::free (value);
+        return out;
+       #else
+        const char* value = std::getenv (name);
+        return value != nullptr ? std::string (value) : std::string (otherwise);
+       #endif
+    }
+
     const std::vector<double>& want (const std::string& label)
     {
         static const std::vector<double> none;
@@ -226,7 +244,7 @@ namespace
         const int nm = (int) want ("finds.landmarks.n").at (0);
         for (int k = 0; k < nm; ++k)
             finds.landmarkTops.push_back ({ unchars (want ("finds.landmarks." + std::to_string (k) + ".role")), want ("finds.landmarks." + std::to_string (k)).at (0) });
-        const auto& d = want ("finds.dragon");
+        const std::vector<double> d = want ("finds.dragon");      // a copy: a reference into a temporary label's lookup warns (gcc -Wdangling-reference)
         const size_t nf = (size_t) d.at (0);
         W::DragonHead h;
         for (size_t f = 0; f < nf; ++f) h.mouth.push_back ({ d[1 + f * 3], d[2 + f * 3], d[3 + f * 3] });
@@ -643,16 +661,67 @@ namespace
     }
 }
 
+namespace
+{
+    /** THE ART AS IT SHIPS (resources/metal, its world/ in WebP): metal::find over it must bring the world the very
+        finds the prototype's folder (or its dump) brings it — the letters' table and atlas cells (the WebP of each PNG
+        the table names, the same size), the groves' deal and names, the landmarks' tops in their order, the dragon's
+        head in every pose — and find every mesh it draws. */
+    void shippedChecks (const std::string& dir)
+    {
+        namespace M = orbitamp::metal;
+        if (! fs::is_directory (fs::path (dir) / "world")) { std::printf ("FAIL shipped: no art at %s\n", dir.c_str()); ++failures; return; }
+        M::Art art;
+        art.bytes = [dir] (const std::string& path) { return bytesOf (fs::path (dir) / path); };
+        art.list = [dir] (const std::string& folder)
+        {
+            std::error_code ec;
+            return fs::is_directory (fs::path (dir) / folder, ec) ? listing (fs::path (dir) / folder) : std::vector<std::string> {};
+        };
+        art.pictureSize = [dir] (const std::string& path) { const auto b = bytesOf (fs::path (dir) / path); return M::webpSize (b.data(), b.size()); };
+        const auto found = M::find (art);
+        const auto& got = found.finds;
+        const auto near = [] (double a, double b) { return std::abs (a - b) <= 1e-9 * std::max (1.0, std::abs (b)); };
+        bool lettersOk = got.letters.size() == finds.letters.size() && ! got.letters.empty();
+        for (size_t k = 0; lettersOk && k < got.letters.size(); ++k)
+        {
+            const auto& a = got.letters[k]; const auto& b = finds.letters[k];
+            lettersOk = a.name == b.name && a.cell == b.cell && near (a.size[0], b.size[0]) && near (a.size[1], b.size[1]) && near (a.up, b.up)
+                     && a.once == b.once && a.colour.has_value() == b.colour.has_value() && (! a.colour || *a.colour == *b.colour);
+        }
+        check (lettersOk, "shipped: the letters' table and cells from the WebP letters are the prototype's");
+        bool guitarsOk = got.guitars.size() == finds.guitars.size() && ! got.guitars.empty() && got.guitarNames == finds.guitarNames;
+        for (size_t i = 0; guitarsOk && i < got.guitars.size(); ++i)
+            guitarsOk = got.guitars[i].grove == finds.guitars[i].grove && got.guitars[i].star == finds.guitars[i].star;
+        check (guitarsOk, "shipped: the groves' deal and names are the prototype's");
+        bool topsOk = got.landmarkTops.size() == finds.landmarkTops.size() && ! got.landmarkTops.empty();
+        for (size_t k = 0; topsOk && k < got.landmarkTops.size(); ++k)
+            topsOk = got.landmarkTops[k].first == finds.landmarkTops[k].first && near (got.landmarkTops[k].second, finds.landmarkTops[k].second);
+        check (topsOk, "shipped: the landmarks' tops, in order, are the prototype's");
+        bool dragonOk = got.dragonHead.has_value() && finds.dragonHead.has_value() && got.dragonHead->mouth.size() == finds.dragonHead->mouth.size();
+        for (size_t f = 0; dragonOk && f < got.dragonHead->mouth.size(); ++f)
+            for (size_t c = 0; c < 3; ++c)
+                dragonOk = dragonOk && near (got.dragonHead->mouth[f][c], finds.dragonHead->mouth[f][c]) && near (got.dragonHead->mid[f][c], finds.dragonHead->mid[f][c]);
+        check (dragonOk, "shipped: the dragon's head in every pose is the prototype's");
+        size_t meshesThere = 0;
+        for (const auto& [role, path] : found.meshOf) if (fs::exists (fs::path (dir) / path)) ++meshesThere;
+        check (found.meshOf.size() == 16 && meshesThere == 16, "shipped: the eight meshes and the groves' eight guitars are found and there");
+        check (found.letters.censored.has_value() && ! found.bannersTxt.empty() && found.credits.size() == 8 && found.credits[0].find ("LasquetiSpice") != std::string::npos,
+               "shipped: the CENSORED cell, the banners' table, eight credits (the lava crawler's file has none), the dragon's first");
+    }
+}
+
 int main (int argc, char** argv)
 {
     readFixture (argc > 1 ? argv[1] : METAL_FIXTURE);
-    const std::string proto = argc > 2 ? argv[2] : (std::getenv ("METAL_PROTOTYPE") ? std::getenv ("METAL_PROTOTYPE") : METAL_PROTOTYPE);
+    const std::string proto = argc > 2 ? argv[2] : environment ("METAL_PROTOTYPE", METAL_PROTOTYPE);
     if (! proto.empty() && fs::is_directory (fs::path (proto) / "finds")) readFinds (proto);
     else findsFromFixture();
     findsEntries();
     makeEntries();
     compare (! findsRead);
     ownChecks();
+    shippedChecks (argc > 3 ? argv[3] : METAL_ART);
     if (failures == 0)
         std::printf ("metal_world_test: all passed\n");
     return failures == 0 ? 0 : 1;

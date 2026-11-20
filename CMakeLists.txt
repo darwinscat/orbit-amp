@@ -1448,6 +1448,7 @@ endif()
 set(METAL_VIEW_SOURCES
     src/metal/view/MetalWorld.cpp
     src/metal/view/MetalFinds.cpp
+    src/metal/view/MetalFound.cpp
     src/redgroove/view/WalkerWorld.cpp)
 if(NOT MSVC)
     set_source_files_properties(src/metal/view/MetalWorld.cpp src/metal/view/MetalFinds.cpp
@@ -1460,6 +1461,12 @@ endif()
 # Faces/DeepGrooveBass, and they are read from there at run time (src/face/Renders.h, UNDERWATER_ART_DIR), decoded
 # with libwebp.
 set(UNDERWATER_ART_SOURCES src/underwater/view/UnderwaterArt.cpp)
+# The metal world on the GPU (src/metal/view/MetalGl.h, metal-gl.js's passes from resources/shaders/metal) and the art
+# it reads at run time (src/metal/view/MetalArt.h): the cabin's two plates, the face's resources/metal/dashboard.webp
+# and dashboard_flash.webp, and resources/metal/world (the owner's meshes, the groves' guitars, the letters, the
+# banners, the dragon; its README.txt), laid out in Faces/MetalAmp and read from there (METAL_ART_DIR).
+set(METAL_GL_SOURCES src/metal/view/MetalGl.cpp)
+set(METAL_ART_SOURCES src/metal/view/MetalArt.cpp)
 
 # A world's demo: a bare window with the windscreen in it over one world — the sea's in the canopy's
 # shape — for looking at it and measuring it. Built only when asked for by name. No audio.
@@ -1489,6 +1496,10 @@ view_demo(underwater_view_demo "UnderwaterViewDemo" SOURCES ${REDPAW_VIEW_SOURCE
 target_link_libraries(underwater_view_demo PRIVATE felitronics::appkit_webp)
 # The demo has no factory folder: the art is read from the source tree unless UNDERWATER_ART_DIR says otherwise.
 target_compile_definitions(underwater_view_demo PRIVATE ORBITAMP_UNDERWATER_ART_DEFAULT="${CMAKE_CURRENT_SOURCE_DIR}/resources/underwater")
+view_demo(metal_view_demo "MetalViewDemo" SOURCES ${REDPAW_VIEW_SOURCES} ${METAL_VIEW_SOURCES} ${METAL_GL_SOURCES} ${METAL_ART_SOURCES} src/face/Renders.cpp
+    DEFINITIONS ORBITAMP_VIEW_DEMO_METAL=1)
+target_link_libraries(metal_view_demo PRIVATE felitronics::appkit_webp)
+target_compile_definitions(metal_view_demo PRIVATE ORBITAMP_METAL_ART_DEFAULT="${CMAKE_CURRENT_SOURCE_DIR}/resources/metal")
 
 # The sea's CPU half against the prototype it was ported from: the start, five scripted flights, the
 # gears, Saturn, the wipers' panes. JUCE-free, links only the world.
@@ -1521,13 +1532,16 @@ target_compile_definitions(underwater_world_test PRIVATE
 # ribbons the renderer uploads, the dragons over two minutes, the ball lightning, the Tesla towers — compared with the
 # prototype's own dump (tests/fixtures/metal). The finds' readers are compared on the prototype's own files when its
 # folder is given (ORBITAMP_METAL_PROTOTYPE, or the test's second argument); without it they are skipped, said so.
+# Then the art as it ships (resources/metal): what the finds there bring the world (src/metal/view/MetalFound.h) must
+# be what the prototype's finds bring it.
 set(ORBITAMP_METAL_PROTOTYPE "" CACHE PATH "The metal world's prototype folder (finds/ in it) for metal_world_test's readers; empty: skipped")
 add_executable(metal_world_test tests/MetalWorldTests.cpp ${METAL_VIEW_SOURCES})
 target_include_directories(metal_world_test PRIVATE src)
 target_compile_features(metal_world_test PRIVATE cxx_std_20)
 target_compile_definitions(metal_world_test PRIVATE
     METAL_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/metal/metal-world.txt"
-    METAL_PROTOTYPE="${ORBITAMP_METAL_PROTOTYPE}")
+    METAL_PROTOTYPE="${ORBITAMP_METAL_PROTOTYPE}"
+    METAL_ART="${CMAKE_CURRENT_SOURCE_DIR}/resources/metal")
 
 # THE ROVER'S FACE IS WORN BY MORE THAN ONE PRODUCT (src/redpaw/RedPawSkin.h): what every rover is made
 # of is said once here — the renders by the file names the face asks for, as bake-art made them, the

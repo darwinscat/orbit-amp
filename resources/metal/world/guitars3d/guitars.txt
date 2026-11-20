@@ -1,0 +1,41 @@
+# guitars: the metal world's guitar statues, one mesh each (CBMESH1, a <name>.txt table beside each),
+#   every one 12 m tall upright on its own 2 m steel pedestal, the footprint centre at the origin on z = 0,
+#   the front toward -y.
+# guitar <name> <file> headstock cx cy cz sx sy sz: the headstock's box (centre, full size; metres, in
+#   that mesh's coordinates) for the censoring mosaic, or "headstock none" for our own designs;
+#   "paint metallic <hex>": a metallic paint (display sRGB), exported as kind 1 in that colour.
+# guitars_pair.mesh (the RG and the BTB together) is an earlier export, not part of this set.
+guitar rg_flame rg_flame.mesh headstock -0.064 -0.035 12.707 1.130 0.789 2.317
+guitar rg_black rg_black.mesh headstock -0.064 -0.035 12.707 1.130 0.789 2.317
+guitar rg_blue rg_blue.mesh headstock -0.064 -0.035 12.707 1.130 0.789 2.317
+guitar rg_white rg_white.mesh headstock -0.064 -0.035 12.707 1.130 0.789 2.317
+guitar btb5 btb5.mesh headstock -0.026 -0.056 13.038 1.462 0.553 1.693
+guitar btb4 btb4.mesh headstock -0.089 -0.067 13.093 1.437 0.530 1.581
+guitar strat_white strat_white.mesh headstock 0.055 -0.213 12.781 1.228 0.412 2.171
+guitar p_avalanche p_avalanche.mesh headstock -0.018 -0.205 12.805 1.329 0.427 2.159
+guitar strat_candy_apple_red strat_candy_apple_red.mesh headstock 0.055 -0.213 12.781 1.228 0.412 2.171 paint metallic a0141e
+guitar pbass_lake_placid_blue pbass_lake_placid_blue.mesh headstock -0.018 -0.205 12.805 1.329 0.427 2.159 paint metallic 285096
+guitar strat_inca_silver strat_inca_silver.mesh headstock 0.055 -0.213 12.781 1.228 0.412 2.171 paint metallic aaacac
+guitar pbass_shoreline_gold pbass_shoreline_gold.mesh headstock -0.018 -0.205 12.805 1.329 0.427 2.159 paint metallic c8aa6e
+guitar strat_sherwood_green strat_sherwood_green.mesh headstock 0.055 -0.213 12.781 1.228 0.412 2.171 paint metallic 2e4b37
+guitar pbass_burgundy_mist pbass_burgundy_mist.mesh headstock -0.018 -0.205 12.805 1.329 0.427 2.159 paint metallic 6e414b
+guitar kestrel kestrel.mesh headstock none
+guitar lantern lantern.mesh headstock none
+guitar lander lander.mesh headstock none
+guitar heron heron.mesh headstock none
+guitar kestrel_blackchrome kestrel_blackchrome.mesh headstock none paint metallic 2a2c30
+guitar kestrel_bloodred kestrel_bloodred.mesh headstock none paint metallic 7a0a0e
+guitar kestrel_brushed kestrel_brushed.mesh headstock none paint metallic b4b6b8
+guitar lantern_gunmetal lantern_gunmetal.mesh headstock none paint metallic 4a4e54
+guitar lantern_brushed lantern_brushed.mesh headstock none paint metallic b4b6b8
+guitar lantern_bloodred lantern_bloodred.mesh headstock none paint metallic 7a0a0e
+guitar lander_blackchrome lander_blackchrome.mesh headstock none paint metallic 2a2c30
+guitar lander_gunmetal lander_gunmetal.mesh headstock none paint metallic 4a4e54
+guitar lander_bloodred lander_bloodred.mesh headstock none paint metallic 7a0a0e
+guitar heron_brushed heron_brushed.mesh headstock none paint metallic b4b6b8
+guitar heron_blackchrome heron_blackchrome.mesh headstock none paint metallic 2a2c30
+guitar heron_gunmetal heron_gunmetal.mesh headstock none paint metallic 4a4e54
+guitar ears_blackchrome ears_blackchrome.mesh headstock none paint metallic 2a2c30
+guitar claw_gunmetal claw_gunmetal.mesh headstock none paint metallic 4a4e54
+guitar fang_bloodred fang_bloodred.mesh headstock none paint metallic 7a0a0e
+guitar bolt_brushed bolt_brushed.mesh headstock none paint metallic b4b6b8
