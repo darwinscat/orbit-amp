@@ -51,6 +51,12 @@ struct Found
     MetalWorld::LetterAtlas letters;
     std::string bannersTxt;
     std::vector<std::string> credits;
+
+    /** Whether anything was found: a part of the world the art furnishes. */
+    bool brings() const noexcept
+    {
+        return finds.dragonHead.has_value() || ! meshOf.empty() || ! guitarSet.empty() || letters.width > 0 || ! bannersTxt.empty();
+    }
 };
 
 /** The finds in the art, as the page finds them: the folders ending in 3d by name (the dragon's apart), each one's first

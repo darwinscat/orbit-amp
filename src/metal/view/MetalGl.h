@@ -61,6 +61,11 @@ public:
 
     /** Builds the programs, buffers and textures, and uploads the art. False when a shader would not build here. */
     bool create();
+    /** Art that came after create(), taken between two frames (the site's module, whose files are fetched while the
+        world runs): the plates if none are on the GPU, what the finds bring (find (art): the letters' atlas, the
+        banners, the meshes, the dragon) if none came before, each made as create() makes it; what is there is kept.
+        The art is let go once taken. */
+    void takeArt (Art a, Found f);
     void destroy();
 
     /** Draws the world's state: the scene at (w * scale) x (h * scale), the post pass and the cabin at w x h,
@@ -154,6 +159,8 @@ private:
     bool compile (Program&, const char* vertexPath, const char* fragmentPath, const char* what, const std::vector<shaders::Written>& written = {});
     void makeTextures();
     void makeArt();
+    void makePlates();
+    void makeFinds();
     void makeBuffers();
     bool loadMesh (const std::string& key, const std::vector<std::uint8_t>& bytes);
     bool ensureFrame (int w, int h, int cw, int ch);

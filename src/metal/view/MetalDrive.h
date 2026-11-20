@@ -48,8 +48,32 @@ public:
         }
         auto found = MetalGl::find (art);
         finds = found.finds;
+        furnished = found.brings();
         gl.setArt (std::move (art), std::move (found));
         gl.setLens (tanH, shear);
+    }
+
+    /** Art that came after the drive was made (the site's module, whose files are fetched while the world runs), taken
+        between two frames on the GL thread: the night plate's window if there was none; the finds, if none came
+        before, furnishing the world from now on (as the prototype's page furnishes it as its fetches come back, in
+        MetalWorld::furnish's fixed order); and to the renderer what it has not got yet (MetalGl::takeArt). */
+    void takeArt (MetalGl::Art art)
+    {
+        if (glass.width == 0 && art.picture)
+        {
+            const auto dash = art.picture ("dashboard.webp");
+            if (dash.valid())
+                glass = MetalWorld::Glass::of (dash.rgba.data(), dash.width, dash.height, 4);
+        }
+        auto found = MetalGl::find (art);
+        if (! furnished && found.brings())
+        {
+            finds = found.finds;
+            furnished = true;
+            if (world.isBuilt())
+                world.furnish (finds);
+        }
+        gl.takeArt (std::move (art), std::move (found));
     }
 
     MetalWorld& metal() noexcept { made(); return world; }
@@ -152,6 +176,7 @@ private:
     double levelLP = 0.0, time = 0.0, lastOnset = -10.0;
     MetalWorld::Glass glass;            // made once, read only after
     MetalWorld::Finds finds;
+    bool furnished = false;             // the finds brought anything (MetalGl::Found::brings)
     MetalWorld world;
     MetalGl gl { world };
 
