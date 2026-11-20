@@ -1,0 +1,16 @@
+# chalk on the road, atlas 2048 x 1024: name, cell x y w h (px from the top left), colour, size on the road in metres: along (the drawing's up, pointing the way the van drives) x across; straight alpha, the colour already in the pixels; "optional" marks one the world can switch off
+chalk hopscotch       0     0  205  563  #fbf6e8   4.40  1.60
+chalk sun           209     0  282  282  #f7d046   2.20  2.20
+chalk daisy         495     0  256  256  #fbf6e8   2.00  2.00
+chalk peace         755     0  256  256  #9fd3f2   2.00  2.00
+chalk heart        1015     0  256  243  #f08bb4   1.90  2.00
+chalk rainbow      1275     0  410  230  #ffffff   1.80  3.20
+chalk smiley       1689     0  230  230  #f7d046   1.80  1.80
+chalk make_love       0   567  432  228  #f08bb4  11.40  5.40
+chalk stars         436   567  307  179  #fbf6e8   1.40  2.40
+chalk love          747   567  400  104  #f08bb4   5.20  5.00
+chalk peace_word   1151   567  492  104  #9fd3f2   5.20  6.15
+chalk wink         1647   567  168  104  #f3c6b0   3.25  2.10  optional
+chalk wink_bold    1819   567  168  104  #f3c6b0   3.25  2.10  optional
+chalk groovy          0   799  528   94  #f7d046   4.70  6.60
+chalk far_out       532   799  528   81  #b5e08a   4.06  6.60

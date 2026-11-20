@@ -1480,6 +1480,27 @@ target_link_libraries(underwater_view_demo PRIVATE felitronics::appkit_webp)
 # The demo has no factory folder: the art is read from the source tree unless UNDERWATER_ART_DIR says otherwise.
 target_compile_definitions(underwater_view_demo PRIVATE ORBITAMP_UNDERWATER_ART_DEFAULT="${CMAKE_CURRENT_SOURCE_DIR}/resources/underwater")
 
+# The Orange's cabin, the 1967 van's: California's golden hills (src/california/view), handed to the windscreen as a
+# CaliforniaDrive, the dashboard and the peace pendant drawn over it by the GPU as its last passes. Its world and its
+# matrices are matched to their prototype (california-gl.js) number for number, with the walker's JS built-ins, so
+# compiled without contraction too; the cabin's Glass and the quality ladder are the sea's (UnderwaterWorld).
+set(CALIFORNIA_VIEW_SOURCES
+    src/california/view/CaliforniaWorld.cpp
+    src/california/view/CaliforniaGl.cpp
+    src/underwater/view/UnderwaterWorld.cpp
+    src/redgroove/view/WalkerWorld.cpp)
+if(NOT MSVC)
+    set_source_files_properties(src/california/view/CaliforniaGl.cpp PROPERTIES COMPILE_OPTIONS "-ffp-contract=off")
+endif()
+# ...and the art and the files it reads (src/california/view/CaliforniaArt.h, resources/california/README.txt): WebP
+# pictures, the meshes and the tables as they are, laid out by the installer in the factory folder's Faces/CaliforniaAmp
+# and read from there at run time (CALIFORNIA_ART_DIR), never built into a binary; decoded with libwebp.
+set(CALIFORNIA_ART_SOURCES src/california/view/CaliforniaArt.cpp src/underwater/view/UnderwaterArt.cpp)
+view_demo(california_view_demo "CaliforniaViewDemo" SOURCES ${REDPAW_VIEW_SOURCES} ${CALIFORNIA_VIEW_SOURCES} ${CALIFORNIA_ART_SOURCES} src/face/Renders.cpp
+    DEFINITIONS ORBITAMP_VIEW_DEMO_CALIFORNIA=1)
+target_link_libraries(california_view_demo PRIVATE felitronics::appkit_webp)
+target_compile_definitions(california_view_demo PRIVATE ORBITAMP_CALIFORNIA_ART_DEFAULT="${CMAKE_CURRENT_SOURCE_DIR}/resources/california")
+
 # The sea's CPU half against the prototype it was ported from: the start, five scripted flights, the
 # gears, Saturn, the wipers' panes. JUCE-free, links only the world.
 add_executable(titan_world_test tests/TitanWorldTests.cpp src/amberpaw/view/TitanWorld.cpp)
@@ -1505,6 +1526,23 @@ target_compile_features(underwater_world_test PRIVATE cxx_std_20)
 target_compile_definitions(underwater_world_test PRIVATE
     UNDERWATER_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/underwater/underwater-world.txt"
     UNDERWATER_SPRITES="${CMAKE_CURRENT_SOURCE_DIR}/resources/underwater/sprites.txt")
+
+# The Orange Super Crush's world, California 1967 (src/california/view): its CPU half against its prototype,
+# california-gl.js, number for number — the hashes, the textures and the road and land maps, the loop, the meshes,
+# everything on the loop, the oaks, the poles, the shadow map, the drive in both gears, PARK and the pull-away, the
+# attacks, the pendant, the saucers, the yellow submarine — compared with the prototype's own dump
+# (tests/fixtures/california), and the files the world reads (copies in tests/fixtures/california/files). Matched
+# with the walker's JS built-ins, so compiled without contraction. JUCE-free, links only the world (and the walker's Js).
+if(NOT MSVC)
+    set_source_files_properties(src/california/view/CaliforniaWorld.cpp PROPERTIES COMPILE_OPTIONS "-ffp-contract=off")
+endif()
+add_executable(california_world_test tests/CaliforniaWorldTests.cpp src/california/view/CaliforniaWorld.cpp src/redgroove/view/WalkerWorld.cpp)
+target_include_directories(california_world_test PRIVATE src)
+target_compile_features(california_world_test PRIVATE cxx_std_20)
+target_compile_definitions(california_world_test PRIVATE
+    CALIFORNIA_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/california/california-world.txt"
+    CALIFORNIA_FILES="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/california/files"
+    CALIFORNIA_ART="${CMAKE_CURRENT_SOURCE_DIR}/resources/california")
 
 # THE ROVER'S FACE IS WORN BY MORE THAN ONE PRODUCT (src/redpaw/RedPawSkin.h): what every rover is made
 # of is said once here — the renders by the file names the face asks for, as bake-art made them, the
