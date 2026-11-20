@@ -1,6 +1,8 @@
-// From the prototype's io-shaders.js (FS_POST), its body as it is.
+// From the prototype's io-shaders.js (FS_POST), its body as it is but for the scene's read: through uSceneBox, where the
+// scene's frame sits in the whole view's (IoGl.cpp: only the cabin window's box is drawn; (0, 0, 1, 1) the whole view).
 
 uniform sampler2D uColour, uDash, uDashDark;
+uniform vec4 uSceneBox;
 uniform float uDashOn, uExpo, uDashMix;
 uniform vec4 uDial;              // the dosimeter: its pivot (stage px), the scale's radius R (stage px; 0: none), canvas px a stage px
 uniform vec2 uStage, uNeedle;    // the stage's size (px); the needle's way (stage px, y down)
@@ -32,7 +34,7 @@ void main() {
   vec3 col;
   if (dash.a > 0.996) col = dash.rgb;                       // the plate opaque: the scene is not read
   else {
-    col = texture (uColour, uv).rgb;
+    col = texture (uColour, (uv - uSceneBox.xy) / uSceneBox.zw).rgb;
     col *= uExpo;
     col = knee (col);
     float vig = 1.0 - 0.16 * dot (vNdc * vec2 (0.8, 1.0), vNdc * vec2 (0.8, 1.0));

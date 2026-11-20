@@ -238,7 +238,8 @@ void IoGl::destroy()
     del (fbo, glDeleteFramebuffers); del (fboOut, glDeleteFramebuffers); del (sh0.fbo, glDeleteFramebuffers); del (sh1.fbo, glDeleteFramebuffers);
     sh0 = {}; sh1 = {};
     sh0Frame.reset(); sh1Frame.reset(); sh1Sun.reset(); sh0Age = sh1Age = 99;
-    fbW = fbH = outW = outH = 0;
+    fbW = fbH = outW = outH = subW = subH = 0;
+    outerKept = false;
     glassBox.reset();
     Q = {};
     lastFrameMs = -1.0;
@@ -483,8 +484,22 @@ void IoGl::makeArt()
 bool IoGl::ensureFrame (int w, int h, int cw, int ch)
 {
     // THE SCENE'S FRAME: colour 32 bits a pixel with light above 1 kept (R11F_G11F_B10F) until the post pass's knee,
-    // RGBA8 where that does not render; depth a renderbuffer.
-    if (fbo == 0 || w != fbW || h != fbH)
+    // RGBA8 where that does not render; depth a renderbuffer. While the cabin is drawn only the window's box of it can
+    // show (the plates are opaque round it): the frame is that box and a pixel round it (left clear, as the whole frame
+    // was), drawn through a viewport that is the whole view's, moved, so that every fragment is the one the whole frame
+    // would have had — its corner on even pixels, so the 2 x 2 quads a fragment's derivatives come from are the whole
+    // frame's (as MetalGl's).
+    int bx0 = 0, by0 = 0, bx1 = w, by1 = h;
+    if (drawsCabin() && glassBox)
+    {
+        const auto& g = *glassBox;
+        bx0 = std::max (0, ((int) std::floor (g[0] * w) - 1) & ~1); bx1 = std::min (w, (int) std::ceil (g[2] * w) + 1);
+        by0 = std::max (0, ((int) std::floor ((1 - g[3]) * h) - 1) & ~1); by1 = std::min (h, (int) std::ceil ((1 - g[1]) * h) + 1);
+    }
+    sceneAt = { bx0, by0 };
+    fbW = w; fbH = h;
+    w = bx1 - bx0; h = by1 - by0;
+    if (fbo == 0 || w != subW || h != subH)
     {
         if (fbo == 0) { glGenFramebuffers (1, &fbo); glGenTextures (1, &fboColour); glGenRenderbuffers (1, &fboDepth); }
         const auto colour = [&] (bool asFloat)
@@ -509,11 +524,11 @@ bool IoGl::ensureFrame (int w, int h, int cw, int ch)
             floatTarget = false;
             if (! colour (false))
             {
-                fbW = fbH = 0;
+                fbW = fbH = subW = subH = 0;
                 return false;
             }
         }
-        fbW = w; fbH = h;
+        subW = w; subH = h;
     }
     // The finished frame, at the frame's own pixels: what is blitted out and read back.
     if (fboOut == 0 || cw != outW || ch != outH)
@@ -529,6 +544,7 @@ bool IoGl::ensureFrame (int w, int h, int cw, int ch)
             return false;
         }
         outW = cw; outH = ch;
+        outerKept = false;          // a new frame: nothing of it drawn yet
     }
     return true;
 }
@@ -908,7 +924,7 @@ void IoGl::drawScene (int rw, int rh, int cw, int ch)
     glActiveTexture (GL_TEXTURE9); glBindTexture (GL_TEXTURE_2D, sh1.tex);
 
     glBindFramebuffer (GL_FRAMEBUFFER, fbo);
-    glViewport (0, 0, rw, rh);
+    glViewport (-sceneAt[0], -sceneAt[1], rw, rh);
     glDisable (GL_BLEND); glEnable (GL_DEPTH_TEST); glDepthFunc (GL_LEQUAL); glDisable (GL_CULL_FACE); glDepthMask (GL_TRUE);
     glClearColor (0, 0, 0, 1);
     glClear (GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -916,7 +932,7 @@ void IoGl::drawScene (int rw, int rh, int cw, int ch)
     {
         const int x0 = (int) std::floor ((*box)[0] * rw), x1 = (int) std::ceil ((*box)[2] * rw);
         const int y0 = (int) std::floor ((1 - (*box)[3]) * rh), y1 = (int) std::ceil ((1 - (*box)[1]) * rh);
-        glEnable (GL_SCISSOR_TEST); glScissor (x0, y0, x1 - x0, y1 - y0);
+        glEnable (GL_SCISSOR_TEST); glScissor (x0 - sceneAt[0], y0 - sceneAt[1], x1 - x0, y1 - y0);
     }
     // WHAT STANDS: the hardware, the rocks; the ground after
     if (! skips ("hardware")) drawHardware (false, nullptr);
@@ -1030,6 +1046,27 @@ void IoGl::drawScene (int rw, int rh, int cw, int ch)
     glBindFramebuffer (GL_FRAMEBUFFER, fboOut);
     glViewport (0, 0, cw, ch);
     glDisable (GL_DEPTH_TEST);
+    // Outside the window's box and the dosimeter's dial the frame is the plates alone (opaque: the scene is not read
+    // there), so it is drawn once and kept until the dark share or the frame's size changes; between, the pass runs only
+    // over the box round the window and the dial.
+    const double darkShare = cabin ? 1 - s.cabinDay : 0;
+    const double outerKey = cabin && box && ! skips ("outer") ? darkShare : -1.0;
+    if (outerKey >= 0 && outerKept && ! (outerKey < keptDark || outerKey > keptDark))
+    {
+        // the box round the window and the dial (fractions of the stage, y down), a pixel wider
+        const double fx0 = std::min ((*box)[0], (dial.x - dial.r) / stage[0]), fx1 = std::max ((*box)[2], (dial.x + dial.r) / stage[0]);
+        const double fy0 = std::min ((*box)[1], (dial.y - dial.r) / stage[1]), fy1 = std::max ((*box)[3], (dial.y + dial.r) / stage[1]);
+        const int x0 = std::max (0, (int) std::floor (fx0 * cw) - 1), x1 = std::min (cw, (int) std::ceil (fx1 * cw) + 1);
+        const int y0 = std::max (0, (int) std::floor ((1 - fy1) * ch) - 1), y1 = std::min (ch, (int) std::ceil ((1 - fy0) * ch) + 1);
+        glEnable (GL_SCISSOR_TEST); glScissor (x0, y0, x1 - x0, y1 - y0);
+    }
+    else
+    {
+        glClearColor (0, 0, 0, 1);
+        glClear (GL_COLOR_BUFFER_BIT);
+    }
+    outerKept = outerKey >= 0 && ! skips ("post");
+    keptDark = outerKey;
     {
         glUseProgram (post.id); glBindVertexArray (vaoEmpty);
         glActiveTexture (GL_TEXTURE4); glBindTexture (GL_TEXTURE_2D, fboColour); glUniform1i (post.u ("uColour"), 4);
@@ -1037,8 +1074,9 @@ void IoGl::drawScene (int rw, int rh, int cw, int ch)
         glUniform1f (post.u ("uDashOn"), cabin ? 1.0f : 0.0f);
         glActiveTexture (GL_TEXTURE11); glBindTexture (GL_TEXTURE_2D, cabin ? texDashDark : 0); glUniform1i (post.u ("uDashDark"), 11);
         // the plates' crossfade: the dark's share, as the sunlight goes (premultiplied, in the shader)
-        const double darkK = cabin ? 1 - s.cabinDay : 0;
+        const double darkK = darkShare;
         glUniform1f (post.u ("uDashMix"), f32 (darkK));
+        glUniform4f (post.u ("uSceneBox"), (float) sceneAt[0] / (float) rw, (float) sceneAt[1] / (float) rh, (float) subW / (float) rw, (float) subH / (float) rh);
         glUniform1f (post.u ("uExpo"), f32 (s.sun.expo));
         // the dosimeter's needle: its pivot and length (stage px), the canvas px a stage px, its way, its colour
         if (cabin)
@@ -1052,10 +1090,8 @@ void IoGl::drawScene (int rw, int rh, int cw, int ch)
         }
         else
             glUniform4f (post.u ("uDial"), 0, 0, 0, 1);
-        // (the pass covers every pixel, opaque: cleared first, so a tiling GPU starts its tiles blank)
-        glClearColor (0, 0, 0, 1);
-        glClear (GL_COLOR_BUFFER_BIT);
         if (! skips ("post")) glDrawArrays (GL_TRIANGLES, 0, 3);
+        glDisable (GL_SCISSOR_TEST);
         glActiveTexture (GL_TEXTURE4); glBindTexture (GL_TEXTURE_2D, 0);
         glActiveTexture (GL_TEXTURE6); glBindTexture (GL_TEXTURE_2D, 0);
         glActiveTexture (GL_TEXTURE11); glBindTexture (GL_TEXTURE_2D, 0);

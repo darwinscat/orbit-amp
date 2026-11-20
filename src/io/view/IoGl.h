@@ -137,7 +137,10 @@ private:
 
     std::uint32_t fbo = 0, fboColour = 0, fboDepth = 0;     // the scene: its colour a texture the post pass reads
     std::uint32_t fboOut = 0, fboOutColour = 0;             // the finished frame
-    int fbW = 0, fbH = 0, outW = 0, outH = 0;
+    int fbW = 0, fbH = 0, outW = 0, outH = 0, subW = 0, subH = 0;   // the view's pixels, the finished frame's, the scene's frame
+    std::array<int, 2> sceneAt {};              // where the scene's frame sits in the view's (the window's box)
+    bool outerKept = false;                     // the plates outside the window's box are in the finished frame...
+    double keptDark = -1.0;                     // ...as this dark share drew them
     bool floatTarget = true;
     int repeats = 1;
 
