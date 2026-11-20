@@ -1,0 +1,9 @@
+# rover: a mesh for the world to draw in 3D. The abandoned Io rover: a 9.6 m shielded hull on six 1.7 m NiTi spring-tyre wheels, the amber hot-cell window in its cab (the eye 2.6 m up), water-jacket tanks, a 5.6 m boom to the fission reactor behind its shadow shield and a fan of radiators; its floods dead (glass), dusted by years of fallout; kinds 0 painted, 1 metal, 2 glass; the footprint centre at the origin, the wheels on z = 0, the front toward -y. credit: none: our own model (Darwin's Cat), no one else's assets
+# rover.mesh: magic CBMESH1, uint32 vertices, uint32 indices; per vertex 40 B: float32 pos xyz (m, z up,
+#   the footprint's centre on the ground at 0), float32 normal xyz, float32 uv, uint8 rgb (display sRGB),
+#   uint8 kind (0 painted, 1 metal, 2 glass, 3 lamp), uint8 texture (0 none, else a row below), 3 pad;
+#   then uint32 indices, 3 per triangle. A textured face: colour and alpha from the texture, cut under 0.5.
+front -y
+vertices 26461
+triangles 14992
+bytes 1238360

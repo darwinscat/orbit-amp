@@ -1,0 +1,9 @@
+# tubebase: a mesh for the world to draw in 3D. The lava-tube base: a skylight pit at the origin, its walls down to -15 m. pit radius 13.0: lower the ground inside r = 13.0 m round the origin (the ragged wall lies between 11.0 and 12.8 m from it; the heaped rim reaches 22 m out, 1-3 m high at its lip). A steel hoist gantry over the pit with its platform hanging at -6.4 m, a railed ramp switchbacking down the south-west wall, three lamps lit deep inside (kind 3), a beacon on the winch house; dormant. credit: none: our own model (Darwin's Cat), no one else's assets
+# tubebase.mesh: magic CBMESH1, uint32 vertices, uint32 indices; per vertex 40 B: float32 pos xyz (m, z up,
+#   the footprint's centre on the ground at 0), float32 normal xyz, float32 uv, uint8 rgb (display sRGB),
+#   uint8 kind (0 painted, 1 metal, 2 glass, 3 lamp), uint8 texture (0 none, else a row below), 3 pad;
+#   then uint32 indices, 3 per triangle. A textured face: colour and alpha from the texture, cut under 0.5.
+front -y
+vertices 12325
+triangles 8446
+bytes 594368

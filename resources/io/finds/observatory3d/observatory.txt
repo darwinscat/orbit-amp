@@ -1,0 +1,9 @@
+# observatory: a mesh for the world to draw in 3D. The lava-lake observatory: +y is toward the lake: it stands on the patera's rim with its slit, heat shields and boom toward +y. The bunker (14 x 9 m) is centred at the origin, its lake-side wall at y = +4.5 m and the heat shields out to y = +6 m (the rim's edge should run just beyond); the boom reaches out to y = +27 m, 10.6 m up at its tip, and the probe capsule hangs there at z = -6 m (below the rim, over the lake); the berms reach y = -10 and x = +-12.5; the door and its one lamp face -y (the road); a beacon (kind 3); dormant. credit: none: our own model (Darwin's Cat), no one else's assets
+# observatory.mesh: magic CBMESH1, uint32 vertices, uint32 indices; per vertex 40 B: float32 pos xyz (m, z up,
+#   the footprint's centre on the ground at 0), float32 normal xyz, float32 uv, uint8 rgb (display sRGB),
+#   uint8 kind (0 painted, 1 metal, 2 glass, 3 lamp), uint8 texture (0 none, else a row below), 3 pad;
+#   then uint32 indices, 3 per triangle. A textured face: colour and alpha from the texture, cut under 0.5.
+front -y
+vertices 9231
+triangles 6244
+bytes 444184
