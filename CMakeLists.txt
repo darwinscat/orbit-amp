@@ -1441,6 +1441,18 @@ if(NOT MSVC)
     set_source_files_properties(src/underwater/view/UnderwaterWorld.cpp src/underwater/view/UnderwaterGl.cpp
         PROPERTIES COMPILE_OPTIONS "-ffp-contract=off")
 endif()
+# The ENGL E530's world, the metal one (src/metal/view): its CPU half (the textures, the loop, the things' places, the
+# drive, the lightning, the dragons, the meshes, the finds' readers) for the renderer to read, a port of its prototype
+# (metal-world.js and the CPU's part of metal-gl.js) matched number for number with the walker's JS built-ins, so
+# compiled without contraction too.
+set(METAL_VIEW_SOURCES
+    src/metal/view/MetalWorld.cpp
+    src/metal/view/MetalFinds.cpp
+    src/redgroove/view/WalkerWorld.cpp)
+if(NOT MSVC)
+    set_source_files_properties(src/metal/view/MetalWorld.cpp src/metal/view/MetalFinds.cpp
+        PROPERTIES COMPILE_OPTIONS "-ffp-contract=off")
+endif()
 # ...and the cabin's art it draws (src/underwater/view/UnderwaterArt.h): the dashboard, its sea layer and the passing
 # bathyscaphe's atlas as WebP made from the renders in resources/underwater/source (resources/underwater/README.txt
 # says how: lossy colour, the alpha lossless and exact, the sea layer at half size), and the atlas's table,
@@ -1503,6 +1515,19 @@ target_compile_features(underwater_world_test PRIVATE cxx_std_20)
 target_compile_definitions(underwater_world_test PRIVATE
     UNDERWATER_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/underwater/underwater-world.txt"
     UNDERWATER_SPRITES="${CMAKE_CURRENT_SOURCE_DIR}/resources/underwater/sprites.txt")
+
+# The metal world against its prototype, number for number: the hashes, the textures and the road map, the loop, the
+# height mirror, every thing's place, the meshes, the drive in every gear, PARK and the storm, an attack and the fires and
+# ribbons the renderer uploads, the dragons over two minutes, the ball lightning, the Tesla towers — compared with the
+# prototype's own dump (tests/fixtures/metal). The finds' readers are compared on the prototype's own files when its
+# folder is given (ORBITAMP_METAL_PROTOTYPE, or the test's second argument); without it they are skipped, said so.
+set(ORBITAMP_METAL_PROTOTYPE "" CACHE PATH "The metal world's prototype folder (finds/ in it) for metal_world_test's readers; empty: skipped")
+add_executable(metal_world_test tests/MetalWorldTests.cpp ${METAL_VIEW_SOURCES})
+target_include_directories(metal_world_test PRIVATE src)
+target_compile_features(metal_world_test PRIVATE cxx_std_20)
+target_compile_definitions(metal_world_test PRIVATE
+    METAL_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/metal/metal-world.txt"
+    METAL_PROTOTYPE="${ORBITAMP_METAL_PROTOTYPE}")
 
 # THE ROVER'S FACE IS WORN BY MORE THAN ONE PRODUCT (src/redpaw/RedPawSkin.h): what every rover is made
 # of is said once here — the renders by the file names the face asks for, as bake-art made them, the
