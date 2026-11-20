@@ -1,0 +1,14 @@
+# road signs, atlas 2048 x 1024: name, shape, cell x y w h (px from the top left), face w h (m), bottom (m over the ground), post (signs on one post share it; a banner hangs between two posts at its ends, high enough to span the road); albedo with alpha, the back plain wood
+sign ufo      board      0     0  410  563   4.16  5.72  2.20  p13
+sign salute   board    414     0  384  512   3.60  4.80  2.50  p2
+sign victory  board    802     0  384  512   3.60  4.80  2.50  p6
+sign smiley   disc    1190     0  461  461   4.50  4.50  3.00  p1
+sign route66  board   1655     0  256  384   3.30  4.95  2.40  p3
+sign peace    banner     0   567  768  307   8.10  3.24  4.60  p5
+sign heaven   board    772   567  614  205   9.00  3.00  3.20  p4
+sign hell     board   1390   567  614  205   9.00  3.00  2.80  p12
+sign rhyme1   board      0   878  384   96   5.76  1.44  1.40  p7
+sign rhyme2   board    388   878  384   96   5.76  1.44  1.40  p8
+sign rhyme3   board    776   878  384   96   5.76  1.44  1.40  p9
+sign rhyme4   board   1164   878  384   96   5.76  1.44  1.40  p10
+sign rhyme5   board   1552   878  384   96   5.76  1.44  1.40  p11

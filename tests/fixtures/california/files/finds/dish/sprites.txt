@@ -1,0 +1,19 @@
+# radio dish sprites: 16 headings, cells 384 x 384 px, 10.917 px per metre, atlas 8 x 2; h = where the dish faces on the screen seen from above (0 toward the viewer, 90 right, 180 away, 270 left); camera 2 deg below level
+# anchor: the pedestal's foot on the ground, at the cell's centre x and row 363 (px from the top)
+anchor 192 363
+cell  0 h   0.0 dish_h000.0.png
+cell  1 h  22.5 dish_h022.5.png
+cell  2 h  45.0 dish_h045.0.png
+cell  3 h  67.5 dish_h067.5.png
+cell  4 h  90.0 dish_h090.0.png
+cell  5 h 112.5 dish_h112.5.png
+cell  6 h 135.0 dish_h135.0.png
+cell  7 h 157.5 dish_h157.5.png
+cell  8 h 180.0 dish_h180.0.png
+cell  9 h 202.5 dish_h202.5.png
+cell 10 h 225.0 dish_h225.0.png
+cell 11 h 247.5 dish_h247.5.png
+cell 12 h 270.0 dish_h270.0.png
+cell 13 h 292.5 dish_h292.5.png
+cell 14 h 315.0 dish_h315.0.png
+cell 15 h 337.5 dish_h337.5.png

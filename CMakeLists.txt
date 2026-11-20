@@ -1504,6 +1504,22 @@ target_compile_definitions(underwater_world_test PRIVATE
     UNDERWATER_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/underwater/underwater-world.txt"
     UNDERWATER_SPRITES="${CMAKE_CURRENT_SOURCE_DIR}/resources/underwater/sprites.txt")
 
+# The Orange Super Crush's world, California 1967 (src/california/view): its CPU half against its prototype,
+# california-gl.js, number for number — the hashes, the textures and the road and land maps, the loop, the meshes,
+# everything on the loop, the oaks, the poles, the shadow map, the drive in both gears, PARK and the pull-away, the
+# attacks, the pendant, the saucers, the yellow submarine — compared with the prototype's own dump
+# (tests/fixtures/california), and the files the world reads (copies in tests/fixtures/california/files). Matched
+# with the walker's JS built-ins, so compiled without contraction. JUCE-free, links only the world (and the walker's Js).
+if(NOT MSVC)
+    set_source_files_properties(src/california/view/CaliforniaWorld.cpp PROPERTIES COMPILE_OPTIONS "-ffp-contract=off")
+endif()
+add_executable(california_world_test tests/CaliforniaWorldTests.cpp src/california/view/CaliforniaWorld.cpp src/redgroove/view/WalkerWorld.cpp)
+target_include_directories(california_world_test PRIVATE src)
+target_compile_features(california_world_test PRIVATE cxx_std_20)
+target_compile_definitions(california_world_test PRIVATE
+    CALIFORNIA_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/california/california-world.txt"
+    CALIFORNIA_FILES="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/california/files")
+
 # THE ROVER'S FACE IS WORN BY MORE THAN ONE PRODUCT (src/redpaw/RedPawSkin.h): what every rover is made
 # of is said once here — the renders by the file names the face asks for, as bake-art made them, the
 # sources, the libraries — and each product adds its own skin's file and its own renders. The lamps a
