@@ -7,7 +7,8 @@
 #include "MetalLayout.h"
 #include "MetalLineup.h"
 
-#include "../redpaw/view/PlainsDrive.h"
+#include "view/MetalArt.h"
+#include "view/MetalDrive.h"
 #include "../ui/FactoryMissing.h"
 #include "../ui/Prefs.h"
 
@@ -30,12 +31,12 @@ using namespace face;
 namespace
 {
     /** What the window shows, and how often — the machine's, kept with its settings: the landscape as a word, in the
-        order of Windscreen::Mode, and what the menu calls each. The plains are a stand-in until the metal world comes. */
+        order of Windscreen::Mode, and what the menu calls each. */
     const juce::Identifier landscapeKey { "landscape" };
     const juce::Identifier frameRateKey { "landscape_fps" };
     const juce::Identifier screenKey    { "screen" };
-    const juce::StringArray landscapeWords { "plains", "1993", "still" };
-    const juce::StringArray landscapeNames { "The plains (until the metal world)", "1993", "Still" };
+    const juce::StringArray landscapeWords { "world", "1993", "still" };
+    const juce::StringArray landscapeNames { "The metal world", "1993", "Still" };
 
     // Where the pointer is drawn on the knobs' renders — the rovers', whose renders these are.
     constexpr ArtKnob::Pointer drivePointer { 0.30f, 0.66f, 0.06f };
@@ -70,9 +71,9 @@ namespace
         return w.substring (0, 1).toUpperCase() + w.substring (1);
     }
 
-    /** The world's gear for a channel: CLEAN GAIN LO the first, HI the second, both LEADs the third — LEAD GAIN HI with its
-        TURBO's dust. */
-    int gearOf (int channel) { return juce::jlimit (1, 3, channel + 1); }
+    /** The world's gear for a channel (MetalDrive): CLEAN GAIN LO the first, CLEAN GAIN HI the second, LEAD GAIN LO the
+        third, LEAD GAIN HI the fourth — the storm. */
+    int gearOf (int channel) { return juce::jlimit (1, MetalWorld::numGears, channel + 1); }
 
     /** WHERE THE CONSOLE'S CONTROLS STAND on the dashboard (MetalLayout.h). */
     Console::Places cabinPlaces()
@@ -442,12 +443,13 @@ MetalEditor::~MetalEditor()
     gl.detach();
 }
 
-/** THE WORLD BEHIND THE GLASS. Until the metal world's port comes (feat/metal-world), the Mars plains stand in: three
-    gears, no cabin of their own, so the face paints the night plate flat. */
+/** THE WORLD BEHIND THE GLASS: the metal world (view/MetalDrive.h), its art read from the factory folder's Faces/MetalAmp
+    (view/MetalArt.h) — the channels its four gears, LEAD GAIN HI the storm, PARK the rover on the shoulder. While it draws
+    the cabin it crossfades the night and flash plates by its lightning, and the face paints only its controls, its words
+    and the cat over them; whenever it does not, the face paints the night plate flat. */
 std::unique_ptr<redpaw::Drive> MetalEditor::makeDrive()
 {
-    // MetalDrive goes here, its world drawing the cabin with the lightning's flash plate (Drive::drawsCabin).
-    return std::make_unique<redpaw::PlainsDrive> (3);
+    return std::make_unique<MetalDrive> (shippedArt());
 }
 
 redgroove::Readout& MetalEditor::readout (juce::Rectangle<float> box)
@@ -508,7 +510,6 @@ void MetalEditor::showSelector (int channel)
     lever.repaint();
     cabinet.refresh();
     view->setGear (gearOf (channel));
-    view->setTurbo (channel == 3);
     showPlace();
 }
 
@@ -567,11 +568,11 @@ bool MetalEditor::pictureRightClicked (juce::Point<int> onStage)
 /** THE CABIN'S OWN PART OF THE SITE'S DEMO (Console::webExtras), in the walker's words and no others, as the bathyscaphe's:
     under places.json's "world", the box the world is drawn in — the whole stage, the plate's alpha its window — and every
     control the console has not already said: the lever, its five stops PARK first, each named where its glyph stands; the
-    world's three gears under the four channels; COMP's, FX 1's, FX 2's and REVERB's columns and COMP's squeeze; the
+    world's four gears under the four channels; COMP's, FX 1's, FX 2's and REVERB's columns and COMP's squeeze; the
     cabinet's screen and the name over its picture. GAIN and the tones are the console's knobs, and no ring goes round
     any knob here: "knobs" is empty and "rings" null. What these words cannot carry — the stops' glyphs, UNDO's and REDO's
     arrows, GATE's and LIMITER's buttons, the cat's flames, how each pack lays the strips — the kit's README says. THE
-    STILL: the world's first frame — the plains', until the metal world comes — the world alone, the whole stage at twice
+    STILL: the world's first frame — the metal world's (makeDrive), as the posters' — the world alone, the whole stage at twice
     its size, the first a poster's frame brings. THE POSTERS: one a stop, PARK the first. */
 void MetalEditor::webExtras (const juce::File& dir, juce::DynamicObject& kit, juce::DynamicObject& world)
 {
@@ -589,7 +590,7 @@ void MetalEditor::webExtras (const juce::File& dir, juce::DynamicObject& kit, ju
     world.setProperty ("dome", rect (layout::view));
     world.setProperty ("gears", gearOf (channels.count() - 1));
     {
-        juce::Array<juce::var> gears;          // CLEAN GAIN LO the first, HI the second, both LEADs the third
+        juce::Array<juce::var> gears;          // a gear a channel, CLEAN GAIN LO the first, LEAD GAIN HI the fourth: the storm
         for (int c = 0; c < channels.count(); ++c)
             gears.add (gearOf (c));
         world.setProperty ("channelGears", gears);
@@ -707,9 +708,9 @@ void MetalEditor::webExtras (const juce::File& dir, juce::DynamicObject& kit, ju
                                     then (frame);
                                 });
     };
-    webPoses.live = "the plains' first frame (TEMPORARY: the Mars plains stand in until the metal world's port), behind the glass "
-                    "alone: the plains on the GPU from their world's start, in the stop's gear, settled, nothing stepped (t = 0), "
-                    "parked at PARK, TURBO's dust at LEAD GAIN HI; the top poster is the stop the app opens at";
+    webPoses.live = "the view's first frame for the stop: the metal world (metal::MetalDrive), behind the glass alone, on the "
+                    "GPU from its world's start, in the stop's gear, settled, nothing stepped (t = 0), parked at PARK, the "
+                    "storm at LEAD GAIN HI; the top poster is the stop the app opens at";
     webPoses.still = [this] (int) { return webStill; };
     webPoses.window = layout::view;
     webPoses.hidden = { view.get() };

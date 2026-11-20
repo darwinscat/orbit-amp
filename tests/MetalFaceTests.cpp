@@ -12,9 +12,12 @@
 //     strip;
 //   - COMP, its fader the threshold alone, and what the cabin holds of it (Lineup::pinned) — in the strip and on, three
 //     quarters through it at 4:1 on OPTO; FX 1 the delay's amount, REVERB the room's share, FX 2 dark;
+//   - THE WORLD BEHIND THE GLASS is the metal world (MetalDrive), in the channel's gear — CLEAN GAIN LO 1, CLEAN GAIN HI 2,
+//     LEAD GAIN LO 3, LEAD GAIN HI 4, the storm — and parked at PARK; every file it reads lies in the factory folder's
+//     Faces/MetalAmp as the build lays it out (MetalShipped.h, the check metal_world_test makes of resources/metal);
 //   - a still: the face renders whole, the cat in the maker's plate silver at rest, and crimson in flames under the hand;
 //   - the site's kit (ORBITAMP_WEB_EXPORT): places.json's "world" in the walker's words — the glass the whole stage, the
-//     world's three gears under the four channels, the lever's five stops PARK first, the columns — and a poster a stop.
+//     world's four gears under the four channels, the lever's five stops PARK first, the columns — and a poster a stop.
 //
 // Each control is found by the name the face gives it, the knobs and the keys by the strip they stand in
 // (metal/MetalLayout.h). With METAL_FACE_STILLS naming a folder, the stills are written there as PNG, at 1x and 2x, to be
@@ -24,10 +27,14 @@
 #include "PluginProcessor.h"
 #include "Parameters.h"
 #include "channels/Engine.h"
+#include "device/FactorySet.h"
 #include "face/Controls.h"
 #include "metal/MetalControls.h"
 #include "metal/MetalLayout.h"
 #include "metal/MetalLineup.h"
+#include "metal/view/MetalArt.h"
+#include "redpaw/view/Windscreen.h"
+#include "MetalShipped.h"
 
 #include <array>
 #include <cmath>
@@ -45,6 +52,17 @@ namespace
             return &in;
         for (auto* child : in.getChildren())
             if (auto* found = named (*child, id))
+                return found;
+        return nullptr;
+    }
+
+    template <typename T>
+    T* findOf (juce::Component& in)
+    {
+        if (auto* t = dynamic_cast<T*> (&in))
+            return t;
+        for (auto* child : in.getChildren())
+            if (auto* found = findOf<T> (*child))
                 return found;
         return nullptr;
     }
@@ -220,6 +238,30 @@ int ORBITAMP_GATE_MAIN()
         check (channels.active() == 2 && lever->getPlace() == 3, "the 3 key pulls LEAD GAIN LO");
     }
 
+    // THE WORLD BEHIND THE GLASS: the metal world, a gear a channel, parked at PARK.
+    {
+        auto* view = findOf<redpaw::Windscreen> (*face);
+        const auto line = [view] { return view != nullptr ? view->statusLine() : juce::String ("no view"); };
+        check (view != nullptr && line().startsWith ("GPU  Metal"), "the world behind the glass is the metal one (" + line() + ")");
+        for (const int gear : { 1, 2, 3, 4 })
+        {
+            pull (gear);
+            check (line().contains ("gear " + juce::String (gear)) && ! line().contains ("PARK") && ! line().contains ("TURBO"),
+                   "..." + nameOf (gear - 1) + " in its gear " + juce::String (gear) + (gear == 4 ? ", the storm" : "") + " (" + line() + ")");
+        }
+        pull (0);
+        check (line().contains ("gear 4 PARK"), "...and parked at PARK, the gear kept (" + line() + ")");
+        pull (3);
+
+        const auto dir = device::FactorySet::location().getChildFile ("Faces").getChildFile (ORBITAMP_PRODUCT_NAME);
+        const auto lost = metal::shipped::missing (metal::shippedArt());
+        juce::StringArray words;
+        for (const auto& w : lost)
+            words.add (w);
+        check (lost.empty(), "the world finds every file it reads in " + dir.getFullPathName()
+                                 + (lost.empty() ? juce::String() : ": not " + words.joinIntoString (", ")));
+    }
+
     // THE STRIPS: the playing pack's tones, as many knobs, in the tone strip; its switch's key in the key strip.
     for (const int c : { 0, 2 })
     {
@@ -306,9 +348,9 @@ int ORBITAMP_GATE_MAIN()
         check (isRect (json["window"]) && rectOf (json["window"]) == whole && isRect (world["dome"]) && rectOf (world["dome"]) == whole
                    && json["stills"].size() == 1 && json["stills"][0].toString() == "still.webp",
                "...the glass the whole stage, the world under it, its still named");
-        check ((int) world["gears"] == 3 && world["channelGears"].size() == 4 && (int) world["channelGears"][0] == 1
-                   && (int) world["channelGears"][1] == 2 && (int) world["channelGears"][2] == 3 && (int) world["channelGears"][3] == 3,
-               "...the world's three gears under the four channels, both LEADs in the third");
+        check ((int) world["gears"] == 4 && world["channelGears"].size() == 4 && (int) world["channelGears"][0] == 1
+                   && (int) world["channelGears"][1] == 2 && (int) world["channelGears"][2] == 3 && (int) world["channelGears"][3] == 4,
+               "...the world's four gears under the four channels, a gear a channel, LEAD GAIN HI the storm");
 
         const auto& lever = world["lever"];
         bool stops = lever["stops"].size() == (int) layout::leverStops.size();

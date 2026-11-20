@@ -631,7 +631,8 @@ endfunction()
 # face, its name, its number and what it carries.
 #
 #   add_amp(<Name>  CODE <code>  [BY_NAME]  [ICON <Amp>]
-#           SOURCES <files...>  LIBRARIES <targets...>  [ART <files...>]  [SET <packs...>]  [WHOLE_SHELF])
+#           SOURCES <files...>  LIBRARIES <targets...>  [ART <files...>]  [ART_FOLDERS <folders...>]
+#           [SET <packs...>]  [WHOLE_SHELF])
 #
 #   <Name>      the target, the PRODUCT_NAME and the stem of every bundle it builds; in lower case, its
 #               bundle id and its CLAP id, com.darwinscat.<name>; and its icon, resources/icon/<Name>-*.
@@ -648,6 +649,8 @@ endfunction()
 #   SOURCES     what it is compiled from; LIBRARIES what it links, ahead of JUCE's recommended flags.
 #   ART         its renders, in the factory folder's Faces/<Name>, each under its own file's name, where its
 #               face reads them (src/face/Renders.h).
+#   ART_FOLDERS folders of its art laid out whole, each as a folder of its own name in Faces/<Name>, every
+#               file in it at the same path under it: a world's finds/, say (Faces/<Name>/finds/...).
 #   SET         the packs it plays, by their folders' names in the tree's set (THE SET), less `.orbitrig` —
 #               at the factory folder's top, zipped.
 #   WHOLE_SHELF the whole cabinet shelf, the folders the cabinet catalog gives OrbitAmp alone with Darwin's
@@ -762,7 +765,7 @@ function(export_entry_points_only)
 endfunction()
 
 function(add_amp name)
-    cmake_parse_arguments(PARSE_ARGV 1 AMP "BY_NAME;WHOLE_SHELF;BASS" "CODE;ICON" "SOURCES;LIBRARIES;ART;SET")
+    cmake_parse_arguments(PARSE_ARGV 1 AMP "BY_NAME;WHOLE_SHELF;BASS" "CODE;ICON" "SOURCES;LIBRARIES;ART;ART_FOLDERS;SET")
     string(TOLOWER "${name}" id)
     set(iconOf "${name}")
     if(AMP_ICON)
@@ -866,6 +869,15 @@ function(add_amp name)
         get_filename_component(base "${render}" NAME)
         list(APPEND files "${render}")
         list(APPEND at "Faces/${name}/${base}")
+    endforeach()
+    foreach(folder IN LISTS AMP_ART_FOLDERS)
+        get_filename_component(top "${folder}" NAME)
+        file(GLOB_RECURSE inside CONFIGURE_DEPENDS RELATIVE "${folder}" "${folder}/*")
+        list(SORT inside)
+        foreach(rel IN LISTS inside)
+            list(APPEND files "${folder}/${rel}")
+            list(APPEND at "Faces/${name}/${top}/${rel}")
+        endforeach()
     endforeach()
     foreach(pack IN LISTS AMP_SET)
         if(NOT pack IN_LIST ORBITAMP_SET_NAMES)
@@ -1670,12 +1682,15 @@ set(DEEPGROOVEBASS_SOURCES
 
 # THE E530'S FACE (src/metal): the family's console on the ENGL E530's dashboard in the metal world's cabin. Its plates,
 # night and flash, as WebP made from catbay's renders (resources/metal/README.txt says which and how),
-# laid out in the factory folder's Faces/MetalAmp: the face paints the night one, the world's renderer will crossfade the
-# two. The knobs and the faders' cap its own where resources/metal/face has one, the helicopter's otherwise, with its mark
-# and its MIDI list. The world behind the glass is the Mars plains until the metal world's port comes.
+# laid out in the factory folder's Faces/MetalAmp. The knobs and the faders' cap its own where resources/metal/face has
+# one, the helicopter's otherwise, with its mark and its MIDI list. Its world, the metal one (src/metal/view), reads the
+# same two plates, and world/ beside them, from the same folder (METALAMP_ART_FOLDERS: resources/metal/world laid out
+# whole, the meshes with their credits, the guitars, the letters, the banners, the dragon); while it draws the cabin it
+# crossfades the plates by its lightning, and whenever it does not the face paints the night one flat.
 set(METALAMP_RENDERS
     "${CMAKE_CURRENT_SOURCE_DIR}/resources/metal/dashboard.webp"
     "${CMAKE_CURRENT_SOURCE_DIR}/resources/metal/dashboard_flash.webp")
+set(METALAMP_ART_FOLDERS "${CMAKE_CURRENT_SOURCE_DIR}/resources/metal/world")
 file(GLOB metal_own CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/resources/metal/face/*")
 foreach(render IN ITEMS mark.svg midi.txt knob-drive.webp knob-tone.webp fader-cap.webp)
     if("${CMAKE_CURRENT_SOURCE_DIR}/resources/metal/face/${render}" IN_LIST metal_own)
@@ -1691,7 +1706,10 @@ set(METALAMP_SOURCES
     src/metal/MetalEditor.cpp
     src/metal/MetalFaceArt.cpp
     src/metal/MetalLineup.cpp
-    ${REDPAW_VIEW_SOURCES})          # the windscreen the rovers look through, on the plains for now
+    ${REDPAW_VIEW_SOURCES}           # the windscreen the rovers look through ...
+    ${METAL_VIEW_SOURCES}            # ... looking out on the metal world
+    ${METAL_GL_SOURCES}
+    ${METAL_ART_SOURCES})
 
 # ----------------------------------------------------------------------------
 # THE AMPS — the family's table, one row an amp (THE FAMILY says what a row says).
@@ -1807,6 +1825,7 @@ add_amp(DeepGrooveBass CODE Dgrv   BY_NAME    BASS
 # icon AmberPawAmp's until its own is drawn.
 add_amp(MetalAmp      CODE Mtla    BY_NAME    ICON AmberPawAmp
     ART       ${METALAMP_RENDERS}
+    ART_FOLDERS ${METALAMP_ART_FOLDERS}
     SOURCES   ${METALAMP_SOURCES}
     LIBRARIES
         OrbitAmpData                 # the family's mark, the notice, the disclaimer — BinaryData::*

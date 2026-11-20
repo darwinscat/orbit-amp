@@ -19,6 +19,7 @@
 
 #include "metal/view/MetalFound.h"
 #include "metal/view/MetalWorld.h"
+#include "MetalShipped.h"
 
 #include <algorithm>
 #include <array>
@@ -666,7 +667,8 @@ namespace
     /** THE ART AS IT SHIPS (resources/metal, its world/ in WebP): metal::find over it must bring the world the very
         finds the prototype's folder (or its dump) brings it — the letters' table and atlas cells (the WebP of each PNG
         the table names, the same size), the groves' deal and names, the landmarks' tops in their order, the dragon's
-        head in every pose — and find every mesh it draws. */
+        head in every pose — and find every file it reads (MetalShipped.h says which; the E530's face gate asks the
+        same of the factory folder, as the build lays it out). */
     void shippedChecks (const std::string& dir)
     {
         namespace M = orbitamp::metal;
@@ -679,6 +681,11 @@ namespace
             return fs::is_directory (fs::path (dir) / folder, ec) ? listing (fs::path (dir) / folder) : std::vector<std::string> {};
         };
         art.pictureSize = [dir] (const std::string& path) { const auto b = bytesOf (fs::path (dir) / path); return M::webpSize (b.data(), b.size()); };
+        for (const auto& what : M::shipped::missing (art))
+        {
+            ++failures;
+            std::printf ("FAIL shipped: %s\n", what.c_str());
+        }
         const auto found = M::find (art);
         const auto& got = found.finds;
         const auto near = [] (double a, double b) { return std::abs (a - b) <= 1e-9 * std::max (1.0, std::abs (b)); };

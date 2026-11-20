@@ -23,9 +23,9 @@ namespace orbitamp::metal
     Rocker, silver. DARWIN'S CAT and POWERED BY are the plate's own; the cat in the maker's plate is drawn live over it
     (CatLogo). Drawn over the world, under the controls, and never takes a click.
 
-    THE PLATE IS THE WORLD'S TO DRAW while it draws it (Windscreen::drawsCabin — the metal world, when it comes, with the
-    lightning's flash plate crossfaded in); the rest of the time, and in every picture taken of it (staticImage), the
-    night plate is painted here, flat. Until the world exists, always. */
+    THE PLATE IS THE WORLD'S TO DRAW while it draws it (Windscreen::drawsCabin — the metal world, the lightning's flash
+    plate crossfaded in); the rest of the time, and in every picture taken of it (staticImage), the night plate is painted
+    here, flat. The words and the cat are always the face's, over whichever plate. */
 class Cabin final : public face::Picture
 {
 public:
