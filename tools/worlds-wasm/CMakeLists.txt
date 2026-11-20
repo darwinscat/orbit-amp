@@ -7,13 +7,16 @@
 #
 #     source ~/emsdk/emsdk_env.sh
 #     emcmake cmake -S tools/worlds-wasm -B build-wasm -G Ninja
-#     cmake --build build-wasm            # -> build-wasm/plains-wasm.mjs + .wasm, ice-wasm.*, titan-wasm.*, sky-wasm.*
+#     cmake --build build-wasm            # -> build-wasm/plains-wasm.mjs + .wasm, ice-wasm.*, titan-wasm.*, sky-wasm.*, walker-wasm.*,
+#                                         #    underwater-wasm.*
 #
 # Each world is an ES module the page imports — plains-wasm.mjs exports createPlainsView (plains-view.js),
 # ice-wasm.mjs createIceView (ice-view.js), titan-wasm.mjs createTitanView (titan-view.js), sky-wasm.mjs
-# CatpitAmp's createCatpitSky (sky-view.js), each behind the one view of view.js — and the .wasm beside it is
-# fetched by it. The renderers and the worlds are the app's (src/redpaw/view, src/frostpaw/view,
-# src/amberpaw/view, src/catpit) over WebGL 2 (src/shaders/Gpu.h); the shaders are
+# CatpitAmp's createCatpitSky (sky-view.js), walker-wasm.mjs RedGrooveBass's createWalkerView (walker-view.js),
+# underwater-wasm.mjs the bass amp's createUnderwaterView (underwater-view.js), each behind the one view of view.js —
+# and the .wasm beside it is fetched by it. The renderers and the worlds are the app's (src/redpaw/view,
+# src/frostpaw/view, src/amberpaw/view, src/catpit, src/redgroove/view, src/underwater/view) over WebGL 2
+# (src/shaders/Gpu.h); the shaders are
 # resources/shaders, carried into the .wasm the way the app's build carries them (CMakeLists.txt, THE SHADERS)
 # and put together by the same src/shaders/Shaders.cpp.
 
@@ -171,3 +174,22 @@ orbitamp_world(titan createTitanModule SOURCES
 orbitamp_world(sky createSkyModule SOURCES
     "${ORBITAMP_ROOT}/src/catpit/CatpitSkyGl.cpp"
     EXTRA _view_throttle _view_place)
+
+# THE WALKER: RedGrooveBass's dome over the glowing forest — with the bass it hears of its own. Its world is matched to
+# its prototype to the last bit, compiled without contraction as the app's build compiles it (a fused multiply-add
+# rounds once where the JS rounds twice; WebAssembly has none to fuse into, and this says so where a compiler might one
+# day find one).
+orbitamp_world(walker createWalkerModule SOURCES
+    "${ORBITAMP_ROOT}/src/redgroove/view/WalkerGl.cpp" "${ORBITAMP_ROOT}/src/redgroove/view/WalkerWorld.cpp"
+    EXTRA _view_hear)
+set_source_files_properties("${ORBITAMP_ROOT}/src/redgroove/view/WalkerWorld.cpp" PROPERTIES COMPILE_OPTIONS "-ffp-contract=off")
+
+# THE SEA FLOOR: the bass amp's bathyscaphe — with the bass it hears, PARK, the cabin and the art the page hands it of
+# its own. Its world and its matrices are matched to their prototype number for number with the walker's JS built-ins
+# (WalkerWorld.cpp), compiled without contraction as the app's build compiles them.
+orbitamp_world(underwater createUnderwaterModule SOURCES
+    "${ORBITAMP_ROOT}/src/underwater/view/UnderwaterGl.cpp" "${ORBITAMP_ROOT}/src/underwater/view/UnderwaterWorld.cpp"
+    "${ORBITAMP_ROOT}/src/redgroove/view/WalkerWorld.cpp"
+    EXTRA _view_hear _view_park _view_cabin _view_picture _view_sprites _view_art)
+set_source_files_properties("${ORBITAMP_ROOT}/src/underwater/view/UnderwaterGl.cpp" "${ORBITAMP_ROOT}/src/underwater/view/UnderwaterWorld.cpp"
+    PROPERTIES COMPILE_OPTIONS "-ffp-contract=off")

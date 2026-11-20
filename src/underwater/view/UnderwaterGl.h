@@ -67,6 +67,11 @@ public:
 
     /** The cabin's art, before create(). */
     void setArt (Art a) { art = std::move (a); sprites = UnderwaterWorld::parseSprites (art.sprites); }
+    /** The passing bathyscaphe's atlas and table (sprites.txt as it is) after create(), on the GL thread, between two
+        frames — for a page that has them only once its first frame is drawn; the app hands them in its Art. Taken as
+        create() takes them, kept until destroy(); a table with no cells or an atlas the GPU cannot hold leaves the
+        bathyscaphe out. */
+    void setPassing (const Picture& atlas, const std::string& table);
     /** The projection: the half-width's tangent (constant over any aspect) and where the view's centre sits (NDC). */
     void setLens (double tanHalfWidth, double centreShear) noexcept { tanH = tanHalfWidth; shear = centreShear; }
 

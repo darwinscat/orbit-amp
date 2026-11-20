@@ -20,6 +20,22 @@
 // { wipers, lights } setting them from the start. CatpitAmp's sky is one more such view (sky-view.js): its gears are
 // the channels, counted from 0, and it has view.setThrottle (0..1, { settled }) — the lever anywhere along its
 // travel — and an option `place`, where the glass and the windshield are, which the module is given once it is made.
+// A world with an ear (RedGrooveBass's walker, walker-view.js) answers what is played, as the app's world lit by the
+// instrument does (WalkerDrive::hear, worlds/Play.h):
+//
+//   view.hear (peak);          // the amp's input's peak since the last call, linear (1 = full scale) — what the IN
+//                              // meter shows — once a frame or so from the page's audio. Not called, it is silence
+//
+// Each frame hears the largest peak said since the frame before it; a frame that comes before the page has said
+// anything since hears what it last said, for a tenth of a second, then silence — as the app's takePlay hands a
+// frame the last block's peak.
+//
+// A world may have calls of its own beyond these (the bathyscaphe's sea floor, underwater-view.js): its file gives
+// the view an option `own` — plain values, handed to wherever the world is drawn — and names two things on the
+// world: `calls (view, say, own)`, which adds its calls to the view, each saying what it wants as a message of its
+// own; and `own (own)`, made where the world is drawn, at once, which is handed the module once it is made (`made
+// (M)`, before anything is built; what it gives back is waited for before the renderer is made) and each of those
+// messages (`said (m)`), and told when the view is destroyed (`gone ()`).
 //
 // The canvas lies over the windscreen's box. It renders at the screen's pixels (at most twice the CSS size) and
 // comes down to 0.75 and 0.5 of that by itself when frames run late, climbing back when they have room; it stops
@@ -50,10 +66,12 @@ const viewAttributes = { antialias: false, alpha: false, depth: false, stencil: 
 function worldDrawn (canvas, options, post, world)
 {
     const { gears = 2, test = null, place = null, hold = false } = options;
+    const own = world.own ? world.own (options.own || {}) : null;     // the world's own, as its file has it
     let gear = options.gear ?? 1, turbo = !! options.turbo;
     let wipers = options.wipers ?? 0, lights = options.lights || [false, false];
     let cssW = options.cssW || 0, cssH = options.cssH || 0, dpr = options.dpr || 1;
     let throttle = null;            // the sky's lever, once moved (sky-view.js)
+    let heard = 0, lastHeard = 0, heardAt = -1, news = false;   // what the page said a world with an ear hears (view.hear)
     let M = null, failed = false, ready = false, drawn = false, active = !! options.on, steer = 0;
     let rung = 0, width = 0, height = 0, frame = 0, last = 0;
     const raf = typeof requestAnimationFrame === 'function' ? requestAnimationFrame : f => setTimeout (() => f (performance.now ()), 16);
@@ -101,6 +119,7 @@ function worldDrawn (canvas, options, post, world)
         last = t;
         if (dt > 0) ladder (dt);
         size ();
+        if (M._view_hear) { M._view_hear (news ? heard : t - heardAt < 0.1 ? lastHeard : 0); heard = 0; news = false; }
         M._view_frame (width, height, dt, steer);
         if (! drawn) { drawn = true; post ({ type: 'ready' }); }
     }
@@ -112,6 +131,7 @@ function worldDrawn (canvas, options, post, world)
         catch (e) { fail ('the module did not load: ' + (e && e.message || e)); return; }
         if (failed) return;
         M._view_make (gears, gear, turbo ? 1 : 0);
+        const owned = own ? own.made (M) : null;
         if (place && M._view_place) M._view_place (...place);
         if (throttle !== null && M._view_throttle) M._view_throttle (throttle);
         canopy ();
@@ -129,6 +149,7 @@ function worldDrawn (canvas, options, post, world)
                           +test.drive || 0, +test.steer || 0, test.still ? 1 : 0);
         }
         else M._view_settle ();     // ...at the gear asked for, whatever was asked for meanwhile
+        if (owned) { await owned; if (failed) return; }
         if (! M._view_create ())
         {
             fail (M.UTF8ToString (M._view_error ()) || 'the renderer did not start');
@@ -168,6 +189,7 @@ function worldDrawn (canvas, options, post, world)
             case 'turbo':  turbo = m.on; if (M && ! failed) M._view_turbo (turbo ? 1 : 0); break;
             case 'throttle': throttle = m.t; if (M && ! failed && M._view_throttle) { M._view_throttle (throttle); if (m.settled) M._view_settle (); } break;
             case 'steer':  steer = m.v; break;
+            case 'hear':   heard = Math.max (heard, m.peak); lastHeard = m.peak; heardAt = performance.now () / 1000; news = true; break;
             case 'wipers': wipers = m.speed; canopy (); break;
             case 'lights': lights = [m.left, m.right]; canopy (); break;
             case 'run':    active = m.on; active ? run () : halt (); break;
@@ -175,9 +197,11 @@ function worldDrawn (canvas, options, post, world)
                 halt ();
                 failed = true;
                 canvas.removeEventListener ('webglcontextlost', lost);
+                if (own) own.gone ();
                 if (M) M._view_destroy ();
                 post ({ type: 'gone' });
                 break;
+            default:       if (own && ! failed) own.said (m); break;
         }
     };
 }
@@ -219,7 +243,7 @@ function viewOffscreenWebGL2 ()
     the module's own, which a worker loads. */
 function createWorldView (canvas, world, url, { steer = false, onFallback = () => {}, onReady = () => {}, onFrame = () => {},
                                                 gears = 2, gear = 1, turbo = false, wipers = 0, lights = [false, false],
-                                                place = null, test = null, worker = true, hold = false } = {})
+                                                place = null, test = null, worker = true, hold = false, own = null } = {})
 {
     let failed = false, quality = VIEW_RUNGS[0], settleReady = null, gone = () => {};
     const readyPromise = new Promise (r => { settleReady = r; });
@@ -236,7 +260,7 @@ function createWorldView (canvas, world, url, { steer = false, onFallback = () =
     const options = { gears, gear, turbo, place: place && place.map (Number),
                       wipers: viewClamp (Math.round (+wipers) || 0, 0, 3), lights: [!! (lights && lights[0]), !! (lights && lights[1])],
                       test: test && { at: test.at || null, clock: test.clock || null, drive: +test.drive || 0, steer: +test.steer || 0, still: !! test.still },
-                      hold: !! hold, on: ! document.hidden && ! hold, ...measured () };
+                      hold: !! hold, on: ! document.hidden && ! hold, own, ...measured () };
 
     // Where the canvas goes to a worker, everything else goes with it; else the view is here, on a canvas that
     // has WebGL 2 or never draws.
@@ -253,7 +277,7 @@ function createWorldView (canvas, world, url, { steer = false, onFallback = () =
     }
     else
     {
-        if (! canvas.getContext ('webgl2', { ...viewAttributes, preserveDrawingBuffer: !! test })) { onFallback ('no WebGL 2'); return worldInert (world); }
+        if (! canvas.getContext ('webgl2', { ...viewAttributes, preserveDrawingBuffer: !! test })) { onFallback ('no WebGL 2'); return worldInert (world, own); }
         send = worldDrawn (canvas, options, said, world);
     }
 
@@ -313,13 +337,21 @@ function createWorldView (canvas, world, url, { steer = false, onFallback = () =
         /** The searchlights' switches, left and right. */
         view.setLights = (left, right) => send ({ type: 'lights', left: !! left, right: !! right });
     }
+    if (world.ear)
+    {
+        /** What is played: the amp's input's peak since the last call, linear (1 = full scale). */
+        view.hear = peak => send ({ type: 'hear', peak: Math.abs (+peak || 0) });
+    }
+    if (world.calls) world.calls (view, send, own);
     return view;
 }
 
-function worldInert (world)
+function worldInert (world, own)
 {
     const view = { setGear () {}, setTurbo () {}, setSteer () {}, start () {}, stop () {}, get quality () { return 0; }, ready: Promise.resolve (false), destroy () {} };
     if (world.canopy) { view.setWipers = () => {}; view.setLights = () => {}; }
     if (world.sky) view.setThrottle = () => {};
+    if (world.ear) view.hear = () => {};
+    if (world.calls) world.calls (view, () => {}, own);
     return view;
 }
