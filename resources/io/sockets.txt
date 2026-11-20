@@ -2,12 +2,12 @@
 plate_cat            plate    1024.0  716.0  196.0   30.0
 plate_maker          plate     836.0  699.0  124.0  108.0
 plate_powered        plate     648.0  716.0  196.0   30.0
-sock_bass            knob      742.0  846.0   76.0   76.0
-sock_blend           fader     646.0  850.0   16.0   67.0
+sock_bass            knob      742.0  832.0   76.0   76.0
+sock_blend           fader     646.0  864.5   16.0   96.0
 sock_cab_screen      screen   1354.0  811.0  244.0   38.0
-sock_chorus          fader    1086.0  850.0   16.0   67.0
-sock_comp            fader     318.0  850.0   16.0   67.0
-sock_comp_gr         meter     343.0  850.0   14.0   67.0
+sock_chorus          fader    1086.0  864.5   16.0   96.0
+sock_comp            fader     318.0  864.5   16.0   96.0
+sock_comp_gr         meter     343.0  864.5   14.0   96.0
 sock_dosimeter       gauge     118.0  566.0   78.0   78.0
 sock_drive           knob      450.0  850.0  112.0  112.0
 sock_fingers         switch   1354.0  899.3   52.0   28.0
@@ -25,12 +25,13 @@ sock_lever_fast      stop      240.0  886.0    8.0    8.0
 sock_lever_park      stop      240.0  818.0    8.0    8.0
 sock_lever_slow      stop      240.0  852.0    8.0    8.0
 sock_limiter         button   1580.0  907.0   92.0   26.0
-sock_middle          knob      830.0  846.0   76.0   76.0
-sock_octave          fader    1024.0  850.0   16.0   67.0
+sock_middle          knob      830.0  832.0   76.0   76.0
+sock_octave          fader    1024.0  864.5   16.0   96.0
 sock_out_fader       fader    1602.0  824.0   16.0   88.0
 sock_out_meter       meter    1558.0  824.0   14.0   88.0
 sock_presence        knob      566.0  846.0   76.0   76.0
-sock_reverb          fader    1148.0  850.0   16.0   67.0
+sock_reverb          fader    1148.0  864.5   16.0   96.0
 sock_strings         switch   1354.0  857.7   52.0   28.0
-sock_treble          knob      918.0  846.0   76.0   76.0
+sock_treble          knob      918.0  832.0   76.0   76.0
 sock_tuner_screen    screen    267.0  718.0  446.0   38.0
+# tone_strip (text, no socket): x0 y0 x1 y1 = 712 878 948 912

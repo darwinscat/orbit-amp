@@ -72,6 +72,11 @@ public:
         the GPU; the day (0) while it is the 1993 landscape or the still, where the face paints the day's plate. */
     void followWorld();
 
+    /** THE CABIN WITH THE DOSIMETER'S FACE CLEAR, the site's cabin-dial.webp: `cabin` (drawn at `scale` pixels to the
+        stage's one) with a disk of layout::dialClearRadius round layout::dialHub made transparent, its edge a pixel
+        soft, everything else as it was. */
+    static juce::Image withDialClear (const juce::Image& cabin, float scale);
+
 private:
     // THE VIEW, under the whole stage, in the windscreen the rovers look through (redpaw/view/Windscreen.h), its gear the
     // speed the lever stands at, parked while the amp is. Its GPU frame is drawn by this window's own context, which

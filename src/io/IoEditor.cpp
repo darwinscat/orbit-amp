@@ -151,12 +151,16 @@ namespace
         p.emblemFace = { emblemFace.begin(), emblemFace.end() };
         p.emblemMark = emblemMark;
 
+        // The readings (the owner, 20.11): PRESET and the playing preset's name top left and the version top right on the
+        // rim over the window, MEM and CPU in the strip under the tones — in Io's paint, as the tuner and the cabinet's name.
         p.preset  = presetPlace;
         p.version = versionPlace;
         p.memory  = memoryPlace;
         p.load    = loadPlace;
         p.readingsFit = true;
         p.readingPx = px13;
+        p.readingInk = glyphs::dayInk;
+        p.presetNamed = true;
         return p;
     }
 
@@ -722,6 +726,25 @@ bool IoEditor::channelKey (const juce::KeyPress& key)
     sockets go into the lineup's "face" (the console's key). THE STILL: the view's first frame, the whole stage at twice
     its size, the first a poster's frame brings: the Io world (makeDrive), as the posters, under the knobs as they stand
     (tellWorld). */
+juce::Image IoEditor::withDialClear (const juce::Image& cabin, float scale)
+{
+    auto cut = cabin.createCopy().convertedToFormat (juce::Image::ARGB);
+    const auto hub = layout::dialHub * scale;
+    const float r = layout::dialClearRadius * scale;
+    const int x0 = juce::jmax (0, (int) std::floor (hub.x - r - 1.0f)), x1 = juce::jmin (cut.getWidth(), (int) std::ceil (hub.x + r + 1.0f));
+    const int y0 = juce::jmax (0, (int) std::floor (hub.y - r - 1.0f)), y1 = juce::jmin (cut.getHeight(), (int) std::ceil (hub.y + r + 1.0f));
+    juce::Image::BitmapData px (cut, juce::Image::BitmapData::readWrite);
+    for (int y = y0; y < y1; ++y)
+        for (int x = x0; x < x1; ++x)
+        {
+            // How much of the pixel lies outside the disk, its edge a pixel soft: 0 inside, 1 a pixel past the edge.
+            const float d = juce::Point<float> ((float) x + 0.5f, (float) y + 0.5f).getDistanceFrom (hub);
+            if (const float keep = juce::jlimit (0.0f, 1.0f, d - r + 0.5f); keep < 1.0f)
+                px.setPixelColour (x, y, px.getPixelColour (x, y).withMultipliedAlpha (keep));
+        }
+    return cut;
+}
+
 void IoEditor::webExtras (const juce::File& dir, juce::DynamicObject& kit, juce::DynamicObject& world)
 {
     using Obj = juce::DynamicObject;
@@ -914,6 +937,11 @@ void IoEditor::webExtras (const juce::File& dir, juce::DynamicObject& kit, juce:
 
     kit.setProperty ("window", rect (layout::view));
     kit.setProperty ("stills", list ({ juce::var ("still.webp") }));
+
+    // THE CABIN WITH THE DOSIMETER'S FACE CLEAR (cabin-dial.webp, @1x and @half, as the cabin's three): for a page that
+    // lays it over a world drawing the dial and its live needle (io-wasm). Named in no key of places.json: the README
+    // says it.
+    web::writeThreeSizes (dir, "cabin-dial", withDialClear (picture->staticImage (2.0f), 2.0f), "cabinDial", web::halfCabinQuality);
 
     // THE POSTERS: the rover as it opens, and one for each place of the lever — PARK, SLOW, FAST — through the glass the
     // view's first frame there. The lever stood at once where the rover opens: when the window first comes up it is still

@@ -17,7 +17,9 @@ dashboard_dark.webp  the same cabin in the dark, for the world's renderer, which
 
 sockets.txt is catbay's table as handed over (final/sockets_dashboard.txt): every control's centre and size, in stage
 px. The face's layout, src/io/IoLayout.h, is read from it; sock_dosimeter is the world's (it draws the needle). The
-pictograms and the words stand where the approved mockup has them (cabin/drafts/face/io.html, glyphs_io.html).
+pictograms and the words stand where the approved mockup has them (cabin/drafts/face/io.html, glyphs_io.html), but
+the tone knobs' three, raised 14 px with the knobs on the re-rendered plates. The table's comment line tone_strip, a
+text strip under the tone knobs with no socket, is where MEM and CPU are written.
 
 fonts/B612-Regular-Latin.ttf and fonts/B612-Bold-Latin.ttf are a European Latin subset of B612 (The B612 Project
 Authors, github.com/polarsys/b612 at 48ac6ba, SIL Open Font License 1.1, fonts/B612-OFL.txt; no Reserved Font Name,

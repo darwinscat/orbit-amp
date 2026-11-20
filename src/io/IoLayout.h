@@ -34,7 +34,6 @@ inline juce::Rectangle<float> socket (float cx, float cy, float w, float h)
 }
 
 // THE TOP ROW.
-inline constexpr float topTitleY = 684.0f;
 inline const juce::Rectangle<float> tunerScreen = socket (267.0f, 718.0f, 446.0f, 38.0f);
 
 // THE MAKER'S PLATE (plate_maker): the octagon the family's cat is cut in, between POWERED BY's and DARWIN'S CAT's.
@@ -45,11 +44,18 @@ inline const juce::Rectangle<float> emblemMark = socket (836.0f, 699.0f, 74.0f, 
 inline const juce::Rectangle<float> poweredByPlate = socket (648.0f, 716.0f, 196.0f, 30.0f);
 inline const juce::Rectangle<float> makerNamePlate = socket (1024.0f, 716.0f, 196.0f, 30.0f);
 
-// PRESET, the version, MEM and CPU: over the two plates, in the middle panel's strip.
-inline const juce::Rectangle<float> presetPlace  { 552.0f, topTitleY - 14.0f, 116.0f, 28.0f };
-inline const juce::Rectangle<float> versionPlace { 670.0f, topTitleY - 14.0f, 76.0f, 28.0f };
-inline const juce::Rectangle<float> memoryPlace  { 926.0f, topTitleY - 14.0f, 120.0f, 28.0f };
-inline const juce::Rectangle<float> loadPlace    { 1050.0f, topTitleY - 14.0f, 72.0f, 28.0f };
+// THE READINGS (the owner, 20.11): nothing round the maker's plate. PRESET and the playing preset's name top left and
+// the version top right, on the dark rim over the window — on dashboard.webp the riveted strip, y 0..23, and the frame's
+// brass under it down to the window's edge at y 73 — their middle at y 36, under the rivets (y 3..11) and, at the right,
+// clear of the grey tape at x 1556..1654, y 31..49. MEM and CPU side by side in the text strip under the tone knobs
+// (catbay's tone_strip), the pair centred in it as the standalone reads them.
+inline const juce::Rectangle<float> rim { 0.0f, 0.0f, width, 73.0f };
+inline constexpr float rimY = 36.0f;
+inline const juce::Rectangle<float> toneTextStrip = juce::Rectangle<float>::leftTopRightBottom (712.0f, 878.0f, 948.0f, 912.0f);
+inline const juce::Rectangle<float> presetPlace  { 64.0f, rimY - 13.0f, 180.0f, 26.0f };
+inline const juce::Rectangle<float> versionPlace { 1440.0f, rimY - 13.0f, 106.0f, 26.0f };
+inline const juce::Rectangle<float> memoryPlace  { 744.0f, 882.0f, 100.0f, 26.0f };
+inline const juce::Rectangle<float> loadPlace    { 852.0f, 882.0f, 72.0f, 26.0f };
 
 // KEYS: UNDO and REDO wider, then A B C D — a dark cap in each hole, its glyph or its letter on it.
 inline constexpr float keyRowY = 719.0f, keyHole = 36.0f;
@@ -84,23 +90,25 @@ inline constexpr float leverSignX = 268.0f;                         // P and the
 inline constexpr float parkBaseline = 826.5f, parkEm = 22.0f;       // P, B612 Bold
 inline constexpr float fastLeftX = 263.0f, fastRightX = 276.0f;
 
-inline const juce::Rectangle<float> compSlot   = socket (318.0f, 850.0f, 16.0f, 67.0f);
-inline const juce::Rectangle<float> compGrSlot = socket (343.0f, 850.0f, 14.0f, 67.0f);
+inline const juce::Rectangle<float> compSlot   = socket (318.0f, 864.5f, 16.0f, 96.0f);
+inline const juce::Rectangle<float> compGrSlot = socket (343.0f, 864.5f, 14.0f, 96.0f);
 
 inline const juce::Point<float> drive { 450.0f, 850.0f };
 inline constexpr float driveSocket = 112.0f, driveKnob = 97.0f;
 
 inline const juce::Point<float> presence { 566.0f, 846.0f };
-inline const juce::Rectangle<float> blendSlot = socket (646.0f, 850.0f, 16.0f, 67.0f);
+inline const juce::Rectangle<float> blendSlot = socket (646.0f, 864.5f, 16.0f, 96.0f);
 
 // TONE: three sockets, BASS, MIDDLE and TREBLE — each the playing channel's tone of that name. PRESENCE's socket is the
 // same size.
 inline constexpr std::array<float, 3> toneX { 742.0f, 830.0f, 918.0f };
-inline constexpr float toneY = 846.0f, toneSocket = 76.0f, toneKnob = 63.0f;
+inline constexpr float toneY = 832.0f, toneSocket = 76.0f, toneKnob = 63.0f;
 
-// THE EFFECTS: OCTAVE, CHORUS and REVERB, a vertical fader in each slot.
+// THE EFFECTS: OCTAVE, CHORUS and REVERB, a vertical fader in each slot. Every column's slot — COMP's, its squeeze's,
+// BLEND's and these — runs 816.5 to 912.5 on the re-rendered plates; the tone knobs stand 14 px higher than the first
+// render had them, their pictograms with them.
 inline constexpr std::array<float, 3> effectX { 1024.0f, 1086.0f, 1148.0f };
-inline constexpr float effectY = 850.0f, effectSlotHeight = 67.0f, effectFaderWidth = 44.0f;
+inline constexpr float effectY = 864.5f, effectSlotHeight = 96.0f, effectFaderWidth = 44.0f;
 
 inline constexpr float ringInset = 3.5f, ringWidth = 2.5f, driveRingWidth = 3.0f;
 
@@ -123,11 +131,16 @@ struct GlyphAt { float x, y, scale; };
 inline constexpr GlyphAt driveGlyph    { 450.0f, 776.0f, 1.35f };
 inline constexpr GlyphAt presenceGlyph { 566.0f, 783.0f, 1.2f };
 inline constexpr GlyphAt blendGlyph    { 646.0f, 783.0f, 1.2f };
-inline constexpr std::array<GlyphAt, 3> toneGlyphs {{ { 742.0f, 785.0f, 1.3f }, { 830.0f, 785.0f, 1.3f }, { 918.0f, 785.0f, 1.3f } }};
+inline constexpr std::array<GlyphAt, 3> toneGlyphs {{ { 742.0f, 771.0f, 1.3f }, { 830.0f, 771.0f, 1.3f }, { 918.0f, 771.0f, 1.3f } }};   // raised with the knobs
 inline constexpr std::array<GlyphAt, 3> effectGlyphs {{ { 1024.0f, 785.0f, 1.1f }, { 1086.0f, 785.0f, 1.1f }, { 1148.0f, 785.0f, 1.2f } }};
 inline constexpr GlyphAt compGlyph     { 330.0f, 785.0f, 1.2f };
 inline constexpr GlyphAt inGlyph       { 92.0f, 772.0f, 1.1f };
 inline constexpr GlyphAt outGlyph      { 1584.0f, 770.0f, 1.25f };
+
+/** THE DOSIMETER'S FACE, for the site's cabin-dial.webp: the kit's cabin with a clear disk of this radius round the dial's hub,
+    inside the bezel's black ring, so that the world's dial and its live needle show through (io-wasm's README). */
+inline const juce::Point<float> dialHub { 119.2f, 564.9f };
+inline constexpr float dialClearRadius = 37.8f;
 
 /** WHERE THE CABIN'S LABELS LIE — every glyph and word on the bottom row and the keys' — for the night's glow, which is
     drawn there alone. */

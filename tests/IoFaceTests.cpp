@@ -79,16 +79,16 @@ namespace
         return nullptr;
     }
 
-    /** Two pictures alike to the last pixel in `area` — the bottom row's labels and controls: MEM and CPU over the plates
-        read the machine, and change as they please. */
-    bool alikeIn (const juce::Image& a, const juce::Image& b, juce::Rectangle<int> area)
+    /** Two pictures alike to the last pixel in `area` but `apart` — the bottom row's labels and controls, but MEM and CPU
+        in the strip under the tones: they read the machine, and change as they please. */
+    bool alikeIn (const juce::Image& a, const juce::Image& b, juce::Rectangle<int> area, juce::Rectangle<int> apart = {})
     {
         if (! a.isValid() || ! b.isValid() || a.getBounds() != b.getBounds())
             return false;
         area = area.getIntersection (a.getBounds());
         for (int y = area.getY(); y < area.getBottom(); ++y)
             for (int x = area.getX(); x < area.getRight(); ++x)
-                if (a.getPixelAt (x, y) != b.getPixelAt (x, y))
+                if (! apart.contains (x, y) && a.getPixelAt (x, y) != b.getPixelAt (x, y))
                     return false;
         return true;
     }
@@ -287,7 +287,79 @@ int ORBITAMP_GATE_MAIN()
                "...the wedge itself lit warm white (" + wedgeNight.toDisplayString (false) + ")");
         io->setCabinDark (0.0f);
         const auto bottomRow = (juce::Rectangle<float> (0.0f, 750.0f, layout::width, 180.0f) * k).toNearestInt();
-        check (alikeIn (day, shot(), bottomRow), "...and back at 0 the bottom row is the day's again, to the pixel");
+        const auto readings = (layout::toneTextStrip.expanded (2.0f) * k).toNearestInt();
+        check (alikeIn (day, shot(), bottomRow, readings), "...and back at 0 the bottom row is the day's again, to the pixel");
+
+        // THE RE-RENDERED PLATES (catbay, 20.11; resources/io/sockets.txt): BASS, MIDDLE and TREBLE 14 px higher, at cy 832,
+        // their rings round them; every column's slot 96 long, 816.5 to 912.5, and COMP, BLEND, OCTAVE, CHORUS and REVERB
+        // each a fader as long, round its centre.
+        bool raised = true;
+        for (const float x : layout::toneX)
+            raised = raised && standingAt<face::ArtKnob> (*face, { x, 832.0f }) != nullptr && standingAt<face::KnobRing> (*face, { x, 832.0f }) != nullptr;
+        check (raised, "BASS, MIDDLE and TREBLE stand at cy 832, their rings round them: the re-rendered plate's sockets");
+        juce::StringArray shortFaders;
+        for (const char* id : { "comp", "blend", "octave", "chorus", "reverb" })
+            if (auto* f = named (*face, id); f == nullptr || f->getHeight() != 96 || std::abs (f->getBounds().toFloat().getCentreY() - 864.5f) > 1.0f)
+                shortFaders.add (juce::String (id) + " " + (f == nullptr ? juce::String ("missing") : f->getBounds().toString()));
+        check (shortFaders.isEmpty(), "COMP, BLEND, OCTAVE, CHORUS and REVERB are faders 96 long round cy 864.5, as their slots"
+                                          + (shortFaders.isEmpty() ? juce::String() : ": not " + shortFaders.joinIntoString ("; ")));
+
+        // THE READINGS MOVED (the owner, 20.11): MEM and CPU in the text strip under the tones (catbay's tone_strip), PRESET
+        // and the preset's name top left and the version top right on the rim over the window, all in Io's paint; nothing
+        // left round the maker's plate, over POWERED BY and DARWIN'S CAT, where they stood.
+        std::vector<face::Legend*> legends;
+        allOf (*face, legends);
+        const auto legendIn = [&legends] (juce::Rectangle<float> place, juce::Rectangle<float> within)
+        {
+            for (auto* l : legends)
+                if (l->getBounds() == place.toNearestInt())     // MEM's shown only in the standalone, the gate a host
+                    return within.toNearestInt().contains (l->getBounds());
+            return false;
+        };
+        const auto inked = [&at, &day] (juce::Rectangle<float> box)
+        {
+            int n = 0;
+            for (float y = box.getY(); y < box.getBottom(); y += 1.0f)
+                for (float x = box.getX(); x < box.getRight(); x += 1.0f)
+                    n += brightness (at (day, x, y)) > 0.6f ? 1 : 0;     // Io's paint; the plate itself stays under 0.36 there
+            return n;
+        };
+        const int inStrip = inked (layout::toneTextStrip), rimLeft = inked ({ 0.0f, 0.0f, 400.0f, 73.0f }),
+                  rimRight = inked ({ 1300.0f, 0.0f, 372.0f, 73.0f });
+        check (legendIn (layout::memoryPlace, layout::toneTextStrip) && legendIn (layout::loadPlace, layout::toneTextStrip) && inStrip > 25,
+               "MEM's and CPU's boxes lie inside the strip under the tones, written there (" + juce::String (inStrip) + " inked pixels)");
+        check (legendIn (layout::presetPlace, layout::rim) && legendIn (layout::versionPlace, layout::rim) && rimLeft > 40 && rimRight > 25,
+               "PRESET and the version stand on the rim over the window, left and right (" + juce::String (rimLeft) + " and "
+                   + juce::String (rimRight) + " inked pixels)");
+        const juce::Rectangle<float> roundLogo[] { juce::Rectangle<float>::leftTopRightBottom (540.0f, 645.0f, 772.0f, 700.0f),
+                                                   juce::Rectangle<float>::leftTopRightBottom (900.0f, 645.0f, 1132.0f, 700.0f) };
+        int legendsThere = 0, inkThere = 0;
+        for (const auto& area : roundLogo)
+        {
+            for (auto* l : legends)
+                legendsThere += l->isVisible() && l->getBounds().intersects (area.toNearestInt()) ? 1 : 0;
+            inkThere += inked (area);
+        }
+        check (legendsThere == 0 && inkThere == 0, "nothing is drawn round the logo over the plates (" + juce::String (legendsThere)
+                                                       + " readings, " + juce::String (inkThere) + " inked pixels there)");
+    }
+
+    // THE SITE'S cabin-dial.webp (IoEditor::withDialClear): the cabin clear in a disk of 37.8 stage px round the dosimeter's
+    // hub (stage 119.2, 564.9), inside its bezel's ring; untouched a pixel past it.
+    {
+        juce::Image plate (juce::Image::ARGB, 3344, 1882, true);
+        plate.clear (plate.getBounds(), juce::Colours::darkgrey);
+        const auto cut = io::IoEditor::withDialClear (plate, 2.0f);
+        const auto alphaAt = [&cut] (float x, float y) { return cut.getPixelAt ((int) (x * 2.0f), (int) (y * 2.0f)).getAlpha(); };
+        const auto hub = layout::dialHub;
+        bool clear = alphaAt (hub.x, hub.y) == 0, kept = alphaAt (0.0f, 0.0f) == 255 && plate.getPixelAt (238, 1129).getAlpha() == 255;
+        for (const auto& towards : { juce::Point<float> (1.0f, 0.0f), { -1.0f, 0.0f }, { 0.0f, 1.0f }, { 0.0f, -1.0f } })
+        {
+            clear = clear && alphaAt (hub.x + towards.x * 36.5f, hub.y + towards.y * 36.5f) == 0;
+            kept  = kept && alphaAt (hub.x + towards.x * 39.5f, hub.y + towards.y * 39.5f) == 255;
+        }
+        check (cut.getBounds() == plate.getBounds() && clear && kept,
+               "cabin-dial.webp's plate is clear in the dosimeter's disk, 37.8 stage px round its hub, and as it was past it");
     }
 
     // THE WORLD BEHIND THE GLASS: Io, in the speed's gear, parked at PARK.
