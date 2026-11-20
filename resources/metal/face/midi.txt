@@ -1,0 +1,19 @@
+FerroClawAmp MIDI commands
+
+It listens to every MIDI input that is switched on, on all 16 channels.
+
+Program Change
+1	CLEAN GAIN LO
+2	CLEAN GAIN HI
+3	LEAD GAIN LO
+4	LEAD GAIN HI
+
+A controller that numbers its programs from 0 sends 0 to 3 for these.
+
+Control Change
+23	GAIN
+24	the first tone knob
+25	the second tone knob
+26	the third tone knob
+
+0 to 127 is the knob's whole travel. On a tone knob 64 is the middle.

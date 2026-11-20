@@ -631,7 +631,8 @@ endfunction()
 # face, its name, its number and what it carries.
 #
 #   add_amp(<Name>  CODE <code>  [BY_NAME]  [ICON <Amp>]
-#           SOURCES <files...>  LIBRARIES <targets...>  [ART <files...>]  [SET <packs...>]  [WHOLE_SHELF])
+#           SOURCES <files...>  LIBRARIES <targets...>  [ART <files...>]  [ART_FOLDERS <folders...>]
+#           [SET <packs...>]  [WHOLE_SHELF])
 #
 #   <Name>      the target, the PRODUCT_NAME and the stem of every bundle it builds; in lower case, its
 #               bundle id and its CLAP id, com.darwinscat.<name>; and its icon, resources/icon/<Name>-*.
@@ -648,6 +649,8 @@ endfunction()
 #   SOURCES     what it is compiled from; LIBRARIES what it links, ahead of JUCE's recommended flags.
 #   ART         its renders, in the factory folder's Faces/<Name>, each under its own file's name, where its
 #               face reads them (src/face/Renders.h).
+#   ART_FOLDERS folders of its art laid out whole, each as a folder of its own name in Faces/<Name>, every
+#               file in it at the same path under it: a world's finds/, say (Faces/<Name>/finds/...).
 #   SET         the packs it plays, by their folders' names in the tree's set (THE SET), less `.orbitrig` —
 #               at the factory folder's top, zipped.
 #   WHOLE_SHELF the whole cabinet shelf, the folders the cabinet catalog gives OrbitAmp alone with Darwin's
@@ -762,7 +765,7 @@ function(export_entry_points_only)
 endfunction()
 
 function(add_amp name)
-    cmake_parse_arguments(PARSE_ARGV 1 AMP "BY_NAME;WHOLE_SHELF;BASS" "CODE;ICON" "SOURCES;LIBRARIES;ART;SET")
+    cmake_parse_arguments(PARSE_ARGV 1 AMP "BY_NAME;WHOLE_SHELF;BASS" "CODE;ICON" "SOURCES;LIBRARIES;ART;ART_FOLDERS;SET")
     string(TOLOWER "${name}" id)
     set(iconOf "${name}")
     if(AMP_ICON)
@@ -866,6 +869,15 @@ function(add_amp name)
         get_filename_component(base "${render}" NAME)
         list(APPEND files "${render}")
         list(APPEND at "Faces/${name}/${base}")
+    endforeach()
+    foreach(folder IN LISTS AMP_ART_FOLDERS)
+        get_filename_component(top "${folder}" NAME)
+        file(GLOB_RECURSE inside CONFIGURE_DEPENDS RELATIVE "${folder}" "${folder}/*")
+        list(SORT inside)
+        foreach(rel IN LISTS inside)
+            list(APPEND files "${folder}/${rel}")
+            list(APPEND at "Faces/${name}/${top}/${rel}")
+        endforeach()
     endforeach()
     foreach(pack IN LISTS AMP_SET)
         if(NOT pack IN_LIST ORBITAMP_SET_NAMES)
@@ -1055,6 +1067,9 @@ set(CATPITAMP_SET   "Soldano X88-IR Normal" "Soldano X88-IR Altered" "Soldano X8
 set(REDPAWAMP_SET   "Friedman IR-X Ch1 PowerAmp" "Friedman IR-X Ch2 PowerAmp")
 set(FROSTPAWAMP_SET "Two Notes ReVolt Clean PowerAmp" "Two Notes ReVolt Crunch PowerAmp" "Two Notes ReVolt Lead PowerAmp")
 set(AMBERPAWAMP_SET "Victory V4 Copper (clean)" "Victory V4 Sheriff (crunch)" "Victory V4 Kraken (hi-gain)")
+# FerroClawAmp's stand-in sound until the E530's own captures come: the V4's three, its four channels over them
+# (src/metal/MetalLineup.cpp).
+set(FERROCLAWAMP_SET "Victory V4 Copper (clean)" "Victory V4 Sheriff (crunch)" "Victory V4 Kraken (hi-gain)")
 
 # THE FAMILY A BUILD RELEASES: installer/family.ini, the amps, unless -DFAMILY_INI= names another —
 # installer/bass.ini, the basses (the owner, 06.11: a package of their own). Everything below that says
@@ -1086,7 +1101,7 @@ separate_arguments(ORBITAMP_RELEASED)
 if(NOT ORBITAMP_DEV_FACTORY AND "OrbitAmp" IN_LIST ORBITAMP_RELEASED)
     set(kept "")
     set(left "")
-    foreach(amp CatpitAmp RedPawAmp FrostPawAmp AmberPawAmp)
+    foreach(amp CatpitAmp RedPawAmp FrostPawAmp AmberPawAmp FerroClawAmp)
         string(TOUPPER "${amp}" key)
         if(amp IN_LIST ORBITAMP_RELEASED)
             list(APPEND kept ${${key}_SET})
@@ -1271,6 +1286,15 @@ juce_add_binary_data(OrbitAmpShaders
 target_include_directories(OrbitAmpShaders INTERFACE "${ORBITAMP_GENERATED_DIR}")   # ShaderPaths.h
 set_target_properties(OrbitAmpShaders PROPERTIES EXCLUDE_FROM_ALL TRUE)   # OrbitAmp itself draws none
 
+# DC ROCKER, the E530 cabin's lettering (src/metal/MetalControls.h): New Rocker (SIL OFL 1.1, resources/fonts/
+# NewRocker-OFL.txt) cut to a European Latin subset and renamed, as the licence asks of a modified copy
+# (tools/fonts/dc-rocker.py). Built into the binary of the face that writes in it, as appkit's Michroma is.
+juce_add_binary_data(OrbitAmpRockerFont
+    NAMESPACE   RockerFontData
+    HEADER_NAME RockerFontData.h
+    SOURCES     "${CMAKE_CURRENT_SOURCE_DIR}/resources/fonts/DCRocker-Regular.ttf")
+set_target_properties(OrbitAmpRockerFont PROPERTIES EXCLUDE_FROM_ALL TRUE)
+
 # BAKE-ART — the faces' pictures as they ship (tools/bake-art/BakeArt.cpp): each face's renders as painted,
 # in resources/<face>/source, corrected and cut once into the lossless WebP its product carries, in
 # resources/<face>. No product builds it or waits for it: it is run by hand, on a Mac, when a render or a
@@ -1441,6 +1465,19 @@ if(NOT MSVC)
     set_source_files_properties(src/underwater/view/UnderwaterWorld.cpp src/underwater/view/UnderwaterGl.cpp
         PROPERTIES COMPILE_OPTIONS "-ffp-contract=off")
 endif()
+# The ENGL E530's world, the metal one (src/metal/view): its CPU half (the textures, the loop, the things' places, the
+# drive, the lightning, the dragons, the meshes, the finds' readers) for the renderer to read, a port of its prototype
+# (metal-world.js and the CPU's part of metal-gl.js) matched number for number with the walker's JS built-ins, so
+# compiled without contraction too.
+set(METAL_VIEW_SOURCES
+    src/metal/view/MetalWorld.cpp
+    src/metal/view/MetalFinds.cpp
+    src/metal/view/MetalFound.cpp
+    src/redgroove/view/WalkerWorld.cpp)
+if(NOT MSVC)
+    set_source_files_properties(src/metal/view/MetalWorld.cpp src/metal/view/MetalFinds.cpp
+        PROPERTIES COMPILE_OPTIONS "-ffp-contract=off")
+endif()
 # ...and the cabin's art it draws (src/underwater/view/UnderwaterArt.h): the dashboard, its sea layer and the passing
 # bathyscaphe's atlas as WebP made from the renders in resources/underwater/source (resources/underwater/README.txt
 # says how: lossy colour, the alpha lossless and exact, the sea layer at half size), and the atlas's table,
@@ -1448,6 +1485,12 @@ endif()
 # Faces/DeepGrooveBass, and they are read from there at run time (src/face/Renders.h, UNDERWATER_ART_DIR), decoded
 # with libwebp.
 set(UNDERWATER_ART_SOURCES src/underwater/view/UnderwaterArt.cpp)
+# The metal world on the GPU (src/metal/view/MetalGl.h, metal-gl.js's passes from resources/shaders/metal) and the art
+# it reads at run time (src/metal/view/MetalArt.h): the cabin's two plates, the face's resources/metal/dashboard.webp
+# and dashboard_flash.webp, and resources/metal/world (the owner's meshes, the groves' guitars, the letters, the
+# banners, the dragon; its README.txt), laid out in Faces/FerroClawAmp and read from there (METAL_ART_DIR).
+set(METAL_GL_SOURCES src/metal/view/MetalGl.cpp)
+set(METAL_ART_SOURCES src/metal/view/MetalArt.cpp)
 
 # A world's demo: a bare window with the windscreen in it over one world — the sea's in the canopy's
 # shape — for looking at it and measuring it. Built only when asked for by name. No audio.
@@ -1477,6 +1520,10 @@ view_demo(underwater_view_demo "UnderwaterViewDemo" SOURCES ${REDPAW_VIEW_SOURCE
 target_link_libraries(underwater_view_demo PRIVATE felitronics::appkit_webp)
 # The demo has no factory folder: the art is read from the source tree unless UNDERWATER_ART_DIR says otherwise.
 target_compile_definitions(underwater_view_demo PRIVATE ORBITAMP_UNDERWATER_ART_DEFAULT="${CMAKE_CURRENT_SOURCE_DIR}/resources/underwater")
+view_demo(metal_view_demo "MetalViewDemo" SOURCES ${REDPAW_VIEW_SOURCES} ${METAL_VIEW_SOURCES} ${METAL_GL_SOURCES} ${METAL_ART_SOURCES} src/face/Renders.cpp
+    DEFINITIONS ORBITAMP_VIEW_DEMO_METAL=1)
+target_link_libraries(metal_view_demo PRIVATE felitronics::appkit_webp)
+target_compile_definitions(metal_view_demo PRIVATE ORBITAMP_METAL_ART_DEFAULT="${CMAKE_CURRENT_SOURCE_DIR}/resources/metal")
 
 # The sea's CPU half against the prototype it was ported from: the start, five scripted flights, the
 # gears, Saturn, the wipers' panes. JUCE-free, links only the world.
@@ -1503,6 +1550,22 @@ target_compile_features(underwater_world_test PRIVATE cxx_std_20)
 target_compile_definitions(underwater_world_test PRIVATE
     UNDERWATER_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/underwater/underwater-world.txt"
     UNDERWATER_SPRITES="${CMAKE_CURRENT_SOURCE_DIR}/resources/underwater/sprites.txt")
+
+# The metal world against its prototype, number for number: the hashes, the textures and the road map, the loop, the
+# height mirror, every thing's place, the meshes, the drive in every gear, PARK and the storm, an attack and the fires and
+# ribbons the renderer uploads, the dragons over two minutes, the ball lightning, the Tesla towers — compared with the
+# prototype's own dump (tests/fixtures/metal). The finds' readers are compared on the prototype's own files when its
+# folder is given (ORBITAMP_METAL_PROTOTYPE, or the test's second argument); without it they are skipped, said so.
+# Then the art as it ships (resources/metal): what the finds there bring the world (src/metal/view/MetalFound.h) must
+# be what the prototype's finds bring it.
+set(ORBITAMP_METAL_PROTOTYPE "" CACHE PATH "The metal world's prototype folder (finds/ in it) for metal_world_test's readers; empty: skipped")
+add_executable(metal_world_test tests/MetalWorldTests.cpp ${METAL_VIEW_SOURCES})
+target_include_directories(metal_world_test PRIVATE src)
+target_compile_features(metal_world_test PRIVATE cxx_std_20)
+target_compile_definitions(metal_world_test PRIVATE
+    METAL_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/metal/metal-world.txt"
+    METAL_PROTOTYPE="${ORBITAMP_METAL_PROTOTYPE}"
+    METAL_ART="${CMAKE_CURRENT_SOURCE_DIR}/resources/metal")
 
 # THE ROVER'S FACE IS WORN BY MORE THAN ONE PRODUCT (src/redpaw/RedPawSkin.h): what every rover is made
 # of is said once here — the renders by the file names the face asks for, as bake-art made them, the
@@ -1617,6 +1680,37 @@ set(DEEPGROOVEBASS_SOURCES
     ${UNDERWATER_VIEW_SOURCES}       # ... looking out on the sea floor
     ${UNDERWATER_ART_SOURCES})
 
+# THE E530'S FACE (src/metal): the family's console on the ENGL E530's dashboard in the metal world's cabin. Its plates,
+# night and flash, as WebP made from catbay's renders (resources/metal/README.txt says which and how),
+# laid out in the factory folder's Faces/FerroClawAmp. The knobs and the faders' cap its own where resources/metal/face has
+# one, the helicopter's otherwise, with its mark and its MIDI list. Its world, the metal one (src/metal/view), reads the
+# same two plates, and world/ beside them, from the same folder (FERROCLAWAMP_ART_FOLDERS: resources/metal/world laid out
+# whole, the meshes with their credits, the guitars, the letters, the banners, the dragon); while it draws the cabin it
+# crossfades the plates by its lightning, and whenever it does not the face paints the night one flat.
+set(FERROCLAWAMP_RENDERS
+    "${CMAKE_CURRENT_SOURCE_DIR}/resources/metal/dashboard.webp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/resources/metal/dashboard_flash.webp")
+set(FERROCLAWAMP_ART_FOLDERS "${CMAKE_CURRENT_SOURCE_DIR}/resources/metal/world")
+file(GLOB metal_own CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/resources/metal/face/*")
+foreach(render IN ITEMS mark.svg midi.txt knob-drive.webp knob-tone.webp fader-cap.webp)
+    if("${CMAKE_CURRENT_SOURCE_DIR}/resources/metal/face/${render}" IN_LIST metal_own)
+        list(APPEND FERROCLAWAMP_RENDERS "${CMAKE_CURRENT_SOURCE_DIR}/resources/metal/face/${render}")
+    else()
+        list(APPEND FERROCLAWAMP_RENDERS "${CMAKE_CURRENT_SOURCE_DIR}/resources/amberpaw/${render}")
+    endif()
+endforeach()
+set(FERROCLAWAMP_SOURCES
+    ${FACE_SOURCES}
+    src/redgroove/RedGrooveControls.cpp     # the walker's squeeze column, cabinet slider and readings
+    src/metal/MetalControls.cpp
+    src/metal/MetalEditor.cpp
+    src/metal/MetalFaceArt.cpp
+    src/metal/MetalLineup.cpp
+    ${REDPAW_VIEW_SOURCES}           # the windscreen the rovers look through ...
+    ${METAL_VIEW_SOURCES}            # ... looking out on the metal world
+    ${METAL_GL_SOURCES}
+    ${METAL_ART_SOURCES})
+
 # ----------------------------------------------------------------------------
 # THE AMPS — the family's table, one row an amp (THE FAMILY says what a row says).
 #
@@ -1724,6 +1818,23 @@ add_amp(DeepGrooveBass CODE Dgrv   BY_NAME    BASS
         ${AMP_ENGINE_LIBRARIES}
         juce::juce_opengl            # the sea, on the GPU
     SET       ${DEEPGROOVEBASS_SET})
+
+# FerroClawAmp (the owner's name, 20.11) — the ENGL E530 preamp's face in the metal world's cabin (src/metal): the
+# family's console over the guitar's chain, driven as channels: four, CLEAN GAIN LO and HI, LEAD GAIN LO and HI, PARK
+# the amp's bypass; the V4's packs as a stand-in sound, the guitar's TOP 12 drawn. Not in the family's release, and
+# asked for by name. Its icon its own (the owner's pick, 20.11): an orange lightning bolt striking a giant anvil.
+add_amp(FerroClawAmp  CODE Mtla    BY_NAME
+    ART       ${FERROCLAWAMP_RENDERS}
+    ART_FOLDERS ${FERROCLAWAMP_ART_FOLDERS}
+    SOURCES   ${FERROCLAWAMP_SOURCES}
+    LIBRARIES
+        OrbitAmpData                 # the family's mark, the notice, the disclaimer — BinaryData::*
+        OrbitAmpShaders              # the world's shaders
+        OrbitAmpRockerFont           # the cabin's lettering
+        felitronics::appkit_webp     # the plates, decoded
+        ${AMP_ENGINE_LIBRARIES}
+        juce::juce_opengl            # the world, on the GPU
+    SET       ${FERROCLAWAMP_SET})
 
 # ----------------------------------------------------------------------------
 # THE FACES' GATES — in the gates binary, with every other (THE GATES BINARY, below); amp_console builds an amp
@@ -1862,6 +1973,13 @@ gate_in_binary(deepgroove-set    tests/AmpSetTests.cpp      PRODUCT DeepGrooveBa
 # each gear's BLEND and CLEAN's held, COMP's threshold and what the bathyscaphe holds of it, CLEAN's two tones in the
 # outer sockets and the frozen one between them, each socket's reading its own knob's.
 gate_in_binary(deepgroove-face   tests/DeepGrooveFaceTests.cpp PRODUCT DeepGrooveBass)
+gate_in_binary(metal-channel     tests/AmpChannelTests.cpp  PRODUCT FerroClawAmp CHANNELS 4)
+gate_in_binary(metal-set         tests/AmpSetTests.cpp      PRODUCT FerroClawAmp CHANNELS 4)
+# ...and the E530's face, its window made and never shown: the lever's five stops, PARK the amp's bypass over the four
+# channels, each its own pack and LEAD GAIN HI its hotter Gain; the tone and key strips the playing pack's; COMP, FX 1,
+# FX 2 (the OCTAVE: its mix, and its sound against the chain without it) and REVERB their parameters; and a still of it
+# with the cat at rest and in flames.
+gate_in_binary(metal-face        tests/MetalFaceTests.cpp   PRODUCT FerroClawAmp)
 
 # ORBITBASS'S CHAIN, headless: where a fresh one stands (the gate off, the HPF on at 25 Hz, the LPF off, mono,
 # its one temporary pack), the strip's arrows in its order (GATE, AMP, CAB, LIMIT), the delay and the reverb
@@ -1878,6 +1996,7 @@ gate_in_binary(catpit-nofactory  tests/NoFactoryTests.cpp   PRODUCT CatpitAmp   
 gate_in_binary(redpaw-nofactory  tests/NoFactoryTests.cpp   PRODUCT RedPawAmp    NO_FACTORY)
 gate_in_binary(redgroove-nofactory tests/NoFactoryTests.cpp  PRODUCT RedGrooveBass NO_FACTORY)
 gate_in_binary(deepgroove-nofactory tests/NoFactoryTests.cpp PRODUCT DeepGrooveBass NO_FACTORY)
+gate_in_binary(metal-nofactory   tests/NoFactoryTests.cpp   PRODUCT FerroClawAmp NO_FACTORY)
 
 # ORBITAMP'S FACE AS THE SITE GETS IT (src/ui/WebFaceplate.h): a fresh OrbitAmp writes the kit, and the kit
 # builds the face back — its own format, every place on the stage, the hull the poster less its places.

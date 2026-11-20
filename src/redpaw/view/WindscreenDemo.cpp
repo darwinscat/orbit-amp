@@ -24,10 +24,16 @@
 // --glass=WxH sizes the glass, any world's. The sea floor parks with --park (P toggles it), sends a bathyscaphe past
 // --sub=seconds from the start (the prototype's setPassFirst), strikes an attack --strike=seconds before the drive's
 // end, and after the drive takes one step of no time, as the prototype's first frame does (cabin.html?t=...); --cabin keeps
-// the cabin the world draws itself in the STILL too, so --still writes the frame as it is seen live.
+// the cabin the world draws itself in the STILL too, so --still writes the frame as it is seen live. (ORBITAMP_VIEW_DEMO_METAL)
+// as the E530's rover cabin over the metal world, the whole stage with its plates: --s=metres round the loop puts the
+// drive there (the prototype's ?s=), --park parks it, --drive=seconds drives it on and --strike=seconds strikes an attack
+// that long before the end (?t= and ?ht=), --skip=parts leaves the renderer's parts out (the prototype's ?off=).
 
 #include "Windscreen.h"
-#if ORBITAMP_VIEW_DEMO_UNDERWATER
+#if ORBITAMP_VIEW_DEMO_METAL
+ #include "../../metal/view/MetalArt.h"
+ #include "../../metal/view/MetalDrive.h"
+#elif ORBITAMP_VIEW_DEMO_UNDERWATER
  #include "../../underwater/view/UnderwaterArt.h"
  #include "../../underwater/view/UnderwaterDrive.h"
 #elif ORBITAMP_VIEW_DEMO_WALKER
@@ -47,7 +53,7 @@
 
 namespace
 {
-   #if ORBITAMP_VIEW_DEMO_WALKER || ORBITAMP_VIEW_DEMO_UNDERWATER
+   #if ORBITAMP_VIEW_DEMO_WALKER || ORBITAMP_VIEW_DEMO_UNDERWATER || ORBITAMP_VIEW_DEMO_METAL
     constexpr int glassWidth = 1672, glassHeight = 941, lineHeight = 26;    // the cabin's whole stage: the view is behind all of it
    #elif ORBITAMP_VIEW_DEMO_TITAN
     constexpr int glassWidth = 1672, glassHeight = 418, lineHeight = 26;    // the cabin's whole canopy, not a rover's windscreen
@@ -58,7 +64,9 @@ namespace
     using Mode = orbitamp::redpaw::Windscreen::Mode;
 
     /** The product's gears, as its lever has them (redpaw/RedPawLineup.h): the demo has no lineup. */
-   #if ORBITAMP_VIEW_DEMO_UNDERWATER
+   #if ORBITAMP_VIEW_DEMO_METAL
+    constexpr int productGears = 4;     // the E530's lever: CLEAN GAIN LO, CLEAN GAIN HI, LEAD GAIN LO, LEAD GAIN HI
+   #elif ORBITAMP_VIEW_DEMO_UNDERWATER
     constexpr int productGears = 3;     // the bass amp's lever: CLEAN, DIRT, DRIVE
    #elif ORBITAMP_VIEW_DEMO_WALKER
     constexpr int productGears = 2;     // RedGrooveBass
@@ -172,8 +180,8 @@ namespace
         double bpm = 0, horizon = 0.40, bass = 0, strike = -1;
         int glassW = glassWidth, glassH = glassHeight;
         bool lights = false, park = false, cabin = false;
-        double sub = -1;
-        juce::String stillFile;
+        double sub = -1, loopAt = -1;
+        juce::String stillFile, skipList;
 
         explicit Args (const juce::StringArray& args)
         {
@@ -203,6 +211,8 @@ namespace
                 else if (a == "--park")              park = true;
                 else if (a == "--cabin")             cabin = true;
                 else if (a.startsWith ("--sub="))    sub = value.getDoubleValue();
+                else if (a.startsWith ("--s="))      loopAt = value.getDoubleValue();
+                else if (a.startsWith ("--skip="))   skipList = value;
                 else if (a.startsWith ("--bpm="))    bpm = value.getDoubleValue();
                 else if (a.startsWith ("--horizon=")) horizon = value.getDoubleValue();
                 else if (a.startsWith ("--bass="))   bass = value.getDoubleValue();
@@ -216,7 +226,27 @@ namespace
         /** The drive, placed and driven as asked before the view takes it. */
         std::unique_ptr<orbitamp::redpaw::Drive> makeDrive() const
         {
-           #if ORBITAMP_VIEW_DEMO_UNDERWATER
+           #if ORBITAMP_VIEW_DEMO_METAL
+            // No factory folder here: the art from the source tree, unless METAL_ART_DIR names a folder.
+            if (juce::SystemStats::getEnvironmentVariable ("METAL_ART_DIR", {}).isEmpty())
+            {
+               #if JUCE_WINDOWS
+                _putenv_s ("METAL_ART_DIR", ORBITAMP_METAL_ART_DEFAULT);
+               #else
+                setenv ("METAL_ART_DIR", ORBITAMP_METAL_ART_DEFAULT, 1);
+               #endif
+            }
+            std::unique_ptr<orbitamp::redpaw::Drive> d = std::make_unique<orbitamp::metal::MetalDrive> (orbitamp::metal::shippedArt());
+            constexpr bool ownStart = true;     // the loop has its own start, 280 m before the skull gate
+            auto& metalDrive = static_cast<orbitamp::metal::MetalDrive&> (*d);
+            metalDrive.renderer().setSkip (skipList.toStdString());
+            d->setPark (park);
+            if (loopAt >= 0)
+            {
+                d->settle (gear, turbo);        // made in the gear and PARK asked for, then put there (?s=)
+                metalDrive.metal().startAt (loopAt);
+            }
+           #elif ORBITAMP_VIEW_DEMO_UNDERWATER
             // No factory folder here: the cabin's art from the source tree, unless UNDERWATER_ART_DIR names a folder.
             if (juce::SystemStats::getEnvironmentVariable ("UNDERWATER_ART_DIR", {}).isEmpty())
             {
@@ -245,7 +275,7 @@ namespace
            #else
             std::unique_ptr<orbitamp::redpaw::Drive> d = std::make_unique<orbitamp::redpaw::PlainsDrive> (gears);
            #endif
-           #if ! ORBITAMP_VIEW_DEMO_WALKER && ! ORBITAMP_VIEW_DEMO_UNDERWATER
+           #if ! ORBITAMP_VIEW_DEMO_WALKER && ! ORBITAMP_VIEW_DEMO_UNDERWATER && ! ORBITAMP_VIEW_DEMO_METAL
             constexpr bool ownStart = false;
            #endif
             d->setGear (gear); d->setTurbo (turbo); d->setLights (lights, lights); d->setTempo (bpm);
@@ -265,7 +295,7 @@ namespace
                 auto& walker = static_cast<orbitamp::redgroove::WalkerDrive&> (*d).walker();
                 d->settle (gear, turbo);
                 walker.setBass (bass);
-               #elif ORBITAMP_VIEW_DEMO_UNDERWATER
+               #elif ORBITAMP_VIEW_DEMO_UNDERWATER || ORBITAMP_VIEW_DEMO_METAL
                 d->settle (gear, turbo);       // made in the gear and PARK asked for, as the prototype's view is
                #endif
                 for (int i = 0, n = juce::roundToInt ((striking ? driveSeconds - strike : driveSeconds) * 60); i < n; ++i)
@@ -285,6 +315,13 @@ namespace
                         d->step (1.0 / 60);
                 }
                 d->step (0.0);                  // the prototype's first frame after its advance: a step of no time
+               #elif ORBITAMP_VIEW_DEMO_METAL
+                if (striking)
+                {
+                    metalDrive.metal().hit (1.0);   // ?ht=: an attack, then that long
+                    for (int i = 0, n = juce::roundToInt (strike * 60); i < n; ++i)
+                        d->step (1.0 / 60);
+                }
                #endif
             }
             d->setRepeats (stress);
@@ -406,7 +443,9 @@ namespace
     class Demo final : public juce::JUCEApplication
     {
     public:
-       #if ORBITAMP_VIEW_DEMO_UNDERWATER
+       #if ORBITAMP_VIEW_DEMO_METAL
+        const juce::String getApplicationName() override    { return "Metal rover cabin"; }
+       #elif ORBITAMP_VIEW_DEMO_UNDERWATER
         const juce::String getApplicationName() override    { return "Bathyscaphe cabin"; }
        #elif ORBITAMP_VIEW_DEMO_WALKER
         const juce::String getApplicationName() override    { return "RedGrooveBass dome"; }

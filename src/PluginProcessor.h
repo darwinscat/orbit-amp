@@ -1064,12 +1064,13 @@ public:
 
     /** WHETHER THIS PRODUCT'S CHAIN HAS THE LINK AT ALL (Product::chain) — the bass's holds every one (its DELAY and
         REVERB out of its strip until the player adds them: linkInRig); a guitar amp's none of the bass's own, OCTAVE,
-        ENVELOPE and CHORUS, and COMP only where the amp has one (Product::guitarComp: OrbitAmp's). A link it does not
-        hold never works, whatever its switch says (a state of another amp's, a host's automation), and has no arrow on
-        the strip and no block on the panel. */
+        ENVELOPE and CHORUS, COMP only where the amp has one (Product::guitarComp: OrbitAmp's) and OCTAVE only where the amp
+        has one (Product::guitarOctave: FerroClawAmp's). A link it does not hold never works, whatever its switch says (a
+        state of another amp's, a host's automation), and has no arrow on the strip and no block on the panel. */
     bool chainHolds (params::ChainRow row) const noexcept
     {
-        return ownProduct.chain == Chain::bass ? params::bassChainHolds (row) : params::guitarChainHolds (row, ownProduct.guitarComp);
+        return ownProduct.chain == Chain::bass ? params::bassChainHolds (row)
+                                               : params::guitarChainHolds (row, ownProduct.guitarComp, ownProduct.guitarOctave);
     }
 
 private:

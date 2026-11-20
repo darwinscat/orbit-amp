@@ -35,6 +35,7 @@
 #include "redpaw/RedPawSkin.h"
 #include "redgroove/RedGrooveLineup.h"
 #include "underwater/UnderwaterLineup.h"
+#include "metal/MetalLineup.h"
 #include "catpit/CatpitLayout.h"
 #include "face/Strip.h"
 #include "ProductPage.h"
@@ -78,6 +79,7 @@ namespace
             { products::amberPawAmp(), &redpaw::skinOf (products::amberPawAmp()).lineup },
             { products::redGrooveBass(), &redgroove::lineup() },
             { products::deepGrooveBass(), &underwater::lineup() },
+            { products::ferroClawAmp(),  &metal::lineup() },
         };
     }
 

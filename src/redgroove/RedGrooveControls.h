@@ -27,6 +27,7 @@ public:
     Readout (const face::Ink&, float em);
 
     void set (const juce::String& words);
+    const juce::String& says() const noexcept { return words; }
     juce::Colour colour;
     bool fromLeft = false;
 

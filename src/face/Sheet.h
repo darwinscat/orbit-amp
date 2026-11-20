@@ -25,6 +25,9 @@ public:
     /** Centred on `anchor`, in the stage's own space, and kept inside it. Empty text hides it. */
     void show (juce::Point<float> anchor, const juce::String& text);
 
+    /** What it says now; empty while hidden. */
+    const juce::String& says() const noexcept { return text; }
+
 private:
     juce::String text;
 };

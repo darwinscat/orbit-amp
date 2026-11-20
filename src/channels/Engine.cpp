@@ -53,6 +53,8 @@ void Engine::opening (const Lineup& lineup, params::Opening& o)
         if (pin.param == params::compOn)        o.compOn        = pin.value > 0.5f;
         if (pin.param == params::filterPresent) o.filterPresent = pin.value > 0.5f;
         if (pin.param == params::reverbPresent) o.reverbPresent = pin.value > 0.5f;
+        if (pin.param == params::compPresent)   o.compPresent   = pin.value > 0.5f;
+        if (pin.param == params::octavePresent) o.octavePresent = pin.value > 0.5f;
     }
 }
 

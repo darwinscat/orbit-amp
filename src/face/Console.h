@@ -102,6 +102,14 @@ public:
         float keyCapLeft = 0.0f, keyCapRight = 0.0f, keyFrameHeight = 0.0f;
         float keyNameOverY = 0.0f, keyNameUnderY = 0.0f, keyNameRoom = 120.0f;
         bool keyNamesAlternate = false, keyNamesOnKeys = false;
+        /** THE KEYS A FACE NAMES ITSELF, where its strip is its own rather than the pack's: a list a channel, by the
+            channel's number (one past the end takes the last), and on a channel its list's keys, in this order, a key
+            each, laid as for so many — FerroClawAmp's BRIGHT on the clean channels and CONTOUR on the lead ones, the E530's.
+            A key the playing pack has a switch of that name for (case aside) plays it; one it has none for is DARK —
+            drawn dim, no hand's, its name in the tag over it followed by `darkKeyWords`; and the pack's other switches
+            are not shown. Empty, as on every other face: the pack's switches, as they come (rightKeysOf). */
+        std::vector<std::vector<juce::String>> namedKeys {};
+        juce::String darkKeyWords {};
         std::array<juce::Point<float>, 6> holes;            // the roof keys' centres
         float holeKeySize = 40.0f;
         /** A ROOF KEY'S OWN BOX, where a face's key is not the square `holeKeySize` across round its hole —
@@ -135,6 +143,10 @@ public:
         const char* limiterWord = "LIMITER";                // what LIMITER's door says: RedGrooveBass's says LIMIT, as its plate has room for
         float readingPx = stage::px11;                      // what CPU and MEM are written at...
         bool readingsFit = false;                           // ...set condensed into their boxes, as tall, where wider (Legend::fit)
+        juce::Colour readingInk {};                         // the version, PRESET, CPU and MEM in this, where they stand on a light
+                                                            // panel; transparent writes them in the words' ink (Look::ink)
+        bool presetNamed = false;                           // PRESET followed by the playing preset's name, set condensed
+                                                            // into its box where wider (readingsFit)
         bool tunerStrip = false;                            // the tuner in one low line (TunerFace::setStrip)...
         TunerFace::Dial tunerDial {};                       // ...or a needle over a dial the picture paints, where it has a reach
         bool tunerMenuOnClick = false;                      // ...and a click on it opens its menu, rather than switching it
@@ -184,6 +196,28 @@ public:
     void fileDragEnter (const juce::StringArray& files, int x, int y) override;
     void fileDragExit (const juce::StringArray& files) override;
     void filesDropped (const juce::StringArray& files, int x, int y) override;
+
+    /** ONE OF THE RIGHT GROUP'S KEYS as a channel has it (rightKeysOf). */
+    struct RightKey
+    {
+        int button = -1;        // which of `buttons`
+        int slot = -1;          // the selector it throws; -1 = the face's own key, or a dark one
+        int position = -1;      // lit while the switch stands here, and where a press puts it
+        int off = -1;           // an off/on key: where it puts the switch when let up; -1 for a position's key
+        juce::String control;   // the switch's name in the pack
+        juce::String name;      // what is written by it
+        juce::String title;     // the switch's name written once over its keys (BRIGHT); empty for most
+        bool dark = false;      // a key the face names that the pack has no switch for (Places::namedKeys)
+    };
+
+    /** THE KEYS A FACE NAMES ITSELF (Places::namedKeys) out of a pack's switches, on the buttons `free` gives, one a
+        name, in the names' order: the switch of that name (case aside, one the channel does not hold) one key, which
+        puts it from its off position (its first, where none reads as off) to the first other one, back when let up,
+        lit while it stands there; no such switch, a dark key under the name. The pack's other
+        switches have no key. What rightKeysOf lays such a face's strip with, and what a gate reads with a pack's
+        switches of its own making. */
+    static std::vector<RightKey> keysNamed (const std::vector<juce::String>& names, const std::vector<Channels::PackSwitch>& pack,
+                                            const std::vector<int>& free);
 
 protected:
     AmpProcessor& amp;
@@ -365,6 +399,8 @@ private:
 
     const juce::String midiCommands;
     const Ink ink;
+    /** What the version, PRESET, CPU and MEM are written in: the place's own ink, or the words' at 0.85. */
+    juce::Colour readingColour() const { return places.readingInk.isTransparent() ? ink.at (ink.words, 0.85f) : places.readingInk; }
 
     ArtKnob drive;
     std::array<std::unique_ptr<ArtKnob>, Channels::maxTones> tones;
@@ -570,18 +606,9 @@ private:
         each position of a switch, the one it stands at lit (the Ch2's TIGHT · FAT; a switch whose every
         position is bare, the IR-X Ch1's Bright, its name once over its keys and each position alone by its
         key: BRIGHT over OFF · 1 · 2), and a switch whose two positions are off and on one key under the switch's
-        own name — and after them the keys the face has taken for itself (claimKey), under the names it
-        gave them. As many as there are, at most the keys the console has for them. */
-    struct RightKey
-    {
-        int button = -1;        // which of `buttons`
-        int slot = -1;          // the selector it throws; -1 = the face's own key
-        int position = -1;      // lit while the switch stands here, and where a press puts it
-        int off = -1;           // an off/on key: where it puts the switch when let up; -1 for a position's key
-        juce::String control;   // the switch's name in the pack
-        juce::String name;      // what is written by it
-        juce::String title;     // the switch's name written once over its keys (BRIGHT); empty for most
-    };
+        own name; or, on a face that names its keys (Places::namedKeys), those alone (keysNamed) — and after
+        them the keys the face has taken for itself (claimKey), under the names it gave them. As many as there
+        are, at most the keys the console has for them. */
     std::vector<RightKey> rightKeysOf (int channel) const;
     std::vector<RightKey> rightKeys;            // the playing channel's, as showKeys last laid them
     std::array<juce::String, numKeys> keyNames; // each key's name for the tag over it, as showKeys last said

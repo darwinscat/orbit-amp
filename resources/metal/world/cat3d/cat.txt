@@ -1,0 +1,9 @@
+# cat: a mesh for the world to draw in 3D. Darwin's Cat as a 28 m steel barbarian, sword raised, the left hand giving the horns; eyes kind 3; its base at z = 0; credit: "Spartan" by kirillchik, https://sketchfab.com/3d-models/spartan-afb1a1a92f434f798ef518558c31ae33, "Cougar" by SKYE, https://sketchfab.com/3d-models/cougar-d9dc5171a1a14674a0313df212d12c87, and "Rock on Hand Shaped for Guitar Hanger" by StructureTree Canada, https://sketchfab.com/3d-models/rock-on-hand-shaped-for-guitar-hanger-d45175242a854318af88746fe3fae518, all CC BY 4.0 (kitbashed: the Spartan's body bulked and posed, the cougar's head, the rock-on hand mirrored as the left hand, with our helmet, horns, cape, collar and sword, made steel)
+# cat.mesh: magic CBMESH1, uint32 vertices, uint32 indices; per vertex 40 B: float32 pos xyz (m, z up,
+#   the footprint's centre on the ground at 0), float32 normal xyz, float32 uv, uint8 rgb (display sRGB),
+#   uint8 kind (0 painted, 1 metal, 2 glass, 3 lamp), uint8 texture (0 none, else a row below), 3 pad;
+#   then uint32 indices, 3 per triangle. A textured face: colour and alpha from the texture, cut under 0.5.
+front -y
+vertices 15041
+triangles 14991
+bytes 781548

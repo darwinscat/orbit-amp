@@ -1,0 +1,11 @@
+# the steel dragon for the ENGL world: a mesh and its wing-beat
+credit "Animated Dragon Three Motion Loops" by LasquetiSpice, CC BY 4.0, https://sketchfab.com/3d-models/animated-dragon-three-motion-loops-eca98cf6cd084c1596cecf716e110c29 (decimated, repainted in steel, one wing-beat baked)
+# dragon.mesh: CBMESH1 (see export_mesh), the beat's first pose, z up, metres, the mean centre at 0
+# dragon.anim: CBANIM1, uint32 V, uint32 F, float32 seconds per beat, float32 metres per unit, then F x V x (int16 xyz, int8 normal xyz x127, pad); loop the F poses over the beat, blending neighbours
+vertices 2993
+triangles 3517
+frames 10
+beat 3.292 s
+span 24.0 m
+nose -y
+bytes mesh 161940 anim 299324

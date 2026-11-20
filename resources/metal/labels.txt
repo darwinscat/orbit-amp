@@ -1,0 +1,18 @@
+# metal cabin label bands, variant c6: name kind cx cy w h (stage px, 1672 x 941) - where the code writes a control's name, 20 px tall (13 px and more fits with air); the strips carry theirs inside, at their top
+# the lever's stops: the app draws their glyphs (P, o, oo, filled o, filled oo; c6), left edge x 228, each centred on its stop (the plates are clean there)
+band_in              label      88.0  773.0   72.0   20.0
+band_comp            label     338.0  773.0   64.0   20.0
+band_gain            label     452.0  773.0  112.0   20.0
+band_tone_strip      label     760.0  773.0  432.0   20.0
+band_key_strip       label     760.0  873.0  212.0   20.0
+band_fx1             label    1036.0  773.0   56.0   20.0
+band_fx2             label    1096.0  773.0   56.0   20.0
+band_reverb          label    1156.0  773.0   56.0   20.0
+band_out             label    1584.0  773.0   72.0   20.0
+#text band_in In
+#text band_comp Comp
+#text band_gain Gain
+#text band_fx1 Fx 1
+#text band_fx2 Fx 2
+#text band_reverb Reverb
+#text band_out Out

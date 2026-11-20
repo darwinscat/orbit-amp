@@ -97,6 +97,11 @@ struct Product
         the cockpit's and the rovers' faces have none. */
     bool guitarComp = false;
 
+    /** A GUITAR CHAIN'S OCTAVE, at the front of it, before COMP and the AMP — the classic octave-down pedal, first on the
+        board (params::addGuitarOctaveParameters, which its `addParameters` adds): FerroClawAmp's. Every other guitar amp has
+        none: no parameter, no stage, nothing computed. */
+    bool guitarOctave = false;
+
     /** THE LOWEST PITCH ITS TUNER LOOKS FOR, in Hz (core::PitchTracker::setLowestHz). Every guitar amp
         stays at the guitar's, which reaches a bass's low E and costs a guitar nothing more; OrbitBass
         reaches its low B and a drop-A's A0. */
@@ -150,6 +155,7 @@ const Product& amberPawAmp();
 const Product& orbitBass();
 const Product& redGrooveBass();
 const Product& deepGrooveBass();
+const Product& ferroClawAmp();
 } // namespace products
 
 } // namespace orbitamp

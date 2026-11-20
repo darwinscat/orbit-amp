@@ -1,0 +1,9 @@
+# mammoth: a mesh for the world to draw in 3D. A mammoth skeleton in steel, 12 m tall; credit: "Mammuthus | reference model (GT)" by Idea, CC0, https://sketchfab.com/3d-models/7892af1468b3412392483fafd87f6ad2 (decimated, scaled, made steel)
+# mammoth.mesh: magic CBMESH1, uint32 vertices, uint32 indices; per vertex 40 B: float32 pos xyz (m, z up,
+#   the footprint's centre on the ground at 0), float32 normal xyz, float32 uv, uint8 rgb (display sRGB),
+#   uint8 kind (0 painted, 1 metal, 2 glass, 3 lamp), uint8 texture (0 none, else a row below), 3 pad;
+#   then uint32 indices, 3 per triangle. A textured face: colour and alpha from the texture, cut under 0.5.
+front -y
+vertices 15024
+triangles 12000
+bytes 744976

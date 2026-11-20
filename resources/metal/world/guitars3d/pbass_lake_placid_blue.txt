@@ -1,0 +1,11 @@
+# pbass_lake_placid_blue: a mesh for the world to draw in 3D. pbass_lake_placid_blue: a P-Bass-type bass in lake placid blue metallic (kind 1 in its colour), 12 m tall, upright on its own 2 m steel pedestal (kind 1), the pedestal's foot on z = 0, the front toward -y.
+# pbass_lake_placid_blue.mesh: magic CBMESH1, uint32 vertices, uint32 indices; per vertex 40 B: float32 pos xyz (m, z up,
+#   the footprint's centre on the ground at 0), float32 normal xyz, float32 uv, uint8 rgb (display sRGB),
+#   uint8 kind (0 painted, 1 metal, 2 glass, 3 lamp), uint8 texture (0 none, else a row below), 3 pad;
+#   then uint32 indices, 3 per triangle. A textured face: colour and alpha from the texture, cut under 0.5.
+front -y
+vertices 9504
+triangles 10010
+bytes 500296
+# headstock cx cy cz sx sy sz: the box round the headstock (everything past the nut), centre and full size in metres in this mesh's coordinates
+headstock -0.018 -0.205 12.805 1.329 0.427 2.159 paint metallic 285096

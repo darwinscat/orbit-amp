@@ -216,6 +216,15 @@ AmpProcessor::AmpProcessor (const Product& product)
         jassert (bass.compAmount != nullptr && bass.compThreshold != nullptr);
     }
 
+    // FerroClawAmp's OCTAVE (Product::guitarOctave): the bass's, the same parameters. Every other guitar amp leaves these
+    // null, and its chain never runs the stage (processChunk).
+    if (ownProduct.chain != Chain::bass && ownProduct.guitarOctave)
+    {
+        bass.octave       = apvts.getRawParameterValue (params::octaveAmount);
+        bass.octaveToneHz = apvts.getRawParameterValue (params::octaveToneHz);
+        jassert (bass.octave != nullptr && bass.octaveToneHz != nullptr);
+    }
+
     gateThresholdParam = apvts.getRawParameterValue (params::gateThreshold);
     gatePosParam       = apvts.getRawParameterValue (params::gatePos);
     gateDecayParam     = apvts.getRawParameterValue (params::gateDecay);
@@ -1304,6 +1313,10 @@ void AmpProcessor::reportLatency()
     const int pr = preamp.latencySamples();
     const int total = pr + limiterLatency.load();      // ...and the limiter's lookahead and grid, always
 
+    // ...and nothing for OCTAVE, the bass's or FerroClawAmp's: the module adds its sub to the dry where it stands. A core
+    // whose octave starts to look ahead stops the build here, to be added to the sum.
+    static_assert (felitronics::octave::Octaver::latencySamples() == 0, "OCTAVE adds no latency: the sum above holds it at 0");
+
     // 🔴 THE WIRE IS SIZED FROM THE NUMBER THE BLOCK ACTUALLY REPORTS, here and nowhere else.
     // `latencySamples()` came out of `NamStage::rateMatch` and therefore out of the rates that are
     // really in play; every ceiling this class used to carry was computed from a model rate NOBODY
@@ -1444,6 +1457,16 @@ void AmpProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     }
     if (ownProduct.chain != Chain::bass)   // the guitar's input cut: snapped where it stands at the first block
         guitarInputCut.prepare (sampleRate);
+    if (ownProduct.chain != Chain::bass && bass.octave != nullptr && bass.octaveToneHz != nullptr)
+    {
+        // FerroClawAmp's OCTAVE (Product::guitarOctave): as the bass's is prepared below — told where it stands before its
+        // prepare, which snaps to it, so at 0 it is idle from the first sample — over as many signals as the guitar's chain
+        // can work (two in STEREO), the one tracker summing them.
+        octaveTap->prepare (sampleRate);
+        octaveToldValid = false;
+        tellOctave();
+        octaverReady = octaver.prepare (sampleRate, block, juce::jlimit (1, 2, channels));
+    }
     if (ownProduct.chain == Chain::bass)
     {
         octaveTap->prepare (sampleRate);
@@ -2592,6 +2615,18 @@ void AmpProcessor::processChunk (juce::AudioBuffer<float>& buffer)
         }
     }
 
+    // THE GUITAR'S OCTAVE (Product::guitarOctave: FerroClawAmp's), FIRST, as an octave pedal stands on a board: after the IN
+    // meter, the input cut and the gate's key, before COMP, the boost and the AMP — the tracker hears the string itself, and
+    // the sub goes into everything after it with the note. Over every signal the chain works (two in STEREO: one tracker,
+    // the same sub on both). Zero latency (Octaver::latencySamples). At 0, standing by, or out of the strip it is idle:
+    // the block untouched, bit for bit. Every other guitar amp has no such stage.
+    if (ownProduct.chain != Chain::bass && bass.octave != nullptr && nch > 0)
+    {
+        const auto a = PerfClock::now();
+        runOctave (channels, juce::jmin (nch, 2), numSamples);
+        nsStage[stOctave] = elapsedNs (a);
+    }
+
     // THE BASS'S COMP (Chain::bass), after the gate, on its one signal: ONE KNOB (core::BassComp). Its STANDBY is
     // the house's crossfade, toward the link in AND its knob up; standing by with the knob up it is fed, not heard;
     // at 0 nothing is computed and the block passes bit for bit. OrbitAmp's the same, before its AMP as a pedal stands;
@@ -2624,7 +2659,7 @@ void AmpProcessor::processChunk (juce::AudioBuffer<float>& buffer)
 
     // THE BASS'S OCTAVE, then its FILTER (Chain::bass), on the one signal, before the AMP: the sub goes into the amp
     // with the note, and the filter sweeps both.
-    if (bass.octave != nullptr && nch > 0)
+    if (ownProduct.chain == Chain::bass && bass.octave != nullptr && nch > 0)
     {
         const auto a = PerfClock::now();
         runOctave (channels, 1, numSamples);
