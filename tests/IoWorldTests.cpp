@@ -516,6 +516,33 @@ namespace
         const double kicked = c->state().dose;
         run (*c, 1.5);
         check (kicked > 0.5 && c->state().dose < 0.3, "quiet: the needle falls back to its rest");
+
+        // THE DAY PAST NOON (Oleh, 20.11): 9 o'clock full day, 12 o'clock a low Sun still up, 3 o'clock dark, 5 o'clock the
+        // darkest. The Sun crosses the skyline at DRIVE 0.65 (SunMap::horizon), and its height falls the whole way.
+        for (const auto& [d, e] : std::vector<std::pair<double, double>> { { 0.2, 14.866 }, { 0.5, 5.848 }, { 0.65, 0 }, { 0.7, -2.079 }, { 0.8, -6.289 }, { 1, -11 } })
+            check (std::abs (W::sunHeightAt (d) / W::deg - e) < 0.001, ("sky: the Sun's height at DRIVE " + num (d)).c_str());
+        bool falls = true;
+        for (int i = 1; i <= 1000; ++i) falls = falls && W::sunHeightAt (i / 1000.0) < W::sunHeightAt ((i - 1) / 1000.0);
+        check (falls, "sky: the Sun's height falls the whole way from DRIVE 0 to 1");
+        // With the horizon at 0.5 the map is the old one: the previous code's cubic, copied as it was.
+        const auto oldHeight = [] (double drive)
+        {
+            const auto& M = W::sunMap;
+            const double y = 0.5 - std::clamp (drive, 0.0, 1.0), H = y >= 0 ? M.top : M.bottom, r = M.dusk / H, a = std::abs (y);
+            return (y > 0 ? 1 : y < 0 ? -1 : 0) * H * (r * a + (12 - 4 * r) * a * a + (4 * r - 16) * a * a * a);
+        };
+        auto half = W::sunMap;
+        half.horizon = 0.5;
+        double worst = 0;
+        for (int i = 0; i <= 1000; ++i) worst = std::max (worst, std::abs (W::sunHeightAt (i / 1000.0, half) - oldHeight (i / 1000.0)));
+        check (worst < 1e-14, "sky: with the horizon at 0.5 the Sun's height is the old map's");
+        check (W::sunSolve (0.5, 0.2).night < 0.05 && W::sunSolve (0.8, 0.2).night > 0.99, "sky: DRIVE 0.5 is the day, 0.8 the night");
+        // Jupiter's light on the land keeps a floor behind it (BLEND 0): a fifth of the full Jupiter's.
+        W::Sun behind;
+        behind.sep = 0; behind.night = 0;
+        const auto jf = W::jupShineOf (behind);
+        check (std::abs (jf[0] - 0.105 * 0.2) < 1e-12 && std::abs (jf[1] - 0.090 * 0.2) < 1e-12 && std::abs (jf[2] - 0.070 * 0.2) < 1e-12,
+               "light: Jupiter's shine with the Sun behind it is a fifth of the full Jupiter's");
     }
 }
 
