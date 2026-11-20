@@ -1817,9 +1817,9 @@ add_amp(DeepGrooveBass CODE Dgrv   BY_NAME    BASS
 # IoBass — a working name: the SansAmp RBI's face in catbay's Io rover cabin, over Jupiter's volcanic moon (src/io) — the
 # family's console over the bass's chain (Chain::bass), one sound under the rover's two speeds, SLOW and FAST (a pair
 # over one memory), PARK the amp's bypass; a stand-in sound (the ReVolt Bass's DIRT) until the RBI has captures; Darwin's
-# Cat's own cabinets. Not in the basses' release (installer/bass.ini), and asked for by name. Its icon DeepGrooveBass's,
-# for now.
-add_amp(IoBass CODE Iobs   BY_NAME    BASS    ICON DeepGrooveBass
+# Cat's own cabinets. Not in the basses' release (installer/bass.ini), and asked for by name. Its icon its own (the owner's
+# pick, 20.11): the six-wheeled rover in profile, its cab's window the orange dot, Jupiter's banded ring over it.
+add_amp(IoBass CODE Iobs   BY_NAME    BASS
     ART       ${IOBASS_RENDERS}
     ART_FOLDERS ${IOBASS_ART_FOLDERS}
     SOURCES   ${IOBASS_SOURCES}
