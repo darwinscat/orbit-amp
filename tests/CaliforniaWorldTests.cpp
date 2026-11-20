@@ -22,6 +22,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <filesystem>
 #include <fstream>
 #include <map>
 #include <memory>
@@ -32,6 +33,9 @@
 
 #ifndef CALIFORNIA_FIXTURE
  #define CALIFORNIA_FIXTURE "tests/fixtures/california/california-world.txt"
+#endif
+#ifndef CALIFORNIA_ART
+ #define CALIFORNIA_ART "resources/california"
 #endif
 #ifndef CALIFORNIA_FILES
  #define CALIFORNIA_FILES "tests/fixtures/california/files"
@@ -46,6 +50,7 @@ namespace
     std::map<std::string, Entry> mine;
     int failures = 0;
     std::string filesDir = CALIFORNIA_FILES;
+    std::string artDir = CALIFORNIA_ART;
 
     void E (const std::string& label, char kind, std::vector<double> v) { mine[label] = { kind, std::move (v) }; }
     void check (bool ok, const char* what) { if (! ok) { ++failures; std::printf ("FAIL %s\n", what); } }
@@ -528,8 +533,58 @@ namespace
     }
 }
 
+namespace
+{
+    /** THE FILES THE GPU'S HALF READS AT RUN TIME (CaliforniaGl::makeArt, as the prototype's view loads them), all in
+        resources/california as the installer lays them out (CaliforniaArt.h): the cabin's, every sprite's atlas and
+        table, the signs', the flags', the chalk's, and every mesh with its table and each texture its table names —
+        the prototype's .png read as .webp — each table one its parser takes. */
+    void shippedFiles()
+    {
+        namespace fs = std::filesystem;
+        const auto has = [] (const std::string& rel)
+        {
+            std::error_code e;
+            const auto f = fs::path (artDir) / rel;
+            return fs::is_regular_file (f, e) && fs::file_size (f, e) > 16;
+        };
+        const auto read = [] (const std::string& rel)
+        {
+            std::ifstream in (fs::path (artDir) / rel, std::ios::binary);
+            return std::string ((std::istreambuf_iterator<char> (in)), std::istreambuf_iterator<char>());
+        };
+        const auto webp = [] (std::string name) { return name.size() > 4 && name.compare (name.size() - 4, 4, ".png") == 0 ? name.substr (0, name.size() - 4) + ".webp" : name; };
+        const auto need = [&] (bool ok, const std::string& what) { if (! ok) { ++failures; std::printf ("FAIL shipped: %s\n", what.c_str()); } };
+        for (const char* f : { "dashboard.webp", "dashboard_pendant.webp", "label.webp" })
+            need (has (f), f);
+        need (W::parsePendantBox (read ("dashboard_pendant.txt")).has_value(), "dashboard_pendant.txt: a box and a pivot");
+        W w;
+        w.build();
+        std::vector<std::string> sprites { "dish" }, meshes { "van3d/van", "saucer3d/saucer", "yellowsub3d/yellowsub" };
+        for (const auto& sp : w.spritePlaces())
+            if (sp.mesh.empty()) sprites.push_back (sp.name);
+            else if (std::find (meshes.begin(), meshes.end(), sp.mesh) == meshes.end()) meshes.push_back (sp.mesh);
+        for (const auto& s : sprites)
+            need (has ("finds/" + s + "/atlas.webp") && W::parseSpriteTable (read ("finds/" + s + "/sprites.txt")).scale > 0, "the sprite " + s);
+        need (has ("finds/signs/atlas.webp") && ! W::parseSigns (read ("finds/signs/signs.txt")).empty(), "the signs");
+        need (has ("finds/flags/atlas.webp") && ! W::parseFlagCells (read ("finds/flags/flags.txt"), 576, 256).empty(), "the flags");
+        need (has ("finds/chalk/atlas.webp") && ! W::parseChalk (read ("finds/chalk/chalk.txt"), 2048, 1024).empty(), "the chalk");
+        for (const auto& m : meshes)
+        {
+            const auto bytes = read ("finds/" + m + ".mesh");
+            need (W::parseCbMesh (reinterpret_cast<const uint8_t*> (bytes.data()), bytes.size()).has_value(), "the mesh " + m);
+            const auto dir = m.substr (0, m.find_last_of ('/') + 1);
+            for (const auto& tex : W::parseMeshInfo (read ("finds/" + m + ".txt")).textures)
+                if (! tex.empty())
+                    need (has ("finds/" + dir + webp (tex)), "the texture " + dir + tex);
+        }
+    }
+}
+
 int main (int argc, char** argv)
 {
+    if (argc > 3) artDir = argv[3];
+    shippedFiles();
     if (argc > 2) filesDir = argv[2];
     makeEntries();
     compareWithFixture (argc > 1 ? argv[1] : CALIFORNIA_FIXTURE);

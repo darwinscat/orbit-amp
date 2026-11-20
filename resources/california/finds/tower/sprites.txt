@@ -1,0 +1,19 @@
+# tower sprites: 16 headings, cells 384 x 384 px, 18.493 px per metre, atlas 8 x 2; h = where its front faces on the screen seen from above (0 toward the viewer, 90 right, 180 away, 270 left); camera 4 deg above level
+# anchor: the footprint's centre on the ground, at the cell's centre x and row 359 (px from the top)
+anchor 192 359
+cell  0 h   0.0
+cell  1 h  22.5
+cell  2 h  45.0
+cell  3 h  67.5
+cell  4 h  90.0
+cell  5 h 112.5
+cell  6 h 135.0
+cell  7 h 157.5
+cell  8 h 180.0
+cell  9 h 202.5
+cell 10 h 225.0
+cell 11 h 247.5
+cell 12 h 270.0
+cell 13 h 292.5
+cell 14 h 315.0
+cell 15 h 337.5

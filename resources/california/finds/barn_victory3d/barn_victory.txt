@@ -1,0 +1,10 @@
+# barn_victory: a mesh for the world to draw in 3D. Its front (the painted side, the screen) looks along -y.
+# barn_victory.mesh: magic CBMESH1, uint32 vertices, uint32 indices; per vertex 40 B: float32 pos xyz (m, z up,
+#   the footprint's centre on the ground at 0), float32 normal xyz, float32 uv, uint8 rgb (display sRGB),
+#   uint8 kind (0 painted, 1 metal, 2 glass, 3 lamp), uint8 texture (0 none, else a row below), 3 pad;
+#   then uint32 indices, 3 per triangle. A textured face: colour and alpha from the texture, cut under 0.5.
+front -y
+vertices 574
+triangles 290
+bytes 26456
+texture 1 barn_victory_tex1.png 384 512
