@@ -192,7 +192,8 @@ bool IoGl::create()
         || ! compile (pvol, "io/pvol.vert", "io/pvol.frag", "plume's body")
         || ! compile (snow, "io/snow.vert", "io/snow.frag", "snow")
         || ! compile (post, "io/post.vert", "io/post.frag", "post")
-        || ! compile (half, "io/post.vert", "io/half.frag", "half-size bodies"))
+        // the half-size bodies only where the ladder's foot draws them: not on the web (drawScene)
+        || (! gpu::web && ! compile (half, "io/post.vert", "io/half.frag", "half-size bodies")))
     {
         destroy();
         return false;
@@ -439,8 +440,25 @@ void IoGl::loadMesh (int variant, const std::string& base)
 
 void IoGl::makeArt()
 {
+    takePlates();
+    takeFinds (false);
+}
+
+void IoGl::takeArt (Art a)
+{
+    art = std::move (a);
+    if (post.id == 0)               // not made yet: what create() reads
+        return;
+    takePlates();
+    takeFinds (true);
+}
+
+void IoGl::takePlates()
+{
     // THE CABIN'S PLATES: premultiplied with their mips; the window's box the union of both plates' clear pixels, 4 stage
-    // px wider all round; the dosimeter's hub ink as each plate paints it.
+    // px wider all round; the dosimeter's hub ink as each plate paints it. Once in, kept (takeArt).
+    if (texDash != 0)
+        return;
     if (art.day)
     {
         const auto day = art.day();
@@ -467,14 +485,19 @@ void IoGl::makeArt()
         if (texDash == 0)
             gpu::note ("io: the cabin's plates did not come; the face paints the panel");
     }
+}
+
+void IoGl::takeFinds (bool keep)
+{
     // THE HARDWARE'S SLOTS (finds/<variant>3d/<name>.mesh + .txt): a file takes its variant's place, by its folder's
-    // name; the lava-tube base's table gives the skylight's pit its radius.
+    // name; the lava-tube base's table gives the skylight's pit its radius. Taken later (`keep`), a variant with its
+    // mesh in already is kept.
     if (art.finds)
         for (const auto& base : art.finds())
         {
             const auto folder = base.substr (0, base.find ('/'));
             const int role = W::roleOf (folder);
-            if (role < 0)
+            if (role < 0 || (keep && meshes.count (role) != 0))
                 continue;
             if (art.text && role == 7)
                 if (const auto r = W::pitRadiusOf (art.text (base + ".txt")))
@@ -1157,6 +1180,35 @@ void IoGl::drawScene (int rw, int rh, int cw, int ch)
         uniform3 (snow.u ("uSunV"), F.sunV); uniform3 (snow.u ("uLavaEnv"), F.lavaEnv);
         glDrawArrays (GL_TRIANGLES, 0, (GLsizei) std::ceil (snowN * F.snow * 1.07) * 6);
         glDisable (GL_BLEND); glDisable (GL_SCISSOR_TEST);
+    }
+    // THE DIAL WITHOUT THE CABIN (setNeedle): the post pass again over the dial's box only, the day's plate in it (opaque
+    // on the dial's face: the scene not read there) and the needle in the day's ink, over the scene and the snow
+    if (! cabin && needleAlone && texDash != 0 && ! skips ("post"))
+    {
+        const int x0 = std::max (0, (int) std::floor ((dial.x - dialBox) / stage[0] * cw)), x1 = std::min (cw, (int) std::ceil ((dial.x + dialBox) / stage[0] * cw));
+        const int y0 = std::max (0, (int) std::floor ((1 - (dial.y + dialBox) / stage[1]) * ch)), y1 = std::min (ch, (int) std::ceil ((1 - (dial.y - dialBox) / stage[1]) * ch));
+        if (x1 > x0 && y1 > y0)
+        {
+            glEnable (GL_SCISSOR_TEST); glScissor (x0, y0, x1 - x0, y1 - y0);
+            glUseProgram (post.id); glBindVertexArray (vaoEmpty);
+            glActiveTexture (GL_TEXTURE4); glBindTexture (GL_TEXTURE_2D, fboColour); glUniform1i (post.u ("uColour"), 4);
+            glActiveTexture (GL_TEXTURE6); glBindTexture (GL_TEXTURE_2D, texDash); glUniform1i (post.u ("uDash"), 6);
+            glActiveTexture (GL_TEXTURE11); glBindTexture (GL_TEXTURE_2D, texDash); glUniform1i (post.u ("uDashDark"), 11);
+            glUniform1f (post.u ("uDashOn"), 1.0f);
+            glUniform1f (post.u ("uDashMix"), 0.0f);
+            glUniform4f (post.u ("uSceneBox"), (float) sceneAt[0] / (float) rw, (float) sceneAt[1] / (float) rh, (float) subW / (float) rw, (float) subH / (float) rh);
+            glUniform1f (post.u ("uExpo"), f32 (s.sun.expo));
+            const auto way = W::needle (s.dose, dial.from, dial.to);
+            glUniform4f (post.u ("uDial"), f32 (dial.x), f32 (dial.y), f32 (dial.r), f32 (cw / stage[0]));
+            glUniform2f (post.u ("uStage"), f32 (stage[0]), f32 (stage[1]));
+            glUniform2f (post.u ("uNeedle"), f32 (way[0]), f32 (way[1]));
+            glUniform3f (post.u ("uNeedleCol"), f32 (inkDay[0]), f32 (inkDay[1]), f32 (inkDay[2]));
+            glDrawArrays (GL_TRIANGLES, 0, 3);
+            glDisable (GL_SCISSOR_TEST);
+            glActiveTexture (GL_TEXTURE4); glBindTexture (GL_TEXTURE_2D, 0);
+            glActiveTexture (GL_TEXTURE6); glBindTexture (GL_TEXTURE_2D, 0);
+            glActiveTexture (GL_TEXTURE11); glBindTexture (GL_TEXTURE_2D, 0);
+        }
     }
 
     for (const GLenum unit : { GL_TEXTURE0, GL_TEXTURE1, GL_TEXTURE2, GL_TEXTURE3, GL_TEXTURE5, GL_TEXTURE7, GL_TEXTURE8, GL_TEXTURE9, GL_TEXTURE10 })
