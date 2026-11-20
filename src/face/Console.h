@@ -102,12 +102,13 @@ public:
         float keyCapLeft = 0.0f, keyCapRight = 0.0f, keyFrameHeight = 0.0f;
         float keyNameOverY = 0.0f, keyNameUnderY = 0.0f, keyNameRoom = 120.0f;
         bool keyNamesAlternate = false, keyNamesOnKeys = false;
-        /** THE KEYS A FACE NAMES ITSELF, where its strip is its own rather than the pack's: these, in this order, a key
-            each, laid as for so many — MetalAmp's BRIGHT and CONTOUR, the E530's. A key the playing pack has a switch of
-            that name for (case aside) plays it; one it has none for is DARK — drawn dim, no hand's, its name in the tag
-            over it followed by `darkKeyWords`; and the pack's other switches are not shown. Empty, as on every other
-            face: the pack's switches, as they come (rightKeysOf). */
-        std::vector<juce::String> namedKeys {};
+        /** THE KEYS A FACE NAMES ITSELF, where its strip is its own rather than the pack's: a list a channel, by the
+            channel's number (one past the end takes the last), and on a channel its list's keys, in this order, a key
+            each, laid as for so many — MetalAmp's BRIGHT on the clean channels and CONTOUR on the lead ones, the E530's.
+            A key the playing pack has a switch of that name for (case aside) plays it; one it has none for is DARK —
+            drawn dim, no hand's, its name in the tag over it followed by `darkKeyWords`; and the pack's other switches
+            are not shown. Empty, as on every other face: the pack's switches, as they come (rightKeysOf). */
+        std::vector<std::vector<juce::String>> namedKeys {};
         juce::String darkKeyWords {};
         std::array<juce::Point<float>, 6> holes;            // the roof keys' centres
         float holeKeySize = 40.0f;

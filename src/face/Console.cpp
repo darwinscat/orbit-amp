@@ -1858,14 +1858,16 @@ std::vector<Console::RightKey> Console::rightKeysOf (int channel) const
 
     std::vector<RightKey> out;
     size_t next = 0;
-    if (! places.namedKeys.empty())
+    const bool named = ! places.namedKeys.empty();
+    if (named)
     {
-        out = keysNamed (places.namedKeys, channels.switchesOf (channel), free);
+        const auto& names = places.namedKeys[std::min ((size_t) std::max (channel, 0), places.namedKeys.size() - 1)];
+        out = keysNamed (names, channels.switchesOf (channel), free);
         next = free.size();     // nothing of the pack's beside them
     }
     for (const auto& s : channels.switchesOf (channel))
     {
-        if (! places.namedKeys.empty())
+        if (named)
             break;
         if (s.held)
             continue;

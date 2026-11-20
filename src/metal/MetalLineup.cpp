@@ -16,10 +16,11 @@ const channels::Lineup& lineup()
     // A STAND-IN SOUND, until the E530's own captures come: the released Victory V4 packs (CMakeLists.txt: METALAMP_SET),
     // a pack a channel — CLEAN GAIN LO the Copper, CLEAN GAIN HI the Sheriff, LEAD GAIN LO the Kraken, and LEAD GAIN HI
     // the Kraken again, opening on a hotter Gain (Lineup::Channel::drive). Every channel holds the V4's Boost OFF: the key
-    // strip is the E530's BRIGHT and CONTOUR (MetalEditor.cpp), with no key for the Boost, so no hand can leave it on —
-    // the stand-in plays the Boost-off captures alone (the Copper's 0005 to 0013, the Sheriff's and the Kraken's Ch1),
-    // whatever a record, a preset or a host says. What each opens on is AmberPawAmp's for the same pack: all on a plate,
-    // the cleaner the wetter, the Copper with 15 % of delay, the Sheriff with about half as much, the Kraken with none.
+    // strip is the E530's one key, BRIGHT on the clean two and CONTOUR on the lead two (MetalEditor.cpp), with no key for
+    // the Boost, so no hand can leave it on — the stand-in plays the Boost-off captures alone (the Copper's 0005 to 0013,
+    // the Sheriff's and the Kraken's Ch1), whatever a record, a preset or a host says. What each opens on is AmberPawAmp's
+    // for the same pack: all on a plate, the cleaner the wetter, the Copper with 15 % of delay, the Sheriff with about half
+    // as much, the Kraken with none.
     //
     // WHAT THE CABIN HOLDS WHERE IT IS, as the bathyscaphe holds its own: COMP in the strip and on, three quarters of the
     // signal through it at 4:1 on OPTO, its fader the threshold alone (the parameters declaring it: Engine::opening reads

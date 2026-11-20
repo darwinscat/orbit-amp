@@ -90,8 +90,9 @@ inline constexpr float gainSocket = 112.0f, gainKnob = 96.0f;
 inline const juce::Rectangle<float> toneStripBox = socket (760.0f, 810.0f, 432.0f, 94.0f);
 inline constexpr float toneY = 822.0f, tonePitch = 72.0f, toneSocket = 72.0f, toneKnob = 60.0f;
 
-/** THE KEY STRIP (sock_key_strip, 212 x 60): BRIGHT and CONTOUR, the E530's two keys, 106 apart where the mockup writes
-    them, each its name in the band over it — dark while the playing pack has no switch of that name (MetalEditor.cpp). */
+/** THE KEY STRIP (sock_key_strip, 212 x 60): one key, centred, its name in the band over it — BRIGHT on the clean channels,
+    CONTOUR on the lead ones, the E530's — dark while the playing pack has no switch of that name (MetalEditor.cpp). The
+    pitch is the mockup's for two, 106 apart, should a channel ever name two. */
 inline const juce::Rectangle<float> keyStripBox = socket (760.0f, 893.0f, 212.0f, 60.0f);
 inline constexpr float keyY = 903.0f, keyPitch = 106.0f, keySize = 30.0f;
 

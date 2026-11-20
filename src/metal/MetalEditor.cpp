@@ -95,12 +95,13 @@ namespace
         p.toneNameEm = px13;
         p.toneSignDrop = 0.0f;
 
-        // No filter keys; the key strip: the E530's two, BRIGHT and CONTOUR, 106 apart, each its name in the band over it —
-        // always these two, whatever the pack (Places::namedKeys): a key whose switch the playing pack has plays it, one it
-        // has none for is dark until the E530's own captures bring it, and the pack's other switches are not shown (the
-        // stand-in V4's Boost, which every channel holds off: MetalLineup.cpp).
+        // No filter keys; the key strip: ONE key, the E530's, centred, its name in the band over it, and which it is changes
+        // with the channel as the tones do — BRIGHT, the clean channel's switch, on CLEAN GAIN LO and HI, CONTOUR, the lead
+        // channel's, on LEAD GAIN LO and HI — whatever the pack (Places::namedKeys): a key whose switch the playing pack has
+        // plays it, one it has none for is dark until the E530's own captures bring it, and the pack's other switches are
+        // not shown (the stand-in V4's Boost, which every channel holds off: MetalLineup.cpp).
         p.filterKeys = false;
-        p.namedKeys = { "Bright", "Contour" };
+        p.namedKeys = { { "Bright" }, { "Bright" }, { "Contour" }, { "Contour" } };
         p.darkKeyWords = "WAITS FOR THE E530 CAPTURES";
         p.keyStrip.area = juce::Rectangle<float> (keyStripBox.getWidth() - 8.0f, keySize).withCentre ({ keyStripBox.getCentreX(), keyY });
         p.keyStrip.pitch = keyPitch;
