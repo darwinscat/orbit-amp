@@ -1,0 +1,36 @@
+# metal cabin sockets, variant c6 (final): name kind cx cy w h (stage px, 1672 x 941; o = circle, w = h = diameter)
+plate_maker          plate     836.0  699.0  124.0  108.0
+sock_cab_picture     picture  1354.0  875.0  244.0   88.0
+sock_cab_screen      screen   1354.0  806.0  244.0   34.0
+sock_comp            fader     326.0  833.0   16.0   88.0
+sock_comp_gr         meter     350.0  833.0   14.0   88.0
+sock_fx1             fader    1036.0  833.0   16.0   88.0
+sock_fx2             fader    1096.0  833.0   16.0   88.0
+sock_gain            knob      452.0  843.0  112.0  112.0
+sock_gate            button     88.0  907.0   92.0   26.0
+sock_in_fader        fader      72.0  833.0   16.0   88.0
+sock_in_meter        meter     104.0  833.0   14.0   88.0
+sock_key_a           key      1399.0  719.0   54.0   36.0
+sock_key_b           key      1463.0  719.0   54.0   36.0
+sock_key_c           key      1527.0  719.0   54.0   36.0
+sock_key_d           key      1591.0  719.0   54.0   36.0
+sock_key_redo        key      1322.0  719.0   80.0   36.0
+sock_key_strip       strip     760.0  893.0  212.0   60.0
+sock_key_undo        key      1232.0  719.0   80.0   36.0
+sock_lever           lever     190.0  842.0   24.0  132.0
+sock_lever_clean_hi  stop      216.0  842.0    8.0    8.0
+sock_lever_clean_lo  stop      216.0  816.0    8.0    8.0
+sock_lever_lead_hi   stop      216.0  894.0    8.0    8.0
+sock_lever_lead_lo   stop      216.0  868.0    8.0    8.0
+sock_lever_park      stop      216.0  790.0    8.0    8.0
+sock_limiter         button   1584.0  907.0   92.0   26.0
+sock_out_fader       fader    1600.0  833.0   16.0   88.0
+sock_out_meter       meter    1568.0  833.0   14.0   88.0
+sock_reverb          fader    1156.0  833.0   16.0   88.0
+sock_tone_strip      strip     760.0  810.0  432.0   94.0
+sock_tuner_screen    screen    267.0  718.0  446.0   38.0
+# plate_cat and plate_powered: BAKED, not sockets (c5): DARWIN'S CAT and POWERED BY are chrome
+# lettering in the plates, the app draws nothing there. Where they stand: #baked name x0 y0 w h
+# (stage px, each box its whole SVG)
+#baked wordmark         935.5  686.0  187.1   44.0
+#baked powered_by       569.4  692.5  147.2   34.4

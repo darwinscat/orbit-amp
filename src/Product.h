@@ -150,6 +150,7 @@ const Product& amberPawAmp();
 const Product& orbitBass();
 const Product& redGrooveBass();
 const Product& deepGrooveBass();
+const Product& metalAmp();
 } // namespace products
 
 } // namespace orbitamp

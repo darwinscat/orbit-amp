@@ -79,9 +79,14 @@ namespace
 
 void addGuitarCompParameters (juce::AudioProcessorValueTreeState::ParameterLayout& layout)
 {
-    // Out of the strip until the player adds it; on OPTO (the owner, 02.11).
-    addCompParameters (layout, compCharacters.indexOf ("Opto"));
-    layout.add (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { compPresent, 1 }, "Comp In Strip", false));
+    addGuitarCompParameters (layout, Opening {});
+}
+
+void addGuitarCompParameters (juce::AudioProcessorValueTreeState::ParameterLayout& layout, const Opening& opening)
+{
+    // Out of the strip until the player adds it, unless the product holds it there; on OPTO (the owner, 02.11).
+    addCompParameters (layout, compCharacters.indexOf ("Opto"), opening.compAmount, opening.compOn);
+    layout.add (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { compPresent, 1 }, "Comp In Strip", opening.compPresent));
 }
 
 void addBassParameters (juce::AudioProcessorValueTreeState::ParameterLayout& layout)

@@ -45,6 +45,11 @@ struct Lineup
         /** ...and HOLDS it there, whatever a record, a preset or a host says: a gear with no BLEND of its own —
             DeepGrooveBass's CLEAN, the capture alone (the owner, 16.11). */
         bool blendHeld = false;
+
+        /** WHERE ITS DRIVE OPENS (params::preampGain, 0..10), where the channel opens it elsewhere than the parameter's
+            middle: MetalAmp's LEAD GAIN HI, the same pack as LEAD GAIN LO, a hotter Gain. A default, not a hold — and a
+            channel's other than the one the product opens on, whose DRIVE is the parameter's own default. */
+        std::optional<float> drive {};
     };
 
     const char* nodeType;       // the product's node in the state tree, where the channels' memory is kept

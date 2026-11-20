@@ -982,6 +982,8 @@ float Channels::defaultOf (int channel, const juce::String& paramId) const
         return own.delayMix;
     if (paramId == params::ampBlend && own.blend.has_value())     // the channel's own BLEND, where it opens one elsewhere
         return *own.blend;
+    if (paramId == params::preampGain && own.drive.has_value())   // ...and its own DRIVE (MetalAmp's LEAD GAIN HI)
+        return *own.drive;
     for (const auto& s : switchesOf (channel))     // a switch of its pack where the pack opens it, or where the channel holds it
         if (paramId == params::selectorId (params::preampId, s.slot))
             return (float) s.opening;

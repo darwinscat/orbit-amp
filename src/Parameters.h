@@ -764,6 +764,11 @@ struct Opening
     bool  filterPresent = true;
     bool  reverbPresent = false;
 
+    // ...and a GUITAR chain's COMP in its strip from the start, where the product holds it there: MetalAmp's, its fader on the
+    // face (channels::Lineup::pinned). Declared by addGuitarCompParameters with compAmount and compOn above; OrbitAmp's is
+    // out of its strip until the player adds it.
+    bool  compPresent   = false;
+
     // WHERE THE AMP'S MIDDLE OPENS: its console's first bell's frequency — 400 Hz on every amp but the basses, whose MID
     // FREQ opens at 1 kHz (RedGrooveBass's: the owner, 02.11; OrbitBass's: 10.11). A default, not a hold: the player moves it, and
     // INIT and a double click bring it back here (engineDefault leaves it its declared default).
@@ -787,6 +792,10 @@ struct Opening
 /** The bass's own parameters (above), each declaring as its default where `opening` says a fresh instance of the
     product stands. */
 void addBassParameters (juce::AudioProcessorValueTreeState::ParameterLayout&, const Opening&);
+
+/** A guitar chain's COMP (addGuitarCompParameters, above), each of its parameters declaring as its default where `opening`
+    says a fresh instance of the product stands: its share, its On and whether it is in the strip. */
+void addGuitarCompParameters (juce::AudioProcessorValueTreeState::ParameterLayout&, const Opening&);
 
 /** The engine's parameters, for the product of that name: the devices a parameter offers are the ones
     it plays, and a fresh instance stands where `opening` says. */
