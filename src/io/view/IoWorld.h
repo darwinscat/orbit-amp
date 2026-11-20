@@ -31,8 +31,9 @@ namespace orbitamp::io
     the prototype's own dump.
 
     THE LEVER: gears 1..2 are CRUISE SLOW and CRUISE FAST; PARK is setParked. There is no TURBO. hit (level) is one
-    attack of the playing. The amp's knobs are the world's inputs (setKnob, each eased): DRIVE the time of day, BLEND
-    Jupiter's phase (down to the eclipse at 0), PRESENCE the sulphur snow; the attacks wake the volcanoes.
+    attack of the playing. The amp's knobs are the world's inputs (setKnob, each eased): DRIVE the time of day (turned
+    up, the day), BLEND Jupiter's phase (down to the eclipse at 0), PRESENCE the sulphur snow; the attacks wake the
+    volcanoes.
 */
 class IoWorld final
 {
@@ -114,9 +115,10 @@ public:
     static double jupEl() noexcept;
     static double jupAz();
     static const JupFrame& jupFrame();
-    /** The Sun's map from the knobs (io-world.js SUN_MAP): the Sun's height at DRIVE 0 (top) and 1 (bottom, under the
-        skyline), the DRIVE where it crosses the skyline (horizon: 0.65 since 20.11, the owner's "9 o'clock full day, 12 still
-        day, 3 dark, 5 the darkest"; it was 0.5), its rate a unit of DRIVE there (dusk), and BLEND's eclipse and window. */
+    /** The Sun's map from the knobs (io-world.js SUN_MAP), laid out along 1 - DRIVE (sunHeightAt's argument; DRIVE turned
+        up is the day since 20.11): the Sun's height at its 0 (top, DRIVE 1) and its 1 (bottom, under the skyline, DRIVE 0),
+        where it crosses the skyline (horizon: 0.65 since 20.11, DRIVE 0.35; it was 0.5), its rate a unit of it there (dusk),
+        and BLEND's eclipse and window. */
     struct SunMap { double top, bottom, horizon, dusk, deep, contact, win, winSep, softTop, softPull; V2 gate, night, adapt, cabin; double graze; };
     static constexpr SunMap sunMap { 17 * deg, 11 * deg, 0.65, 40 * deg, 4.6 * deg, 0.06, 0.35, 40 * deg, 20 * deg, 3 * deg,
                                      { -3.6 * deg, -2.6 * deg }, { -4 * deg, 7 * deg }, { -11 * deg, 7 * deg }, { -0.2 * deg, 5 * deg }, 4 * deg };
@@ -126,14 +128,18 @@ public:
         double sep = 0, vis = 0; V3 hue {}; double light = 0, flat = 0, graze = 0, ring = 0, depth = 0, u = 0, eclAir = 0, eclExpo = 0, eclDark = 0;
         V3 dir {}; double el = 0, az = 0, eA = 0, gate = 0, night = 0, dark = 0, airglow = 0, expo = 1, cabin = 0;
     };
-    /** The Sun's height over the skyline DRIVE asks (radians): a cubic each side of SunMap::horizon, flat at noon (DRIVE
-        0) and at the deepest night (1), at the rate dusk where it crosses (C1). The day lasts to 0.65: 14.9 degrees at
-        0.2, 5.9 at 0.5 (a low Sun, still day), 0 at 0.65, -6.3 at 0.8 (the full night), -11 at 1. With the horizon at 0.5
-        it is the old map exactly. */
+    /** The Sun's height over the skyline (radians) at `drive` counted from the top of the day: sunSolve passes 1 - DRIVE.
+        A cubic each side of SunMap::horizon, flat at noon (0) and at the deepest night (1), at the rate dusk where it
+        crosses (C1). The day lasts to 0.65: 14.9 degrees at 0.2, 5.9 at 0.5 (a low Sun, still day), 0 at 0.65, -6.3 at 0.8
+        (the full night), -11 at 1. With the horizon at 0.5 it is the old map exactly. */
     static double sunHeightAt (double drive, const SunMap& map) noexcept;
     static double sunHeightAt (double drive) noexcept { return sunHeightAt (drive, sunMap); }
     static double sunSepAt (double blend) noexcept;
     static Sun sunLook (double sep, double late);
+    /** The Sun the knobs ask for. DRIVE turned up is the day (the owner, 20.11): its height sunHeightAt (1 - drive), the
+        deepest night (-11 degrees) at DRIVE 0, a night at 0.2 (the knob's 9 o'clock), the skyline at 0.35, a low Sun at 0.5
+        (12 o'clock, 5.85 degrees), full day at 0.8 (3 o'clock, 14.9) and the highest Sun (17) at 1. BLEND its angle from
+        Jupiter (sunSepAt). */
     static Sun sunSolve (double drive, double blend);
     /** The old path (the second DRIVE map, on no knob now: for a planetarium). */
     static double pathSepAt (double x);
@@ -270,8 +276,9 @@ public:
     struct Light { V3 dir {}, key {}; double k = 1; V3 adir {}, amb {}; };
     struct Ring { double level = 0, t = 0; };
     static Ring ringLevel (const Sun& sp);
-    /** Jupiter's shine on the land (unexposed): as full as its phase, never under a fifth of the full Jupiter's (the owner,
-        20.11: a little soft light stays at BLEND 0); the night's adaptation on it. Jupiter's own disc is not this. */
+    /** Jupiter's shine on the land (unexposed): the full Jupiter's whatever BLEND is (the owner, 20.11), over the Sun's
+        exposure, so that once exposed it is always the full-Jupiter night's (the night's exposure, 1.6, times its
+        strength): the same on the screen by day and by night. Jupiter's own disc is not this. */
     static V3 jupShineOf (const Sun& sp);
     static Light surfaceLight (const Sun& sp);
     /** The skyline's elevation toward an azimuth from the eye (the ground out to the far cut, falling with the

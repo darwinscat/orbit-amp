@@ -536,13 +536,32 @@ namespace
         double worst = 0;
         for (int i = 0; i <= 1000; ++i) worst = std::max (worst, std::abs (W::sunHeightAt (i / 1000.0, half) - oldHeight (i / 1000.0)));
         check (worst < 1e-14, "sky: with the horizon at 0.5 the Sun's height is the old map's");
-        check (W::sunSolve (0.5, 0.2).night < 0.05 && W::sunSolve (0.8, 0.2).night > 0.99, "sky: DRIVE 0.5 is the day, 0.8 the night");
-        // Jupiter's light on the land keeps a floor behind it (BLEND 0): a fifth of the full Jupiter's.
-        W::Sun behind;
-        behind.sep = 0; behind.night = 0;
-        const auto jf = W::jupShineOf (behind);
-        check (std::abs (jf[0] - 0.105 * 0.2) < 1e-12 && std::abs (jf[1] - 0.090 * 0.2) < 1e-12 && std::abs (jf[2] - 0.070 * 0.2) < 1e-12,
-               "light: Jupiter's shine with the Sun behind it is a fifth of the full Jupiter's");
+        // DRIVE TURNED UP IS THE DAY (Oleh, 20.11): sunSolve reads the map from its other end, the deepest night at DRIVE 0,
+        // a low Sun at 0.5, the highest at 1.
+        for (const auto& [d, e] : std::vector<std::pair<double, double>> { { 0, -11 }, { 0.5, 5.848 }, { 1, 17 } })
+            check (std::abs (W::sunSolve (d, 1).eA / W::deg - e) < 0.001, ("sky: sunSolve's Sun height at DRIVE " + num (d) + ", BLEND 1").c_str());
+        check (W::sunSolve (0.5, 0.2).night < 0.05 && W::sunSolve (0.2, 0.2).night > 0.99, "sky: DRIVE 0.5 is the day, 0.2 the night");
+        // Jupiter lights the land as if full whatever BLEND is: the same shine behind it (BLEND 0) and opposite (BLEND 1).
+        bool sameShine = true;
+        for (const double expo : { 1.0, 1.3, 1.6 })
+        {
+            W::Sun behind, opposite;
+            behind.sep = W::sunSepAt (0); opposite.sep = W::sunSepAt (1);
+            behind.expo = opposite.expo = expo; behind.night = 0; opposite.night = 1;
+            const auto a = W::jupShineOf (behind), o = W::jupShineOf (opposite);
+            for (size_t k = 0; k < 3; ++k) sameShine = sameShine && std::abs (a[k] - o[k]) < 1e-12 * std::abs (o[k]) && o[k] > 0;
+        }
+        check (sameShine, "light: Jupiter's shine on the land is the same at BLEND 0 and 1 for the same exposure");
+        // ...and, exposed, the full-Jupiter night's by day too: its shine times the exposure the same at noon and at midnight.
+        bool sameExposed = true;
+        for (const double blend : { 0.0, 1.0 })
+        {
+            const auto day = W::sunSolve (1, blend), night = W::sunSolve (0, blend);
+            const auto sd = W::jupShineOf (day), sn = W::jupShineOf (night);
+            for (size_t k = 0; k < 3; ++k) sameExposed = sameExposed && std::abs (sd[k] * day.expo - sn[k] * night.expo) < 1e-12 * sn[k] * night.expo;
+        }
+        check (W::sunSolve (1, 1).expo == 1 && W::sunSolve (0, 1).expo > 1.59 && sameExposed,
+               "light: Jupiter's shine on the land times the exposure is the same by day and by night");
     }
 }
 

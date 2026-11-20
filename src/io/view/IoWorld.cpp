@@ -377,7 +377,8 @@ IoWorld::Sun IoWorld::sunLook (double sep, double late)
 IoWorld::Sun IoWorld::sunSolve (double drive, double blend)
 {
     const auto& M = sunMap;
-    const double j = jupEl(), eA = sunHeightAt (drive);
+    // DRIVE turned up is the day (the owner, 20.11: more drive, more light): its foot the deepest night, its head the highest Sun.
+    const double j = jupEl(), eA = sunHeightAt (1 - drive);
     const double sep = clamp (smin (sunSepAt (blend), PI - std::abs (eA + j), M.softTop), 0, PI);
     const double e = clamp (smax (smin (eA, j + sep, M.softPull), j - sep, M.softPull), j - sep, j + sep);
     const double cz = clamp ((Js::cos (sep) - Js::sin (e) * Js::sin (j)) / jsMax (Js::cos (e) * Js::cos (j), 1e-9), -1, 1);
