@@ -65,6 +65,11 @@ public:
     explicit IoGl (IoWorld& w) : world (w) {}
 
     void setArt (Art a) { art = std::move (a); }
+    /** The art again once the GPU's half is made, between two frames: each part not on the GPU yet is read from it — a
+        file that has come since (the site's files arrive while the world runs) — and the parts already in are kept, none
+        of them read again: the plates while neither is in (both taken together), a find whose variant has no mesh yet.
+        Before create(), the same as setArt. GL thread only. */
+    void takeArt (Art a);
 
     /** The projection: the half-width's tangent (constant over any aspect) and where the view's centre sits (NDC). */
     void setLens (double tanHalfWidth, double centreShear) noexcept { tanH = tanHalfWidth; shear = centreShear; }
@@ -80,6 +85,11 @@ public:
     /** Whether the cabin is drawn: asked for (setCabin), and its two plates are on the GPU. */
     bool drawsCabin() const noexcept { return cabinOn && texDash != 0 && texDashDark != 0; }
     void setCabin (bool on) noexcept { cabinOn = on; }
+    /** The dosimeter's dial drawn over the view even while the cabin is not: the day plate's own pixels inside the dial's
+        box (dialBox) and the live needle on them, over the scene and the snow — for a page that lays a plate of its own
+        over the view, the dial's face cut out of it (the site's). Needs the day's plate only. Off in the app, where the
+        face paints the panel and no needle. */
+    void setNeedle (bool on) noexcept { needleAlone = on; }
 
     /** What the last frames cost on the GPU, milliseconds, a running mean; -1 until known. */
     float gpuMillis() const noexcept { return gpuMs; }
@@ -102,13 +112,16 @@ public:
         counter-clockwise from 3 o'clock), as cabin.html hands it to the prototype, and the stage. */
     struct Dial { double x, y, r, from, to; };
     static constexpr Dial dial { 119.2, 564.9, 36.8, 210, -30 };
+    /** Half the side of the square round the dial's hub that setNeedle draws (stage px): the dial's face and its black
+        ring, a little of the bezel. */
+    static constexpr double dialBox = 1.25 * dial.r;
     static constexpr std::array<double, 2> stage { 1672, 941 };
 
 private:
     IoWorld& world;
     Art art;
     double tanH = 18.0 / 16.0, shear = 0.0;
-    bool cabinOn = true;
+    bool cabinOn = true, needleAlone = false;
 
     struct Program
     {
@@ -179,6 +192,8 @@ private:
     void makeTextures();
     void makeBuffers();
     void makeArt();
+    void takePlates();
+    void takeFinds (bool keep);
     void loadMesh (int variant, const std::string& base);
     Grid& gridFor (int cells);
     bool ensureFrame (int w, int h, int cw, int ch);
