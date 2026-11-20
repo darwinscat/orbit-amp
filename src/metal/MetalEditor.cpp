@@ -564,6 +564,158 @@ bool MetalEditor::pictureRightClicked (juce::Point<int> onStage)
 }
 
 //==============================================================================
+/** THE CABIN'S OWN PART OF THE SITE'S DEMO (Console::webExtras), in the walker's words and no others, as the bathyscaphe's:
+    under places.json's "world", the box the world is drawn in — the whole stage, the plate's alpha its window — and every
+    control the console has not already said: the lever, its five stops PARK first, each named where its glyph stands; the
+    world's three gears under the four channels; COMP's, FX 1's, FX 2's and REVERB's columns and COMP's squeeze; the
+    cabinet's screen and the name over its picture. GAIN and the tones are the console's knobs, and no ring goes round
+    any knob here: "knobs" is empty and "rings" null. What these words cannot carry — the stops' glyphs, UNDO's and REDO's
+    arrows, GATE's and LIMITER's buttons, the cat's flames, how each pack lays the strips — the kit's README says. THE
+    STILL: the world's first frame — the plains', until the metal world comes — the world alone, the whole stage at twice
+    its size, the first a poster's frame brings. THE POSTERS: one a stop, PARK the first. */
+void MetalEditor::webExtras (const juce::File& dir, juce::DynamicObject& kit, juce::DynamicObject& world)
+{
+    using Obj = juce::DynamicObject;
+    const auto rect = [] (juce::Rectangle<float> r)
+    {
+        auto* o = new Obj();
+        o->setProperty ("x", r.getX()); o->setProperty ("y", r.getY());
+        o->setProperty ("w", r.getWidth()); o->setProperty ("h", r.getHeight());
+        return juce::var (o);
+    };
+    const auto point = [] (juce::Point<float> p) { auto* o = new Obj(); o->setProperty ("x", p.x); o->setProperty ("y", p.y); return juce::var (o); };
+    const auto boxOf = [] (const juce::Component& c) { return c.getBoundsInParent().toFloat(); };
+
+    world.setProperty ("dome", rect (layout::view));
+    world.setProperty ("gears", gearOf (channels.count() - 1));
+    {
+        juce::Array<juce::var> gears;          // CLEAN GAIN LO the first, HI the second, both LEADs the third
+        for (int c = 0; c < channels.count(); ++c)
+            gears.add (gearOf (c));
+        world.setProperty ("channelGears", gears);
+    }
+
+    // THE LEVER: its five stops top to bottom, PARK first, the slot it runs in, each stop's name where its glyph stands.
+    {
+        auto* l = new Obj();
+        const auto box = boxOf (lever);
+        l->setProperty ("box", rect (box));
+        l->setProperty ("slotX", layout::leverSlot.getCentreX());
+        juce::Array<juce::var> stops, names;
+        for (int i = 0; i < (int) layout::leverStops.size(); ++i)
+        {
+            stops.add (layout::leverStops[(size_t) i]);
+            auto* n = new Obj();
+            n->setProperty ("name", placeName (i)); n->setProperty ("at", point (box.getPosition() + lever.glyphAt (i)));
+            names.add (juce::var (n));
+        }
+        l->setProperty ("stops", stops);
+        l->setProperty ("names", names);
+        l->setProperty ("capWidth", GlyphLever::capWidth);
+        l->setProperty ("capHeight", GlyphLever::capHeight);
+        l->setProperty ("does", "place 0 is PARK, the amp's bypass, which leaves the channel as it was; place i >= 1 is channel i - 1 "
+                                "(the lineup's), the amp back in on it, the world in its gear (channelGears)");
+        world.setProperty ("lever", l);
+    }
+
+    // THE KNOBS: none of the cabin's own (GAIN and the tones are the console's), and no ring round any.
+    world.setProperty ("knobs", juce::Array<juce::var>());
+    world.setProperty ("rings", juce::var());
+    world.setProperty ("knobNameY", layout::bandY);
+
+    // THE COLUMNS: COMP's threshold, FX 1, FX 2 and REVERB, upright, the fader cap's render; what each says while it is held.
+    {
+        struct F { const char* id; const char* name; const face::ColumnFader* c; const char* param; const char* travel; const char* reading; };
+        const F faders[] {
+            { "comp",   "COMP",   &comp,   params::compThreshold, "travel = threshold / -48 dB: 0 dB at the foot, -48 dB at the head",
+                                                                  "whole dB, in the name tag while held: COMP  -24 dB" },
+            { "fx1",    "FX 1",   &fx1,    params::delayMix,      "the value / 100, bottom to top",
+                                                                  "percent, in the name tag while held: FX 1  DELAY  15%" },
+            { "fx2",    "FX 2",   &fx2,    nullptr,               "none: nothing plays there yet; dark at its foot, out of the hand's reach",
+                                                                  "none: the name tag FX 2 under the hand" },
+            { "reverb", "REVERB", &reverb, params::reverbMix,     "the value / 100, bottom to top",
+                                                                  "percent, in the name tag while held: REVERB  20%" } };
+        juce::Array<juce::var> a;
+        for (const auto& f : faders)
+        {
+            auto* v = new Obj();
+            v->setProperty ("id", f.id); v->setProperty ("name", f.name); v->setProperty ("box", rect (boxOf (*f.c)));
+            v->setProperty ("sprite", "fader-cap"); v->setProperty ("capLength", layout::faderCapLength);
+            v->setProperty ("param", f.param != nullptr ? juce::var (f.param) : juce::var());
+            v->setProperty ("travel", f.travel); v->setProperty ("reading", f.reading);
+            a.add (juce::var (v));
+        }
+        world.setProperty ("columns", a);
+    }
+
+    // COMP'S SQUEEZE: its gain reduction as a column filling down, its full span.
+    {
+        auto* g = new Obj();
+        g->setProperty ("box", rect (boxOf (squeeze))); g->setProperty ("slot", rect (layout::compGrSlot)); g->setProperty ("across", false);
+        g->setProperty ("rangeDb", redgroove::GrColumn::rangeDb); g->setProperty ("reads", "COMP's gain reduction in dB (AmpProcessor::compGrDb)");
+        world.setProperty ("squeeze", g);
+    }
+
+    // THE CABINET'S SCREEN: the slider in it, and the playing cabinet's name over the picture under it.
+    {
+        auto* c = new Obj();
+        c->setProperty ("box", rect (boxOf (cabinet)));
+        c->setProperty ("shows", "a slider across the screen, a notch a cabinet of the lineup's (lineup.cabinets, cabSteps), the fader "
+                                 "cap's render its cap; the playing cabinet's name over the picture under it (readings: cabinet); "
+                                 "a right click lists them");
+        world.setProperty ("cabinetScreen", c);
+    }
+    {
+        juce::Array<juce::var> readings;
+        if (cabinet.label != nullptr)
+        {
+            auto* v = new Obj();
+            v->setProperty ("id", "cabinet"); v->setProperty ("box", rect (boxOf (*cabinet.label)));
+            v->setProperty ("format", "CAB: <the cabinet's name, the TOP 12's number left out>; the slot's under the hand while "
+                                      "it moves the slider; CAB: OFF while the cabinet is out of the sound");
+            readings.add (juce::var (v));
+        }
+        world.setProperty ("readings", readings);
+        world.setProperty ("readingPx", stage::px13);
+    }
+
+    kit.setProperty ("window", rect (layout::view));
+    kit.setProperty ("stills", juce::Array<juce::var> { juce::var ("still.webp") });
+
+    webPoses.count = (int) layout::leverStops.size();
+    webPoses.opening = parked ? 0 : channels.active() + 1;
+    webPoses.standAt = [this] (int at)
+    {
+        if (lever.onPlace)
+            lever.onPlace (at);
+        lever.setPlace (at, false, false);
+    };
+    webStill = {};
+    webPoses.firstFrame = [safe = juce::Component::SafePointer<MetalEditor> (this), dir] (int, std::function<void (juce::Image)> done)
+    {
+        if (safe == nullptr)
+            return;
+        const auto box = layout::view * 2.0f;
+        safe->view->firstFrame (makeDrive(), juce::roundToInt (box.getWidth()), juce::roundToInt (box.getHeight()),
+                                [safe, dir, then = std::move (done)] (juce::Image frame)
+                                {
+                                    if (safe != nullptr && frame.isValid() && ! safe->webStill.isValid())
+                                    {
+                                        safe->webStill = frame;
+                                        writeForWeb (dir.getChildFile ("still.webp"), frame);
+                                    }
+                                    then (frame);
+                                });
+    };
+    webPoses.live = "the plains' first frame (TEMPORARY: the Mars plains stand in until the metal world's port), behind the glass "
+                    "alone: the plains on the GPU from their world's start, in the stop's gear, settled, nothing stepped (t = 0), "
+                    "parked at PARK, TURBO's dust at LEAD GAIN HI; the top poster is the stop the app opens at";
+    webPoses.still = [this] (int) { return webStill; };
+    webPoses.window = layout::view;
+    webPoses.hidden = { view.get() };
+}
+
+//==============================================================================
 /** What the window shows — the world on the GPU, the 1993 landscape on the CPU, or the still — and how often; whether it
     answers the guitar; and full screen. The machine's, kept with its settings. */
 void MetalEditor::addWindowSections (juce::PopupMenu& menu)

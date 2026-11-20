@@ -124,6 +124,10 @@ private:
     std::vector<std::unique_ptr<redgroove::Readout>> readouts;
     redgroove::Readout& readout (juce::Rectangle<float> box);
 
+    // THE SITE'S DEMO (Console::webExtras): what is the cabin's own, in the walker's words, and a poster a stop of the lever.
+    void webExtras (const juce::File& dir, juce::DynamicObject& kit, juce::DynamicObject& world) override;
+    juce::Image webStill;           // the site's still: the world's first frame, the first a poster brings
+
     void showSelector (int channel) override;
     void showPark (bool on);
     void showPlace();

@@ -12,7 +12,9 @@
 //     strip;
 //   - COMP, its fader the threshold alone, and what the cabin holds of it (Lineup::pinned) — in the strip and on, three
 //     quarters through it at 4:1 on OPTO; FX 1 the delay's amount, REVERB the room's share, FX 2 dark;
-//   - a still: the face renders whole, the cat in the maker's plate silver at rest, and crimson in flames under the hand.
+//   - a still: the face renders whole, the cat in the maker's plate silver at rest, and crimson in flames under the hand;
+//   - the site's kit (ORBITAMP_WEB_EXPORT): places.json's "world" in the walker's words — the glass the whole stage, the
+//     world's three gears under the four channels, the lever's five stops PARK first, the columns — and a poster a stop.
 //
 // Each control is found by the name the face gives it, the knobs and the keys by the strip they stand in
 // (metal/MetalLayout.h). With METAL_FACE_STILLS naming a folder, the stills are written there as PNG, at 1x and 2x, to be
@@ -30,6 +32,7 @@
 #include <array>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <functional>
 #include <memory>
 #include <vector>
@@ -76,6 +79,38 @@ namespace
                 b += c.getFloatBlue() * c.getFloatAlpha();
             }
         return { r, b };
+    }
+
+    /** Sets a variable of this process's environment, empty to clear it — for the window made next to read. */
+    void setEnvironment (const char* name, const juce::String& value)
+    {
+       #if JUCE_WINDOWS
+        _putenv_s (name, value.toRawUTF8());
+       #else
+        setenv (name, value.toRawUTF8(), 1);
+       #endif
+    }
+
+    juce::Rectangle<float> rectOf (const juce::var& v)
+    {
+        return { (float) v["x"], (float) v["y"], (float) v["w"], (float) v["h"] };
+    }
+
+    bool isRect (const juce::var& v)
+    {
+        return v.isObject() && v.hasProperty ("x") && v.hasProperty ("y") && v.hasProperty ("w") && v.hasProperty ("h");
+    }
+
+    /** Every object and array under `v`, `v` first. */
+    void visitAll (const juce::var& v, const std::function<void (const juce::var&)>& visit)
+    {
+        visit (v);
+        if (const auto* a = v.getArray())
+            for (const auto& item : *a)
+                visitAll (item, visit);
+        else if (auto* o = v.getDynamicObject())
+            for (const auto& p : o->getProperties())
+                visitAll (p.value, visit);
     }
 
     void writeStill (const juce::Image& img, const juce::String& name)
@@ -252,6 +287,68 @@ int ORBITAMP_GATE_MAIN()
     writeStill (face->createComponentSnapshot (face->getLocalBounds(), true, 2.0f), "metal-face-2x.png");
 
     face.reset();
+
+    // THE SITE'S KIT: a window that comes up with ORBITAMP_WEB_EXPORT naming a folder writes it there (Console::exportForWeb),
+    // and what is the E530's own is under places.json's "world", in the walker's words (MetalEditor::webExtras).
+    {
+        const auto kit = juce::File::getSpecialLocation (juce::File::tempDirectory)
+                             .getChildFile ("MetalWebKit-" + juce::String (juce::Time::currentTimeMillis()));
+        setEnvironment ("ORBITAMP_WEB_EXPORT", kit.getFullPathName());
+        face.reset (amp->createEditor());
+        setEnvironment ("ORBITAMP_WEB_EXPORT", {});
+        for (int waited = 0; waited < 1800 && ! kit.getChildFile ("done.txt").existsAsFile(); ++waited)
+            juce::MessageManager::getInstance()->runDispatchLoopUntil (100);
+        const auto json = juce::JSON::parse (kit.getChildFile ("places.json"));
+        check (json.isObject() && kit.getChildFile ("done.txt").existsAsFile(), "the site's kit is written, and places.json reads");
+
+        const juce::Rectangle<float> whole { 0.0f, 0.0f, layout::width, layout::height };
+        const auto& world = json["world"];
+        check (isRect (json["window"]) && rectOf (json["window"]) == whole && isRect (world["dome"]) && rectOf (world["dome"]) == whole
+                   && json["stills"].size() == 1 && json["stills"][0].toString() == "still.webp",
+               "...the glass the whole stage, the world under it, its still named");
+        check ((int) world["gears"] == 3 && world["channelGears"].size() == 4 && (int) world["channelGears"][0] == 1
+                   && (int) world["channelGears"][1] == 2 && (int) world["channelGears"][2] == 3 && (int) world["channelGears"][3] == 3,
+               "...the world's three gears under the four channels, both LEADs in the third");
+
+        const auto& lever = world["lever"];
+        bool stops = lever["stops"].size() == (int) layout::leverStops.size();
+        for (int i = 0; stops && i < (int) layout::leverStops.size(); ++i)
+            stops = std::abs ((float) lever["stops"][i] - layout::leverStops[(size_t) i]) < 0.01f;
+        bool names = lever["names"].size() == 5 && lever["names"][0]["name"].toString() == "PARK" && isRect (lever["box"]);
+        for (int i = 0; names && i < 5; ++i)
+        {
+            const auto& n = lever["names"][i];
+            names = (i == 0 || n["name"].toString() == nameOf (i - 1).toUpperCase())
+                 && rectOf (lever["box"]).contains ((float) n["at"]["x"], (float) n["at"]["y"]);
+        }
+        check (stops && names, "...the lever's five stops where the plate has them, PARK first and then the channels, each named where its glyph stands");
+        check (json["posters"].size() == 5, "...a poster for each stop, PARK's among them: " + juce::String (json["posters"].size()));
+
+        const juce::StringArray columnIds { "comp", "fx1", "fx2", "reverb" };
+        bool columns = world["columns"].size() == columnIds.size();
+        for (int i = 0; columns && i < columnIds.size(); ++i)
+        {
+            const auto& c = world["columns"][i];
+            const bool dark = c["id"].toString() == "fx2";
+            columns = c["id"].toString() == columnIds[i] && isRect (c["box"])
+                   && (dark ? c["param"].isVoid() || c["param"].toString().isEmpty() : amp->apvts.getParameter (c["param"].toString()) != nullptr);
+        }
+        check (columns, "...the columns COMP, FX 1, FX 2 and REVERB, each with the parameter it moves, FX 2 none");
+
+        bool onStage = true, named = true;
+        visitAll (world, [&] (const juce::var& v)
+        {
+            if (isRect (v))
+                onStage = onStage && whole.contains (rectOf (v)) && ! rectOf (v).isEmpty();
+            if (v.isObject() && v.hasProperty ("param") && v["param"].toString().isNotEmpty())
+                named = named && amp->apvts.getParameter (v["param"].toString()) != nullptr;
+        });
+        check (onStage && named, "...and every box in the world on the stage, every parameter it names the amp's");
+
+        face.reset();
+        kit.deleteRecursively();
+    }
+
     amp.reset();
     std::printf ("%s\n", failed == 0 ? "PASSED" : "FAILED");
     return failed == 0 ? 0 : 1;
