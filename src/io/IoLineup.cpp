@@ -46,7 +46,7 @@ const channels::Lineup& lineup()
     // COMP on, three quarters through it at 4:1 on OPTO, its fader the threshold alone; OCTAVE and CHORUS in the strip
     // and on, their faders their amounts; the room in the strip and on; both cuts on, the switches choosing between their
     // positions; no ENVELOPE and no delay (underwater/UnderwaterLineup.cpp). Its tones are Bass, Mid and Treble; it has
-    // no Presence, so the RBI's PRESENCE stands frozen on the face.
+    // no Presence, so the RBI's PRESENCE turns the rover's own parameter (presenceParam): the world's snow, no sound.
     static const channels::Lineup sub {
         "io", "io_channel", "4x10-classic",
         {
@@ -86,11 +86,14 @@ namespace orbitamp
 namespace
 {
     // The rover's half of the two things a product gives the processor beside its face (Product.h): CHANNEL over its
-    // lineup, and the bass's own — BLEND, the cuts and the effects — each declaring where the rover holds it
-    // (Lineup::pinned, read into the Opening by Engine::opening).
+    // lineup, PRESENCE (io::presenceParam, its own: no other amp declares it), and the bass's own — BLEND, the cuts and
+    // the effects — each declaring where the rover holds it (Lineup::pinned, read into the Opening by Engine::opening).
     void addParameters (const Product&, juce::AudioProcessorValueTreeState::ParameterLayout& layout)
     {
         channels::Engine::addParameters (layout, io::lineup());
+        layout.add (std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { io::presenceParam, 1 }, "Presence",
+                                                                 juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f),
+                                                                 io::presenceDefault));
         params::Opening held;
         channels::Engine::opening (io::lineup(), held);
         params::addBassParameters (layout, held);

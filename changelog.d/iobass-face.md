@@ -7,5 +7,6 @@ Amps: IoBass
   COMP and its squeeze; OCTAVE, CHORUS and REVERB; the 5STR | 4STR and FING | SLAP switches; IN and OUT, GATE and
   LIMITER; the tuner and the cabinet's slider; UNDO, REDO and A to D. At night the labels glow warm white.
 - The sound is a stand-in until the RBI has captures of its own: the Two Notes ReVolt Bass's DIRT channel, as
-  DeepGrooveBass's DIRT gear plays it. It has no PRESENCE, so that knob stands frozen at its noon for now. Its world is
-  the Mars plains for now.
+  DeepGrooveBass's DIRT gear plays it. It has no PRESENCE tone, so for now that knob has no sound: it fills Io's air
+  with sulphur snow, a parameter of its own, saved with the session and automatable. Its world is
+  the Io world (Jupiter's volcanic moon) behind the glass.

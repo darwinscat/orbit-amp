@@ -10,15 +10,16 @@
 //   - ONE SOUND: SLOW and FAST play the same pack, nothing held, and every parameter but CHANNEL stands where it stood
 //     when the lever goes from one to the other — whatever the hand set on either (Lineup::pairs, one memory);
 //   - the tones by name: BASS, MIDDLE and TREBLE each turn the channel's tone of that name; PRESENCE, which the stand-in's
-//     pack has none of, a frozen knob at its noon, dim, taking no hand, its name said on hover — and no parameter made up
-//     for it;
+//     pack has no tone for, a live knob all the same — not dim, its ring lit, taking the hand — turning IoBass's own
+//     parameter (io::presenceParam), which opens at the prototype's 0.2;
 //   - every pictogram named (a spot over each, its title the name);
 //   - a still of the face renders: the day's dark panel painted, DRIVE's wedge on it in Io's light paint;
 //   - THE NIGHT: the cabin's dark share at 1 lights the labels — a warm halo round DRIVE's wedge where the day has none,
 //     the wedge itself warmer — and back at 0 the still is the day's again;
 //   - THE WORLD BEHIND THE GLASS is Io (io::IoDrive), in the speed's gear — SLOW 1, FAST 2 — and parked at PARK; DRIVE's
-//     and BLEND's places over their ranges reach the drive as the time of day and Jupiter's phase, PRESENCE (frozen) the
-//     prototype's 0.2; the face's night glow follows how dark the world says the cabin is (IoDrive::cabinDark) — dark at
+//     and BLEND's places over their ranges reach the drive as the time of day and Jupiter's phase, PRESENCE's the sulphur
+//     snow — 0.2 as the face opens, 1.0 with the knob turned full — and a state saved with PRESENCE full and restored over
+//     another brings it back, the parameter and the world's snow both; the face's night glow follows how dark the world says the cabin is (IoDrive::cabinDark) — dark at
 //     DRIVE's end, the day at its start; and the world finds every file it reads where the build lays them out, the
 //     factory folder's Faces/IoBass (io::shippedArt): both plates, a mesh and its table for every variant of the finds,
 //     the skylight's pit radius.
@@ -33,6 +34,7 @@
 #include "face/Controls.h"
 #include "io/IoEditor.h"
 #include "io/IoLayout.h"
+#include "io/IoLineup.h"
 #include "io/view/IoArt.h"
 #include "io/view/IoDrive.h"
 #include "redpaw/view/Windscreen.h"
@@ -229,21 +231,19 @@ int ORBITAMP_GATE_MAIN()
         check (byName, "BASS, MIDDLE and TREBLE each turn the DIRT pack's tone of that name: Bass, Mid and Treble");
 
         auto* presence = standingAt<face::ArtKnob> (*face, layout::presence);
-        bool takes = true, children = true;
+        auto* ring     = standingAt<face::KnobRing> (*face, layout::presence);
+        bool takes = false, children = false;
         if (presence != nullptr)
             presence->getInterceptsMouseClicks (takes, children);
-        auto* said = named (*face, "frozen-presence");
-        bool invented = false;
-        for (auto* p : amp->getParameters())
-            if (auto* ranged = dynamic_cast<juce::RangedAudioParameter*> (p))
-                invented = invented || ranged->getParameterID().containsIgnoreCase ("presence");
-        check (presence != nullptr && ! presence->isEnabled() && ! takes && presence->getAlpha() < 0.5f
-                   && std::abs (presence->getValue() - 0.5f) < 1.0e-6f,
-               "PRESENCE, which the stand-in's pack has none of, is a frozen knob at its noon, dim, taking no hand");
-        check (said != nullptr && said->isVisible() && said->getTitle() == "PRESENCE"
-                   && said->getBounds().toFloat().getCentre().getDistanceFrom (layout::presence) < 4.0f,
-               "...its name said on hover over it");
-        check (! invented, "...and no parameter is made up for it");
+        juce::RangedAudioParameter* own = amp->apvts.getParameter (io::presenceParam);
+        check (dynamic_cast<juce::AudioParameterFloat*> (own) != nullptr && std::abs (own->getDefaultValue() - io::presenceDefault) < 1.0e-6f
+                   && std::abs (own->getValue() - io::presenceDefault) < 1.0e-6f && ! channels.toneNamesOf (0).contains ("Presence"),
+               "PRESENCE, which the stand-in's pack has no tone for, is IoBass's own parameter " + juce::String (io::presenceParam)
+                   + ", opening at " + juce::String (io::presenceDefault));
+        check (presence != nullptr && presence->isEnabled() && takes && juce::approximatelyEqual (presence->getAlpha(), 1.0f)
+                   && ring != nullptr && juce::approximatelyEqual (ring->getAlpha(), 1.0f)
+                   && std::abs (presence->getValue() - io::presenceDefault) < 1.0e-3f && named (*face, "frozen-presence") == nullptr,
+               "...its knob live, not dim, its ring lit, taking the hand, standing at it");
     }
 
     // EVERY PICTOGRAM NAMED.
@@ -325,8 +325,35 @@ int ORBITAMP_GATE_MAIN()
                    && std::abs (then[1] - 0.8) < 1.0e-6,
                "DRIVE's and BLEND's places over their ranges reach the drive: 10 and 0.25 as " + words (first) + ", 2.5 and 0.8 as "
                    + words (then));
-        check (std::abs (first[2] - io::IoEditor::presenceAtRest) < 1.0e-9 && std::abs (then[2] - io::IoEditor::presenceAtRest) < 1.0e-9,
-               "...and PRESENCE, frozen, the prototype's " + juce::String (io::IoEditor::presenceAtRest) + " (" + juce::String (then[2]) + ")");
+        // PRESENCE, the sulphur snow: where the face opened it, then turned full by the hand, then saved full, moved, and the
+        // saved state restored over it.
+        auto* presence = standingAt<face::ArtKnob> (*face, layout::presence);
+        auto* own = amp->apvts.getParameter (io::presenceParam);
+        const auto valueOf = [own] { return own != nullptr ? (double) own->getValue() : -1.0; };
+        const double atStart = then[2];
+        if (presence != nullptr)
+            presence->setValue (1.0f, true);
+        settle();
+        const auto full = knobs();
+        const double turned = valueOf();
+        check (std::abs (atStart - io::presenceDefault) < 1.0e-6 && std::abs (full[2] - 1.0) < 1.0e-6 && std::abs (turned - 1.0) < 1.0e-6,
+               "PRESENCE reaches the world's snow: " + juce::String (atStart, 3) + " as the face opens, " + juce::String (full[2], 3)
+                   + " with its knob turned full (" + juce::String (io::presenceParam) + " " + juce::String (turned, 3) + ")");
+
+        juce::MemoryBlock saved;
+        amp->getStateInformation (saved);
+        setPlain (io::presenceParam, 0.4f);
+        settle();
+        const auto moved = knobs();
+        amp->setStateInformation (saved.getData(), (int) saved.getSize());
+        settle();
+        const auto back = knobs();
+        const double restored = valueOf();
+        check (std::abs (moved[2] - 0.4) < 1.0e-6 && std::abs (restored - 1.0) < 1.0e-6 && std::abs (back[2] - 1.0) < 1.0e-6
+                   && presence != nullptr && std::abs (presence->getValue() - 1.0f) < 1.0e-3f,
+               "...saved with the state and restored: full, moved to " + juce::String (moved[2], 3) + ", the state back -> "
+                   + juce::String (restored, 3) + ", the snow " + juce::String (back[2], 3) + ", the knob "
+                   + juce::String (presence != nullptr ? presence->getValue() : -1.0f, 3));
 
         const auto darkAt = [&] (float drive)
         {

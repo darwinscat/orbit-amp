@@ -52,8 +52,8 @@ private:
     the console's own: DRIVE, the six keys of the history and the registers, IN and OUT, the lamps, the tuner, the
     maker's plate; what it has not: the REVERB, DELAY and CAB plates, the HPF and LPF keys, the console's row of tone
     knobs and of a pack's switches. What is its own over it: the lever, PARK over SLOW and FAST; BASS, MIDDLE and
-    TREBLE, each the channel's tone OF THAT NAME, and PRESENCE, the tone named so — a socket the pack has none for keeping
-    a frozen, dim knob at its noon; BLEND; COMP and its squeeze; OCTAVE, CHORUS and REVERB; GATE and LIMITER on caps of
+    TREBLE, each the channel's tone OF THAT NAME — a socket the pack has none for keeping a frozen, dim knob at its noon —
+    and PRESENCE, the tone named so or, where the pack has none, the rover's own parameter (io::presenceParam); BLEND; COMP and its squeeze; OCTAVE, CHORUS and REVERB; GATE and LIMITER on caps of
     their own; the cabinet's slider in its screen and the cuts' two switches; and the name of every pictogram, and of
     every control, on hover. */
 class IoEditor final : public face::Console,
@@ -72,10 +72,6 @@ public:
         the GPU; the day (0) while it is the 1993 landscape or the still, where the face paints the day's plate. */
     void followWorld();
 
-    /** PRESENCE as the world takes it while the pack has no Presence tone (the knob frozen at its noon): the prototype's
-        own default. */
-    static constexpr double presenceAtRest = 0.2;
-
 private:
     // THE VIEW, under the whole stage, in the windscreen the rovers look through (redpaw/view/Windscreen.h), its gear the
     // speed the lever stands at, parked while the amp is. Its GPU frame is drawn by this window's own context, which
@@ -87,9 +83,10 @@ private:
     static std::unique_ptr<redpaw::Drive> makeDrive();
     /** THE AMP'S KNOBS ARE THE WORLD'S INPUTS (io/README.md, "The knobs"), each its place over its range, 0..1: DRIVE the
         time of day (IoDrive::setDrive), BLEND Jupiter's phase (setBlend), PRESENCE the sulphur snow (setPresence) — the
-        Presence tone's where the pack has one, presenceAtRest where it has none. Read from the parameters themselves. */
+        Presence tone's where the pack has one, the rover's own io::presenceParam where it has none. Read from the
+        parameters themselves. */
     void tellWorld (IoDrive&) const;
-    juce::RangedAudioParameter* presenceTone = nullptr;     // the playing channel's Presence tone, none where its pack has none
+    juce::RangedAudioParameter* presence = nullptr;     // what PRESENCE turns: the playing channel's Presence tone, or the rover's own
     Cabin& cabin() { return static_cast<Cabin&> (*picture); }
     void placeView();
     void chooseLandscape (redpaw::Windscreen::Mode);
@@ -148,13 +145,14 @@ private:
                      std::function<float (float)> toPlain);
 
     // THE TONES' SOCKETS, PRESENCE, BASS, MIDDLE AND TREBLE: each the channel's tone of that name — its knob bound to that
-    // tone's parameter — or, where the pack has none (the stand-in's PRESENCE), a frozen knob at its noon, dim, out of the
-    // hand's reach, its ring with it, its name on hover still.
+    // tone's parameter — or, where the pack has none, BASS, MIDDLE or TREBLE a frozen knob at its noon, dim, out of the
+    // hand's reach, its ring with it, its name on hover still; PRESENCE the rover's own parameter, live, the world's snow
+    // and no sound, which its hover says (presenceSilent).
     static constexpr size_t presenceSocket = 0;
     std::array<std::unique_ptr<face::ArtKnob>, 4> tones;
     std::array<std::unique_ptr<juce::ParameterAttachment>, 4> toneBindings;
     std::array<juce::String, 4> toneBound;
-    Spot* frozenPresence = nullptr;
+    bool presenceSilent = false;        // PRESENCE on the rover's own parameter: no tone of the pack's under it
     void bindTones (int channel);
 
     // THE HAND ON THE SPEEDS, THE CUTS AND THE CABINET. The lever: PARK, then SLOW and FAST — PARK is the amp's bypass,

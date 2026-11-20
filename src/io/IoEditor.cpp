@@ -301,7 +301,12 @@ IoEditor::IoEditor (AmpProcessor& p)
         addToStage (knob);
         knob.setBounds (around (toneAt[s], layout::toneKnob, layout::toneKnob).toNearestInt());
         knob.setComponentID (juce::String ("tone-") + juce::String (toneNames[s]).toLowerCase());
-        knob.onHover = [this, s, name = juce::String (toneNames[s])] (bool over) { sayName (tones[s]->getBounds().toFloat(), name, over); };
+        knob.onHover = [this, s, name = juce::String (toneNames[s])] (bool over)
+        {
+            // PRESENCE on the rover's own parameter says, in one line, what it does and what it does not (the owner, 20.11).
+            sayName (tones[s]->getBounds().toFloat(),
+                     s == presenceSocket && presenceSilent ? juce::String ("PRESENCE:   the snow, no sound in this pack yet") : name, over);
+        };
         ringFor (knob, toneAt[s], layout::toneSocket, layout::ringWidth);
     }
 
@@ -454,7 +459,7 @@ IoEditor::IoEditor (AmpProcessor& p)
     nameOnHover (tuner, "TUNER");
 
     // EVERY PICTOGRAM'S NAME, a spot over each; the lever's stops pull the lever there, GATE's and LIMITER's caps open the
-    // menus their doors open; PRESENCE's frozen knob says its name too.
+    // menus their doors open.
     for (const auto& s : signs())
     {
         std::function<void()> click;
@@ -467,8 +472,6 @@ IoEditor::IoEditor (AmpProcessor& p)
           [this] { lever.setPlace (0, true, true); }).setComponentID ("sign-park");
     spot (layout::gateSlot.reduced (3.0f).withTrimmedLeft (24.0f), "GATE", [this] { showGateMenu(); }).setComponentID ("sign-gate");
     spot (layout::limiterSlot.reduced (3.0f).withTrimmedLeft (24.0f), "LIMITER", [this] { showOutputMenu(); }).setComponentID ("sign-limiter");
-    frozenPresence = &spot (tones[presenceSocket]->getBounds().toFloat(), "PRESENCE");
-    frozenPresence->setComponentID ("frozen-presence");
 
     // THE VIEW, under the whole stage: the panel's alpha is its windscreen.
     stage.addAndMakeVisible (*view, 0);
@@ -522,7 +525,7 @@ void IoEditor::tellWorld (IoDrive& d) const
         d.setDrive (p->getValue());
     if (auto* p = amp.apvts.getParameter (params::ampBlend))
         d.setBlend (p->getValue());
-    d.setPresence (presenceTone != nullptr ? (double) presenceTone->getValue() : presenceAtRest);
+    d.setPresence (presence != nullptr ? (double) presence->getValue() : (double) presenceDefault);
 }
 
 void IoEditor::followWorld()
@@ -593,8 +596,9 @@ void IoEditor::bindSwitch (redgroove::SlideSwitch& sw, const char* paramId)
 }
 
 /** EACH SOCKET ITS TONE BY NAME: PRESENCE the pack's tone named so, BASS, MIDDLE (or MID) and TREBLE wherever the
-    channel's pack lists them (Channels::toneNamed) — a knob bound again only where its parameter is another now; a socket
-    the pack has no tone for, a frozen knob at its noon, dim, taking no hand, its ring dim with it. */
+    channel's pack lists them (Channels::toneNamed) — a knob bound again only where its parameter is another now; BASS,
+    MIDDLE or TREBLE the pack has no tone for, a frozen knob at its noon, dim, taking no hand, its ring dim with it;
+    PRESENCE the pack has none for, the rover's own parameter (presenceParam): live, the world's snow, no sound. */
 void IoEditor::bindTones (int channel)
 {
     using Band = Channels::Band;
@@ -608,7 +612,13 @@ void IoEditor::bindTones (int channel)
             t = names.indexOf ("Presence", true);
         else
             t = channels.toneNamed (channel, bands[s - 1]);
-        const auto id = t >= 0 ? channels.toneOf (channel, t) : juce::String();
+        auto id = t >= 0 ? channels.toneOf (channel, t) : juce::String();
+        if (s == presenceSocket)
+        {
+            presenceSilent = id.isEmpty();
+            if (presenceSilent)
+                id = presenceParam;
+        }
         auto* p = id.isNotEmpty() ? amp.apvts.getParameter (id) : nullptr;
         if (p == nullptr)
         {
@@ -637,7 +647,7 @@ void IoEditor::bindTones (int channel)
         }
         if (s == presenceSocket)
         {
-            presenceTone = p;
+            presence = p;
             if (ioWorld != nullptr)
                 tellWorld (*ioWorld);
         }
@@ -647,8 +657,6 @@ void IoEditor::bindTones (int channel)
         knob.setAlpha (live ? 1.0f : 0.4f);
         if (s + 1 < rings.size())
             rings[s + 1]->setAlpha (live ? 1.0f : 0.4f);
-        if (s == presenceSocket && frozenPresence != nullptr)
-            frozenPresence->setVisible (! live);
     }
 }
 
@@ -782,7 +790,8 @@ void IoEditor::webExtras (const juce::File& dir, juce::DynamicObject& kit, juce:
             v->setProperty ("box", rect (boxOf (*tones[s]))); v->setProperty ("sprite", "knob-tone");
             v->setProperty ("travel", s == presenceSocket
                 ? "the playing channel's tone named Presence (lineup.channels[c].face.tones, by text): its parameter's 0..1 over "
-                  "its min..max; a channel with none (the stand-in's): the knob frozen at noon (0.5), alpha 0.4, its ring too, no hand"
+                  "its min..max; a channel with none (the stand-in's): the rover's own io_presence, 0..1, opening at 0.2, live, "
+                  "its tone null: the world's snow, no sound"
                 : "the playing channel's tone of this name (lineup.channels[c].face.tones, by text): its parameter's 0..1 over its "
                   "min..max; a channel with none: the knob frozen at noon (0.5), alpha 0.4, its ring too, no hand");
             a.add (juce::var (v));
@@ -813,7 +822,8 @@ void IoEditor::webExtras (const juce::File& dir, juce::DynamicObject& kit, juce:
     // EACH CHANNEL'S SOCKETS, in the lineup's "face": the rover lays no row of the console's tone knobs, so the console
     // wrote none. Here each socket the channel has a tone for by name (as bindTones binds it): the knob's box, its
     // pictogram's box — the pictogram in the cabin, no icon of its own — its name, the pack's tone and its parameter. A
-    // socket missing from a channel's list stands frozen on it.
+    // socket missing from a channel's list stands frozen on it. PRESENCE is never missing: where the pack has no tone
+    // named so, its tone is null and its parameter the rover's own (presenceParam).
     if (auto* line = kit.getProperty ("lineup").getDynamicObject())
         if (auto* all = line->getProperty ("channels").getArray())
             for (int c = 0; c < all->size() && c < channels.count(); ++c)
@@ -824,7 +834,8 @@ void IoEditor::webExtras (const juce::File& dir, juce::DynamicObject& kit, juce:
                     for (size_t s = 0; s < tones.size(); ++s)
                     {
                         const int t = s == presenceSocket ? names.indexOf ("Presence", true) : channels.toneNamed (c, toneBands[s - 1]);
-                        if (t < 0)
+                        const bool own = t < 0 && s == presenceSocket;
+                        if (t < 0 && ! own)
                             continue;
                         const auto& [sign, at] = knobSigns[s];
                         auto* k = new Obj();
@@ -832,8 +843,8 @@ void IoEditor::webExtras (const juce::File& dir, juce::DynamicObject& kit, juce:
                         k->setProperty ("label", rect (glyphs::boxOf (sign, centreOf (at), at.scale)));
                         k->setProperty ("icon", juce::var());
                         k->setProperty ("text", knobNames[s]);
-                        k->setProperty ("tone", t);
-                        k->setProperty ("param", channels.toneOf (c, t));
+                        k->setProperty ("tone", own ? juce::var() : juce::var (t));
+                        k->setProperty ("param", own ? juce::String (presenceParam) : channels.toneOf (c, t));
                         knobs.add (juce::var (k));
                     }
                     f->setProperty ("tones", knobs);
