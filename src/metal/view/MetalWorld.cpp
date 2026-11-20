@@ -13,6 +13,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cmath>
+#include <functional>
 
 namespace orbitamp::metal
 {
@@ -23,6 +24,9 @@ using V3 = MetalWorld::V3;
 
 namespace
 {
+    /** a == b, as the JS's === compares two numbers (std::equal_to: the same comparison, said where -Wfloat-equal
+        does not take it for an accident). */
+    inline bool same (double a, double b) noexcept { return std::equal_to<double>() (a, b); }
     /** The small 32-bit generator whose stream is the landscape (the rogue planet's). */
     struct Generator
     {
@@ -914,7 +918,7 @@ void MetalWorld::settle()
 }
 void MetalWorld::settleCamera() noexcept
 {
-    if (! built || s.camY != 0)
+    if (! built || ! same (s.camY, 0))
         return;
     const double fx = Js::sin (s.heading), fz = -Js::cos (s.heading);
     const double g0 = floorHeight (s.x, s.z), sp = s.speed / 17;
@@ -997,7 +1001,7 @@ void MetalWorld::step (double dt)
     const double g0 = floorHeight (s.x, s.z), sp = s.speed / 17;
     const double bob = 0.012 * sp * (Js::sin (s.travel * 1.7) + 0.6 * Js::sin (s.travel * 4.3 + 1));
     const double targetY = g0 + eye + bob;
-    if (s.camY == 0) s.camY = targetY;
+    if (same (s.camY, 0)) s.camY = targetY;
     s.camY += (targetY - s.camY) * ease (dt, 0.12);
     const double gb = floorHeight (s.x - fx * 5, s.z - fz * 5), gf = floorHeight (s.x + fx * 5, s.z + fz * 5);
     const double pitchT = basePitch + s.pitchOffset + Js::atan2 (gf - gb, 10);
@@ -1028,7 +1032,7 @@ void MetalWorld::step (double dt)
     // the ball lightning
     for (auto& o : orbs_)
     {
-        if (o.life == 1 && o.age == 0) respawnOrb (o, true);
+        if (same (o.life, 1) && same (o.age, 0)) respawnOrb (o, true);
         o.age += dt;
         o.as += s.speed * 0.25 * dt;
         const V2 a = roadPointAt (o.as, o.lat + 6 * Js::sin (s.time * 0.21 + o.ph));
@@ -1350,7 +1354,7 @@ void MetalWorld::stepDragons (double dt)
     bool busy = false;
     for (const auto& u : dragons_) if (u.mode == Mode::swoop || u.mode == Mode::clang) busy = true;
     // the swooping stretch: one waits over it, then swoops at the rover
-    if (! parked && toStretch < 520 && dc.swoopPass != pass)
+    if (! parked && toStretch < 520 && ! same (dc.swoopPass, pass))
     {
         Dragon& u = dragons_[0];
         if (u.mode == Mode::roam && u.kind != Kind::prep) anchor (u, Kind::prep);
@@ -1366,7 +1370,7 @@ void MetalWorld::stepDragons (double dt)
     }
     // the citadel: two perch on its towers while the rover comes by; on odd laps one flies into a spire
     const double toCit = modL (citadel_.at - s.sr);
-    if (! parked && toCit < 640 && toCit > 120 && dc.perchPass != pass)
+    if (! parked && toCit < 640 && toCit > 120 && ! same (dc.perchPass, pass))
     {
         dc.perchPass = pass;
         const int dragonOf[2] = { 1, 2 }, towerOf[2] = { 1, 3 };
@@ -1379,7 +1383,7 @@ void MetalWorld::stepDragons (double dt)
             if (pi_ >= 0) startPerch (u, perches_[(size_t) pi_], pi_);
         }
     }
-    if (! parked && s.lap % 2 == 1 && toCit < 460 && toCit > 200 && dc.clangPass != pass && dragons_[0].mode == Mode::roam)
+    if (! parked && s.lap % 2 == 1 && toCit < 460 && toCit > 200 && ! same (dc.clangPass, pass) && dragons_[0].mode == Mode::roam)
     { dc.clangPass = pass; startClang (dragons_[0], 2); }
     // PARK: they come nearer and perch on what stands ahead (or on the ground)
     if (parked && s.speed < 0.5)

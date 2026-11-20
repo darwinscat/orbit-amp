@@ -94,12 +94,14 @@ private:
         mutable std::unordered_map<const char*, int> at;
         int u (const char* name) const;
     };
-    Program ground, groundH, groundHN, sky, prop, mesh, dragon, sign, letters, fire, ribbon, spark, steam, ember, post;
+    Program ground, groundH, groundHN, sky, skySmooth, cabinPass, prop, mesh, dragon, sign, letters, fire, ribbon, spark, steam, ember, post;
 
     std::uint32_t texBase = 0, texDetail = 0, texNoise = 0, texCells = 0, texRoad = 0;
     std::uint32_t texDash = 0, texDashFlash = 0, texLetters = 0, texBanners = 0;
     std::array<double, 4> glassBox {};          // x0 y0 x1 y1, fractions of the stage, the top row first
     bool hasGlassBox = false;
+    int dashW = 0, dashH = 0;                   // the plates' size
+    bool platesWhole = false;                   // ...and whether they are read without their mips (platesFor)
     std::array<double, 2> lettersAtlas { 2048, 1024 };
     std::vector<std::array<double, 4>> bannerCells;
 
@@ -116,12 +118,17 @@ private:
     Gpu clothBuf, fireBuf, ribBuf, letBuf;
     std::uint32_t vaoEmpty = 0, vboEmpty = 0;
     std::vector<float> scratch;
+    MetalWorld::Fires frameFires;               // this frame's, worked out once before its draws (render)
+    MetalWorld::Ribbons frameRibbons;
 
     std::uint32_t fbo = 0, fboColour = 0, fboDepth = 0;     // the scene: its colour a texture the post pass reads
     std::uint32_t fboOut = 0, fboOutColour = 0;             // the finished frame
     int fbW = 0, fbH = 0, outW = 0, outH = 0, subW = 0, subH = 0;   // the view's pixels, the finished frame's, the scene's frame
     std::array<int, 2> sceneAt {};              // where the scene's frame sits in the view's (the window's box)
     int repeats = 1;
+    std::uint32_t fboSmooth = 0, texSmooth = 0, fboPost = 0, texPost = 0;   // the sky's smooth parts; the foot's post pass
+    int smoothW = 0, smoothH = 0, postW = 0, postH = 0;
+    int smoothDiv = 4;                          // the smooth parts at a quarter of the view's pixels each way
     bool outerKept = false;                     // the plate outside the window's box is in the finished frame...
     double keptFlash = -1.0;                    // ...as this flash drew it
 
@@ -145,7 +152,9 @@ private:
     void makeBuffers();
     bool loadMesh (const std::string& key, const std::vector<std::uint8_t>& bytes);
     bool ensureFrame (int w, int h, int cw, int ch);
+    bool ensureTarget (std::uint32_t& fb, std::uint32_t& tex, int& tw, int& th, int w, int h, bool floats);
     void follow (double scale, double seconds);
+    void platesFor (int cw, int ch);
     void drawScene (int rw, int rh, int cw, int ch);
     void noteCost (float ms);
 };
