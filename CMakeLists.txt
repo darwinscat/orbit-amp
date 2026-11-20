@@ -631,7 +631,8 @@ endfunction()
 # face, its name, its number and what it carries.
 #
 #   add_amp(<Name>  CODE <code>  [BY_NAME]  [ICON <Amp>]
-#           SOURCES <files...>  LIBRARIES <targets...>  [ART <files...>]  [SET <packs...>]  [WHOLE_SHELF])
+#           SOURCES <files...>  LIBRARIES <targets...>  [ART <files...>]  [ART_FOLDERS <folders...>]
+#           [SET <packs...>]  [WHOLE_SHELF])
 #
 #   <Name>      the target, the PRODUCT_NAME and the stem of every bundle it builds; in lower case, its
 #               bundle id and its CLAP id, com.darwinscat.<name>; and its icon, resources/icon/<Name>-*.
@@ -648,6 +649,8 @@ endfunction()
 #   SOURCES     what it is compiled from; LIBRARIES what it links, ahead of JUCE's recommended flags.
 #   ART         its renders, in the factory folder's Faces/<Name>, each under its own file's name, where its
 #               face reads them (src/face/Renders.h).
+#   ART_FOLDERS folders of its art laid out whole, each as a folder of its own name in Faces/<Name>, every
+#               file in it at the same path under it: a world's finds/, say (Faces/<Name>/finds/...).
 #   SET         the packs it plays, by their folders' names in the tree's set (THE SET), less `.orbitrig` —
 #               at the factory folder's top, zipped.
 #   WHOLE_SHELF the whole cabinet shelf, the folders the cabinet catalog gives OrbitAmp alone with Darwin's
@@ -762,7 +765,7 @@ function(export_entry_points_only)
 endfunction()
 
 function(add_amp name)
-    cmake_parse_arguments(PARSE_ARGV 1 AMP "BY_NAME;WHOLE_SHELF;BASS" "CODE;ICON" "SOURCES;LIBRARIES;ART;SET")
+    cmake_parse_arguments(PARSE_ARGV 1 AMP "BY_NAME;WHOLE_SHELF;BASS" "CODE;ICON" "SOURCES;LIBRARIES;ART;ART_FOLDERS;SET")
     string(TOLOWER "${name}" id)
     set(iconOf "${name}")
     if(AMP_ICON)
@@ -866,6 +869,15 @@ function(add_amp name)
         get_filename_component(base "${render}" NAME)
         list(APPEND files "${render}")
         list(APPEND at "Faces/${name}/${base}")
+    endforeach()
+    foreach(folder IN LISTS AMP_ART_FOLDERS)
+        get_filename_component(top "${folder}" NAME)
+        file(GLOB_RECURSE inside CONFIGURE_DEPENDS RELATIVE "${folder}" "${folder}/*")
+        list(SORT inside)
+        foreach(rel IN LISTS inside)
+            list(APPEND files "${folder}/${rel}")
+            list(APPEND at "Faces/${name}/${top}/${rel}")
+        endforeach()
     endforeach()
     foreach(pack IN LISTS AMP_SET)
         if(NOT pack IN_LIST ORBITAMP_SET_NAMES)
@@ -1055,6 +1067,8 @@ set(CATPITAMP_SET   "Soldano X88-IR Normal" "Soldano X88-IR Altered" "Soldano X8
 set(REDPAWAMP_SET   "Friedman IR-X Ch1 PowerAmp" "Friedman IR-X Ch2 PowerAmp")
 set(FROSTPAWAMP_SET "Two Notes ReVolt Clean PowerAmp" "Two Notes ReVolt Crunch PowerAmp" "Two Notes ReVolt Lead PowerAmp")
 set(AMBERPAWAMP_SET "Victory V4 Copper (clean)" "Victory V4 Sheriff (crunch)" "Victory V4 Kraken (hi-gain)")
+# PeacePhaseAmp's two, a stand-in until the Orange Super Crush 100 has captures (src/california/CaliforniaLineup.cpp).
+set(PEACEPHASEAMP_SET "Victory V4 Copper (clean)" "Victory V4 Sheriff (crunch)")
 
 # THE FAMILY A BUILD RELEASES: installer/family.ini, the amps, unless -DFAMILY_INI= names another —
 # installer/bass.ini, the basses (the owner, 06.11: a package of their own). Everything below that says
@@ -1086,7 +1100,7 @@ separate_arguments(ORBITAMP_RELEASED)
 if(NOT ORBITAMP_DEV_FACTORY AND "OrbitAmp" IN_LIST ORBITAMP_RELEASED)
     set(kept "")
     set(left "")
-    foreach(amp CatpitAmp RedPawAmp FrostPawAmp AmberPawAmp)
+    foreach(amp CatpitAmp RedPawAmp FrostPawAmp AmberPawAmp PeacePhaseAmp)
         string(TOUPPER "${amp}" key)
         if(amp IN_LIST ORBITAMP_RELEASED)
             list(APPEND kept ${${key}_SET})
@@ -1478,6 +1492,27 @@ target_link_libraries(underwater_view_demo PRIVATE felitronics::appkit_webp)
 # The demo has no factory folder: the art is read from the source tree unless UNDERWATER_ART_DIR says otherwise.
 target_compile_definitions(underwater_view_demo PRIVATE ORBITAMP_UNDERWATER_ART_DEFAULT="${CMAKE_CURRENT_SOURCE_DIR}/resources/underwater")
 
+# The Orange's cabin, the 1967 van's: California's golden hills (src/california/view), handed to the windscreen as a
+# CaliforniaDrive, the dashboard and the peace pendant drawn over it by the GPU as its last passes. Its world and its
+# matrices are matched to their prototype (california-gl.js) number for number, with the walker's JS built-ins, so
+# compiled without contraction too; the cabin's Glass and the quality ladder are the sea's (UnderwaterWorld).
+set(CALIFORNIA_VIEW_SOURCES
+    src/california/view/CaliforniaWorld.cpp
+    src/california/view/CaliforniaGl.cpp
+    src/underwater/view/UnderwaterWorld.cpp
+    src/redgroove/view/WalkerWorld.cpp)
+if(NOT MSVC)
+    set_source_files_properties(src/california/view/CaliforniaGl.cpp PROPERTIES COMPILE_OPTIONS "-ffp-contract=off")
+endif()
+# ...and the art and the files it reads (src/california/view/CaliforniaArt.h, resources/california/README.txt): WebP
+# pictures, the meshes and the tables as they are, laid out by the installer in the factory folder's Faces/PeacePhaseAmp
+# and read from there at run time (CALIFORNIA_ART_DIR), never built into a binary; decoded with libwebp.
+set(CALIFORNIA_ART_SOURCES src/california/view/CaliforniaArt.cpp src/underwater/view/UnderwaterArt.cpp)
+view_demo(california_view_demo "CaliforniaViewDemo" SOURCES ${REDPAW_VIEW_SOURCES} ${CALIFORNIA_VIEW_SOURCES} ${CALIFORNIA_ART_SOURCES} src/face/Renders.cpp
+    DEFINITIONS ORBITAMP_VIEW_DEMO_CALIFORNIA=1)
+target_link_libraries(california_view_demo PRIVATE felitronics::appkit_webp)
+target_compile_definitions(california_view_demo PRIVATE ORBITAMP_CALIFORNIA_ART_DEFAULT="${CMAKE_CURRENT_SOURCE_DIR}/resources/california")
+
 # The sea's CPU half against the prototype it was ported from: the start, five scripted flights, the
 # gears, Saturn, the wipers' panes. JUCE-free, links only the world.
 add_executable(titan_world_test tests/TitanWorldTests.cpp src/amberpaw/view/TitanWorld.cpp)
@@ -1503,6 +1538,23 @@ target_compile_features(underwater_world_test PRIVATE cxx_std_20)
 target_compile_definitions(underwater_world_test PRIVATE
     UNDERWATER_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/underwater/underwater-world.txt"
     UNDERWATER_SPRITES="${CMAKE_CURRENT_SOURCE_DIR}/resources/underwater/sprites.txt")
+
+# The Orange Super Crush's world, California 1967 (src/california/view): its CPU half against its prototype,
+# california-gl.js, number for number — the hashes, the textures and the road and land maps, the loop, the meshes,
+# everything on the loop, the oaks, the poles, the shadow map, the drive in both gears, PARK and the pull-away, the
+# attacks, the pendant, the saucers, the yellow submarine — compared with the prototype's own dump
+# (tests/fixtures/california), and the files the world reads (copies in tests/fixtures/california/files). Matched
+# with the walker's JS built-ins, so compiled without contraction. JUCE-free, links only the world (and the walker's Js).
+if(NOT MSVC)
+    set_source_files_properties(src/california/view/CaliforniaWorld.cpp PROPERTIES COMPILE_OPTIONS "-ffp-contract=off")
+endif()
+add_executable(california_world_test tests/CaliforniaWorldTests.cpp src/california/view/CaliforniaWorld.cpp src/redgroove/view/WalkerWorld.cpp)
+target_include_directories(california_world_test PRIVATE src)
+target_compile_features(california_world_test PRIVATE cxx_std_20)
+target_compile_definitions(california_world_test PRIVATE
+    CALIFORNIA_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/california/california-world.txt"
+    CALIFORNIA_FILES="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/california/files"
+    CALIFORNIA_ART="${CMAKE_CURRENT_SOURCE_DIR}/resources/california")
 
 # THE ROVER'S FACE IS WORN BY MORE THAN ONE PRODUCT (src/redpaw/RedPawSkin.h): what every rover is made
 # of is said once here — the renders by the file names the face asks for, as bake-art made them, the
@@ -1617,6 +1669,42 @@ set(DEEPGROOVEBASS_SOURCES
     ${UNDERWATER_VIEW_SOURCES}       # ... looking out on the sea floor
     ${UNDERWATER_ART_SOURCES})
 
+# THE VAN'S FACE (src/california): the family's console on the 1967 van's dashboard, no word on its panels, our own
+# pictograms over the sockets (src/california/CaliforniaGlyphs.h), its letters in Shrikhand — a European Latin subset of
+# it, embedded (resources/california/fonts, the OFL beside it). Its dashboard and the peace pendant made WebP from catbay's
+# renders (resources/california/README.txt), laid out in the factory folder's Faces/PeacePhaseAmp and read at run time
+# (CALIFORNIA_ART_DIR); the knobs and the faders' cap its own where resources/california/face has one, the helicopter's
+# otherwise, with its mark and its MIDI list. Its world, California (src/california/view), reads the same dashboard and
+# pendant, and label.webp and finds/ beside them, from the same folder (PEACEPHASEAMP_ART_FOLDERS: finds/ laid out
+# whole); the face paints the dashboard and the pendant itself whenever the world does not draw them.
+set(PEACEPHASEAMP_RENDERS
+    "${CMAKE_CURRENT_SOURCE_DIR}/resources/california/dashboard.webp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/resources/california/dashboard_pendant.webp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/resources/california/dashboard_pendant.txt"
+    "${CMAKE_CURRENT_SOURCE_DIR}/resources/california/label.webp")
+set(PEACEPHASEAMP_ART_FOLDERS "${CMAKE_CURRENT_SOURCE_DIR}/resources/california/finds")
+file(GLOB california_own CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/resources/california/face/*")
+foreach(render IN ITEMS mark.svg midi.txt knob-drive.webp knob-tone.webp fader-cap.webp)
+    if("${CMAKE_CURRENT_SOURCE_DIR}/resources/california/face/${render}" IN_LIST california_own)
+        list(APPEND PEACEPHASEAMP_RENDERS "${CMAKE_CURRENT_SOURCE_DIR}/resources/california/face/${render}")
+    else()
+        list(APPEND PEACEPHASEAMP_RENDERS "${CMAKE_CURRENT_SOURCE_DIR}/resources/amberpaw/${render}")
+    endif()
+endforeach()
+juce_add_binary_data(CaliforniaData HEADER_NAME CaliforniaData.h NAMESPACE CaliforniaData
+    SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/resources/california/fonts/Shrikhand-Latin.ttf")
+set(PEACEPHASEAMP_SOURCES
+    ${FACE_SOURCES}
+    src/redgroove/RedGrooveControls.cpp     # the walker's lever, cabinet slider and readings
+    src/california/CaliforniaEditor.cpp
+    src/california/CaliforniaFaceArt.cpp
+    src/california/CaliforniaGlyphs.cpp
+    src/california/CaliforniaLineup.cpp
+    src/ui/CabWindow.cpp             # the cabinets, drawn
+    ${REDPAW_VIEW_SOURCES}           # the windscreen the rovers look through ...
+    ${CALIFORNIA_VIEW_SOURCES}       # ... looking out on California's golden hills
+    ${CALIFORNIA_ART_SOURCES})
+
 # ----------------------------------------------------------------------------
 # THE AMPS — the family's table, one row an amp (THE FAMILY says what a row says).
 #
@@ -1724,6 +1812,24 @@ add_amp(DeepGrooveBass CODE Dgrv   BY_NAME    BASS
         ${AMP_ENGINE_LIBRARIES}
         juce::juce_opengl            # the sea, on the GPU
     SET       ${DEEPGROOVEBASS_SET})
+
+# PeacePhaseAmp (the owner's name, 20.11): the Orange Super Crush 100's face in catbay's 1967 hippie van
+# (src/california) — the family's console over the guitar's chain, driven as channels: two, CLEAN and DIRTY, PARK the
+# amp's bypass, a stand-in sound (the V4 Copper and Sheriff) until the Orange has captures; the guitar's TOP 12, drawn.
+# Not in the family's release (installer/family.ini), and asked for by name. Its icon its own (the owner's pick, 20.11):
+# an open poppy, its heart the orange dot, on a curved stem with one leaf.
+add_amp(PeacePhaseAmp CODE Clfa    BY_NAME
+    ART       ${PEACEPHASEAMP_RENDERS}
+    ART_FOLDERS ${PEACEPHASEAMP_ART_FOLDERS}
+    SOURCES   ${PEACEPHASEAMP_SOURCES}
+    LIBRARIES
+        OrbitAmpData                 # the family's mark, the notice, the disclaimer — BinaryData::*
+        CaliforniaData               # Shrikhand's letters
+        OrbitAmpShaders              # the view's shaders
+        felitronics::appkit_webp     # the world's art, decoded
+        ${AMP_ENGINE_LIBRARIES}
+        juce::juce_opengl            # the view, on the GPU
+    SET       ${PEACEPHASEAMP_SET})
 
 # ----------------------------------------------------------------------------
 # THE FACES' GATES — in the gates binary, with every other (THE GATES BINARY, below); amp_console builds an amp
@@ -1862,6 +1968,11 @@ gate_in_binary(deepgroove-set    tests/AmpSetTests.cpp      PRODUCT DeepGrooveBa
 # each gear's BLEND and CLEAN's held, COMP's threshold and what the bathyscaphe holds of it, CLEAN's two tones in the
 # outer sockets and the frozen one between them, each socket's reading its own knob's.
 gate_in_binary(deepgroove-face   tests/DeepGrooveFaceTests.cpp PRODUCT DeepGrooveBass)
+gate_in_binary(california-channel tests/AmpChannelTests.cpp  PRODUCT PeacePhaseAmp CHANNELS 2)
+gate_in_binary(california-set    tests/AmpSetTests.cpp      PRODUCT PeacePhaseAmp CHANNELS 2)
+# ...and the van's face, its window made and never shown: the lever's PARK the amp's bypass over CLEAN and DIRTY, each
+# tone socket the playing channel's tone of its name, VOLUME and PHASER dark, every pictogram named, and a still renders.
+gate_in_binary(california-face   tests/CaliforniaFaceTests.cpp PRODUCT PeacePhaseAmp)
 
 # ORBITBASS'S CHAIN, headless: where a fresh one stands (the gate off, the HPF on at 25 Hz, the LPF off, mono,
 # its one temporary pack), the strip's arrows in its order (GATE, AMP, CAB, LIMIT), the delay and the reverb
@@ -1878,6 +1989,7 @@ gate_in_binary(catpit-nofactory  tests/NoFactoryTests.cpp   PRODUCT CatpitAmp   
 gate_in_binary(redpaw-nofactory  tests/NoFactoryTests.cpp   PRODUCT RedPawAmp    NO_FACTORY)
 gate_in_binary(redgroove-nofactory tests/NoFactoryTests.cpp  PRODUCT RedGrooveBass NO_FACTORY)
 gate_in_binary(deepgroove-nofactory tests/NoFactoryTests.cpp PRODUCT DeepGrooveBass NO_FACTORY)
+gate_in_binary(california-nofactory tests/NoFactoryTests.cpp PRODUCT PeacePhaseAmp NO_FACTORY)
 
 # ORBITAMP'S FACE AS THE SITE GETS IT (src/ui/WebFaceplate.h): a fresh OrbitAmp writes the kit, and the kit
 # builds the face back — its own format, every place on the stage, the hull the poster less its places.

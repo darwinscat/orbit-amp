@@ -83,6 +83,12 @@ deepgroove-channel  orbitamp_gates  DEEPGROOVE_GATE_OWNS_HOME=1
 deepgroove-face     orbitamp_gates
 deepgroove-nofactory orbitamp_gates
 
+# ...and the van's, over its two channels on the guitar's chain, and its face: the lever's PARK, the tones by name, a still.
+california-set      orbitamp_gates
+california-channel  orbitamp_gates  CALIFORNIA_GATE_OWNS_HOME=1
+california-face     orbitamp_gates
+california-nofactory orbitamp_gates
+
 # Every amp in one binary: all of them side by side in one process, each its own product (src/Product.h).
 family             orbitamp_gates
 

@@ -743,6 +743,14 @@ void Emblem::setLamp (juce::Colour c)
     repaint();
 }
 
+void Emblem::setGlow (const EmblemGlow& g)
+{
+    glow = g;
+    lit = {};
+    litScale = 0.0f;
+    repaint();
+}
+
 float Emblem::lightSeconds() const noexcept
 {
     // The spring stepped as the timer steps it, from dark to full: the time to 95 % of the way. It is the
@@ -769,6 +777,49 @@ juce::Image Emblem::litPicture (float scale) const
     const auto& cut = MarkCut::at (scale, mark).cut;
     if (! cut.isValid())
         return {};
+
+    if (glow.set())
+    {
+        // THE FACE'S OWN LIGHT (EmblemGlow), over the whole of litBox: the plate warmed, the bloom and the halo — the
+        // cut's own shape blurred, wide and then tight — and the floor over them lit near white.
+        const auto area = litBox();
+        juce::Image made (juce::Image::ARGB, juce::jmax (1, juce::roundToInt (area.getWidth() * scale)),
+                          juce::jmax (1, juce::roundToInt (area.getHeight() * scale)), true);
+        const int ox = juce::roundToInt ((mark.getX() - area.getX()) * scale), oy = juce::roundToInt ((mark.getY() - area.getY()) * scale);
+        {
+            juce::Graphics g (made);
+            if (! glow.plate.isTransparent())
+            {
+                const auto toImage = juce::AffineTransform::translation (-area.getX(), -area.getY()).scaled (scale);
+                const auto centre = mark.getCentre();
+                const auto bounds = plate.getBounds();
+                const float reach = juce::jmax (centre.getDistanceFrom (bounds.getTopLeft()), centre.getDistanceFrom (bounds.getBottomRight()),
+                                                centre.getDistanceFrom (bounds.getTopRight()), centre.getDistanceFrom (bounds.getBottomLeft()));
+                g.setGradientFill (juce::ColourGradient (glow.plate, centre.transformedBy (toImage),
+                                                         glow.plate.withMultipliedAlpha (1.0f / 3.0f),
+                                                         centre.translated (reach, 0.0f).transformedBy (toImage), true));
+                g.fillPath (plate, toImage);
+            }
+
+            juce::Image shape (juce::Image::ARGB, made.getWidth(), made.getHeight(), true);
+            {
+                juce::Graphics sg (shape);
+                sg.setColour (juce::Colours::white);
+                sg.drawImageAt (cut, ox, oy, true);
+            }
+            if (! glow.bloom.isTransparent())
+                juce::DropShadow (glow.bloom, juce::jmax (1, juce::roundToInt (glow.bloomRadius * scale)), {}).drawForImage (g, shape);
+            if (! glow.halo.isTransparent())
+                juce::DropShadow (glow.halo, juce::jmax (1, juce::roundToInt (glow.haloRadius * scale)), {}).drawForImage (g, shape);
+
+            const auto box = juce::Rectangle<float> ((float) ox, (float) oy, (float) cut.getWidth(), (float) cut.getHeight());
+            g.setGradientFill (juce::ColourGradient (glow.core, box.getCentre(), glow.edge, box.getTopLeft(), true));
+            g.drawImageAt (cut, ox, oy, true);
+        }
+        lit = made;
+        litScale = scale;
+        return lit;
+    }
 
     const int pad = juce::roundToInt (bloom * scale);
     juce::Image made (juce::Image::ARGB, cut.getWidth() + 2 * pad, cut.getHeight() + 2 * pad, true);

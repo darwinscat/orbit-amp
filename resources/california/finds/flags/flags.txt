@@ -1,0 +1,7 @@
+# fence flags, atlas 576 x 256: cloth cells 192 x 128 px, 3 x 2, row by row; ragged edges in alpha
+flag 0    0    0  192  128
+flag 1  192    0  192  128
+flag 2  384    0  192  128
+flag 3    0  128  192  128
+flag 4  192  128  192  128
+flag 5  384  128  192  128

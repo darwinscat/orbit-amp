@@ -135,6 +135,10 @@ public:
         const char* limiterWord = "LIMITER";                // what LIMITER's door says: RedGrooveBass's says LIMIT, as its plate has room for
         float readingPx = stage::px11;                      // what CPU and MEM are written at...
         bool readingsFit = false;                           // ...set condensed into their boxes, as tall, where wider (Legend::fit)
+        juce::Colour readingInk {};                         // the version, PRESET, CPU and MEM in this, where they stand on a light
+                                                            // panel; transparent writes them in the words' ink (Look::ink)
+        bool presetNamed = false;                           // PRESET followed by the playing preset's name, set condensed
+                                                            // into its box where wider (readingsFit)
         bool tunerStrip = false;                            // the tuner in one low line (TunerFace::setStrip)...
         TunerFace::Dial tunerDial {};                       // ...or a needle over a dial the picture paints, where it has a reach
         bool tunerMenuOnClick = false;                      // ...and a click on it opens its menu, rather than switching it
@@ -155,6 +159,7 @@ public:
         juce::Colour handLight {};                          // a light round a slider's or a fader's cap under the hand; none if transparent
         Ink ink {};                                         // what the words on the panel are written in
         juce::Colour emblemLamp {};                         // the lamp under the cat's glass under the hand (Emblem); none if transparent
+        EmblemGlow emblemGlow {};                           // ...and the face's own light under it (EmblemGlow); unset, the family's glass
     };
 
     Console (AmpProcessor&, std::unique_ptr<Picture>, const Places&, const Look&);
@@ -365,6 +370,8 @@ private:
 
     const juce::String midiCommands;
     const Ink ink;
+    /** What the version, PRESET, CPU and MEM are written in: the place's own ink, or the words' at 0.85. */
+    juce::Colour readingColour() const { return places.readingInk.isTransparent() ? ink.at (ink.words, 0.85f) : places.readingInk; }
 
     ArtKnob drive;
     std::array<std::unique_ptr<ArtKnob>, Channels::maxTones> tones;

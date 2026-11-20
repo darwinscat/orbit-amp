@@ -38,7 +38,7 @@
 //
 // It reads the amp's packs from where the amp reads them, and lays the build's set out there first, as
 // the amp does. Every amp over the channels' engine runs it as itself — CatpitAmp, RedPawAmp,
-// FrostPawAmp, AmberPawAmp, RedGrooveBass, DeepGrooveBass (CMakeLists.txt: amp_console), each as AmpGate.h knows it.
+// FrostPawAmp, AmberPawAmp, RedGrooveBass, DeepGrooveBass, PeacePhaseAmp (CMakeLists.txt: amp_console), each as AmpGate.h knows it.
 
 #include "GateMain.h"
 #include "AmpGate.h"
@@ -430,9 +430,22 @@ int ORBITAMP_GATE_MAIN()
     // the amp is on nor CHANNEL opens on, where the parameter, missing from the state, falls back to its default: the
     // last, or on the walker, which opens on its last, the first.
     {
-        int said = last;
-        while (said > 0 && (said == channels.active() || said == opener))
-            --said;
+        const auto sayable = [&]
+        {
+            int s = last;
+            while (s > 0 && (s == channels.active() || s == opener))
+                --s;
+            return s;
+        };
+        int said = sayable();
+        // ...which, of two channels, only the other than the opener is, and only while the amp is on the opener: where it
+        // is not (the van, on its second), it is put there first.
+        if (channels.count() == 2 && (said == opener || said == channels.active()))
+        {
+            asHost (opener);
+            ticks();            // ...its own step settled before the older state's is counted
+            said = sayable();
+        }
         auto old = amp->apvts.copyState();
         if (auto word = old.getChildWithProperty ("id", juce::String (engine.channelId())); word.isValid())
             old.removeChild (word, nullptr);

@@ -241,6 +241,22 @@ inline const Product& product()
             "a bass's gear never pulled since INIT opens on its own DRIVE, BLEND, tones, COMP and effects, not the other gear's",
             "each gear comes back with the DRIVE, BLEND, BASS, MID, TREBLE, COMP threshold, OCTAVE and CHORUS it was left with",
             "INIT gives COMP on, three quarters of the signal through it at 4:1 on OPTO, OCTAVE and CHORUS in the strip and on, no ENVELOPE, both cuts on, no delay, and the room in the strip and on" } },
+        // The van: a stand-in sound until the Orange Super Crush 100 has captures — CLEAN the Victory V4 Copper and DIRTY
+        // the V4 Sheriff, each its Boost held off (no TURBO), on a plate, the cleaner the wetter, as AmberPawAmp opens them;
+        // on the TOP 12's first, drawn (src/california/CaliforniaLineup.cpp). Made after the family's folder: nothing of
+        // before to gather.
+        { "PeacePhaseAmp", "van", "CALIFORNIA_GATE_OWNS_HOME",
+          {
+              { "v4-copper-4ae0",      "Boost=off", "Plate", 20.0f, 15.0f, nullptr, topFirst },
+              { "v4-sheriff-ch1-82ab", "Boost=off", "Plate", 15.0f, 8.0f,  nullptr, topFirst },
+          },
+          nullptr,
+          {},
+          "both channels' packs are installed",
+          "every channel's tone knobs are its pack's tones, as many as it lists, knob i its tone i",
+          "...and both on the TOP 12's first, drawn: the 4x12 SELFISH GENE",
+          false,
+          false },
     };
 
     for (const auto& p : products)

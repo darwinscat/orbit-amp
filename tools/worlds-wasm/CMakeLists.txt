@@ -8,14 +8,15 @@
 #     source ~/emsdk/emsdk_env.sh
 #     emcmake cmake -S tools/worlds-wasm -B build-wasm -G Ninja
 #     cmake --build build-wasm            # -> build-wasm/plains-wasm.mjs + .wasm, ice-wasm.*, titan-wasm.*, sky-wasm.*, walker-wasm.*,
-#                                         #    underwater-wasm.*
+#                                         #    underwater-wasm.*, california-wasm.*
 #
 # Each world is an ES module the page imports — plains-wasm.mjs exports createPlainsView (plains-view.js),
 # ice-wasm.mjs createIceView (ice-view.js), titan-wasm.mjs createTitanView (titan-view.js), sky-wasm.mjs
 # CatpitAmp's createCatpitSky (sky-view.js), walker-wasm.mjs RedGrooveBass's createWalkerView (walker-view.js),
-# underwater-wasm.mjs the bass amp's createUnderwaterView (underwater-view.js), each behind the one view of view.js —
+# underwater-wasm.mjs the bass amp's createUnderwaterView (underwater-view.js), california-wasm.mjs the Orange's
+# createCaliforniaView (california-view.js), each behind the one view of view.js —
 # and the .wasm beside it is fetched by it. The renderers and the worlds are the app's (src/redpaw/view,
-# src/frostpaw/view, src/amberpaw/view, src/catpit, src/redgroove/view, src/underwater/view) over WebGL 2
+# src/frostpaw/view, src/amberpaw/view, src/catpit, src/redgroove/view, src/underwater/view, src/california/view) over WebGL 2
 # (src/shaders/Gpu.h); the shaders are
 # resources/shaders, carried into the .wasm the way the app's build carries them (CMakeLists.txt, THE SHADERS)
 # and put together by the same src/shaders/Shaders.cpp.
@@ -126,15 +127,15 @@ inline const char* getNamedResourceOriginalFilename (const char* name)
 
 # ----------------------------------------------------------------------------
 # A WORLD: its own file of calls (plains.cpp, ...) over the app's world and renderer, built to <name>-wasm.mjs
-# + .wasm; view.js at the end of the module, the world's <name>-view.js after it. Every world exports the calls
-# view.h names; `EXTRA` are a world's own beyond them.
+# + .wasm; view.js at the end of the module, `JS` after it (files the build writes for a world), the world's
+# <name>-view.js last. Every world exports the calls view.h names; `EXTRA` are a world's own beyond them.
 # ----------------------------------------------------------------------------
 set(ORBITAMP_VIEW_CALLS
     _view_make _view_build _view_context _view_create _view_error _view_gear _view_turbo _view_settle
     _view_frame _view_draw _view_test _view_read _view_read_width _view_read_height _view_destroy)
 
 function(orbitamp_world name factory)
-    cmake_parse_arguments(W "" "" "SOURCES;EXTRA" ${ARGN})
+    cmake_parse_arguments(W "" "" "SOURCES;EXTRA;JS" ${ARGN})
     add_executable(${name}_wasm ${name}.cpp ${W_SOURCES} "${ORBITAMP_ROOT}/src/shaders/Shaders.cpp")
     target_include_directories(${name}_wasm PRIVATE "${ORBITAMP_ROOT}/src" "${ORBITAMP_GENERATED_DIR}" "${CMAKE_CURRENT_SOURCE_DIR}")
     target_compile_options(${name}_wasm PRIVATE -O3 -Wall -Wextra)
@@ -142,6 +143,10 @@ function(orbitamp_world name factory)
     list(JOIN calls "," calls)
     set(view "${CMAKE_CURRENT_SOURCE_DIR}/view.js")
     set(world_view "${CMAKE_CURRENT_SOURCE_DIR}/${name}-view.js")
+    set(world_js "")
+    foreach(js IN LISTS W_JS)
+        list(APPEND world_js "--extern-post-js=${js}")
+    endforeach()
     target_link_options(${name}_wasm PRIVATE
         -O3
         -sENVIRONMENT=web,worker
@@ -152,8 +157,9 @@ function(orbitamp_world name factory)
         "-sEXPORTED_FUNCTIONS=${calls}"
         "-sEXPORTED_RUNTIME_METHODS=HEAPU8,UTF8ToString"
         "--extern-post-js=${view}"
+        ${world_js}
         "--extern-post-js=${world_view}")
-    set_property(TARGET ${name}_wasm APPEND PROPERTY LINK_DEPENDS "${view}" "${world_view}")
+    set_property(TARGET ${name}_wasm APPEND PROPERTY LINK_DEPENDS "${view}" ${W_JS} "${world_view}")
     set_target_properties(${name}_wasm PROPERTIES OUTPUT_NAME "${name}-wasm" SUFFIX ".mjs")
 endfunction()
 
@@ -192,4 +198,33 @@ orbitamp_world(underwater createUnderwaterModule SOURCES
     "${ORBITAMP_ROOT}/src/redgroove/view/WalkerWorld.cpp"
     EXTRA _view_hear _view_park _view_cabin _view_picture _view_sprites _view_art)
 set_source_files_properties("${ORBITAMP_ROOT}/src/underwater/view/UnderwaterGl.cpp" "${ORBITAMP_ROOT}/src/underwater/view/UnderwaterWorld.cpp"
+    PROPERTIES COMPILE_OPTIONS "-ffp-contract=off")
+
+# CALIFORNIA, 1967: the Orange's van cabin — with the guitar it hears, PARK, the cabin, the pendant, the chalks and the
+# files the page hands it of its own. Its files are read at run time, never built in, as in the app: the page serves
+# resources/california as it is shipped, and the module knows its list (california-files.js, written here from that
+# folder: each file's path and size, the folder's README.txt left out). Its world and its matrices are matched to their
+# prototype number for number with the walker's JS built-ins, compiled without contraction as the app's build compiles
+# them; the cabin's Glass and the quality ladder are the sea's.
+set(ORBITAMP_CALIFORNIA_FILES_DIR "${ORBITAMP_ROOT}/resources/california")
+file(GLOB_RECURSE ORBITAMP_CALIFORNIA_FILES CONFIGURE_DEPENDS RELATIVE "${ORBITAMP_CALIFORNIA_FILES_DIR}" "${ORBITAMP_CALIFORNIA_FILES_DIR}/*")
+list(REMOVE_ITEM ORBITAMP_CALIFORNIA_FILES README.txt)
+list(SORT ORBITAMP_CALIFORNIA_FILES)
+set(_california_files "")
+foreach(file IN LISTS ORBITAMP_CALIFORNIA_FILES)
+    file(SIZE "${ORBITAMP_CALIFORNIA_FILES_DIR}/${file}" size)
+    string(APPEND _california_files "    ['${file}', ${size}],\n")
+endforeach()
+file(CONFIGURE OUTPUT "${ORBITAMP_GENERATED_DIR}/california-files.js" @ONLY CONTENT
+"// Written by tools/worlds-wasm/CMakeLists.txt (CALIFORNIA): the California world's files as the app ships them
+// (resources/california), each path under that folder with its size in bytes.
+const CALIFORNIA_FILES = [
+@_california_files@];
+")
+orbitamp_world(california createCaliforniaModule SOURCES
+    "${ORBITAMP_ROOT}/src/california/view/CaliforniaGl.cpp" "${ORBITAMP_ROOT}/src/california/view/CaliforniaWorld.cpp"
+    "${ORBITAMP_ROOT}/src/underwater/view/UnderwaterWorld.cpp" "${ORBITAMP_ROOT}/src/redgroove/view/WalkerWorld.cpp"
+    JS "${ORBITAMP_GENERATED_DIR}/california-files.js"
+    EXTRA _view_hear _view_park _view_cabin _view_pendant _view_wink _view_name _view_picture _view_file _view_art)
+set_source_files_properties("${ORBITAMP_ROOT}/src/california/view/CaliforniaGl.cpp" "${ORBITAMP_ROOT}/src/california/view/CaliforniaWorld.cpp"
     PROPERTIES COMPILE_OPTIONS "-ffp-contract=off")
