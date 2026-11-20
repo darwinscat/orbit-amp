@@ -1976,8 +1976,9 @@ gate_in_binary(deepgroove-face   tests/DeepGrooveFaceTests.cpp PRODUCT DeepGroov
 gate_in_binary(metal-channel     tests/AmpChannelTests.cpp  PRODUCT MetalAmp     CHANNELS 4)
 gate_in_binary(metal-set         tests/AmpSetTests.cpp      PRODUCT MetalAmp     CHANNELS 4)
 # ...and the E530's face, its window made and never shown: the lever's five stops, PARK the amp's bypass over the four
-# channels, each its own pack and LEAD GAIN HI its hotter Gain; the tone and key strips the playing pack's; COMP, FX 1 and
-# REVERB their parameters, FX 2 dark; and a still of it with the cat at rest and in flames.
+# channels, each its own pack and LEAD GAIN HI its hotter Gain; the tone and key strips the playing pack's; COMP, FX 1,
+# FX 2 (the OCTAVE: its mix, and its sound against the chain without it) and REVERB their parameters; and a still of it
+# with the cat at rest and in flames.
 gate_in_binary(metal-face        tests/MetalFaceTests.cpp   PRODUCT MetalAmp)
 
 # ORBITBASS'S CHAIN, headless: where a fresh one stands (the gate off, the HPF on at 25 Hz, the LPF off, mono,
