@@ -74,14 +74,14 @@ namespace
     }
 }
 
-/** CALIFORNIAAMP (Product.h), a working name: the Orange Super Crush 100's face in catbay's 1967 hippie van — its face
-    (california/CaliforniaEditor.h) over its two channels and the guitar's chain, with a COMP before the AMP. No first
-    start: it has no player's files of before to gather. */
-const Product& products::californiaAmp()
+/** PEACEPHASEAMP (Product.h), the owner's name (20.11): the Orange Super Crush 100's face in catbay's 1967 hippie van
+    — its face (california/CaliforniaEditor.h) over its two channels and the guitar's chain, with a COMP before the AMP.
+    No first start: it has no player's files of before to gather. */
+const Product& products::peacePhaseAmp()
 {
     static const Product van = []
     {
-        Product p { "CaliforniaAmp", california::makeEditor };
+        Product p { "PeacePhaseAmp", california::makeEditor };
         p.addParameters = addParameters;
         p.makeEngine    = makeEngine;
         p.opening       = opening;
@@ -97,6 +97,6 @@ const Product& products::californiaAmp()
 #if ORBITAMP_PLUGIN_ENTRY
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()
 {
-    return new orbitamp::AmpProcessor (orbitamp::products::californiaAmp());
+    return new orbitamp::AmpProcessor (orbitamp::products::peacePhaseAmp());
 }
 #endif

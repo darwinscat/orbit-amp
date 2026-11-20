@@ -1,4 +1,4 @@
-The California world's art and files, as the installer lays them out (Faces/CaliforniaAmp in the factory folder) and
+The California world's art and files, as the installer lays them out (Faces/PeacePhaseAmp in the factory folder) and
 src/california/view/CaliforniaArt.cpp reads them at run time (CALIFORNIA_ART_DIR, src/face/Renders.h). Never built
 into a binary. The world's prototype (california-gl.js) names its pictures .png; each is read from the .webp of the
 same name here.
@@ -35,11 +35,11 @@ Sizes, PNG -> WebP: dashboard 9.77 MB -> 1.19 MB; pendant 64 KB -> 38 KB; dish 1
 879 KB; signs 1.56 MB -> 957 KB; flags 190 KB -> 144 KB; chalk 453 KB -> 241 KB; the meshes' eleven textures
 1.04 MB -> 266 KB. The meshes 7.0 MB as they are. Everything here: 11 MB.
 
-THE FACE'S OWN (CaliforniaAmp, src/california): sockets.txt is the cabin's socket table as catbay handed it; face/
+THE FACE'S OWN (PeacePhaseAmp, src/california): sockets.txt is the cabin's socket table as catbay handed it; face/
 holds what the face has of its own (its MIDI list); the knobs and the faders' cap are AmberPawAmp's renders until it
 has its own (CMakeLists.txt). The face reads the world's dashboard.webp and dashboard_pendant.webp (one pendant, its box
 in dashboard_pendant.txt) and paints them, the pendant hanging still, whenever the world does not draw the cabin itself.
-The build lays out all of it but sockets.txt, fonts/ and this file in the factory folder's Faces/CaliforniaAmp, finds/
+The build lays out all of it but sockets.txt, fonts/ and this file in the factory folder's Faces/PeacePhaseAmp, finds/
 as a folder with every file at the same path (add_amp's ART_FOLDERS).
 
 fonts/Shrikhand-Latin.ttf is a European Latin subset of Shrikhand (Jonny Pinhorn, SIL Open Font License 1.1,

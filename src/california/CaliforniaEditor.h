@@ -46,7 +46,7 @@ private:
 };
 
 //==============================================================================
-/** CALIFORNIAAMP'S FACE over OrbitAmp's processor: the family's console (face/Console.h) laid out on the van's
+/** PEACEPHASEAMP'S FACE over OrbitAmp's processor: the family's console (face/Console.h) laid out on the van's
     dashboard, a world under the whole of it, its channels CLEAN and DIRTY. What it has of the console's own: GAIN (the
     console's DRIVE), the six keys of the history and the registers, IN and OUT, the lamps, the tuner, the maker's plate;
     what it has not: the REVERB, DELAY and CAB plates, the HPF and LPF keys, the console's row of tone knobs and of a

@@ -12,7 +12,7 @@ namespace orbitamp::california
 
 namespace
 {
-    constexpr const char* product = "CaliforniaAmp";
+    constexpr const char* product = "PeacePhaseAmp";
     constexpr const char* folderVariable = "CALIFORNIA_ART_DIR";
 
     juce::Image load (const char* name)

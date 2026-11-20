@@ -38,7 +38,7 @@
 //
 // It reads the amp's packs from where the amp reads them, and lays the build's set out there first, as
 // the amp does. Every amp over the channels' engine runs it as itself — CatpitAmp, RedPawAmp,
-// FrostPawAmp, AmberPawAmp, RedGrooveBass, DeepGrooveBass, CaliforniaAmp (CMakeLists.txt: amp_console), each as AmpGate.h knows it.
+// FrostPawAmp, AmberPawAmp, RedGrooveBass, DeepGrooveBass, PeacePhaseAmp (CMakeLists.txt: amp_console), each as AmpGate.h knows it.
 
 #include "GateMain.h"
 #include "AmpGate.h"

@@ -356,7 +356,7 @@ void paintBadge (juce::Graphics&, const juce::Path& plate, const std::vector<juc
                  juce::Rectangle<float> mark, float scale, const BadgeLook& = {});
 
 /** A FACE'S OWN LIGHT under the cat's glass, where the lamp's colour laid over the floor would put the mark out: a
-    light mark on a coloured plate (CaliforniaAmp's cream cat on its orange cap) comes out darker under the family's
+    light mark on a coloured plate (PeacePhaseAmp's cream cat on its orange cap) comes out darker under the family's
     glass — the lamp's colour, whitened at the middle — than it was unlit. Here the floor is lit near white instead,
     from `core` at the mark's middle to `edge` at its corners; a `halo` hugs the mark's lines and a wider `bloom`
     spreads past them, both the cut's own shape blurred; and the plate round it warms (`plate`, strongest at the mark,

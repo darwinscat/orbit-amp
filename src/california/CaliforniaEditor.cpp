@@ -556,7 +556,7 @@ CaliforniaEditor::~CaliforniaEditor()
 }
 
 /** THE WORLD BEHIND THE GLASS: California, 1967 (view/CaliforniaDrive.h), its art read from the factory folder's
-    Faces/CaliforniaAmp (view/CaliforniaArt.h) — CLEAN its first gear, DIRTY its second, PARK the van on the shoulder. */
+    Faces/PeacePhaseAmp (view/CaliforniaArt.h) — CLEAN its first gear, DIRTY its second, PARK the van on the shoulder. */
 std::unique_ptr<redpaw::Drive> CaliforniaEditor::makeDrive()
 {
     return std::make_unique<CaliforniaDrive> (shippedArt());

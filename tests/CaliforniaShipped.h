@@ -19,7 +19,7 @@ namespace orbitamp::california::shipped
     as .webp — each table one its parser takes. `has (rel)`: the file is there with something in it; `read (rel)`: its
     bytes. What is missing or will not parse, in words; none when the world finds all it reads. Shared by
     california_world_test (the source tree's resources/california) and the van's face gate (the factory folder's
-    Faces/CaliforniaAmp, as the build lays it out). */
+    Faces/PeacePhaseAmp, as the build lays it out). */
 template <typename Has, typename Read>
 std::vector<std::string> missing (Has has, Read read)
 {

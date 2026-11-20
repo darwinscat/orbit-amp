@@ -8,8 +8,8 @@
 namespace orbitamp::california
 {
 
-/** WHAT THE FACE DRAWS WITH, laid out in the factory folder under Faces/CaliforniaAmp (CMakeLists.txt:
-    CALIFORNIAAMP_RENDERS), as the bathyscaphe's are: the van's dashboard, which the face paints itself whenever its
+/** WHAT THE FACE DRAWS WITH, laid out in the factory folder under Faces/PeacePhaseAmp (CMakeLists.txt:
+    PEACEPHASEAMP_RENDERS), as the bathyscaphe's are: the van's dashboard, which the face paints itself whenever its
     world, California, does not draw it, with the peace pendant hanging still under the mirror — the world's own two
     files, dashboard.webp and dashboard_pendant.webp (view/CaliforniaArt.h); the knobs and the faders' cap, renders
     of the family's; its mark and its MIDI list. A render that fails to decode leaves its image null, and its control

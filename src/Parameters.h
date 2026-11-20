@@ -512,7 +512,7 @@ inline constexpr float compRatioMin = 1.5f, compRatioMax = 10.0f;
 inline constexpr const char* compPresent = "comp_present";
 void addGuitarCompParameters (juce::AudioProcessorValueTreeState::ParameterLayout&);
 struct Opening;
-/** ...declaring where a product's Opening holds it: CaliforniaAmp's COMP in the strip and on, three quarters through it
+/** ...declaring where a product's Opening holds it: PeacePhaseAmp's COMP in the strip and on, three quarters through it
     (channels::Lineup::pinned). */
 void addGuitarCompParameters (juce::AudioProcessorValueTreeState::ParameterLayout&, const Opening&);
 
@@ -768,7 +768,7 @@ struct Opening
     bool  filterPresent = true;
     bool  reverbPresent = false;
 
-    // ...and a GUITAR'S COMP in its strip, where a product holds it there: CaliforniaAmp's (channels::Lineup::pinned).
+    // ...and a GUITAR'S COMP in its strip, where a product holds it there: PeacePhaseAmp's (channels::Lineup::pinned).
     // Declared by addGuitarCompParameters with this Opening; every other guitar amp's is out until the player adds it.
     bool  compPresent   = false;
 

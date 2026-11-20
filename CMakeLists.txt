@@ -1067,8 +1067,8 @@ set(CATPITAMP_SET   "Soldano X88-IR Normal" "Soldano X88-IR Altered" "Soldano X8
 set(REDPAWAMP_SET   "Friedman IR-X Ch1 PowerAmp" "Friedman IR-X Ch2 PowerAmp")
 set(FROSTPAWAMP_SET "Two Notes ReVolt Clean PowerAmp" "Two Notes ReVolt Crunch PowerAmp" "Two Notes ReVolt Lead PowerAmp")
 set(AMBERPAWAMP_SET "Victory V4 Copper (clean)" "Victory V4 Sheriff (crunch)" "Victory V4 Kraken (hi-gain)")
-# CaliforniaAmp's two, a stand-in until the Orange Super Crush 100 has captures (src/california/CaliforniaLineup.cpp).
-set(CALIFORNIAAMP_SET "Victory V4 Copper (clean)" "Victory V4 Sheriff (crunch)")
+# PeacePhaseAmp's two, a stand-in until the Orange Super Crush 100 has captures (src/california/CaliforniaLineup.cpp).
+set(PEACEPHASEAMP_SET "Victory V4 Copper (clean)" "Victory V4 Sheriff (crunch)")
 
 # THE FAMILY A BUILD RELEASES: installer/family.ini, the amps, unless -DFAMILY_INI= names another —
 # installer/bass.ini, the basses (the owner, 06.11: a package of their own). Everything below that says
@@ -1100,7 +1100,7 @@ separate_arguments(ORBITAMP_RELEASED)
 if(NOT ORBITAMP_DEV_FACTORY AND "OrbitAmp" IN_LIST ORBITAMP_RELEASED)
     set(kept "")
     set(left "")
-    foreach(amp CatpitAmp RedPawAmp FrostPawAmp AmberPawAmp CaliforniaAmp)
+    foreach(amp CatpitAmp RedPawAmp FrostPawAmp AmberPawAmp PeacePhaseAmp)
         string(TOUPPER "${amp}" key)
         if(amp IN_LIST ORBITAMP_RELEASED)
             list(APPEND kept ${${key}_SET})
@@ -1505,7 +1505,7 @@ if(NOT MSVC)
     set_source_files_properties(src/california/view/CaliforniaGl.cpp PROPERTIES COMPILE_OPTIONS "-ffp-contract=off")
 endif()
 # ...and the art and the files it reads (src/california/view/CaliforniaArt.h, resources/california/README.txt): WebP
-# pictures, the meshes and the tables as they are, laid out by the installer in the factory folder's Faces/CaliforniaAmp
+# pictures, the meshes and the tables as they are, laid out by the installer in the factory folder's Faces/PeacePhaseAmp
 # and read from there at run time (CALIFORNIA_ART_DIR), never built into a binary; decoded with libwebp.
 set(CALIFORNIA_ART_SOURCES src/california/view/CaliforniaArt.cpp src/underwater/view/UnderwaterArt.cpp)
 view_demo(california_view_demo "CaliforniaViewDemo" SOURCES ${REDPAW_VIEW_SOURCES} ${CALIFORNIA_VIEW_SOURCES} ${CALIFORNIA_ART_SOURCES} src/face/Renders.cpp
@@ -1672,28 +1672,28 @@ set(DEEPGROOVEBASS_SOURCES
 # THE VAN'S FACE (src/california): the family's console on the 1967 van's dashboard, no word on its panels, our own
 # pictograms over the sockets (src/california/CaliforniaGlyphs.h), its letters in Shrikhand — a European Latin subset of
 # it, embedded (resources/california/fonts, the OFL beside it). Its dashboard and the peace pendant made WebP from catbay's
-# renders (resources/california/README.txt), laid out in the factory folder's Faces/CaliforniaAmp and read at run time
+# renders (resources/california/README.txt), laid out in the factory folder's Faces/PeacePhaseAmp and read at run time
 # (CALIFORNIA_ART_DIR); the knobs and the faders' cap its own where resources/california/face has one, the helicopter's
 # otherwise, with its mark and its MIDI list. Its world, California (src/california/view), reads the same dashboard and
-# pendant, and label.webp and finds/ beside them, from the same folder (CALIFORNIAAMP_ART_FOLDERS: finds/ laid out
+# pendant, and label.webp and finds/ beside them, from the same folder (PEACEPHASEAMP_ART_FOLDERS: finds/ laid out
 # whole); the face paints the dashboard and the pendant itself whenever the world does not draw them.
-set(CALIFORNIAAMP_RENDERS
+set(PEACEPHASEAMP_RENDERS
     "${CMAKE_CURRENT_SOURCE_DIR}/resources/california/dashboard.webp"
     "${CMAKE_CURRENT_SOURCE_DIR}/resources/california/dashboard_pendant.webp"
     "${CMAKE_CURRENT_SOURCE_DIR}/resources/california/dashboard_pendant.txt"
     "${CMAKE_CURRENT_SOURCE_DIR}/resources/california/label.webp")
-set(CALIFORNIAAMP_ART_FOLDERS "${CMAKE_CURRENT_SOURCE_DIR}/resources/california/finds")
+set(PEACEPHASEAMP_ART_FOLDERS "${CMAKE_CURRENT_SOURCE_DIR}/resources/california/finds")
 file(GLOB california_own CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/resources/california/face/*")
 foreach(render IN ITEMS mark.svg midi.txt knob-drive.webp knob-tone.webp fader-cap.webp)
     if("${CMAKE_CURRENT_SOURCE_DIR}/resources/california/face/${render}" IN_LIST california_own)
-        list(APPEND CALIFORNIAAMP_RENDERS "${CMAKE_CURRENT_SOURCE_DIR}/resources/california/face/${render}")
+        list(APPEND PEACEPHASEAMP_RENDERS "${CMAKE_CURRENT_SOURCE_DIR}/resources/california/face/${render}")
     else()
-        list(APPEND CALIFORNIAAMP_RENDERS "${CMAKE_CURRENT_SOURCE_DIR}/resources/amberpaw/${render}")
+        list(APPEND PEACEPHASEAMP_RENDERS "${CMAKE_CURRENT_SOURCE_DIR}/resources/amberpaw/${render}")
     endif()
 endforeach()
 juce_add_binary_data(CaliforniaData HEADER_NAME CaliforniaData.h NAMESPACE CaliforniaData
     SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/resources/california/fonts/Shrikhand-Latin.ttf")
-set(CALIFORNIAAMP_SOURCES
+set(PEACEPHASEAMP_SOURCES
     ${FACE_SOURCES}
     src/redgroove/RedGrooveControls.cpp     # the walker's lever, cabinet slider and readings
     src/california/CaliforniaEditor.cpp
@@ -1813,15 +1813,15 @@ add_amp(DeepGrooveBass CODE Dgrv   BY_NAME    BASS
         juce::juce_opengl            # the sea, on the GPU
     SET       ${DEEPGROOVEBASS_SET})
 
-# CaliforniaAmp — a working name: the Orange Super Crush 100's face in catbay's 1967 hippie van (src/california) — the
-# family's console over the guitar's chain, driven as channels: two, CLEAN and DIRTY, PARK the amp's bypass, a stand-in
-# sound (the V4 Copper and Sheriff) until the Orange has captures; the guitar's TOP 12, drawn. Not in the family's release
-# (installer/family.ini), and asked for by name. Its icon its own (the owner's pick, 20.11): an open poppy, its heart the
-# orange dot, on a curved stem with one leaf.
-add_amp(CaliforniaAmp CODE Clfa    BY_NAME
-    ART       ${CALIFORNIAAMP_RENDERS}
-    ART_FOLDERS ${CALIFORNIAAMP_ART_FOLDERS}
-    SOURCES   ${CALIFORNIAAMP_SOURCES}
+# PeacePhaseAmp (the owner's name, 20.11): the Orange Super Crush 100's face in catbay's 1967 hippie van
+# (src/california) — the family's console over the guitar's chain, driven as channels: two, CLEAN and DIRTY, PARK the
+# amp's bypass, a stand-in sound (the V4 Copper and Sheriff) until the Orange has captures; the guitar's TOP 12, drawn.
+# Not in the family's release (installer/family.ini), and asked for by name. Its icon its own (the owner's pick, 20.11):
+# an open poppy, its heart the orange dot, on a curved stem with one leaf.
+add_amp(PeacePhaseAmp CODE Clfa    BY_NAME
+    ART       ${PEACEPHASEAMP_RENDERS}
+    ART_FOLDERS ${PEACEPHASEAMP_ART_FOLDERS}
+    SOURCES   ${PEACEPHASEAMP_SOURCES}
     LIBRARIES
         OrbitAmpData                 # the family's mark, the notice, the disclaimer — BinaryData::*
         CaliforniaData               # Shrikhand's letters
@@ -1829,7 +1829,7 @@ add_amp(CaliforniaAmp CODE Clfa    BY_NAME
         felitronics::appkit_webp     # the world's art, decoded
         ${AMP_ENGINE_LIBRARIES}
         juce::juce_opengl            # the view, on the GPU
-    SET       ${CALIFORNIAAMP_SET})
+    SET       ${PEACEPHASEAMP_SET})
 
 # ----------------------------------------------------------------------------
 # THE FACES' GATES — in the gates binary, with every other (THE GATES BINARY, below); amp_console builds an amp
@@ -1968,11 +1968,11 @@ gate_in_binary(deepgroove-set    tests/AmpSetTests.cpp      PRODUCT DeepGrooveBa
 # each gear's BLEND and CLEAN's held, COMP's threshold and what the bathyscaphe holds of it, CLEAN's two tones in the
 # outer sockets and the frozen one between them, each socket's reading its own knob's.
 gate_in_binary(deepgroove-face   tests/DeepGrooveFaceTests.cpp PRODUCT DeepGrooveBass)
-gate_in_binary(california-channel tests/AmpChannelTests.cpp  PRODUCT CaliforniaAmp CHANNELS 2)
-gate_in_binary(california-set    tests/AmpSetTests.cpp      PRODUCT CaliforniaAmp CHANNELS 2)
+gate_in_binary(california-channel tests/AmpChannelTests.cpp  PRODUCT PeacePhaseAmp CHANNELS 2)
+gate_in_binary(california-set    tests/AmpSetTests.cpp      PRODUCT PeacePhaseAmp CHANNELS 2)
 # ...and the van's face, its window made and never shown: the lever's PARK the amp's bypass over CLEAN and DIRTY, each
 # tone socket the playing channel's tone of its name, VOLUME and PHASER dark, every pictogram named, and a still renders.
-gate_in_binary(california-face   tests/CaliforniaFaceTests.cpp PRODUCT CaliforniaAmp)
+gate_in_binary(california-face   tests/CaliforniaFaceTests.cpp PRODUCT PeacePhaseAmp)
 
 # ORBITBASS'S CHAIN, headless: where a fresh one stands (the gate off, the HPF on at 25 Hz, the LPF off, mono,
 # its one temporary pack), the strip's arrows in its order (GATE, AMP, CAB, LIMIT), the delay and the reverb
@@ -1989,7 +1989,7 @@ gate_in_binary(catpit-nofactory  tests/NoFactoryTests.cpp   PRODUCT CatpitAmp   
 gate_in_binary(redpaw-nofactory  tests/NoFactoryTests.cpp   PRODUCT RedPawAmp    NO_FACTORY)
 gate_in_binary(redgroove-nofactory tests/NoFactoryTests.cpp  PRODUCT RedGrooveBass NO_FACTORY)
 gate_in_binary(deepgroove-nofactory tests/NoFactoryTests.cpp PRODUCT DeepGrooveBass NO_FACTORY)
-gate_in_binary(california-nofactory tests/NoFactoryTests.cpp PRODUCT CaliforniaAmp NO_FACTORY)
+gate_in_binary(california-nofactory tests/NoFactoryTests.cpp PRODUCT PeacePhaseAmp NO_FACTORY)
 
 # ORBITAMP'S FACE AS THE SITE GETS IT (src/ui/WebFaceplate.h): a fresh OrbitAmp writes the kit, and the kit
 # builds the face back — its own format, every place on the stage, the hull the poster less its places.

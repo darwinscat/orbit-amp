@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of OrbitAmp — see LICENSE.
 
-// Gate for CALIFORNIAAMP'S FACE (src/california/CaliforniaEditor.h), its window made and never shown, run as the van out
+// Gate for PEACEPHASEAMP'S FACE (src/california/CaliforniaEditor.h), its window made and never shown, run as the van out
 // of the build's factory folder:
 //
 //   - the lever: PARK over the two channels, CLEAN and DIRTY. PARK is the amp's bypass (AmpProcessor::bypassParameter)
@@ -17,7 +17,7 @@
 //   - the plate for a swinging pendant (Cabin::withoutPendant, the kit's cabin-swing.webp) is the cabin less its pendant;
 //   - a still of the face renders: the cream panel painted, a pictogram's ink on it;
 //   - THE WORLD BEHIND THE GLASS is California (CaliforniaDrive), in the channel's gear — CLEAN 1, DIRTY 2 — and parked
-//     at PARK; every file it reads lies in the factory folder's Faces/CaliforniaAmp as the build lays it out
+//     at PARK; every file it reads lies in the factory folder's Faces/PeacePhaseAmp as the build lays it out
 //     (CaliforniaShipped.h, the check california_world_test makes of resources/california), and the face's pendant is
 //     the world's, dashboard_pendant.webp.
 //

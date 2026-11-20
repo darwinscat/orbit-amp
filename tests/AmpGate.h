@@ -245,7 +245,7 @@ inline const Product& product()
         // the V4 Sheriff, each its Boost held off (no TURBO), on a plate, the cleaner the wetter, as AmberPawAmp opens them;
         // on the TOP 12's first, drawn (src/california/CaliforniaLineup.cpp). Made after the family's folder: nothing of
         // before to gather.
-        { "CaliforniaAmp", "van", "CALIFORNIA_GATE_OWNS_HOME",
+        { "PeacePhaseAmp", "van", "CALIFORNIA_GATE_OWNS_HOME",
           {
               { "v4-copper-4ae0",      "Boost=off", "Plate", 20.0f, 15.0f, nullptr, topFirst },
               { "v4-sheriff-ch1-82ab", "Boost=off", "Plate", 15.0f, 8.0f,  nullptr, topFirst },

@@ -151,7 +151,7 @@ const Product& amberPawAmp();
 const Product& orbitBass();
 const Product& redGrooveBass();
 const Product& deepGrooveBass();
-const Product& californiaAmp();
+const Product& peacePhaseAmp();
 } // namespace products
 
 } // namespace orbitamp
