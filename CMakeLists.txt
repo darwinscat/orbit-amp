@@ -631,7 +631,8 @@ endfunction()
 # face, its name, its number and what it carries.
 #
 #   add_amp(<Name>  CODE <code>  [BY_NAME]  [ICON <Amp>]
-#           SOURCES <files...>  LIBRARIES <targets...>  [ART <files...>]  [SET <packs...>]  [WHOLE_SHELF])
+#           SOURCES <files...>  LIBRARIES <targets...>  [ART <files...>]  [ART_FOLDERS <folders...>]
+#           [SET <packs...>]  [WHOLE_SHELF])
 #
 #   <Name>      the target, the PRODUCT_NAME and the stem of every bundle it builds; in lower case, its
 #               bundle id and its CLAP id, com.darwinscat.<name>; and its icon, resources/icon/<Name>-*.
@@ -648,6 +649,8 @@ endfunction()
 #   SOURCES     what it is compiled from; LIBRARIES what it links, ahead of JUCE's recommended flags.
 #   ART         its renders, in the factory folder's Faces/<Name>, each under its own file's name, where its
 #               face reads them (src/face/Renders.h).
+#   ART_FOLDERS folders of its art laid out whole, each as a folder of its own name in Faces/<Name>, every
+#               file in it at the same path under it: a world's finds/, say (Faces/<Name>/finds/...).
 #   SET         the packs it plays, by their folders' names in the tree's set (THE SET), less `.orbitrig` —
 #               at the factory folder's top, zipped.
 #   WHOLE_SHELF the whole cabinet shelf, the folders the cabinet catalog gives OrbitAmp alone with Darwin's
@@ -762,7 +765,7 @@ function(export_entry_points_only)
 endfunction()
 
 function(add_amp name)
-    cmake_parse_arguments(PARSE_ARGV 1 AMP "BY_NAME;WHOLE_SHELF;BASS" "CODE;ICON" "SOURCES;LIBRARIES;ART;SET")
+    cmake_parse_arguments(PARSE_ARGV 1 AMP "BY_NAME;WHOLE_SHELF;BASS" "CODE;ICON" "SOURCES;LIBRARIES;ART;ART_FOLDERS;SET")
     string(TOLOWER "${name}" id)
     set(iconOf "${name}")
     if(AMP_ICON)
@@ -866,6 +869,15 @@ function(add_amp name)
         get_filename_component(base "${render}" NAME)
         list(APPEND files "${render}")
         list(APPEND at "Faces/${name}/${base}")
+    endforeach()
+    foreach(folder IN LISTS AMP_ART_FOLDERS)
+        get_filename_component(top "${folder}" NAME)
+        file(GLOB_RECURSE inside CONFIGURE_DEPENDS RELATIVE "${folder}" "${folder}/*")
+        list(SORT inside)
+        foreach(rel IN LISTS inside)
+            list(APPEND files "${folder}/${rel}")
+            list(APPEND at "Faces/${name}/${top}/${rel}")
+        endforeach()
     endforeach()
     foreach(pack IN LISTS AMP_SET)
         if(NOT pack IN_LIST ORBITAMP_SET_NAMES)
@@ -1042,13 +1054,15 @@ add_custom_target(OrbitAmpSetPacks DEPENDS ${ORBITAMP_SET_PACKS})
 set(ORBITBASS_SET   "Ampeg SGT-DI" "Two Notes ReVolt Bass Clean" "Two Notes ReVolt Bass Dirt" "Two Notes ReVolt Bass Drive")
 set(REDGROOVEBASS_SET "Ampeg SGT-DI")
 set(DEEPGROOVEBASS_SET "Two Notes ReVolt Bass Clean" "Two Notes ReVolt Bass Dirt" "Two Notes ReVolt Bass Drive")
+# IoTideBass's one sound, a stand-in until the SansAmp RBI has captures: the ReVolt Bass's DIRT (src/io/IoLineup.cpp).
+set(IOTIDEBASS_SET "Two Notes ReVolt Bass Dirt")
 
 # WHAT ORBITAMP PLAYS: every pack in resources/set/Devices but the bass's — every folder there, zipped — the
 # X88-IR's, the IR-X's, the ReVolt's and the V4's, each one file in the family's folder whichever amps play it. A
 # guitar pack added there is OrbitAmp's from the next build on, with nobody to remember to list it; a pack the
 # tree keeps but OrbitAmp should not play has no place in resources/set/Devices, or is a bass amp's.
 set(ORBITAMP_PLAYS ${ORBITAMP_SET_NAMES})
-list(REMOVE_ITEM ORBITAMP_PLAYS ${ORBITBASS_SET} ${REDGROOVEBASS_SET} ${DEEPGROOVEBASS_SET})
+list(REMOVE_ITEM ORBITAMP_PLAYS ${ORBITBASS_SET} ${REDGROOVEBASS_SET} ${DEEPGROOVEBASS_SET} ${IOTIDEBASS_SET})
 
 # WHAT EACH OTHER AMP PLAYS of the set, said once — its row in THE AMPS names it by these.
 set(CATPITAMP_SET   "Soldano X88-IR Normal" "Soldano X88-IR Altered" "Soldano X88-IR Crunch" "Soldano X88-IR Overdrive")
@@ -1504,6 +1518,44 @@ target_compile_definitions(underwater_world_test PRIVATE
     UNDERWATER_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/underwater/underwater-world.txt"
     UNDERWATER_SPRITES="${CMAKE_CURRENT_SOURCE_DIR}/resources/underwater/sprites.txt")
 
+# Io's world (the SansAmp RBI bass's: the surface of Jupiter's volcanic moon, src/io/view), its CPU half matched to its
+# prototype (io-world.js and io-gl.js's CPU part) number for number with the walker's JS built-ins (Js in
+# WalkerWorld.cpp), so compiled without contraction; against the prototype's own dump (tests/fixtures/io), the
+# finds' readers on the copies of its small files (tests/fixtures/io/files). JUCE-free, links only the world.
+set(IO_VIEW_SOURCES
+    src/io/view/IoWorld.cpp
+    src/io/view/IoFrame.cpp
+    src/redgroove/view/WalkerWorld.cpp)
+if(NOT MSVC)
+    set_source_files_properties(src/io/view/IoWorld.cpp src/io/view/IoFrame.cpp PROPERTIES COMPILE_OPTIONS "-ffp-contract=off")
+endif()
+# ...on the GPU behind the rover's cabin (IoGl), handed to the windscreen as an IoDrive: its matrices and light frames
+# matched to the prototype too, so compiled without contraction; the cabin's Glass is the sea's (UnderwaterWorld). The
+# cabin's two plates and the finds' meshes (resources/io, src/io/view/IoArt.h) are read at run time from the factory
+# folder's Faces/IoTideBass (IO_ART_DIR), never built into a binary; the plates decoded with libwebp.
+set(IO_GL_SOURCES
+    src/io/view/IoGl.cpp
+    src/underwater/view/UnderwaterWorld.cpp)
+if(NOT MSVC)
+    set_source_files_properties(src/io/view/IoGl.cpp PROPERTIES COMPILE_OPTIONS "-ffp-contract=off")
+endif()
+set(IO_ART_SOURCES src/io/view/IoArt.cpp src/underwater/view/UnderwaterArt.cpp)
+view_demo(io_view_demo "IoViewDemo" SOURCES ${REDPAW_VIEW_SOURCES} ${IO_VIEW_SOURCES} ${IO_GL_SOURCES} ${IO_ART_SOURCES} src/face/Renders.cpp
+    DEFINITIONS ORBITAMP_VIEW_DEMO_IO=1)
+target_link_libraries(io_view_demo PRIVATE felitronics::appkit_webp)
+# The demo has no factory folder: the art is read from the source tree unless IO_ART_DIR says otherwise.
+target_compile_definitions(io_view_demo PRIVATE ORBITAMP_IO_ART_DEFAULT="${CMAKE_CURRENT_SOURCE_DIR}/resources/io")
+
+add_executable(io_world_test tests/IoWorldTests.cpp ${IO_VIEW_SOURCES})
+target_include_directories(io_world_test PRIVATE src)
+target_compile_features(io_world_test PRIVATE cxx_std_20)
+target_compile_definitions(io_world_test PRIVATE
+    IO_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/io/io-world.txt"
+    IO_FILES="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/io/files"
+    IO_ART="${CMAKE_CURRENT_SOURCE_DIR}/resources/io")
+# ...and the art it reads at run time (resources/io): the plates' window and the dosimeter's ink, the finds' meshes.
+target_link_libraries(io_world_test PRIVATE felitronics::appkit_webp)
+
 # THE ROVER'S FACE IS WORN BY MORE THAN ONE PRODUCT (src/redpaw/RedPawSkin.h): what every rover is made
 # of is said once here — the renders by the file names the face asks for, as bake-art made them, the
 # sources, the libraries — and each product adds its own skin's file and its own renders. The lamps a
@@ -1617,6 +1669,43 @@ set(DEEPGROOVEBASS_SOURCES
     ${UNDERWATER_VIEW_SOURCES}       # ... looking out on the sea floor
     ${UNDERWATER_ART_SOURCES})
 
+# THE IO ROVER'S FACE (src/io): the family's console on the rover's dashboard, the SansAmp RBI's controls, our own
+# pictograms over the sockets and a few words in B612 (src/io/IoGlyphs.h) — a European Latin subset of it, embedded
+# (resources/io/fonts, the OFL beside it). Its two plates, the day's and the dark one, made WebP from catbay's renders
+# (resources/io/README.txt), laid out in the factory folder's Faces/IoTideBass and read at run time (IO_ART_DIR). The knobs and
+# the faders' cap its own where resources/io/face has one, the helicopter's otherwise, with its MIDI list; no mark of its
+# own — the maker's plate wears the family's cat. Its world, Io (src/io/view), reads both plates and finds/ beside them
+# from the same folder (IOTIDEBASS_ART_FOLDERS: finds/ laid out whole) and draws the cabin, the two plates crossfaded by the
+# Sun; the face paints the day's plate itself whenever the world does not draw the cabin.
+set(IOTIDEBASS_RENDERS
+    "${CMAKE_CURRENT_SOURCE_DIR}/resources/io/dashboard.webp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/resources/io/dashboard_dark.webp")
+set(IOTIDEBASS_ART_FOLDERS "${CMAKE_CURRENT_SOURCE_DIR}/resources/io/finds")
+file(GLOB io_own CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/resources/io/face/*")
+foreach(render IN ITEMS midi.txt knob-drive.webp knob-tone.webp fader-cap.webp)
+    if("${CMAKE_CURRENT_SOURCE_DIR}/resources/io/face/${render}" IN_LIST io_own)
+        list(APPEND IOTIDEBASS_RENDERS "${CMAKE_CURRENT_SOURCE_DIR}/resources/io/face/${render}")
+    else()
+        list(APPEND IOTIDEBASS_RENDERS "${CMAKE_CURRENT_SOURCE_DIR}/resources/amberpaw/${render}")
+    endif()
+endforeach()
+juce_add_binary_data(IoData HEADER_NAME IoData.h NAMESPACE IoData
+    SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/resources/io/fonts/B612-Regular-Latin.ttf"
+            "${CMAKE_CURRENT_SOURCE_DIR}/resources/io/fonts/B612-Bold-Latin.ttf")
+set_target_properties(IoData PROPERTIES EXCLUDE_FROM_ALL TRUE)
+set(IOTIDEBASS_SOURCES
+    ${FACE_SOURCES}
+    src/redgroove/RedGrooveControls.cpp     # the walker's lever, switches, cabinet slider and readings
+    src/io/IoEditor.cpp
+    src/io/IoFaceArt.cpp
+    src/io/IoGlyphs.cpp
+    src/io/IoLineup.cpp
+    src/ui/CabWindow.cpp             # the bass's cabinets, drawn
+    ${REDPAW_VIEW_SOURCES}           # the windscreen the rovers look through ...
+    ${IO_VIEW_SOURCES}               # ... looking out on Io's sulphur plains
+    ${IO_GL_SOURCES}
+    ${IO_ART_SOURCES})
+
 # ----------------------------------------------------------------------------
 # THE AMPS — the family's table, one row an amp (THE FAMILY says what a row says).
 #
@@ -1724,6 +1813,25 @@ add_amp(DeepGrooveBass CODE Dgrv   BY_NAME    BASS
         ${AMP_ENGINE_LIBRARIES}
         juce::juce_opengl            # the sea, on the GPU
     SET       ${DEEPGROOVEBASS_SET})
+
+# IoTideBass (the owner's name, 20.11): the SansAmp RBI's face in catbay's Io rover cabin, over Jupiter's volcanic
+# moon (src/io) — the family's console over the bass's chain (Chain::bass), one sound under the rover's two speeds, SLOW
+# and FAST (a pair over one memory), PARK the amp's bypass; a stand-in sound (the ReVolt Bass's DIRT) until the RBI has
+# captures; Darwin's Cat's own cabinets. Not in the basses' release (installer/bass.ini), and asked for by name. Its
+# icon its own (the owner's pick, 20.11): the six-wheeled rover in profile, its cab's window the orange dot, Jupiter's
+# banded ring over it.
+add_amp(IoTideBass CODE Iobs   BY_NAME    BASS
+    ART       ${IOTIDEBASS_RENDERS}
+    ART_FOLDERS ${IOTIDEBASS_ART_FOLDERS}
+    SOURCES   ${IOTIDEBASS_SOURCES}
+    LIBRARIES
+        OrbitAmpData                 # the family's mark, the notice, the disclaimer — BinaryData::*
+        IoData                       # B612's letters
+        OrbitAmpShaders              # the view's shaders
+        felitronics::appkit_webp     # the world's art, decoded
+        ${AMP_ENGINE_LIBRARIES}
+        juce::juce_opengl            # the view, on the GPU
+    SET       ${IOTIDEBASS_SET})
 
 # ----------------------------------------------------------------------------
 # THE FACES' GATES — in the gates binary, with every other (THE GATES BINARY, below); amp_console builds an amp
@@ -1862,6 +1970,12 @@ gate_in_binary(deepgroove-set    tests/AmpSetTests.cpp      PRODUCT DeepGrooveBa
 # each gear's BLEND and CLEAN's held, COMP's threshold and what the bathyscaphe holds of it, CLEAN's two tones in the
 # outer sockets and the frozen one between them, each socket's reading its own knob's.
 gate_in_binary(deepgroove-face   tests/DeepGrooveFaceTests.cpp PRODUCT DeepGrooveBass)
+# The Io rover's set, and its face, its window made and never shown: the lever's PARK the amp's bypass over SLOW and FAST,
+# the two speeds one sound, each tone socket the channel's tone of its name and PRESENCE frozen, every pictogram named, a
+# still that renders, and the night's glow drawn where the cabin is dark. No channel gate: one sound has no channels to
+# go between (tests/AmpChannelTests.cpp walks two memories at least).
+gate_in_binary(iobass-set        tests/AmpSetTests.cpp      PRODUCT IoTideBass CHANNELS 2)
+gate_in_binary(iobass-face       tests/IoFaceTests.cpp      PRODUCT IoTideBass)
 
 # ORBITBASS'S CHAIN, headless: where a fresh one stands (the gate off, the HPF on at 25 Hz, the LPF off, mono,
 # its one temporary pack), the strip's arrows in its order (GATE, AMP, CAB, LIMIT), the delay and the reverb
@@ -1878,6 +1992,7 @@ gate_in_binary(catpit-nofactory  tests/NoFactoryTests.cpp   PRODUCT CatpitAmp   
 gate_in_binary(redpaw-nofactory  tests/NoFactoryTests.cpp   PRODUCT RedPawAmp    NO_FACTORY)
 gate_in_binary(redgroove-nofactory tests/NoFactoryTests.cpp  PRODUCT RedGrooveBass NO_FACTORY)
 gate_in_binary(deepgroove-nofactory tests/NoFactoryTests.cpp PRODUCT DeepGrooveBass NO_FACTORY)
+gate_in_binary(iobass-nofactory  tests/NoFactoryTests.cpp   PRODUCT IoTideBass   NO_FACTORY)
 
 # ORBITAMP'S FACE AS THE SITE GETS IT (src/ui/WebFaceplate.h): a fresh OrbitAmp writes the kit, and the kit
 # builds the face back — its own format, every place on the stage, the hull the poster less its places.

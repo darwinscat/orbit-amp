@@ -1,0 +1,483 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of OrbitAmp — see LICENSE.
+
+// Gate for IOTIDEBASS'S FACE (src/io/IoEditor.h), its window made and never shown, run as the Io rover out of the build's
+// factory folder:
+//
+//   - the lever: PARK over the two speeds, SLOW and FAST. PARK is the amp's bypass (AmpProcessor::bypassParameter) and
+//     leaves the speed as it was; a speed brings the amp back in; a host's bypass moves the lever to PARK, and a number
+//     key, the amp out, brings it back in;
+//   - ONE SOUND: SLOW and FAST play the same pack, nothing held, and every parameter but CHANNEL stands where it stood
+//     when the lever goes from one to the other — whatever the hand set on either (Lineup::pairs, one memory);
+//   - the tones by name: BASS, MIDDLE and TREBLE each turn the channel's tone of that name; PRESENCE, which the stand-in's
+//     pack has no tone for, a live knob all the same — not dim, its ring lit, taking the hand — turning IoTideBass's own
+//     parameter (io::presenceParam), which opens at the prototype's 0.2;
+//   - every pictogram named (a spot over each, its title the name);
+//   - a still of the face renders: the day's dark panel painted, DRIVE's wedge on it in Io's light paint;
+//   - THE NIGHT: the cabin's dark share at 1 lights the labels — a warm halo round DRIVE's wedge where the day has none,
+//     the wedge itself warmer — and back at 0 the still is the day's again;
+//   - THE WORLD BEHIND THE GLASS is Io (io::IoDrive), in the speed's gear — SLOW 1, FAST 2 — and parked at PARK; DRIVE's
+//     and BLEND's places over their ranges reach the drive as the time of day and Jupiter's phase, PRESENCE's the sulphur
+//     snow — 0.2 as the face opens, 1.0 with the knob turned full — and a state saved with PRESENCE full and restored over
+//     another brings it back, the parameter and the world's snow both; the face's night glow follows how dark the world says the cabin is (IoDrive::cabinDark) — dark at
+//     DRIVE's start, the day at its end; and the world finds every file it reads where the build lays them out, the
+//     factory folder's Faces/IoTideBass (io::shippedArt): both plates, a mesh and its table for every variant of the finds,
+//     the skylight's pit radius.
+//
+// Each control is found by the name the face gives it; the tone knobs by the sockets they stand in (io/IoLayout.h).
+// main() returns 0 when every check held.
+
+#include "GateMain.h"
+#include "PluginProcessor.h"
+#include "Parameters.h"
+#include "channels/Engine.h"
+#include "face/Controls.h"
+#include "io/IoEditor.h"
+#include "io/IoLayout.h"
+#include "io/IoLineup.h"
+#include "io/view/IoArt.h"
+#include "io/view/IoDrive.h"
+#include "redpaw/view/Windscreen.h"
+
+#include <array>
+#include <cmath>
+#include <cstdio>
+#include <memory>
+#include <vector>
+
+namespace
+{
+    juce::Component* named (juce::Component& in, const juce::String& id)
+    {
+        if (in.getComponentID() == id)
+            return &in;
+        for (auto* child : in.getChildren())
+            if (auto* found = named (*child, id))
+                return found;
+        return nullptr;
+    }
+
+    /** Every component of a kind under `in`, wherever it stands. */
+    template <typename Kind>
+    void allOf (juce::Component& in, std::vector<Kind*>& out)
+    {
+        if (auto* k = dynamic_cast<Kind*> (&in))
+            out.push_back (k);
+        for (auto* child : in.getChildren())
+            allOf (*child, out);
+    }
+
+    /** What a component of a kind stands at `centre` of the stage, within a few px, and is showing. */
+    template <typename Kind>
+    Kind* standingAt (juce::Component& in, juce::Point<float> centre)
+    {
+        std::vector<Kind*> all;
+        allOf (in, all);
+        for (auto* k : all)
+            if (k->isVisible() && k->getBounds().toFloat().getCentre().getDistanceFrom (centre) < 4.0f)
+                return k;
+        return nullptr;
+    }
+
+    /** Two pictures alike to the last pixel in `area` but `apart` — the bottom row's labels and controls, but MEM and CPU
+        in the strip under the tones: they read the machine, and change as they please. */
+    bool alikeIn (const juce::Image& a, const juce::Image& b, juce::Rectangle<int> area, juce::Rectangle<int> apart = {})
+    {
+        if (! a.isValid() || ! b.isValid() || a.getBounds() != b.getBounds())
+            return false;
+        area = area.getIntersection (a.getBounds());
+        for (int y = area.getY(); y < area.getBottom(); ++y)
+            for (int x = area.getX(); x < area.getRight(); ++x)
+                if (! apart.contains (x, y) && a.getPixelAt (x, y) != b.getPixelAt (x, y))
+                    return false;
+        return true;
+    }
+
+    float brightness (juce::Colour c) { return (c.getFloatRed() + c.getFloatGreen() + c.getFloatBlue()) / 3.0f; }
+}
+
+int ORBITAMP_GATE_MAIN()
+{
+    using namespace orbitamp;
+    namespace layout = io::layout;
+    const juce::ScopedJuceInitialiser_GUI juceInit;
+
+    int failed = 0;
+    const auto check = [&failed] (bool ok, const juce::String& what)
+    {
+        std::printf ("%s  %s\n", ok ? "ok  " : "FAIL", what.toRawUTF8());
+        if (! ok)
+            ++failed;
+    };
+
+    auto amp = std::make_unique<AmpProcessor> (ORBITAMP_GATE_PRODUCT());
+    amp->inlineLoads = true;
+    const auto setPlain = [&amp] (const juce::String& id, float v) { if (auto* p = amp->apvts.getParameter (id)) p->setValueNotifyingHost (p->convertTo0to1 (v)); };
+    const auto settle = [] { juce::MessageManager::getInstance()->runDispatchLoopUntil (100); };
+
+    auto& engine   = channels::Engine::of (*amp);
+    auto& channels = engine.channels;
+    auto* device   = amp->apvts.getParameter (params::preampDevice);
+    auto& bypass   = amp->bypassParameter();
+    const auto playing = [device] { return juce::roundToInt (device->convertFrom0to1 (device->getValue())); };
+    const auto nameOf  = [&channels] (int c) { return juce::String (channels.lineup().channels[(size_t) c].name); };
+    const auto out     = [&bypass] { return bypass.get(); };
+
+    std::unique_ptr<juce::AudioProcessorEditor> face (amp->createEditor());
+    auto* io = dynamic_cast<io::IoEditor*> (face.get());
+    check (io != nullptr && named (*face, "lever") != nullptr && named (*face, "comp") != nullptr,
+           "the Io rover's face comes up, its own controls on it");
+    if (io == nullptr || named (*face, "lever") == nullptr || named (*face, "comp") == nullptr)
+    {
+        std::printf ("FAILED\n");
+        return 1;
+    }
+    settle();
+
+    // THE LEVER: PARK, then the two speeds. A fresh rover opens on SLOW, the amp in.
+    auto* lever = dynamic_cast<face::DetentLever*> (named (*face, "lever"));
+    check (lever != nullptr && lever->numPlaces() == 3 && channels.count() == 2 && nameOf (0) == "SLOW" && nameOf (1) == "FAST",
+           "the lever has three places: PARK, SLOW and FAST");
+    check (lever != nullptr && ! out() && channels.active() == 0 && lever->getPlace() == 1,
+           "...and a fresh one stands on SLOW, the amp in");
+    const auto pull = [&] (int place) { if (lever != nullptr) lever->setPlace (place, false, true); settle(); };
+    if (lever != nullptr)
+    {
+        pull (0);
+        check (out() && channels.active() == 0 && lever->getPlace() == 0,
+               "the lever pulled to PARK takes the amp out — its bypass on — and leaves the speed on SLOW");
+        pull (2);
+        check (! out() && channels.active() == 1 && playing() == channels.packFor (1) && lever->getPlace() == 2,
+               "...pulled to FAST brings the amp back in, on FAST, its pack playing");
+        bypass.setValueNotifyingHost (1.0f);
+        settle();
+        check (lever->getPlace() == 0 && channels.active() == 1, "a host's bypass on moves the lever to PARK, the speed left on FAST");
+        face->keyPressed (juce::KeyPress ('1'));
+        settle();
+        check (! out() && channels.active() == 0 && lever->getPlace() == 1, "the 1 key, the amp out, pulls SLOW: the amp back in");
+    }
+
+    // ONE SOUND UNDER BOTH SPEEDS: the same pack, nothing held, and every parameter but CHANNEL where it stood.
+    {
+        const auto engineChannel = juce::String (engine.channelId());
+        const auto everything = [&amp, &engineChannel]
+        {
+            juce::StringPairArray all;
+            for (auto* p : amp->getParameters())
+                if (auto* ranged = dynamic_cast<juce::RangedAudioParameter*> (p); ranged != nullptr && ranged->getParameterID() != engineChannel)
+                    all.set (ranged->getParameterID(), juce::String (ranged->getValue(), 6));
+            return all;
+        };
+        const auto differing = [] (const juce::StringPairArray& a, const juce::StringPairArray& b)
+        {
+            juce::StringArray off;
+            for (const auto& key : a.getAllKeys())
+                if (a[key] != b[key])
+                    off.add (key + " " + a[key] + " -> " + b[key]);
+            return off;
+        };
+        check (channels.packFor (0) >= 0 && channels.packFor (0) == channels.packFor (1)
+                   && channels.lineup().channels[0].held.control == nullptr && channels.lineup().channels[1].held.control == nullptr,
+               "SLOW and FAST play the same pack, the ReVolt Bass's DIRT, and hold none of its switches");
+
+        pull (1);
+        setPlain (params::preampGain, 7.5f);
+        for (int t = 0; t < 3; ++t)
+            if (auto* p = amp->apvts.getParameter (channels.toneOf (0, t)))
+                p->setValueNotifyingHost (0.2f + 0.25f * (float) t);
+        setPlain (params::ampBlend, 0.55f);
+        setPlain (params::compThreshold, -30.0f);
+        setPlain (params::octaveAmount, 0.3f);
+        setPlain (params::chorusAmount, 0.6f);
+        setPlain (params::reverbMix, 40.0f);
+        setPlain (params::bassHpf, 1.0f);
+        settle();
+        const auto onSlow = everything();
+        pull (2);
+        const auto offFast = differing (onSlow, everything());
+        check (channels.active() == 1 && playing() == channels.packFor (0) && offFast.isEmpty(),
+               "the hand's DRIVE, tones, BLEND, COMP, effects and cut set on SLOW all stand on FAST, the pack the same"
+                   + (offFast.isEmpty() ? juce::String() : ": " + offFast.joinIntoString ("; ")));
+        setPlain (params::preampGain, 3.0f);
+        setPlain (params::reverbMix, 12.0f);
+        setPlain (params::bassLpf, 1.0f);
+        settle();
+        const auto onFast = everything();
+        pull (1);
+        const auto offSlow = differing (onFast, everything());
+        check (channels.active() == 0 && offSlow.isEmpty(),
+               "...and what the hand sets on FAST stands on SLOW"
+                   + (offSlow.isEmpty() ? juce::String() : ": " + offSlow.joinIntoString ("; ")));
+    }
+
+    // THE TONES BY NAME, AND PRESENCE FROZEN.
+    {
+        const std::array<juce::Point<float>, 3> sockets {{ { layout::toneX[0], layout::toneY }, { layout::toneX[1], layout::toneY }, { layout::toneX[2], layout::toneY } }};
+        const char* names[] { "Bass", "Mid", "Treble" };
+        bool byName = channels.toneNamesOf (0) == juce::StringArray { "Bass", "Mid", "Treble" };
+        for (size_t s = 0; s < sockets.size(); ++s)
+        {
+            auto* knob = standingAt<face::ArtKnob> (*face, sockets[s]);
+            const int t = channels.toneNamesOf (0).indexOf (names[s]);
+            auto* p = t >= 0 ? amp->apvts.getParameter (channels.toneOf (0, t)) : nullptr;
+            if (knob == nullptr || p == nullptr || ! knob->isEnabled())
+            {
+                byName = false;
+                continue;
+            }
+            knob->setValue (0.15f + 0.3f * (float) s, true);
+            byName = byName && std::abs (p->getValue() - (0.15f + 0.3f * (float) s)) < 1.0e-3f;
+        }
+        check (byName, "BASS, MIDDLE and TREBLE each turn the DIRT pack's tone of that name: Bass, Mid and Treble");
+
+        auto* presence = standingAt<face::ArtKnob> (*face, layout::presence);
+        auto* ring     = standingAt<face::KnobRing> (*face, layout::presence);
+        bool takes = false, children = false;
+        if (presence != nullptr)
+            presence->getInterceptsMouseClicks (takes, children);
+        juce::RangedAudioParameter* own = amp->apvts.getParameter (io::presenceParam);
+        check (dynamic_cast<juce::AudioParameterFloat*> (own) != nullptr && std::abs (own->getDefaultValue() - io::presenceDefault) < 1.0e-6f
+                   && std::abs (own->getValue() - io::presenceDefault) < 1.0e-6f && ! channels.toneNamesOf (0).contains ("Presence"),
+               "PRESENCE, which the stand-in's pack has no tone for, is IoTideBass's own parameter " + juce::String (io::presenceParam)
+                   + ", opening at " + juce::String (io::presenceDefault));
+        check (presence != nullptr && presence->isEnabled() && takes && juce::approximatelyEqual (presence->getAlpha(), 1.0f)
+                   && ring != nullptr && juce::approximatelyEqual (ring->getAlpha(), 1.0f)
+                   && std::abs (presence->getValue() - io::presenceDefault) < 1.0e-3f && named (*face, "frozen-presence") == nullptr,
+               "...its knob live, not dim, its ring lit, taking the hand, standing at it");
+    }
+
+    // EVERY PICTOGRAM NAMED.
+    {
+        const char* signs[] { "drive", "presence", "blend", "bass", "middle", "treble", "octave", "chorus", "reverb", "output",
+                              "compressor", "input", "park", "slow", "fast", "gate", "limiter" };
+        juce::StringArray missing;
+        for (const auto* s : signs)
+            if (auto* c = named (*face, juce::String ("sign-") + s); c == nullptr || ! c->isVisible() || c->getTitle() != juce::String (s).toUpperCase())
+                missing.add (s);
+        check (missing.isEmpty(), "every pictogram has a spot that names it" + (missing.isEmpty() ? juce::String() : ": not " + missing.joinIntoString (", ")));
+    }
+
+    // A STILL, BY DAY AND BY NIGHT.
+    {
+        face->setSize (1672, 941);
+        settle();
+        const auto shot = [&face, &settle] { settle(); return face->createComponentSnapshot (face->getLocalBounds()); };
+        const auto day = shot();
+        const float k = (float) day.getWidth() / layout::width;
+        const auto at = [k] (const juce::Image& img, float x, float y) { return img.getPixelAt (juce::roundToInt (x * k), juce::roundToInt (y * k)); };
+
+        // DRIVE's wedge, a point inside it, and one just under its base, where the night's halo lies.
+        const auto& g = layout::driveGlyph;
+        const juce::Point<float> inWedge { g.x + 8.0f * g.scale, g.y + 4.0f * g.scale };
+        const juce::Point<float> underWedge { g.x + 6.0f * g.scale, g.y + 6.5f * g.scale + 1.2f };     // the halo, a px under the base
+        const auto panel = at (day, 380.0f, 905.0f);
+        const auto wedge = at (day, inWedge.x, inWedge.y);
+        check (day.isValid() && brightness (panel) < 0.35f && brightness (wedge) > 0.7f,
+               "a still of the face renders: the dark panel (" + panel.toDisplayString (false) + ") and DRIVE's wedge on it in Io's paint ("
+                   + wedge.toDisplayString (false) + ")");
+
+        io->setCabinDark (1.0f);
+        const auto night = shot();
+        const auto haloDay = at (day, underWedge.x, underWedge.y), haloNight = at (night, underWedge.x, underWedge.y);
+        const auto wedgeNight = at (night, inWedge.x, inWedge.y);
+        check (juce::approximatelyEqual (io->cabinDark(), 1.0f) && brightness (haloNight) > brightness (haloDay) + 0.06f,
+               "the cabin's dark share at 1 draws the night's glow: a warm halo under DRIVE's wedge ("
+                   + haloDay.toDisplayString (false) + " by day, " + haloNight.toDisplayString (false) + " by night)");
+        check (wedgeNight.getRed() > wedge.getRed() + 15 && wedgeNight.getRed() > wedgeNight.getBlue(),
+               "...the wedge itself lit warm white (" + wedgeNight.toDisplayString (false) + ")");
+        io->setCabinDark (0.0f);
+        const auto bottomRow = (juce::Rectangle<float> (0.0f, 750.0f, layout::width, 180.0f) * k).toNearestInt();
+        const auto readings = (layout::toneTextStrip.expanded (2.0f) * k).toNearestInt();
+        check (alikeIn (day, shot(), bottomRow, readings), "...and back at 0 the bottom row is the day's again, to the pixel");
+
+        // THE RE-RENDERED PLATES (catbay, 20.11; resources/io/sockets.txt): BASS, MIDDLE and TREBLE 14 px higher, at cy 832,
+        // their rings round them; every column's slot 96 long, 816.5 to 912.5, and COMP, BLEND, OCTAVE, CHORUS and REVERB
+        // each a fader as long, round its centre.
+        bool raised = true;
+        for (const float x : layout::toneX)
+            raised = raised && standingAt<face::ArtKnob> (*face, { x, 832.0f }) != nullptr && standingAt<face::KnobRing> (*face, { x, 832.0f }) != nullptr;
+        check (raised, "BASS, MIDDLE and TREBLE stand at cy 832, their rings round them: the re-rendered plate's sockets");
+        juce::StringArray shortFaders;
+        for (const char* id : { "comp", "blend", "octave", "chorus", "reverb" })
+            if (auto* f = named (*face, id); f == nullptr || f->getHeight() != 96 || std::abs (f->getBounds().toFloat().getCentreY() - 864.5f) > 1.0f)
+                shortFaders.add (juce::String (id) + " " + (f == nullptr ? juce::String ("missing") : f->getBounds().toString()));
+        check (shortFaders.isEmpty(), "COMP, BLEND, OCTAVE, CHORUS and REVERB are faders 96 long round cy 864.5, as their slots"
+                                          + (shortFaders.isEmpty() ? juce::String() : ": not " + shortFaders.joinIntoString ("; ")));
+
+        // THE READINGS MOVED (the owner, 20.11): MEM and CPU in the text strip under the tones (catbay's tone_strip), PRESET
+        // and the preset's name top left and the version top right on the rim over the window, all in Io's paint; nothing
+        // left round the maker's plate, over POWERED BY and DARWIN'S CAT, where they stood.
+        std::vector<face::Legend*> legends;
+        allOf (*face, legends);
+        const auto legendIn = [&legends] (juce::Rectangle<float> place, juce::Rectangle<float> within)
+        {
+            for (auto* l : legends)
+                if (l->getBounds() == place.toNearestInt())     // MEM's shown only in the standalone, the gate a host
+                    return within.toNearestInt().contains (l->getBounds());
+            return false;
+        };
+        const auto inked = [&at, &day] (juce::Rectangle<float> box)
+        {
+            int n = 0;
+            for (float y = box.getY(); y < box.getBottom(); y += 1.0f)
+                for (float x = box.getX(); x < box.getRight(); x += 1.0f)
+                    n += brightness (at (day, x, y)) > 0.6f ? 1 : 0;     // Io's paint; the plate itself stays under 0.36 there
+            return n;
+        };
+        const int inStrip = inked (layout::toneTextStrip), rimLeft = inked ({ 0.0f, 0.0f, 400.0f, 73.0f }),
+                  rimRight = inked ({ 1300.0f, 0.0f, 372.0f, 73.0f });
+        check (legendIn (layout::memoryPlace, layout::toneTextStrip) && legendIn (layout::loadPlace, layout::toneTextStrip) && inStrip > 25,
+               "MEM's and CPU's boxes lie inside the strip under the tones, written there (" + juce::String (inStrip) + " inked pixels)");
+        check (legendIn (layout::presetPlace, layout::rim) && legendIn (layout::versionPlace, layout::rim) && rimLeft > 40 && rimRight > 25,
+               "PRESET and the version stand on the rim over the window, left and right (" + juce::String (rimLeft) + " and "
+                   + juce::String (rimRight) + " inked pixels)");
+        const juce::Rectangle<float> roundLogo[] { juce::Rectangle<float>::leftTopRightBottom (540.0f, 645.0f, 772.0f, 700.0f),
+                                                   juce::Rectangle<float>::leftTopRightBottom (900.0f, 645.0f, 1132.0f, 700.0f) };
+        int legendsThere = 0, inkThere = 0;
+        for (const auto& area : roundLogo)
+        {
+            for (auto* l : legends)
+                legendsThere += l->isVisible() && l->getBounds().intersects (area.toNearestInt()) ? 1 : 0;
+            inkThere += inked (area);
+        }
+        check (legendsThere == 0 && inkThere == 0, "nothing is drawn round the logo over the plates (" + juce::String (legendsThere)
+                                                       + " readings, " + juce::String (inkThere) + " inked pixels there)");
+    }
+
+    // THE SITE'S cabin-dial.webp (IoEditor::withDialClear): the cabin clear in a disk of 37.8 stage px round the dosimeter's
+    // hub (stage 119.2, 564.9), inside its bezel's ring; untouched a pixel past it.
+    {
+        juce::Image plate (juce::Image::ARGB, 3344, 1882, true);
+        plate.clear (plate.getBounds(), juce::Colours::darkgrey);
+        const auto cut = io::IoEditor::withDialClear (plate, 2.0f);
+        const auto alphaAt = [&cut] (float x, float y) { return cut.getPixelAt ((int) (x * 2.0f), (int) (y * 2.0f)).getAlpha(); };
+        const auto hub = layout::dialHub;
+        bool clear = alphaAt (hub.x, hub.y) == 0, kept = alphaAt (0.0f, 0.0f) == 255 && plate.getPixelAt (238, 1129).getAlpha() == 255;
+        for (const auto& towards : { juce::Point<float> (1.0f, 0.0f), { -1.0f, 0.0f }, { 0.0f, 1.0f }, { 0.0f, -1.0f } })
+        {
+            clear = clear && alphaAt (hub.x + towards.x * 36.5f, hub.y + towards.y * 36.5f) == 0;
+            kept  = kept && alphaAt (hub.x + towards.x * 39.5f, hub.y + towards.y * 39.5f) == 255;
+        }
+        check (cut.getBounds() == plate.getBounds() && clear && kept,
+               "cabin-dial.webp's plate is clear in the dosimeter's disk, 37.8 stage px round its hub, and as it was past it");
+    }
+
+    // THE WORLD BEHIND THE GLASS: Io, in the speed's gear, parked at PARK.
+    std::vector<redpaw::Windscreen*> views;
+    allOf (*face, views);
+    auto* view = views.empty() ? nullptr : views.front();
+    const auto line = [view] { return view != nullptr ? view->statusLine() : juce::String ("no view"); };
+    check (view != nullptr && line().startsWith ("GPU  Io"), "the world behind the glass is Io (" + line() + ")");
+    if (lever != nullptr)
+    {
+        pull (1);
+        check (line().contains ("gear 1") && ! line().contains ("PARK"), "...on SLOW in its first gear (" + line() + ")");
+        pull (2);
+        check (line().contains ("gear 2") && ! line().contains ("PARK"), "...on FAST in its second (" + line() + ")");
+        pull (0);
+        check (line().contains ("gear 2 PARK"), "...and parked at PARK, the gear kept (" + line() + ")");
+        pull (1);
+    }
+
+    // THE AMP'S KNOBS ARE THE WORLD'S INPUTS, and THE NIGHT GLOW FOLLOWS IT. The drive is stepped here, by no time: the
+    // window is never shown, so no frame takes the knobs to it.
+    {
+        auto* d = view != nullptr ? dynamic_cast<io::IoDrive*> (&view->drive()) : nullptr;
+        const auto knobs = [d] { if (d == nullptr) return std::array<double, 3> { -1.0, -1.0, -1.0 }; d->step (0.0); return d->io().knobs(); };
+        const auto words = [] (const std::array<double, 3>& k) { return juce::String (k[0], 3) + ", " + juce::String (k[1], 3) + ", " + juce::String (k[2], 3); };
+        setPlain (params::preampGain, 10.0f);
+        setPlain (params::ampBlend, 0.25f);
+        settle();
+        const auto first = knobs();
+        setPlain (params::preampGain, 2.5f);
+        setPlain (params::ampBlend, 0.8f);
+        settle();
+        const auto then = knobs();
+        check (std::abs (first[0] - 1.0) < 1.0e-6 && std::abs (first[1] - 0.25) < 1.0e-6 && std::abs (then[0] - 0.25) < 1.0e-6
+                   && std::abs (then[1] - 0.8) < 1.0e-6,
+               "DRIVE's and BLEND's places over their ranges reach the drive: 10 and 0.25 as " + words (first) + ", 2.5 and 0.8 as "
+                   + words (then));
+        // PRESENCE, the sulphur snow: where the face opened it, then turned full by the hand, then saved full, moved, and the
+        // saved state restored over it.
+        auto* presence = standingAt<face::ArtKnob> (*face, layout::presence);
+        auto* own = amp->apvts.getParameter (io::presenceParam);
+        const auto valueOf = [own] { return own != nullptr ? (double) own->getValue() : -1.0; };
+        const double atStart = then[2];
+        if (presence != nullptr)
+            presence->setValue (1.0f, true);
+        settle();
+        const auto full = knobs();
+        const double turned = valueOf();
+        check (std::abs (atStart - io::presenceDefault) < 1.0e-6 && std::abs (full[2] - 1.0) < 1.0e-6 && std::abs (turned - 1.0) < 1.0e-6,
+               "PRESENCE reaches the world's snow: " + juce::String (atStart, 3) + " as the face opens, " + juce::String (full[2], 3)
+                   + " with its knob turned full (" + juce::String (io::presenceParam) + " " + juce::String (turned, 3) + ")");
+
+        juce::MemoryBlock saved;
+        amp->getStateInformation (saved);
+        setPlain (io::presenceParam, 0.4f);
+        settle();
+        const auto moved = knobs();
+        amp->setStateInformation (saved.getData(), (int) saved.getSize());
+        settle();
+        const auto back = knobs();
+        const double restored = valueOf();
+        check (std::abs (moved[2] - 0.4) < 1.0e-6 && std::abs (restored - 1.0) < 1.0e-6 && std::abs (back[2] - 1.0) < 1.0e-6
+                   && presence != nullptr && std::abs (presence->getValue() - 1.0f) < 1.0e-3f,
+               "...saved with the state and restored: full, moved to " + juce::String (moved[2], 3) + ", the state back -> "
+                   + juce::String (restored, 3) + ", the snow " + juce::String (back[2], 3) + ", the knob "
+                   + juce::String (presence != nullptr ? presence->getValue() : -1.0f, 3));
+
+        const auto darkAt = [&] (float drive)
+        {
+            setPlain (params::preampGain, drive);
+            setPlain (params::ampBlend, 1.0f);
+            settle();
+            if (d != nullptr)
+            {
+                d->step (0.0);
+                d->io().settle();       // the knobs reached at once, not eased
+                d->step (0.0);
+            }
+            io->followWorld();
+            return std::pair<float, float> { d != nullptr ? d->cabinDark() : -1.0f, io->cabinDark() };
+        };
+        const auto step = [] (float share) { return (float) juce::roundToInt (share * (float) io::Cabin::darkSteps) / (float) io::Cabin::darkSteps; };
+        // DRIVE turned up is the day (the owner, 20.11): its foot the night, its head the highest Sun.
+        const auto night = darkAt (0.0f), noon = darkAt (10.0f);
+        check (night.first > 0.5f && juce::approximatelyEqual (night.second, step (night.first))
+                   && noon.first < 0.2f && juce::approximatelyEqual (noon.second, step (noon.first)),
+               "the night glow follows the world: the cabin " + juce::String (night.first, 3) + " dark at DRIVE 0, the face "
+                   + juce::String (night.second, 3) + "; " + juce::String (noon.first, 3) + " at DRIVE 10, the face " + juce::String (noon.second, 3));
+    }
+
+    // THE WORLD'S FILES, as the build lays them out: what io::shippedArt reads from the factory folder's Faces/IoTideBass.
+    {
+        const auto art = io::shippedArt();
+        juce::StringArray lost;
+        for (const auto& [plate, name] : { std::pair { art.day, "dashboard.webp" }, std::pair { art.dark, "dashboard_dark.webp" } })
+            if (const auto pic = plate ? plate() : io::IoGl::Picture {}; ! pic.valid() || pic.width != 3344 || pic.height != 1882)
+                lost.add (name);
+        std::array<bool, io::IoWorld::numVariants> filled {};
+        for (const auto& base : art.finds ? art.finds() : std::vector<std::string>())
+        {
+            const int role = io::IoWorld::roleOf (base.substr (0, base.find ('/')));
+            const auto bytes = art.bytes ? art.bytes (base + ".mesh") : std::vector<std::uint8_t>();
+            const auto mesh = io::IoWorld::readMesh (bytes.data(), bytes.size());
+            if (role >= 0 && mesh.ok && mesh.nv > 0 && mesh.ni > 0 && art.text && ! art.text (base + ".txt").empty())
+                filled[(size_t) role] = true;
+        }
+        for (size_t v = 0; v < filled.size(); ++v)
+            if (! filled[v])
+                lost.add (juce::String ("finds/") + io::IoWorld::variants[v] + "3d");
+        const auto pit = art.text ? io::IoWorld::pitRadiusOf (art.text ("tubebase3d/tubebase.txt")) : std::nullopt;
+        if (! pit || std::abs (*pit - 13.0) > 1.0e-9)
+            lost.add ("the skylight's pit radius (finds/tubebase3d/tubebase.txt)");
+        check (lost.isEmpty(), "the world finds every file it reads in the factory folder's Faces/" + juce::String (ORBITAMP_PRODUCT_NAME)
+                                   + (lost.isEmpty() ? juce::String() : ": not " + lost.joinIntoString (", ")));
+    }
+
+    face.reset();
+    amp.reset();
+    std::printf ("%s\n", failed == 0 ? "PASSED" : "FAILED");
+    return failed == 0 ? 0 : 1;
+}
