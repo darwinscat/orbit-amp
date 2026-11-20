@@ -83,6 +83,12 @@ deepgroove-channel  orbitamp_gates  DEEPGROOVE_GATE_OWNS_HOME=1
 deepgroove-face     orbitamp_gates
 deepgroove-nofactory orbitamp_gates
 
+# ...and the Io rover's, its one sound on the bass's chain, and its face: the lever's PARK, the two speeds alike, the tones
+# by name, PRESENCE frozen, a still and the night's glow.
+iobass-set          orbitamp_gates
+iobass-face         orbitamp_gates
+iobass-nofactory    orbitamp_gates
+
 # Every amp in one binary: all of them side by side in one process, each its own product (src/Product.h).
 family             orbitamp_gates
 

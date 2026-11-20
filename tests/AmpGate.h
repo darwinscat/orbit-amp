@@ -241,6 +241,26 @@ inline const Product& product()
             "a bass's gear never pulled since INIT opens on its own DRIVE, BLEND, tones, COMP and effects, not the other gear's",
             "each gear comes back with the DRIVE, BLEND, BASS, MID, TREBLE, COMP threshold, OCTAVE and CHORUS it was left with",
             "INIT gives COMP on, three quarters of the signal through it at 4:1 on OPTO, OCTAVE and CHORUS in the strip and on, no ENVELOPE, both cuts on, no delay, and the room in the strip and on" } },
+        // The Io rover: one sound under its two speeds, SLOW and FAST, a pair over one memory — a stand-in until the SansAmp
+        // RBI has captures: the ReVolt Bass's DIRT, as DeepGrooveBass's DIRT gear stands, on a plate it opens with none of,
+        // no delay, BLEND at 80/20, on the dozen's 8x10, drawn (src/io/IoLineup.cpp). Made after the family's folder.
+        { "IoBass", "Io rover", "IOBASS_GATE_OWNS_HOME",
+          {
+              { "revolt-bass-dirt-e9d4", "", "Plate", 0.0f, 0.0f, nullptr, "rock-03-8x10-stack", 0.8f },
+              { "revolt-bass-dirt-e9d4", "", "Plate", 0.0f, 0.0f, nullptr, "rock-03-8x10-stack", 0.8f },
+          },
+          "SLOW and FAST are one pack over one memory: the same sound",
+          {},
+          "its one pack is installed",
+          "its tone knobs are its pack's dials on the bass's chain — the ReVolt Bass's DIRT Bass, Mid and Treble — with no "
+          "frequency knob and no switch",
+          "...and both speeds on the bass's dozen's 8x10, drawn",
+          true,
+          false,
+          { false, false, false, true,
+            "the one memory never pulled since INIT opens on its own DRIVE, BLEND, tones, COMP and effects",
+            "it comes back with the DRIVE, BLEND, BASS, MID, TREBLE, COMP threshold, OCTAVE and CHORUS it was left with",
+            "INIT gives COMP on, three quarters of the signal through it at 4:1 on OPTO, OCTAVE and CHORUS in the strip and on, no ENVELOPE, both cuts on, no delay, and the room in the strip and on" } },
     };
 
     for (const auto& p : products)

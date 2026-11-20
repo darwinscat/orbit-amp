@@ -35,6 +35,7 @@
 #include "redpaw/RedPawSkin.h"
 #include "redgroove/RedGrooveLineup.h"
 #include "underwater/UnderwaterLineup.h"
+#include "io/IoLineup.h"
 #include "catpit/CatpitLayout.h"
 #include "face/Strip.h"
 #include "ProductPage.h"
@@ -78,6 +79,7 @@ namespace
             { products::amberPawAmp(), &redpaw::skinOf (products::amberPawAmp()).lineup },
             { products::redGrooveBass(), &redgroove::lineup() },
             { products::deepGrooveBass(), &underwater::lineup() },
+            { products::ioBass(),      &io::lineup() },
         };
     }
 
@@ -338,13 +340,14 @@ int ORBITAMP_GATE_MAIN()
 
         // ...THE BASS AMPS, OrbitBass and the walker alike: none of the shelf, whatever the number; their player's IRs in
         // `Bass IRs` — the walker's cabinets drawn besides (channels::Lineup::drawnCabinets), no file at all.
-        for (const auto* bass : { &products::orbitBass(), &products::redGrooveBass(), &products::deepGrooveBass() })
+        for (const auto* bass : { &products::orbitBass(), &products::redGrooveBass(), &products::deepGrooveBass(), &products::ioBass() })
         {
             bool none = cabinetsOn (*bass) == 0;
             for (int i = 0; i < params::cabIrNames.size(); ++i)
                 none = none && ! bass->playsCabIr (i) && AmpProcessor::cabIrBytes (*bass, i).data == nullptr;
             const bool ownDrawn = bass != &products::orbitBass();
-            const bool drawn = ! ownDrawn || (bass == &products::redGrooveBass() ? redgroove::lineup() : underwater::lineup()).drawnCabinets;
+            const bool drawn = ! ownDrawn || (bass == &products::redGrooveBass() ? redgroove::lineup()
+                                                 : bass == &products::ioBass() ? io::lineup() : underwater::lineup()).drawnCabinets;
             check (bass->chain == Chain::bass && none && drawn && juce::String (bass->irsFolder()) == "Bass IRs",
                    juce::String (bass->name) + " plays no guitar cabinet: no place of the shelf held, no number a cabinet, RED GIANT none; "
                    "the player's IRs in `Bass IRs`" + (ownDrawn ? ", its own cabinets drawn" : ""));
