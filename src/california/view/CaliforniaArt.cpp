@@ -13,7 +13,7 @@ namespace orbitamp::california
 
 namespace
 {
-    constexpr const char* product = "California";
+    constexpr const char* product = "CaliforniaAmp";
     constexpr const char* folderVariable = "CALIFORNIA_ART_DIR";
 
     juce::File fileOf (const std::string& name) { return face::renders::fileOf (product, name.c_str(), folderVariable); }

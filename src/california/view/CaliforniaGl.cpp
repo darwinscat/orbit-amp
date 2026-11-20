@@ -764,6 +764,7 @@ void CaliforniaGl::drawScene (int rw, int rh, int cw, int ch)
         glUniformMatrix4fv (p.u ("uViewProj"), 1, GL_FALSE, VP.data());
     };
     const auto v3 = [] (int loc, const V3& v) { glUniform3f (loc, (float) v[0], (float) v[1], (float) v[2]); };
+    ++frameStamp;
     const auto setLight = [&] (const Program& p)
     {
         v3 (p.u ("uSun"), SUN); glUniform2f (p.u ("uSunXZ"), (float) SUN_XZ[0], (float) SUN_XZ[1]); glUniform1f (p.u ("uSunTan"), (float) SUN_TAN);
@@ -778,6 +779,9 @@ void CaliforniaGl::drawScene (int rw, int rh, int cw, int ch)
         glUniform2f (p.u ("uWind"), (float) WIND[0], (float) WIND[1]);
         glUniform2f (p.u ("uHitT"), (float) std::min (s.hitT, 1e4), (float) s.hitS);
     };
+    // The frame's uniforms, the same for every draw of a scene: set once a scene in each program (a program keeps
+    // them), not again for each of its draws.
+    const auto setFrame = [&] (const Program& p) { if (p.stamp == frameStamp) return; p.stamp = frameStamp; setCommon (p); setLight (p); };
     const bool cabin = drawsCabin();
     const auto box = cabin ? glassBox : std::optional<V4>();
 
@@ -810,7 +814,7 @@ void CaliforniaGl::drawScene (int rw, int rh, int cw, int ch)
     {
         const auto& p = flora;
         glUseProgram (p.id);
-        setCommon (p); setLight (p);
+        setFrame (p);
         glUniform1f (p.u ("uThin"), (float) quality.thin); glUniform1f (p.u ("uGustPh"), (float) gustPh);
         glUniform1f (p.u ("uViewBottom"), (float) (box ? 1 - 2 * (*box)[3] : -1.0));   // the glass's lower edge (the cabin's own)
         // THE CELLS THAT CAN SHOW. The shader culls a flower whose root (somewhere in its cell's square) is past the
@@ -819,24 +823,27 @@ void CaliforniaGl::drawScene (int rw, int rh, int cw, int ch)
         // one of them, so no flower that shows is lost. The window's rows go in bands of 8, each drawn over the run of
         // its cells that can show (the window's base and width moved to it: every cell keeps its own flower).
         const double vb = box ? 1 - 2 * (*box)[3] : -1.0, y0 = camRel[1] - 1.9, y1 = camRel[1] + 1.5;
-        const auto lin = [&VP] (size_t row, double x, double y, double z)
-        { return (double) VP[row] * x + (double) VP[4 + row] * y + (double) VP[8 + row] * z + (double) VP[12 + row]; };
+        // the shader's tests as g (x, z) = a x + b z + c >= 0: in front (cp.w >= 0.2), within the left and right
+        // edges (|cp.x| <= 1.06 cp.w + 0.8), over the glass's lower edge (ct.y >= ct.w (vb - 0.02))
+        const auto plane = [&] (size_t row, double y) { return std::array<double, 3> { (double) VP[row], (double) VP[8 + row], (double) VP[4 + row] * y + (double) VP[12 + row] }; };
+        const auto cpx = plane (0, y0), cpw = plane (3, y0), cty = plane (1, y1), ctw = plane (3, y1);
+        std::array<std::array<double, 3>, 4> tests {};
+        for (size_t k = 0; k < 3; ++k)
+        {
+            tests[0][k] = cpw[k] - (k == 2 ? 0.2 : 0.0);
+            tests[1][k] = 1.06 * cpw[k] + cpx[k] + (k == 2 ? 0.8 : 0.0);
+            tests[2][k] = 1.06 * cpw[k] - cpx[k] + (k == 2 ? 0.8 : 0.0);
+            tests[3][k] = cty[k] - (vb - 0.02) * ctw[k];
+        }
         const auto canShow = [&] (double x0, double z0, double cell, double reach)
         {
             const double x1 = x0 + cell, z1 = z0 + cell;
             const double ex = std::max ({ x0 - camFrac[0], 0.0, camFrac[0] - x1 }), ez = std::max ({ z0 - camFrac[1], 0.0, camFrac[1] - z1 });
             if (ex * ex + ez * ez > reach * reach) return false;
-            bool front = false, left = false, right = false, above = false;
-            for (int q = 0; q < 4; ++q)
-            {
-                const double x = (q & 1) ? x1 : x0, z = (q & 2) ? z1 : z0;
-                const double cpx = lin (0, x, y0, z), cpw = lin (3, x, y0, z), cty = lin (1, x, y1, z), ctw = lin (3, x, y1, z);
-                front = front || cpw >= 0.2;
-                left = left || -cpx <= cpw * 1.06 + 0.8;
-                right = right || cpx <= cpw * 1.06 + 0.8;
-                above = above || cty >= ctw * (vb - 0.02);
-            }
-            return front && left && right && above;
+            for (const auto& g : tests)       // each test linear over the ground: its largest at one corner
+                if (g[0] * (g[0] > 0 ? x1 : x0) + g[1] * (g[1] > 0 ? z1 : z0) + g[2] < -1.0e-9)
+                    return false;
+            return true;
         };
         for (const auto& F : W::flora)
         {
@@ -868,7 +875,7 @@ void CaliforniaGl::drawScene (int rw, int rh, int cw, int ch)
     {
         const auto& p = prop;
         glUseProgram (p.id);
-        setCommon (p); setLight (p);
+        setFrame (p);
         glUniform1i (p.u ("uNoise"), 2);
         std::array<int, 3> nOak {};
         const std::array<Prop*, 3> lods { &oakNear, &oakMid, &oakFar };
@@ -968,7 +975,7 @@ void CaliforniaGl::drawScene (int rw, int rh, int cw, int ch)
         const int nf = fill (signFlags, wd.flags(), -1, -1, 420, 1);
         const auto& p = sign;
         glUseProgram (p.id);
-        setCommon (p); setLight (p);
+        setFrame (p);
         glActiveTexture (GL_TEXTURE5); glBindTexture (GL_TEXTURE_2D, texSigns);
         glActiveTexture (GL_TEXTURE6); glBindTexture (GL_TEXTURE_2D, texFlags);
         glUniform1i (p.u ("uAtlas"), 5); glUniform1i (p.u ("uFlags"), 6); glUniform1i (p.u ("uNoise"), 2);
@@ -984,7 +991,7 @@ void CaliforniaGl::drawScene (int rw, int rh, int cw, int ch)
     {
         const auto& p = bfly;
         glUseProgram (p.id);
-        setCommon (p); setLight (p);
+        setFrame (p);
         glUniform1f (p.u ("uPxAngle"), (float) pxAngle);
         int n = 0;
         const auto& Bs = wd.butterflies();
@@ -1026,7 +1033,7 @@ void CaliforniaGl::drawScene (int rw, int rh, int cw, int ch)
         const auto& p = mono;
         const auto& f = *fMono;
         glUseProgram (p.id); glBindVertexArray (vaoEmpty);
-        setCommon (p); setLight (p);
+        setFrame (p);
         v3 (p.u ("uMonoC"), { camFrac[0] + nearest (f.x - s.x), f.y, camFrac[1] + nearest (f.z - s.z) });
         v3 (p.u ("uMonoX"), { -f.nz * monoWide / 2, 0, f.nx * monoWide / 2 }); v3 (p.u ("uMonoZ"), { f.nx * monoThick / 2, 0, f.nz * monoThick / 2 });
         glUniform1f (p.u ("uMonoH"), (float) (monoHigh + 0.3)); glUniform1f (p.u ("uMonoFade"), (float) smoothstep (0, 1, fvis));
@@ -1041,7 +1048,7 @@ void CaliforniaGl::drawScene (int rw, int rh, int cw, int ch)
         {
             const auto& p = mesh;
             glUseProgram (p.id); glBindVertexArray (m.vao);
-            setCommon (p); setLight (p);
+            setFrame (p);
             for (GLenum i = 0; i < 3; ++i) { glActiveTexture (GL_TEXTURE10 + i); glBindTexture (GL_TEXTURE_2D, m.tex[i]); }
             glUniform1i (p.u ("uTex1"), 10); glUniform1i (p.u ("uTex2"), 11); glUniform1i (p.u ("uTex3"), 12);
             v3 (p.u ("uMeshAt"), at); glUniform1f (p.u ("uMeshYaw"), (float) yaw);
@@ -1161,7 +1168,7 @@ void CaliforniaGl::drawScene (int rw, int rh, int cw, int ch)
             const auto& g = outerAt[L];
             const auto& p = L == 0 ? ground : groundH;
             glUseProgram (p.id);
-            setCommon (p); setLight (p);
+            setFrame (p);
             glUniform1i (p.u ("uDetail"), 1);
             glUniform2f (p.u ("uDetOff0"), (float) fract (ccx / 3.3), (float) fract (ccz / 3.3)); glUniform2f (p.u ("uDetOff1"), (float) fract (ccx / 0.85), (float) fract (ccz / 0.85));
             glUniform2f (p.u ("uLvlOrigin"), (float) (g.ox - ccx), (float) (g.oz - ccz));
@@ -1234,7 +1241,7 @@ void CaliforniaGl::drawScene (int rw, int rh, int cw, int ch)
     {
         const auto& p = sky;
         glUseProgram (p.id); glBindVertexArray (vaoEmpty);
-        setCommon (p); setLight (p);
+        setFrame (p);
         glUniform1i (p.u ("uNoise"), 2);
         v3 (p.u ("uCamFwd"), basis.f); v3 (p.u ("uCamRight"), basis.r); v3 (p.u ("uCamUp"), basis.u);
         glUniform2f (p.u ("uTanHalf"), (float) th, (float) tv); glUniform1f (p.u ("uShear"), (float) sh);
@@ -1250,7 +1257,7 @@ void CaliforniaGl::drawScene (int rw, int rh, int cw, int ch)
     {
         const auto& p = beam;
         glUseProgram (p.id); glBindVertexArray (vaoEmpty);
-        setCommon (p); setLight (p);
+        setFrame (p);
         v3 (p.u ("uBeamTop"), { camFrac[0] + beamU->x - s.x, beamU->y - 0.9 * W::saucerScale, camFrac[1] + beamU->z - s.z }); v3 (p.u ("uBeamFoot"), beamFoot);
         glUniform2f (p.u ("uBeamR"), (float) (1.3 * W::saucerScale), (float) beamR); glUniform1f (p.u ("uBeamA"), (float) beamU->beam);
         glDrawArrays (GL_TRIANGLES, 0, 28 * 6);
@@ -1280,7 +1287,7 @@ void CaliforniaGl::drawScene (int rw, int rh, int cw, int ch)
             c = { camRel[0] + (c[0] - camRel[0]) * kk, camRel[1] + (c[1] - camRel[1]) * kk, camRel[2] + (c[2] - camRel[2]) * kk };
             const auto& p = sprite;
             glUseProgram (p.id); glBindVertexArray (vaoEmpty);
-            setCommon (p); setLight (p);
+            setFrame (p);
             glActiveTexture (GL_TEXTURE5); glBindTexture (GL_TEXTURE_2D, sp.tex);
             glUniform1i (p.u ("uAtlas"), 5);
             v3 (p.u ("uCenter"), c);
@@ -1323,7 +1330,7 @@ void CaliforniaGl::drawScene (int rw, int rh, int cw, int ch)
     {
         const auto& p = wire;
         glUseProgram (p.id);
-        setCommon (p); setLight (p);
+        setFrame (p);
         glUniform1f (p.u ("uPxAngle"), (float) pxAngle);
         glBindBuffer (GL_ARRAY_BUFFER, instWire); glBufferSubData (GL_ARRAY_BUFFER, 0, nw * 28, wireData.data());
         glBindVertexArray (vaoWire);
@@ -1334,7 +1341,7 @@ void CaliforniaGl::drawScene (int rw, int rh, int cw, int ch)
     {
         const auto& p = particle;
         glUseProgram (p.id); glBindVertexArray (vaoEmpty);
-        setCommon (p); setLight (p);
+        setFrame (p);
         v3 (p.u ("uCamR"), basis.r); v3 (p.u ("uCamU"), basis.u); v3 (p.u ("uCamF"), basis.f);
         std::vector<float> burst (16), burstF (16);
         bool anyBurst = false;

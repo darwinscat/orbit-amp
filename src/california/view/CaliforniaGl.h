@@ -109,6 +109,7 @@ private:
     {
         std::uint32_t id = 0;
         mutable std::unordered_map<const char*, int> at;     // by the name's literal: each call site's own
+        mutable int stamp = -1;                               // the scene its frame's uniforms were last set for
         int u (const char* name) const;
     };
     Program ground, groundH, prop, flora, bfly, mono, mesh, beam, sky, sprite, wire, particle, post, glass, sign, pendant;
@@ -159,6 +160,7 @@ private:
     double outsideGain = -1.0;                              // the finished frame's dashboard outside the glass, as last drawn
     std::uint32_t outsideTex = 0;
     int repeats = 1;
+    int frameStamp = 0;
     CaliforniaWorld::Quality quality;
     double lastFrameMs = -1.0;
 

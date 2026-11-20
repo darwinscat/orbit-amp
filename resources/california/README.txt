@@ -1,4 +1,4 @@
-The California world's art and files, as the installer lays them out (Faces/California in the factory folder) and
+The California world's art and files, as the installer lays them out (Faces/CaliforniaAmp in the factory folder) and
 src/california/view/CaliforniaArt.cpp reads them at run time (CALIFORNIA_ART_DIR, src/face/Renders.h). Never built
 into a binary. The world's prototype (california-gl.js) names its pictures .png; each is read from the .webp of the
 same name here.

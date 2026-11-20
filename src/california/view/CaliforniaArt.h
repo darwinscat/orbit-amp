@@ -12,8 +12,8 @@ namespace orbitamp::california
     binary: dashboard.webp (3344 x 1882, the windshield alpha 0), dashboard_pendant.webp and its .txt (the peace
     pendant, its box and pivot), label.webp (the CENSORED word), and finds/ — the sprites' and the signs', the flags'
     and the chalk's atlases with their tables, the meshes (CBMESH1) with their tables and textures — as
-    resources/california/README.txt lists them, each found by face::renders::fileOf as product "California"
-    (Faces/California in the factory folder, or the folder CALIFORNIA_ART_DIR names where it has the file). The
+    resources/california/README.txt lists them, each found by face::renders::fileOf as product "CaliforniaAmp"
+    (Faces/CaliforniaAmp in the factory folder, or the folder CALIFORNIA_ART_DIR names where it has the file). The
     prototype names its pictures .png; they are read from the .webp of the same name. Each is read and decoded (by
     libwebp, into straight RGBA) when the GPU's half asks for it, so nothing of them is held in between. A file that
     is not there leaves its part out. What a CaliforniaDrive is made with: `CaliforniaDrive (shippedArt())`; `wink`

@@ -1491,7 +1491,7 @@ if(NOT MSVC)
     set_source_files_properties(src/california/view/CaliforniaGl.cpp PROPERTIES COMPILE_OPTIONS "-ffp-contract=off")
 endif()
 # ...and the art and the files it reads (src/california/view/CaliforniaArt.h, resources/california/README.txt): WebP
-# pictures, the meshes and the tables as they are, laid out by the installer in the factory folder's Faces/California
+# pictures, the meshes and the tables as they are, laid out by the installer in the factory folder's Faces/CaliforniaAmp
 # and read from there at run time (CALIFORNIA_ART_DIR), never built into a binary; decoded with libwebp.
 set(CALIFORNIA_ART_SOURCES src/california/view/CaliforniaArt.cpp src/underwater/view/UnderwaterArt.cpp)
 view_demo(california_view_demo "CaliforniaViewDemo" SOURCES ${REDPAW_VIEW_SOURCES} ${CALIFORNIA_VIEW_SOURCES} ${CALIFORNIA_ART_SOURCES} src/face/Renders.cpp
