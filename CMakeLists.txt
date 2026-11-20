@@ -631,7 +631,8 @@ endfunction()
 # face, its name, its number and what it carries.
 #
 #   add_amp(<Name>  CODE <code>  [BY_NAME]  [ICON <Amp>]
-#           SOURCES <files...>  LIBRARIES <targets...>  [ART <files...>]  [SET <packs...>]  [WHOLE_SHELF])
+#           SOURCES <files...>  LIBRARIES <targets...>  [ART <files...>]  [ART_FOLDERS <folders...>]
+#           [SET <packs...>]  [WHOLE_SHELF])
 #
 #   <Name>      the target, the PRODUCT_NAME and the stem of every bundle it builds; in lower case, its
 #               bundle id and its CLAP id, com.darwinscat.<name>; and its icon, resources/icon/<Name>-*.
@@ -648,6 +649,8 @@ endfunction()
 #   SOURCES     what it is compiled from; LIBRARIES what it links, ahead of JUCE's recommended flags.
 #   ART         its renders, in the factory folder's Faces/<Name>, each under its own file's name, where its
 #               face reads them (src/face/Renders.h).
+#   ART_FOLDERS folders of its art laid out whole, each as a folder of its own name in Faces/<Name>, every
+#               file in it at the same path under it: a world's finds/, say (Faces/<Name>/finds/...).
 #   SET         the packs it plays, by their folders' names in the tree's set (THE SET), less `.orbitrig` —
 #               at the factory folder's top, zipped.
 #   WHOLE_SHELF the whole cabinet shelf, the folders the cabinet catalog gives OrbitAmp alone with Darwin's
@@ -762,7 +765,7 @@ function(export_entry_points_only)
 endfunction()
 
 function(add_amp name)
-    cmake_parse_arguments(PARSE_ARGV 1 AMP "BY_NAME;WHOLE_SHELF;BASS" "CODE;ICON" "SOURCES;LIBRARIES;ART;SET")
+    cmake_parse_arguments(PARSE_ARGV 1 AMP "BY_NAME;WHOLE_SHELF;BASS" "CODE;ICON" "SOURCES;LIBRARIES;ART;ART_FOLDERS;SET")
     string(TOLOWER "${name}" id)
     set(iconOf "${name}")
     if(AMP_ICON)
@@ -866,6 +869,15 @@ function(add_amp name)
         get_filename_component(base "${render}" NAME)
         list(APPEND files "${render}")
         list(APPEND at "Faces/${name}/${base}")
+    endforeach()
+    foreach(folder IN LISTS AMP_ART_FOLDERS)
+        get_filename_component(top "${folder}" NAME)
+        file(GLOB_RECURSE inside CONFIGURE_DEPENDS RELATIVE "${folder}" "${folder}/*")
+        list(SORT inside)
+        foreach(rel IN LISTS inside)
+            list(APPEND files "${folder}/${rel}")
+            list(APPEND at "Faces/${name}/${top}/${rel}")
+        endforeach()
     endforeach()
     foreach(pack IN LISTS AMP_SET)
         if(NOT pack IN_LIST ORBITAMP_SET_NAMES)
@@ -1660,13 +1672,15 @@ set(DEEPGROOVEBASS_SOURCES
 # THE IO ROVER'S FACE (src/io): the family's console on the rover's dashboard, the SansAmp RBI's controls, our own
 # pictograms over the sockets and a few words in B612 (src/io/IoGlyphs.h) — a European Latin subset of it, embedded
 # (resources/io/fonts, the OFL beside it). Its two plates, the day's and the dark one, made WebP from catbay's renders
-# (resources/io/README.txt), laid out in the factory folder's Faces/IoBass and read at run time (IO_ART_DIR): the face
-# paints the day's, the dark one is the Io world's. The knobs and the faders' cap its own where resources/io/face has one,
-# the helicopter's otherwise, with its MIDI list; no mark of its own — the maker's plate wears the family's cat. Its world
-# comes later (feat/io-world): until then the Mars plains run behind the glass and the face paints the cabin itself.
+# (resources/io/README.txt), laid out in the factory folder's Faces/IoBass and read at run time (IO_ART_DIR). The knobs and
+# the faders' cap its own where resources/io/face has one, the helicopter's otherwise, with its MIDI list; no mark of its
+# own — the maker's plate wears the family's cat. Its world, Io (src/io/view), reads both plates and finds/ beside them
+# from the same folder (IOBASS_ART_FOLDERS: finds/ laid out whole) and draws the cabin, the two plates crossfaded by the
+# Sun; the face paints the day's plate itself whenever the world does not draw the cabin.
 set(IOBASS_RENDERS
     "${CMAKE_CURRENT_SOURCE_DIR}/resources/io/dashboard.webp"
     "${CMAKE_CURRENT_SOURCE_DIR}/resources/io/dashboard_dark.webp")
+set(IOBASS_ART_FOLDERS "${CMAKE_CURRENT_SOURCE_DIR}/resources/io/finds")
 file(GLOB io_own CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/resources/io/face/*")
 foreach(render IN ITEMS midi.txt knob-drive.webp knob-tone.webp fader-cap.webp)
     if("${CMAKE_CURRENT_SOURCE_DIR}/resources/io/face/${render}" IN_LIST io_own)
@@ -1687,7 +1701,10 @@ set(IOBASS_SOURCES
     src/io/IoGlyphs.cpp
     src/io/IoLineup.cpp
     src/ui/CabWindow.cpp             # the bass's cabinets, drawn
-    ${REDPAW_VIEW_SOURCES})          # the windscreen the rovers look through, on the Mars plains until Io's world
+    ${REDPAW_VIEW_SOURCES}           # the windscreen the rovers look through ...
+    ${IO_VIEW_SOURCES}               # ... looking out on Io's sulphur plains
+    ${IO_GL_SOURCES}
+    ${IO_ART_SOURCES})
 
 # ----------------------------------------------------------------------------
 # THE AMPS — the family's table, one row an amp (THE FAMILY says what a row says).
@@ -1804,11 +1821,13 @@ add_amp(DeepGrooveBass CODE Dgrv   BY_NAME    BASS
 # for now.
 add_amp(IoBass CODE Iobs   BY_NAME    BASS    ICON DeepGrooveBass
     ART       ${IOBASS_RENDERS}
+    ART_FOLDERS ${IOBASS_ART_FOLDERS}
     SOURCES   ${IOBASS_SOURCES}
     LIBRARIES
         OrbitAmpData                 # the family's mark, the notice, the disclaimer — BinaryData::*
         IoData                       # B612's letters
         OrbitAmpShaders              # the view's shaders
+        felitronics::appkit_webp     # the world's art, decoded
         ${AMP_ENGINE_LIBRARIES}
         juce::juce_opengl            # the view, on the GPU
     SET       ${IOBASS_SET})

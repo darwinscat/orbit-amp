@@ -9,11 +9,11 @@ cwebp 1.6.0, run in this folder on copies of them in source/, as resources/under
   cwebp -q 90 -alpha_q 100 -exact -sharp_yuv -m 6 source/dashboard_day.png -o dashboard.webp
   cwebp -q 90 -alpha_q 100 -exact -sharp_yuv -m 6 source/dashboard_dark.png -o dashboard_dark.webp
 
-dashboard.webp       the day's plate, which the face paints whenever the world does not draw the cabin itself (until
-                     the Io world's port comes: always). Lossy colour, the alpha lossless and exact.
+dashboard.webp       the day's plate, which the face paints whenever the world does not draw the cabin itself (the 1993
+                     landscape, the still, a picture taken). Lossy colour, the alpha lossless and exact.
 dashboard_dark.webp  the same cabin in the dark, for the world's renderer, which crossfades the two by the Sun
                      (catbay's cabinDay). The face never reads it; it only follows how dark the world says the cabin is
-                     (IoEditor::setCabinDark) with its labels' glow.
+                     (IoDrive::cabinDark, taken every frame: IoEditor::followWorld) with its labels' glow.
 
 sockets.txt is catbay's table as handed over (final/sockets_dashboard.txt): every control's centre and size, in stage
 px. The face's layout, src/io/IoLayout.h, is read from it; sock_dosimeter is the world's (it draws the needle). The

@@ -7,7 +7,7 @@
 #include "IoLayout.h"
 #include "IoLineup.h"
 
-#include "../redpaw/view/PlainsDrive.h"
+#include "view/IoArt.h"
 #include "../ui/BassControls.h"
 #include "../ui/CabWindow.h"
 #include "../ui/FactoryMissing.h"
@@ -477,6 +477,12 @@ IoEditor::IoEditor (AmpProcessor& p)
     glassClicks.menu = [this] { showWindowMenu(); };
     cabin().worldDrawsPanel = [this] { return view->isVisible() && view->drawsCabin(); };
 
+    // THE AMP'S KNOBS DRIVE THE WORLD: DRIVE and BLEND told it whenever they move, and once now (PRESENCE with the tones,
+    // bindTones).
+    ioWorld = dynamic_cast<IoDrive*> (&view->drive());
+    for (const char* id : { params::preampGain, params::ampBlend })
+        follow (id, [this] (float) { if (ioWorld != nullptr) tellWorld (*ioWorld); })->sendInitialUpdate();
+
     park.sendInitialUpdate();
     showChannel();
 
@@ -502,11 +508,27 @@ IoEditor::~IoEditor()
     gl.detach();
 }
 
-/** THE WORLD BEHIND THE GLASS: until Io's own exists, the Mars plains (redpaw::PlainsDrive), a gear a speed. */
+/** THE WORLD BEHIND THE GLASS: Io (view/IoDrive.h), its art read from the factory folder's Faces/IoBass (view/IoArt.h)
+    — SLOW its first gear, FAST its second, PARK the rover on the shoulder. */
 std::unique_ptr<redpaw::Drive> IoEditor::makeDrive()
 {
-    // SEAM: the Io world's IoDrive goes here (feat/io-world), with the cabin's dark share it says (setCabinDark).
-    return std::make_unique<redpaw::PlainsDrive> (lineup().count());
+    return std::make_unique<IoDrive> (shippedArt());
+}
+
+void IoEditor::tellWorld (IoDrive& d) const
+{
+    // Each parameter's own value, 0..1 over its range (both are linear: DRIVE 0..10, BLEND 0..1).
+    if (auto* p = amp.apvts.getParameter (params::preampGain))
+        d.setDrive (p->getValue());
+    if (auto* p = amp.apvts.getParameter (params::ampBlend))
+        d.setBlend (p->getValue());
+    d.setPresence (presenceTone != nullptr ? (double) presenceTone->getValue() : presenceAtRest);
+}
+
+void IoEditor::followWorld()
+{
+    const float share = ioWorld != nullptr && view->mode() == redpaw::Windscreen::Mode::gpu ? ioWorld->cabinDark() : 0.0f;
+    setCabinDark ((float) juce::roundToInt (share * (float) Cabin::darkSteps) / (float) Cabin::darkSteps);
 }
 
 void IoEditor::setCabinDark (float share)
@@ -599,7 +621,12 @@ void IoEditor::bindTones (int channel)
         }
         else if (id != toneBound[s])
         {
-            toneBindings[s] = std::make_unique<juce::ParameterAttachment> (*p, [&knob, p] (float v) { knob.setValue (p->convertTo0to1 (v), false); });
+            toneBindings[s] = std::make_unique<juce::ParameterAttachment> (*p, [this, s, &knob, p] (float v)
+            {
+                knob.setValue (p->convertTo0to1 (v), false);
+                if (s == presenceSocket && ioWorld != nullptr)
+                    tellWorld (*ioWorld);       // PRESENCE, the sulphur snow
+            });
             auto* a = toneBindings[s].get();
             knob.onGestureStart = [a] { a->beginGesture(); };
             knob.onChange       = [a, p] (float v) { a->setValueAsPartOfGesture (p->convertFrom0to1 (v)); };
@@ -607,6 +634,12 @@ void IoEditor::bindTones (int channel)
             knob.defaultValue   = amp.engineDefault (*p);
             toneBound[s] = id;
             a->sendInitialUpdate();
+        }
+        if (s == presenceSocket)
+        {
+            presenceTone = p;
+            if (ioWorld != nullptr)
+                tellWorld (*ioWorld);
         }
         const bool live = p != nullptr;
         knob.setEnabled (live);
@@ -679,8 +712,8 @@ bool IoEditor::channelKey (const juce::KeyPress& key)
     PRESENCE and the three tones — and their rings, the five columns — COMP, BLEND, OCTAVE, CHORUS and REVERB — COMP's
     squeeze, the cuts' two switches, the cabinet's screen and the one reading, the cabinet's name. Each channel's own
     sockets go into the lineup's "face" (the console's key). THE STILL: the view's first frame, the whole stage at twice
-    its size, the first a poster's frame brings. Until the Io world is ported the view is the Mars plains (makeDrive), and
-    so are the still and the posters. */
+    its size, the first a poster's frame brings: the Io world (makeDrive), as the posters, under the knobs as they stand
+    (tellWorld). */
 void IoEditor::webExtras (const juce::File& dir, juce::DynamicObject& kit, juce::DynamicObject& world)
 {
     using Obj = juce::DynamicObject;
@@ -886,7 +919,9 @@ void IoEditor::webExtras (const juce::File& dir, juce::DynamicObject& kit, juce:
     webPoses.firstFrame = [this, dir] (int, std::function<void (juce::Image)> done)
     {
         const auto box = layout::view * 2.0f;
-        view->firstFrame (makeDrive(), juce::roundToInt (box.getWidth()), juce::roundToInt (box.getHeight()),
+        auto fresh = std::make_unique<IoDrive> (shippedArt());
+        tellWorld (*fresh);             // the Sun and Jupiter where the knobs put them
+        view->firstFrame (std::move (fresh), juce::roundToInt (box.getWidth()), juce::roundToInt (box.getHeight()),
                           [this, dir, then = std::move (done)] (juce::Image frame)
                           {
                               if (frame.isValid() && ! webStill.isValid())
@@ -897,8 +932,8 @@ void IoEditor::webExtras (const juce::File& dir, juce::DynamicObject& kit, juce:
                               then (frame);
                           });
     };
-    webPoses.live = "the view's first frame for the place: the Mars plains (redpaw::PlainsDrive), the stand-in until the Io world is "
-                    "ported, on the GPU from its start, at the place's gear (PARK parked), settled, nothing stepped (t = 0); the top "
+    webPoses.live = "the view's first frame for the place: the Io world (io::IoDrive), on the GPU from its start, at the place's "
+                    "gear (PARK parked), under DRIVE, BLEND and PRESENCE as they stand, settled, nothing stepped (t = 0); the top "
                     "poster is the place the app opens at";
     webPoses.still = [this] (int) { return webStill; };
     webPoses.window = layout::view;

@@ -15,7 +15,13 @@
 //   - every pictogram named (a spot over each, its title the name);
 //   - a still of the face renders: the day's dark panel painted, DRIVE's wedge on it in Io's light paint;
 //   - THE NIGHT: the cabin's dark share at 1 lights the labels — a warm halo round DRIVE's wedge where the day has none,
-//     the wedge itself warmer — and back at 0 the still is the day's again.
+//     the wedge itself warmer — and back at 0 the still is the day's again;
+//   - THE WORLD BEHIND THE GLASS is Io (io::IoDrive), in the speed's gear — SLOW 1, FAST 2 — and parked at PARK; DRIVE's
+//     and BLEND's places over their ranges reach the drive as the time of day and Jupiter's phase, PRESENCE (frozen) the
+//     prototype's 0.2; the face's night glow follows how dark the world says the cabin is (IoDrive::cabinDark) — dark at
+//     DRIVE's end, the day at its start; and the world finds every file it reads where the build lays them out, the
+//     factory folder's Faces/IoBass (io::shippedArt): both plates, a mesh and its table for every variant of the finds,
+//     the skylight's pit radius.
 //
 // Each control is found by the name the face gives it; the tone knobs by the sockets they stand in (io/IoLayout.h).
 // main() returns 0 when every check held.
@@ -27,6 +33,9 @@
 #include "face/Controls.h"
 #include "io/IoEditor.h"
 #include "io/IoLayout.h"
+#include "io/view/IoArt.h"
+#include "io/view/IoDrive.h"
+#include "redpaw/view/Windscreen.h"
 
 #include <array>
 #include <cmath>
@@ -279,6 +288,92 @@ int ORBITAMP_GATE_MAIN()
         io->setCabinDark (0.0f);
         const auto bottomRow = (juce::Rectangle<float> (0.0f, 750.0f, layout::width, 180.0f) * k).toNearestInt();
         check (alikeIn (day, shot(), bottomRow), "...and back at 0 the bottom row is the day's again, to the pixel");
+    }
+
+    // THE WORLD BEHIND THE GLASS: Io, in the speed's gear, parked at PARK.
+    std::vector<redpaw::Windscreen*> views;
+    allOf (*face, views);
+    auto* view = views.empty() ? nullptr : views.front();
+    const auto line = [view] { return view != nullptr ? view->statusLine() : juce::String ("no view"); };
+    check (view != nullptr && line().startsWith ("GPU  Io"), "the world behind the glass is Io (" + line() + ")");
+    if (lever != nullptr)
+    {
+        pull (1);
+        check (line().contains ("gear 1") && ! line().contains ("PARK"), "...on SLOW in its first gear (" + line() + ")");
+        pull (2);
+        check (line().contains ("gear 2") && ! line().contains ("PARK"), "...on FAST in its second (" + line() + ")");
+        pull (0);
+        check (line().contains ("gear 2 PARK"), "...and parked at PARK, the gear kept (" + line() + ")");
+        pull (1);
+    }
+
+    // THE AMP'S KNOBS ARE THE WORLD'S INPUTS, and THE NIGHT GLOW FOLLOWS IT. The drive is stepped here, by no time: the
+    // window is never shown, so no frame takes the knobs to it.
+    {
+        auto* d = view != nullptr ? dynamic_cast<io::IoDrive*> (&view->drive()) : nullptr;
+        const auto knobs = [d] { if (d == nullptr) return std::array<double, 3> { -1.0, -1.0, -1.0 }; d->step (0.0); return d->io().knobs(); };
+        const auto words = [] (const std::array<double, 3>& k) { return juce::String (k[0], 3) + ", " + juce::String (k[1], 3) + ", " + juce::String (k[2], 3); };
+        setPlain (params::preampGain, 10.0f);
+        setPlain (params::ampBlend, 0.25f);
+        settle();
+        const auto first = knobs();
+        setPlain (params::preampGain, 2.5f);
+        setPlain (params::ampBlend, 0.8f);
+        settle();
+        const auto then = knobs();
+        check (std::abs (first[0] - 1.0) < 1.0e-6 && std::abs (first[1] - 0.25) < 1.0e-6 && std::abs (then[0] - 0.25) < 1.0e-6
+                   && std::abs (then[1] - 0.8) < 1.0e-6,
+               "DRIVE's and BLEND's places over their ranges reach the drive: 10 and 0.25 as " + words (first) + ", 2.5 and 0.8 as "
+                   + words (then));
+        check (std::abs (first[2] - io::IoEditor::presenceAtRest) < 1.0e-9 && std::abs (then[2] - io::IoEditor::presenceAtRest) < 1.0e-9,
+               "...and PRESENCE, frozen, the prototype's " + juce::String (io::IoEditor::presenceAtRest) + " (" + juce::String (then[2]) + ")");
+
+        const auto darkAt = [&] (float drive)
+        {
+            setPlain (params::preampGain, drive);
+            setPlain (params::ampBlend, 1.0f);
+            settle();
+            if (d != nullptr)
+            {
+                d->step (0.0);
+                d->io().settle();       // the knobs reached at once, not eased
+                d->step (0.0);
+            }
+            io->followWorld();
+            return std::pair<float, float> { d != nullptr ? d->cabinDark() : -1.0f, io->cabinDark() };
+        };
+        const auto step = [] (float share) { return (float) juce::roundToInt (share * (float) io::Cabin::darkSteps) / (float) io::Cabin::darkSteps; };
+        const auto night = darkAt (10.0f), noon = darkAt (0.0f);
+        check (night.first > 0.5f && juce::approximatelyEqual (night.second, step (night.first))
+                   && noon.first < 0.2f && juce::approximatelyEqual (noon.second, step (noon.first)),
+               "the night glow follows the world: the cabin " + juce::String (night.first, 3) + " dark at DRIVE 10, the face "
+                   + juce::String (night.second, 3) + "; " + juce::String (noon.first, 3) + " at DRIVE 0, the face " + juce::String (noon.second, 3));
+    }
+
+    // THE WORLD'S FILES, as the build lays them out: what io::shippedArt reads from the factory folder's Faces/IoBass.
+    {
+        const auto art = io::shippedArt();
+        juce::StringArray lost;
+        for (const auto& [plate, name] : { std::pair { art.day, "dashboard.webp" }, std::pair { art.dark, "dashboard_dark.webp" } })
+            if (const auto pic = plate ? plate() : io::IoGl::Picture {}; ! pic.valid() || pic.width != 3344 || pic.height != 1882)
+                lost.add (name);
+        std::array<bool, io::IoWorld::numVariants> filled {};
+        for (const auto& base : art.finds ? art.finds() : std::vector<std::string>())
+        {
+            const int role = io::IoWorld::roleOf (base.substr (0, base.find ('/')));
+            const auto bytes = art.bytes ? art.bytes (base + ".mesh") : std::vector<std::uint8_t>();
+            const auto mesh = io::IoWorld::readMesh (bytes.data(), bytes.size());
+            if (role >= 0 && mesh.ok && mesh.nv > 0 && mesh.ni > 0 && art.text && ! art.text (base + ".txt").empty())
+                filled[(size_t) role] = true;
+        }
+        for (size_t v = 0; v < filled.size(); ++v)
+            if (! filled[v])
+                lost.add (juce::String ("finds/") + io::IoWorld::variants[v] + "3d");
+        const auto pit = art.text ? io::IoWorld::pitRadiusOf (art.text ("tubebase3d/tubebase.txt")) : std::nullopt;
+        if (! pit || std::abs (*pit - 13.0) > 1.0e-9)
+            lost.add ("the skylight's pit radius (finds/tubebase3d/tubebase.txt)");
+        check (lost.isEmpty(), "the world finds every file it reads in the factory folder's Faces/" + juce::String (ORBITAMP_PRODUCT_NAME)
+                                   + (lost.isEmpty() ? juce::String() : ": not " + lost.joinIntoString (", ")));
     }
 
     face.reset();
