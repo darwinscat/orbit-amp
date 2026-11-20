@@ -25,6 +25,10 @@ namespace
     constexpr std::array<Level, 3> levels { { { 2.0, 96 }, { 6.0, 96 }, { 24.0, 96 } } };
     constexpr double zNear = 0.5, zFar = 9000.0, farCut = W::farCut;
     constexpr double fadeSeconds = 1.5;
+    // The ladder's foot: the near lattice's middle cells it draws (cells 21..75 each way, 108 m: edges on the coarse
+    // lattice's lines, 48 m or more from the morph's centre, past its 45 m), and how near the far meshes come.
+    constexpr int footFrom = 21, footCells = 54;
+    constexpr double footGuitars = 300, footLandmarks = 450, footDragons = 600;
     constexpr int ventW = 8, sparks = 64, puffs = 5, embers = 1400;
     constexpr int fireP = 48, maxEmit = W::maxEmit, maxRib = W::maxRib, maxLetters = 40, maxCloth = 24;
     constexpr double bandAzTurns = -0.09, bandTilt = 34 * pi / 180;
@@ -213,11 +217,14 @@ bool MetalGl::create()
     }
     if (! world.isBuilt())
         world.build();
+    smoothFloats = gpu::halfFloatFrames();
 
     if (! compile (ground, "metal/ground.vert", "metal/ground.frag", "ground", { { "hole", "#define HOLE 0\n#define FARCUT 0\n" } })
         || ! compile (groundH, "metal/ground.vert", "metal/ground.frag", "outer ground", { { "hole", "#define HOLE 1\n#define FARCUT 1\n" } })
         || ! compile (groundHN, "metal/ground.vert", "metal/ground.frag", "middle ground", { { "hole", "#define HOLE 1\n#define FARCUT 0\n" } })
-        || ! compile (sky, "metal/sky.vert", "metal/sky.frag", "sky")
+        || ! compile (sky, "metal/sky.vert", "metal/sky.frag", "sky", { { "skypass", "#define SKY_SMOOTH 0\n" } })
+        || ! compile (skySmooth, "metal/sky.vert", "metal/sky.frag", "sky's smooth parts", { { "skypass", "#define SKY_SMOOTH 1\n" } })
+        || ! compile (cabinPass, "metal/post.vert", "metal/cabin.frag", "cabin")
         || ! compile (prop, "metal/prop.vert", "metal/prop.frag", "prop")
         || ! compile (mesh, "metal/mesh.vert", "metal/mesh.frag", "mesh")
         || ! compile (dragon, "metal/dragon.vert", "metal/mesh.frag", "dragon")
@@ -270,9 +277,13 @@ void MetalGl::destroy()
     delVao (dragonM.vao); delBuf (dragonM.vbo); dragonM = {};
     delGpu (clothBuf); delGpu (fireBuf); delGpu (ribBuf); delGpu (letBuf);
     delVao (vaoGrid); delBuf (vboGrid); delBuf (iboGrid); gridCount = 0;
+    delVao (vaoGridFoot); delBuf (iboGridFoot); gridFootCount = 0;
     delVao (vaoEmpty); delBuf (vboEmpty);
-    for (auto* t : { &texBase, &texDetail, &texNoise, &texCells, &texRoad, &texLetters, &texBanners, &fboColour })
+    for (auto* t : { &texBase, &texDetail, &texNoise, &texCells, &texRoad, &texLetters, &texBanners, &fboColour, &texSmooth, &texPost })
         delTex (*t);
+    for (auto* f : { &fboSmooth, &fboPost })
+        if (*f != 0) { glDeleteFramebuffers (1, f); *f = 0; }
+    smoothW = smoothH = postW = postH = 0;
     if (texDashFlash != texDash) delTex (texDashFlash);
     texDashFlash = 0;
     delTex (texDash);
@@ -292,7 +303,7 @@ void MetalGl::destroy()
     if (query[0] != 0) glDeleteQueries ((GLsizei) query.size(), query.data());
     query.fill (0);
     queriesWork = false; queriesPending = 0; queryNext = 0;
-    for (auto* p : { &ground, &groundH, &groundHN, &sky, &prop, &mesh, &dragon, &sign, &letters, &fire, &ribbon, &spark, &steam, &ember, &post })
+    for (auto* p : { &ground, &groundH, &groundHN, &sky, &skySmooth, &cabinPass, &prop, &mesh, &dragon, &sign, &letters, &fire, &ribbon, &spark, &steam, &ember, &post })
     {
         if (p->id != 0) glDeleteProgram (p->id);
         p->id = 0;
@@ -369,6 +380,7 @@ void MetalGl::makeArt()
                 any = true;
             }
             texDash = pictureTexture (night, true, true);
+            dashW = night.width; dashH = night.height; platesWhole = false;
             texDashFlash = flash.valid() ? pictureTexture (flash, true, true) : texDash;
             if (texDashFlash == 0) texDashFlash = texDash;
             glassBox = box; hasGlassBox = any && texDash != 0;
@@ -469,6 +481,20 @@ void MetalGl::makeBuffers()
         glBufferData (GL_ELEMENT_ARRAY_BUFFER, (GLsizeiptr) (idx.size() * 2), idx.data(), GL_STATIC_DRAW);
         glBindVertexArray (0);
         gridCount = (int) idx.size();
+        // the near level's middle cells, as the ladder's foot draws that level
+        std::vector<std::uint16_t> mid;
+        for (int j = footFrom; j < footFrom + footCells; ++j)
+            for (int i = footFrom; i < footFrom + footCells; ++i)
+                mid.insert (mid.end(), idx.begin() + (std::ptrdiff_t) (j * NL + i) * 6, idx.begin() + (std::ptrdiff_t) (j * NL + i) * 6 + 6);
+        glGenVertexArrays (1, &vaoGridFoot);
+        glBindVertexArray (vaoGridFoot);
+        glBindBuffer (GL_ARRAY_BUFFER, vboGrid);
+        glEnableVertexAttribArray (0); glVertexAttribPointer (0, 2, GL_FLOAT, GL_FALSE, 0, nullptr);
+        glGenBuffers (1, &iboGridFoot);
+        glBindBuffer (GL_ELEMENT_ARRAY_BUFFER, iboGridFoot);
+        glBufferData (GL_ELEMENT_ARRAY_BUFFER, (GLsizeiptr) (mid.size() * 2), mid.data(), GL_STATIC_DRAW);
+        glBindVertexArray (0);
+        gridFootCount = (int) mid.size();
     }
 
     // THE PROPS: a vertex array per procedural mesh with its instance buffer (8 floats); the hill a mesh of its own.
@@ -596,10 +622,28 @@ bool MetalGl::ensureFrame (int w, int h, int cw, int ch)
     return true;
 }
 
+bool MetalGl::ensureTarget (std::uint32_t& fb, std::uint32_t& tex, int& tw, int& th, int w, int h, bool floats)
+{
+    // A frame of its own with one colour texture (filtered, clamped), for a pass another pass reads scaled.
+    if (fb != 0 && w == tw && h == th)
+        return true;
+    if (fb == 0) { glGenFramebuffers (1, &fb); glGenTextures (1, &tex); }
+    glBindTexture (GL_TEXTURE_2D, tex);
+    glTexImage2D (GL_TEXTURE_2D, 0, floats ? (GLint) GL_RGBA16F : (GLint) GL_RGBA8, w, h, 0, GL_RGBA, floats ? (GLenum) GL_FLOAT : (GLenum) GL_UNSIGNED_BYTE, nullptr);
+    glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR); glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE); glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glBindTexture (GL_TEXTURE_2D, 0);
+    glBindFramebuffer (GL_FRAMEBUFFER, fb);
+    glFramebufferTexture2D (GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tex, 0);
+    if (glCheckFramebufferStatus (GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE || (floats && skips ("halffloat"))) { tw = th = 0; return false; }
+    tw = w; th = h;
+    return true;
+}
+
 void MetalGl::follow (double scale, double seconds)
 {
     // A rung down (0.75) the aurora's finest rays; at the foot (0.5) half the fire's particles, half the embers, the
-    // near lattice coarse beyond 45 m — each faded in over 1.5 s.
+    // near lattice coarse beyond 45 m (and then drawn only in its middle), the far meshes — each faded in over 1.5 s.
     Q.level = scale > 0.99 ? 0 : scale > 0.74 ? 1 : 2;
     const double d = Q.started ? std::max (0.0, seconds) / fadeSeconds : 1;
     Q.started = true;
@@ -619,6 +663,7 @@ void MetalGl::render (int w, int h, float scale, std::uint32_t target, int x, in
     const int rw = std::max (2, (int) std::lround ((double) w * scale)), rh = std::max (2, (int) std::lround ((double) h * scale));
     if (! ensureFrame (rw, rh, w, h))
         return;
+    platesFor (w, h);
     const double now = gpu::milliseconds();
     follow (scale, lastFrameMs < 0 ? 0.0 : (now - lastFrameMs) * 0.001);
     lastFrameMs = now;
@@ -628,6 +673,10 @@ void MetalGl::render (int w, int h, float scale, std::uint32_t target, int x, in
         const double hot = world.probe (s.x, s.z).hot;
         envHot = envHot < 0 ? hot : envHot + (hot - envHot) * std::min (1.0, s.dt / 2);
     }
+
+    // The world's fires and ribbons for this frame, worked out before the timer starts: the CPU's part, not the GPU's.
+    frameFires = world.fires();
+    frameRibbons = world.ribbons (! skips ("beams"));
 
     const bool probe = ! gpu::web && ! queriesWork && (frameCounter % 60) == 0;
     ++frameCounter;
@@ -670,6 +719,22 @@ void MetalGl::render (int w, int h, float scale, std::uint32_t target, int x, in
     glBindFramebuffer (GL_DRAW_FRAMEBUFFER, target);
     glBlitFramebuffer (0, 0, w, h, x, y, x + w, y + h, GL_COLOR_BUFFER_BIT, GL_NEAREST);
     glBindFramebuffer (GL_FRAMEBUFFER, target);
+}
+
+void MetalGl::platesFor (int cw, int ch)
+{
+    // The plates are read through their mips only where the frame is smaller than they are: at their own size or over
+    // it a pixel never covers more than a texel, the mips weigh nothing — and a trilinear read there still fetches two.
+    const bool whole = cw >= dashW && ch >= dashH;
+    if (texDash == 0 || whole == platesWhole)
+        return;
+    platesWhole = whole;
+    for (const auto id : { texDash, texDashFlash })
+    {
+        glBindTexture (GL_TEXTURE_2D, id);
+        glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, whole ? GL_LINEAR : GL_LINEAR_MIPMAP_LINEAR);
+    }
+    glBindTexture (GL_TEXTURE_2D, 0);
 }
 
 bool MetalGl::readFrame (std::vector<std::uint8_t>& rgba, int& w, int& h)
@@ -732,8 +797,8 @@ void MetalGl::drawScene (int rw, int rh, int cw, int ch)
     const double flash = skips ("flash") ? 0 : s.flash;
 
     // THE FIRES this frame and the two that light what is near; THE RIBBONS.
-    const auto fires = world.fires();
-    const auto ribbons = world.ribbons (! skips ("beams"));
+    const auto& fires = frameFires;
+    const auto& ribbons = frameRibbons;
 
     const auto bandH = V3 { std::sin (bandAzTurns * 2 * pi), 0, -std::cos (bandAzTurns * 2 * pi) };
     const auto bandTan = V3 { std::cos (bandAzTurns * 2 * pi), 0, std::sin (bandAzTurns * 2 * pi) };
@@ -766,6 +831,59 @@ void MetalGl::drawScene (int rw, int rh, int cw, int ch)
         glUniform2f (p.u ("uFragOff"), (float) sceneAt[0], (float) sceneAt[1]);
     };
 
+    // THE SKY'S SMOOTH PARTS (the galaxy's band and the aurora), first, into a frame of their own at half the view's pixels
+    // each way over the scene's frame: the sky reads them scaled up (sky.frag, SKY_SMOOTH).
+    const auto setSky = [&] (const Program& p)
+    {
+            glUniform1i (p.u ("uNoise"), 2);
+            u3d (p.u ("uCamFwd"), basis.f); u3d (p.u ("uCamRight"), basis.r); u3d (p.u ("uCamUp"), basis.u);
+            glUniform2f (p.u ("uTanHalf"), (float) th, (float) tv); glUniform1f (p.u ("uShear"), (float) shear); glUniform1f (p.u ("uPxAng"), (float) pxAng);
+            glUniform1f (p.u ("uAurT"), (float) std::fmod (s.aurora, 100000.0)); glUniform1f (p.u ("uFlat"), (float) Q.flat);
+            {
+                // the curtains' terms that vary only with the aurora's clock, in floats as the shader had them
+                const float T = (float) std::fmod (s.aurora, 100000.0);
+                std::array<float, 16> A {}, B {};
+                for (int k = 0; k < 4; ++k)
+                {
+                    const float fk = (float) k;
+                    A[(size_t) k * 4]     = 0.004f * std::sin (T * 0.05f + fk * 1.7f);
+                    A[(size_t) k * 4 + 1] = T * 0.9f * std::sin (T * 0.031f + fk);
+                    A[(size_t) k * 4 + 2] = 0.010f * std::sin (T * 0.11f + fk * 2.3f);
+                    A[(size_t) k * 4 + 3] = T * 0.45f * std::sin (T * 0.023f + fk * 0.7f);
+                    B[(size_t) k * 4]     = 0.8f + 0.2f * std::sin (T * 0.13f + fk * 1.9f);
+                }
+                glUniform4fv (p.u ("uCurtA[0]"), 4, A.data()); glUniform4fv (p.u ("uCurtB[0]"), 4, B.data());
+            }
+            u3d (p.u ("uBandH"), bandH); u3d (p.u ("uBandT"), bandT); u3d (p.u ("uBandN"), bandN);
+            glUniform1f (p.u ("uSmoothSq"), smoothFloats ? 0.0f : 1.0f);
+    };
+    std::array<float, 4> smoothMap { 1, 1, 0, 0 };
+    if (! skips ("sky"))
+    {
+        const int f = smoothDiv;
+        const int vw = std::max (1, rw / f), vh = std::max (1, rh / f), hx = sceneAt[0] / f, hy = sceneAt[1] / f;
+        const int tw = std::max (1, (subW + f - 1) / f + 1), tht = std::max (1, (subH + f - 1) / f + 1);
+        // in half floats where they can be drawn into; where not (WebGL 2 without EXT_color_buffer_float or its half
+        // twin), in 8 bits a channel from then on, square roots in it so the dim aurora keeps its steps small
+        bool made = ensureTarget (fboSmooth, texSmooth, smoothW, smoothH, tw, tht, smoothFloats);
+        if (! made && smoothFloats)
+        {
+            smoothFloats = false;
+            made = ensureTarget (fboSmooth, texSmooth, smoothW, smoothH, tw, tht, false);
+        }
+        if (made)
+        {
+            glBindFramebuffer (GL_FRAMEBUFFER, fboSmooth);
+            glViewport (-hx, -hy, vw, vh);
+            glDisable (GL_DEPTH_TEST); glDisable (GL_BLEND); glDisable (GL_SCISSOR_TEST);
+            glClearColor (0, 0, 0, 1); glClear (GL_COLOR_BUFFER_BIT);
+            glActiveTexture (GL_TEXTURE2); glBindTexture (GL_TEXTURE_2D, texNoise);
+            glUseProgram (skySmooth.id); glBindVertexArray (vaoEmpty); setCommon (skySmooth); setSky (skySmooth);
+            glDrawArrays (GL_TRIANGLES, 0, 3);
+            smoothMap = { (float) vw / (float) tw, (float) vh / (float) tht, (float) -hx / (float) tw, (float) -hy / (float) tht };
+        }
+    }
+
     glBindFramebuffer (GL_FRAMEBUFFER, fbo);
     glViewport (-sceneAt[0], -sceneAt[1], rw, rh);
     glDisable (GL_BLEND); glEnable (GL_DEPTH_TEST); glDepthFunc (GL_LEQUAL); glDisable (GL_CULL_FACE); glDepthMask (GL_TRUE);
@@ -780,6 +898,13 @@ void MetalGl::drawScene (int rw, int rh, int cw, int ch)
         const int y0 = (int) std::floor ((1 - glassBox[3]) * rh), y1 = (int) std::ceil ((1 - glassBox[1]) * rh);
         glEnable (GL_SCISSOR_TEST); glScissor (x0 - sceneAt[0], y0 - sceneAt[1], x1 - x0, y1 - y0);
     }
+
+    // At the ladder's foot the far meshes go, from beyond the view inward as Q.thin comes: the guitars beyond 300 m (of
+    // 700), the landmarks beyond 450 m (of 900), the dragons beyond 600 m (of the far cut), each dithered out over the
+    // last quarter of its reach (uMeshFade). Above the foot (thin 0) the cut is where it was, and hard.
+    const auto reachOf = [&] (double top, double atFoot) { return lerp (top, atFoot, Q.thin); };
+    const auto fadeAt = [&] (double D, double reach) { const double band = 0.25 * reach * Q.thin; return band > 0 ? 1 - smoothstep (reach - band, reach, D) : 1.0; };
+    const double reachGuitars = reachOf (700, footGuitars), reachLandmarks = reachOf (900, footLandmarks), reachDragons = reachOf (farCut, footDragons);
 
     // THE CENSORED HEADSTOCKS: each star's box projected; the nearest four get the mosaic, each grove one CENSORED.
     struct Cens { double x, y, z, R; int side; double D, fade, top; int grove; };
@@ -803,7 +928,7 @@ void MetalGl::drawScene (int rw, int rh, int cw, int ch)
             const V3 w0 = mulM3 (q.M, { q.hb.c[0], q.hb.c[2], -q.hb.c[1] });
             const double wx = q.at[0] + w0[0], wy = q.at[1] + w0[1], wz = q.at[2] + w0[2];
             const double dx = wx - s.x, dz = wz - s.z, D = std::hypot (dx, dz);
-            if (D > 700 || D < 4 || dx * fx + dz * fz < 0.35 * D) continue;
+            if (D > reachGuitars || D < 4 || dx * fx + dz * fz < 0.35 * D) continue;
             const double R = 0.5 * std::sqrt (q.hb.s[0] * q.hb.s[0] + q.hb.s[1] * q.hb.s[1] + q.hb.s[2] * q.hb.s[2]) * q.k * 1.05;
             const double hx = wx - ccx, hz = wz - ccz;
             const double Wc = VP[3] * hx + VP[7] * wy + VP[11] * hz + VP[15];
@@ -934,10 +1059,11 @@ void MetalGl::drawScene (int rw, int rh, int cw, int ch)
         for (const auto& lm : world.landmarks())
         {
             const auto* m = has (lm.role.c_str());
-            if (! m || ! inView (lm.x, lm.z, 30) || std::hypot (lm.x - s.x, lm.z - s.z) > 900) continue;
+            const double D = std::hypot (lm.x - s.x, lm.z - s.z);
+            if (! m || ! inView (lm.x, lm.z, 30) || D > reachLandmarks) continue;
             const double k = lm.height > 0 ? lm.height / (m->zmax - std::max (m->zmin, 0.0)) : 1;
             glUniform1f (p.u ("uMeshSteel"), lm.paint ? 0.0f : 1.0f);
-            drawMesh (*m, rel (lm.x, lm.y, lm.z), yawMat (lm.yaw, k));
+            drawMesh (*m, rel (lm.x, lm.y, lm.z), yawMat (lm.yaw, k), {}, (float) fadeAt (D, reachLandmarks));
         }
         // the guitars round the loop: steel, the Fender-types in their metallic paint, the stars' headstocks censored
         for (size_t i = 0; i < slots.size(); ++i)
@@ -945,7 +1071,8 @@ void MetalGl::drawScene (int rw, int rh, int cw, int ch)
             const auto* gm = meshFor (i);
             const auto* ge = guitarOf (i);
             const auto& sl = slots[i];
-            if (! gm || ! inView (sl.x, sl.z, 16) || std::hypot (sl.x - s.x, sl.z - s.z) > 700) continue;
+            const double D = std::hypot (sl.x - s.x, sl.z - s.z);
+            if (! gm || ! inView (sl.x, sl.z, 16) || D > reachGuitars) continue;
             glUniform1f (p.u ("uMeshSteel"), 1);
             if (ge->paint) glUniform4f (p.u ("uMeshPaint"), (float) (*ge->paint)[0], (float) (*ge->paint)[1], (float) (*ge->paint)[2], 1);
             else glUniform4f (p.u ("uMeshPaint"), 0, 0, 0, 0);
@@ -955,7 +1082,7 @@ void MetalGl::drawScene (int rw, int rh, int cw, int ch)
                 const std::array<float, 8> S { (float) (ge->box->s[0] / 2), (float) (ge->box->s[1] / 2), (float) (ge->box->s[2] / 2), 1, 0, 0, 0, 0 };
                 glUniform4fv (p.u ("uCensorC[0]"), 2, C.data()); glUniform4fv (p.u ("uCensorS[0]"), 2, S.data());
             }
-            drawMesh (*gm, rel (sl.x, sl.y, sl.z), leanMat (sl.yaw, sl.k, sl.lean[0], sl.lean[1]));
+            drawMesh (*gm, rel (sl.x, sl.y, sl.z), leanMat (sl.yaw, sl.k, sl.lean[0], sl.lean[1]), {}, (float) fadeAt (D, reachGuitars));
             if (ge->box) { glUniform4fv (p.u ("uCensorC[0]"), 2, noCensor.data()); glUniform4fv (p.u ("uCensorS[0]"), 2, noCensor.data()); }
         }
         glUniform4f (p.u ("uMeshPaint"), 0, 0, 0, 0);
@@ -987,7 +1114,8 @@ void MetalGl::drawScene (int rw, int rh, int cw, int ch)
         for (const auto& u : world.dragons())
         {
             const double dx = u.x - s.x, dz = u.z - s.z, dd = std::hypot (dx, dz);
-            if (dd > farCut || (dd > 80 && dx * fx + dz * fz < 0.3 * dd)) continue;
+            if (dd > reachDragons || (dd > 80 && dx * fx + dz * fz < 0.3 * dd)) continue;
+            glUniform1f (p.u ("uMeshFade"), (float) fadeAt (dd, reachDragons));
             const double f = u.beat * D.nf;
             const int k0 = (((int) std::floor (f)) % D.nf + D.nf) % D.nf, k1 = (k0 + 1) % D.nf;
             const size_t a0 = (size_t) k0 * (size_t) D.nv * 10, a1 = (size_t) k1 * (size_t) D.nv * 10;
@@ -1056,7 +1184,9 @@ void MetalGl::drawScene (int rw, int rh, int cw, int ch)
         }
         const double CP = W::crackPeriod;
         const std::array<double, 2> crackOff { std::fmod (std::fmod (ccx, CP) + CP, CP), std::fmod (std::fmod (ccz, CP) + CP, CP) };
-        glBindVertexArray (vaoGrid);
+        // At the ladder's foot, once its near lattice is coarse beyond 45 m (Q.thin whole), that level is drawn only in its
+        // middle cells and the middle level fills its hole up to them: there it draws the same coarse lattice.
+        const bool nearCut = Q.thin >= 1 && gridFootCount > 0;
         for (size_t L = 0; L < levels.size(); ++L)
         {
             const auto& g = outerAt[L];
@@ -1082,26 +1212,27 @@ void MetalGl::drawScene (int rw, int rh, int cw, int ch)
             {
                 const auto& inner = outerAt[L - 1];
                 const double e = 0.05;
-                glUniform4f (p.u ("uHole"), (float) (inner.ox - ccx + e), (float) (inner.oz - ccz + e), (float) (inner.ox + inner.size - ccx - e), (float) (inner.oz + inner.size - ccz - e));
+                const double from = L == 1 && nearCut ? footFrom * inner.cell : 0, to = L == 1 && nearCut ? (footFrom + footCells) * inner.cell : inner.size;
+                glUniform4f (p.u ("uHole"), (float) (inner.ox + from - ccx + e), (float) (inner.oz + from - ccz + e), (float) (inner.ox + to - ccx - e), (float) (inner.oz + to - ccz - e));
                 glUniform1f (p.u ("uHoleOn"), 1);
             }
             else glUniform1f (p.u ("uHoleOn"), 0);
             glUniform1f (p.u ("uFarCut"), (float) farCut); glUniform1f (p.u ("uStuds"), (float) W::studs()); glUniform1f (p.u ("uBreath"), (float) (0.6 + 0.4 * calm));
             glUniform2f (p.u ("uFwdXZ"), (float) fx, (float) fz);
-            glDrawElements (GL_TRIANGLES, gridCount, GL_UNSIGNED_SHORT, nullptr);
+            const bool cut = L == 0 && nearCut;
+            glBindVertexArray (cut ? vaoGridFoot : vaoGrid);
+            glDrawElements (GL_TRIANGLES, cut ? gridFootCount : gridCount, GL_UNSIGNED_SHORT, nullptr);
         }
     }
-    // THE SKY where nothing was drawn.
+    // THE SKY where nothing was drawn, its smooth parts read from the smooth pass.
     if (! skips ("sky"))
     {
         const Program& p = sky;
-        glUseProgram (p.id); glBindVertexArray (vaoEmpty); setCommon (p);
-        glUniform1i (p.u ("uNoise"), 2);
-        u3d (p.u ("uCamFwd"), basis.f); u3d (p.u ("uCamRight"), basis.r); u3d (p.u ("uCamUp"), basis.u);
-        glUniform2f (p.u ("uTanHalf"), (float) th, (float) tv); glUniform1f (p.u ("uShear"), (float) shear); glUniform1f (p.u ("uPxAng"), (float) pxAng);
-        glUniform1f (p.u ("uAurT"), (float) std::fmod (s.aurora, 100000.0)); glUniform1f (p.u ("uFlat"), (float) Q.flat);
-        u3d (p.u ("uBandH"), bandH); u3d (p.u ("uBandT"), bandT); u3d (p.u ("uBandN"), bandN);
+        glUseProgram (p.id); glBindVertexArray (vaoEmpty); setCommon (p); setSky (p);
+        glActiveTexture (GL_TEXTURE9); glBindTexture (GL_TEXTURE_2D, texSmooth); glUniform1i (p.u ("uSmooth"), 9);
+        glUniform4fv (p.u ("uSmoothMap"), 1, smoothMap.data());
         glDrawArrays (GL_TRIANGLES, 0, 3);
+        glActiveTexture (GL_TEXTURE9); glBindTexture (GL_TEXTURE_2D, 0);
     }
 
     // WHAT IS BLENDED (premultiplied; the fire added): the vents' steam and sparks, the fire, the ribbons, the embers.
@@ -1222,6 +1353,31 @@ void MetalGl::drawScene (int rw, int rh, int cw, int ch)
     // alone (with the flash's crossfade and lift), the same every frame until the flash or the frame's size changes — so
     // it is drawn once and kept, and each frame after it the pass is scissored to the box (skip "outer": all of it every
     // frame, cleared first). Kept, it is read back by the pass, and that still costs less than drawing it.
+    const auto runPost = [&] (bool plates)
+    {
+        const Program& p = post;
+        glUseProgram (p.id); glBindVertexArray (vaoEmpty);
+        bindTex (4, fboColour); glUniform1i (p.u ("uColour"), 4);
+        glUniform4f (p.u ("uSceneBox"), (float) sceneAt[0] / (float) rw, (float) sceneAt[1] / (float) rh, (float) subW / (float) rw, (float) subH / (float) rh);
+        bindTex (6, plates ? texDash : 0); glUniform1i (p.u ("uDash"), 6); glUniform1f (p.u ("uDashOn"), plates ? 1.0f : 0.0f);
+        bindTex (8, plates ? texDashFlash : 0); glUniform1i (p.u ("uDashFlash"), 8);
+        glUniform1f (p.u ("uDashMix"), plates && ! skips ("flash") ? (float) clamp01 (s.flash / cabinFlashFull, 0, 1) : 0.0f);
+        glUniform1f (p.u ("uLift"), (float) (0.035 * flash));
+        glUniform4fv (p.u ("uCens[0]"), 4, cens.data()); glUniform4fv (p.u ("uCensB[0]"), 4, censB.data());
+        if (! skips ("post")) glDrawArrays (GL_TRIANGLES, 0, 3);
+        bindTex (4, 0); bindTex (6, 0); bindTex (8, 0);
+    };
+    // At the ladder's foot (a rung of 0.5) with the cabin drawn: the post pass at the scene's pixels, over its frame, and
+    // the cabin's pass scaling it up under the plates, as UnderwaterGl does below its top rung. Above it, one pass.
+    const bool foot = cabin && Q.level >= 2 && ensureTarget (fboPost, texPost, postW, postH, subW, subH, false);
+    if (foot)
+    {
+        glBindFramebuffer (GL_FRAMEBUFFER, fboPost);
+        glViewport (-sceneAt[0], -sceneAt[1], rw, rh);
+        glDisable (GL_DEPTH_TEST);
+        glClearColor (0, 0, 0, 1); glClear (GL_COLOR_BUFFER_BIT);
+        runPost (false);
+    }
     glBindFramebuffer (GL_FRAMEBUFFER, fboOut);
     glViewport (0, 0, cw, ch);
     glDisable (GL_DEPTH_TEST);
@@ -1239,18 +1395,21 @@ void MetalGl::drawScene (int rw, int rh, int cw, int ch)
     }
     outerKept = outerKey >= 0 && ! skips ("post");
     keptFlash = outerKey;
+    if (foot)
     {
-        const Program& p = post;
+        const Program& p = cabinPass;
         glUseProgram (p.id); glBindVertexArray (vaoEmpty);
-        bindTex (4, fboColour); glUniform1i (p.u ("uColour"), 4);
+        bindTex (4, texPost); glUniform1i (p.u ("uView"), 4);
         glUniform4f (p.u ("uSceneBox"), (float) sceneAt[0] / (float) rw, (float) sceneAt[1] / (float) rh, (float) subW / (float) rw, (float) subH / (float) rh);
-        bindTex (6, cabin ? texDash : 0); glUniform1i (p.u ("uDash"), 6); glUniform1f (p.u ("uDashOn"), cabin ? 1.0f : 0.0f);
-        bindTex (8, cabin ? texDashFlash : 0); glUniform1i (p.u ("uDashFlash"), 8);
-        glUniform1f (p.u ("uDashMix"), cabin && ! skips ("flash") ? (float) clamp01 (s.flash / cabinFlashFull, 0, 1) : 0.0f);
-        glUniform1f (p.u ("uLift"), (float) (0.035 * flash));
-        glUniform4fv (p.u ("uCens[0]"), 4, cens.data()); glUniform4fv (p.u ("uCensB[0]"), 4, censB.data());
+        bindTex (6, texDash); glUniform1i (p.u ("uDash"), 6);
+        bindTex (8, texDashFlash); glUniform1i (p.u ("uDashFlash"), 8);
+        glUniform1f (p.u ("uDashMix"), ! skips ("flash") ? (float) clamp01 (s.flash / cabinFlashFull, 0, 1) : 0.0f);
         if (! skips ("post")) glDrawArrays (GL_TRIANGLES, 0, 3);
         bindTex (4, 0); bindTex (6, 0); bindTex (8, 0);
+    }
+    else
+    {
+        runPost (cabin);
     }
     glDisable (GL_SCISSOR_TEST);
     glActiveTexture (GL_TEXTURE0);
