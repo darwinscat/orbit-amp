@@ -1,0 +1,38 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of OrbitAmp — see LICENSE.
+
+#pragma once
+
+#include <juce_gui_basics/juce_gui_basics.h>
+
+namespace orbitamp::california
+{
+
+/** WHAT THE FACE DRAWS WITH, laid out in the factory folder under Faces/CaliforniaAmp (CMakeLists.txt:
+    CALIFORNIAAMP_RENDERS), as the bathyscaphe's are: the van's dashboard, which the face paints itself whenever its
+    world does not draw it — today always: the van's own world, California, comes later, and until then the Mars plains
+    run behind the glass — with the peace pendant hanging still under the mirror; the knobs and the faders' cap, renders
+    of the family's; its mark and its MIDI list. A render that fails to decode leaves its image null, and its control
+    draws a stand-in. */
+struct FaceArt
+{
+    juce::Image bg;                 // the dashboard, its windscreen transparent
+    juce::Image pendant;            // the peace pendant under the mirror, its sprite (pendant.txt: its box and pivot)
+    juce::Image knobDrive, knobTone;
+    juce::Image faderCap;
+    juce::Image none;               // a lamp the picture does not paint lit: drawn by code (Console::Places::lampDot)
+
+    /** Decoded the first time the face asks, and kept. */
+    static const FaceArt& of();
+
+    /** The cabin's mark, as SVG: the build window wears it. Empty where it has none. */
+    static juce::String mark();
+
+    /** What its MIDI window lists (face/Midi.h). */
+    static juce::String midiCommands();
+
+    /** Whether its pictures are there at all: no dashboard, no face (ui/FactoryMissing.h). */
+    static bool present();
+};
+
+} // namespace orbitamp::california

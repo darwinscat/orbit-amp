@@ -7,7 +7,7 @@
 // Cat's own ten cabinets and none of the shelf's Other, and the face's own pictures in its own folder;
 // that every file it names is there; and that the amp's cabinets are its own, whatever another product
 // lays out beside them. Every amp over the channels' engine runs it as itself — CatpitAmp, RedPawAmp,
-// FrostPawAmp, AmberPawAmp, RedGrooveBass, DeepGrooveBass (CMakeLists.txt: amp_set_test), each as AmpGate.h knows it.
+// FrostPawAmp, AmberPawAmp, RedGrooveBass, DeepGrooveBass, CaliforniaAmp (CMakeLists.txt: amp_set_test), each as AmpGate.h knows it.
 //
 // It reads the build's own <build>/Factory (gate_reads_factory) — never the machine's — and, for the
 // product beside it, a folder of its own under the system's temporary folder, which it leaves behind.

@@ -511,6 +511,10 @@ inline constexpr float compRatioMin = 1.5f, compRatioMax = 10.0f;
     has no `compPresent`: its COMP stands for good. */
 inline constexpr const char* compPresent = "comp_present";
 void addGuitarCompParameters (juce::AudioProcessorValueTreeState::ParameterLayout&);
+struct Opening;
+/** ...declaring where a product's Opening holds it: CaliforniaAmp's COMP in the strip and on, three quarters through it
+    (channels::Lineup::pinned). */
+void addGuitarCompParameters (juce::AudioProcessorValueTreeState::ParameterLayout&, const Opening&);
 
 /** THE GUITAR'S INPUT CUT (the owner, 02.11): a 2nd-order high-pass at the input of every guitar amp's chain, always,
     under the lowest note (a low E loses half a decibel), so rumble, thumps and DC reach neither the gate, nor COMP, nor
@@ -763,6 +767,10 @@ struct Opening
     bool  compOn        = true;
     bool  filterPresent = true;
     bool  reverbPresent = false;
+
+    // ...and a GUITAR'S COMP in its strip, where a product holds it there: CaliforniaAmp's (channels::Lineup::pinned).
+    // Declared by addGuitarCompParameters with this Opening; every other guitar amp's is out until the player adds it.
+    bool  compPresent   = false;
 
     // WHERE THE AMP'S MIDDLE OPENS: its console's first bell's frequency — 400 Hz on every amp but the basses, whose MID
     // FREQ opens at 1 kHz (RedGrooveBass's: the owner, 02.11; OrbitBass's: 10.11). A default, not a hold: the player moves it, and
