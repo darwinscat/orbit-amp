@@ -1,0 +1,9 @@
+# horns: a mesh for the world to draw in 3D. A 14 m steel hand giving the horns on a 3 m plinth; credit: "Rock on Hand Shaped for Guitar Hanger" by StructureTree Canada, CC BY 4.0, https://sketchfab.com/3d-models/rock-on-hand-shaped-for-guitar-hanger-d45175242a854318af88746fe3fae518 (decimated, scaled, made steel)
+# horns.mesh: magic CBMESH1, uint32 vertices, uint32 indices; per vertex 40 B: float32 pos xyz (m, z up,
+#   the footprint's centre on the ground at 0), float32 normal xyz, float32 uv, uint8 rgb (display sRGB),
+#   uint8 kind (0 painted, 1 metal, 2 glass, 3 lamp), uint8 texture (0 none, else a row below), 3 pad;
+#   then uint32 indices, 3 per triangle. A textured face: colour and alpha from the texture, cut under 0.5.
+front -y
+vertices 6454
+triangles 12788
+bytes 411632

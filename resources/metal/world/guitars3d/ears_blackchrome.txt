@@ -1,0 +1,11 @@
+# ears_blackchrome: a mesh for the world to draw in 3D. ears_blackchrome: a guitar of our own design in black chrome (kind 1 in its colour), 12 m tall, upright on its own 2 m steel pedestal (kind 1), the pedestal's foot on z = 0, the front toward -y. Our own design: no headstock to hide.
+# ears_blackchrome.mesh: magic CBMESH1, uint32 vertices, uint32 indices; per vertex 40 B: float32 pos xyz (m, z up,
+#   the footprint's centre on the ground at 0), float32 normal xyz, float32 uv, uint8 rgb (display sRGB),
+#   uint8 kind (0 painted, 1 metal, 2 glass, 3 lamp), uint8 texture (0 none, else a row below), 3 pad;
+#   then uint32 indices, 3 per triangle. A textured face: colour and alpha from the texture, cut under 0.5.
+front -y
+vertices 6056
+triangles 5272
+bytes 305520
+# headstock cx cy cz sx sy sz: the box round the headstock (everything past the nut), centre and full size in metres in this mesh's coordinates
+headstock none paint metallic 2a2c30

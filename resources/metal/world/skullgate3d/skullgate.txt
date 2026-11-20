@@ -1,0 +1,9 @@
+# skullgate: a mesh for the world to draw in 3D. A giant skull, the jaw open: the road runs along +y through x = 0 in at the mouth, under the palate and out at the back; the ground is z = 0 (the lower jaw sunk below it); the eye lamps are kind 3; credit: "Skull downloadable" by martinjario, CC BY 4.0, https://sketchfab.com/3d-models/skull-downloadable-1a9db900738d44298b0bc59f68123393 (jaw opened, scaled, made steel)
+# skullgate.mesh: magic CBMESH1, uint32 vertices, uint32 indices; per vertex 40 B: float32 pos xyz (m, z up,
+#   the footprint's centre on the ground at 0), float32 normal xyz, float32 uv, uint8 rgb (display sRGB),
+#   uint8 kind (0 painted, 1 metal, 2 glass, 3 lamp), uint8 texture (0 none, else a row below), 3 pad;
+#   then uint32 indices, 3 per triangle. A textured face: colour and alpha from the texture, cut under 0.5.
+front -y
+vertices 6495
+triangles 12854
+bytes 414064
