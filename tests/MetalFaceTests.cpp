@@ -11,7 +11,7 @@
 //   - the strips: as many tone knobs as the playing pack has tones, in the tone strip, and its switch's key in the key
 //     strip;
 //   - COMP, its fader the threshold alone, and what the cabin holds of it (Lineup::pinned) — in the strip and on, three
-//     quarters through it at 4:1 on OPTO; FX 1 the delay's amount, REVERB the room's share, FX 2 dark;
+//     quarters through it at 4:1 on OPTO; FX 1 the delay's amount, REVERB the room's share, FX 2 the octave's mix;
 //   - THE WORLD BEHIND THE GLASS is the metal world (MetalDrive), in the channel's gear — CLEAN GAIN LO 1, CLEAN GAIN HI 2,
 //     LEAD GAIN LO 3, LEAD GAIN HI 4, the storm — and parked at PARK; every file it reads lies in the factory folder's
 //     Faces/MetalAmp as the build lays it out (MetalShipped.h, the check metal_world_test makes of resources/metal);
@@ -380,7 +380,7 @@ int ORBITAMP_GATE_MAIN()
         check (std::abs (plain (params::compThreshold) + 12.0f) < 0.05f, "...a quarter up sets -12 dB");
     }
 
-    // THE EFFECTS: FX 1 the delay's amount, REVERB the room's share, FX 2 dark.
+    // THE EFFECTS: FX 1 the delay's amount, REVERB the room's share, FX 2 the octave's mix.
     auto* fx1 = dynamic_cast<face::ColumnFader*> (named (*face, "fx1"));
     auto* fx2 = dynamic_cast<face::ColumnFader*> (named (*face, "fx2"));
     auto* reverb = dynamic_cast<face::ColumnFader*> (named (*face, "reverb"));
@@ -392,10 +392,64 @@ int ORBITAMP_GATE_MAIN()
                "FX 1 sets the delay's amount and REVERB the room's share (" + juce::String (plain (params::delayMix), 1) + ", "
                    + juce::String (plain (params::reverbMix), 1) + ")");
     }
-    bool takes = true, children = true;
+    // FX 2, THE OCTAVE (the owner, 20.11): lit and in the hand's reach; the octave in the strip and on, on every channel;
+    // the fader its mix, opening at 0, each channel keeping its own as it keeps its delay; OCTAVE under the hand, and while
+    // held where it stands.
+    bool takes = false, children = false;
     if (fx2 != nullptr)
         fx2->getInterceptsMouseClicks (takes, children);
-    check (fx2 != nullptr && ! fx2->isEnabled() && ! takes, "FX 2 is dark, and takes no hand");
+    check (fx2 != nullptr && fx2->isEnabled() && takes && fx2->getAlpha() == 1.0f, "FX 2 is lit, and takes the hand");
+    if (fx2 != nullptr && lever != nullptr)
+    {
+        const int was = asked();
+        bool held = true;
+        for (int c = 0; c < channels.count(); ++c)
+        {
+            pull (c + 1);
+            held = held && amp->linkInRig (params::rowOctave) && plain (params::octavePresent) > 0.5f && plain (params::octaveOn) > 0.5f
+                && plain (params::octaveAmount) == 0.0f && fx2->getValue() == 0.0f;
+        }
+        check (held, "every channel holds the OCTAVE in the strip and on, its mix at 0 and FX 2 at its foot");
+
+        pull (1);
+        fx2->setValue (0.4f, true);
+        const float moved = plain (params::octaveAmount);
+        pull (2);
+        const float opens = plain (params::octaveAmount);
+        setPlain (params::octaveAmount, 0.7f);
+        const float follows = fx2->getValue();
+        pull (1);
+        const float backA = plain (params::octaveAmount), capA = fx2->getValue();
+        pull (2);
+        const float backB = plain (params::octaveAmount);
+        check (std::abs (moved - 0.4f) < 1.0e-3f && std::abs (follows - 0.7f) < 1.0e-3f,
+               "FX 2 moves the octave's mix, and stands where the mix does (" + juce::String (moved, 3) + ", " + juce::String (follows, 3) + ")");
+        check (opens == 0.0f && std::abs (backA - 0.4f) < 1.0e-3f && std::abs (capA - 0.4f) < 1.0e-3f && std::abs (backB - 0.7f) < 1.0e-3f,
+               "...kept by each channel: " + nameOf (1) + " opens at " + juce::String (opens, 3) + ", " + nameOf (0) + " comes back at "
+                   + juce::String (backA, 3) + ", " + nameOf (1) + " at " + juce::String (backB, 3));
+
+        if (fx2->onHover && tag != nullptr)
+        {
+            fx2->onHover (true);
+            const auto over = tag->says();
+            fx2->onHover (false);
+            const auto gone = tag->says();
+            if (fx2->onGestureStart)
+                fx2->onGestureStart();
+            const auto holding = tag->says();
+            if (fx2->onGestureEnd)
+                fx2->onGestureEnd();
+            check (over == "OCTAVE" && gone.isEmpty() && holding == "FX 2  OCTAVE  70%",
+                   "its name under the hand OCTAVE, and held where it stands: \"" + over + "\", \"" + holding + "\"");
+        }
+        else
+            check (false, "FX 2 names itself under the hand");
+
+        setPlain (params::octaveAmount, 0.0f);
+        pull (1);
+        setPlain (params::octaveAmount, 0.0f);
+        pull (was + 1);
+    }
 
     // THE CABINET'S SCREEN: the playing cabinet's name alone, no CAB:, in the gap over the slider; the picture under it no
     // spectrum but the service readings, PRESET and the version over MEM and CPU, two lines centred in its glass; nothing of
@@ -526,11 +580,10 @@ int ORBITAMP_GATE_MAIN()
         for (int i = 0; columns && i < columnIds.size(); ++i)
         {
             const auto& c = world["columns"][i];
-            const bool dark = c["id"].toString() == "fx2";
-            columns = c["id"].toString() == columnIds[i] && isRect (c["box"])
-                   && (dark ? c["param"].isVoid() || c["param"].toString().isEmpty() : amp->apvts.getParameter (c["param"].toString()) != nullptr);
+            columns = c["id"].toString() == columnIds[i] && isRect (c["box"]) && amp->apvts.getParameter (c["param"].toString()) != nullptr
+                   && (c["id"].toString() != "fx2" || c["param"].toString() == params::octaveAmount);
         }
-        check (columns, "...the columns COMP, FX 1, FX 2 and REVERB, each with the parameter it moves, FX 2 none");
+        check (columns, "...the columns COMP, FX 1, FX 2 and REVERB, each with the parameter it moves, FX 2 the octave's");
 
         bool onStage = true, named = true;
         visitAll (world, [&] (const juce::var& v)
@@ -570,6 +623,85 @@ int ORBITAMP_GATE_MAIN()
     }
 
     amp.reset();
+
+    // THE OCTAVE'S SOUND (Product::guitarOctave), on fresh amps as a host makes them, a steady A2 (110 Hz, -12 dBFS) into
+    // the chain as the first channel opens it, its cabinet out (so a speaker's low end does not decide what is heard):
+    //   - the chain with no octave at all — the product made without it, the path every other guitar amp plays — twice,
+    //     bit for bit the same (the control: what follows is the octave's and nothing else's);
+    //   - the octave at 0, and the octave out of the strip with its mix up: that chain's output bit for bit;
+    //   - the octave at 1: the note gains its octave down, 55 Hz, which the chain without it does not have; and the
+    //     latency the host is told is the octave-less chain's (Octaver::latencySamples is 0).
+    {
+        static const Product without = [] { Product p = ORBITAMP_GATE_PRODUCT(); p.guitarOctave = false; return p; }();
+        constexpr double rate = 48000.0, hz = 110.0;
+        constexpr int block = 512, blocks = 141;   // 1.5 s
+        int latency = -1;
+        const auto play = [&] (const Product& p, float present, float mix)
+        {
+            auto a = std::make_unique<AmpProcessor> (p);
+            a->inlineLoads = true;            // no message loop here: a model lands inside the pump
+            const auto put = [&a] (const char* id, float v) { if (auto* q = a->apvts.getParameter (id)) q->setValueNotifyingHost (q->convertTo0to1 (v)); };
+            put (params::cabOn, 0.0f);
+            put (params::octavePresent, present);
+            put (params::octaveAmount, mix);
+            a->prepareToPlay (rate, block);
+            a->pumpDeviceWork();
+            juce::AudioBuffer<float> buf (juce::jmax (2, a->getTotalNumInputChannels(), a->getTotalNumOutputChannels()), block);
+            juce::MidiBuffer midi;
+            std::vector<float> heard;
+            const double peak = juce::Decibels::decibelsToGain (-12.0);
+            long long n = 0;
+            for (int b = 0; b < blocks; ++b)
+            {
+                for (int i = 0; i < block; ++i, ++n)
+                    for (int ch = 0; ch < buf.getNumChannels(); ++ch)
+                        buf.setSample (ch, i, (float) (peak * std::sin (juce::MathConstants<double>::twoPi * hz * (double) n / rate)));
+                a->processBlock (buf, midi);
+                a->pumpDeviceWork();
+                heard.insert (heard.end(), buf.getReadPointer (0), buf.getReadPointer (0) + block);
+            }
+            latency = a->getLatencySamples();
+            return heard;
+        };
+        const auto levelAt = [&] (const std::vector<float>& v, double f)   // dB, one DFT bin over the second half
+        {
+            double c = 0.0, s = 0.0;
+            for (size_t i = v.size() / 2; i < v.size(); ++i)
+            {
+                const double ph = juce::MathConstants<double>::twoPi * f * (double) i / rate;
+                c += v[i] * std::cos (ph);
+                s += v[i] * std::sin (ph);
+            }
+            return 10.0 * std::log10 (c * c + s * s + 1.0e-30);
+        };
+        const auto loud = [] (const std::vector<float>& v)
+        {
+            float p = 0.0f;
+            for (const float x : v)
+                p = std::max (p, std::abs (x));
+            return p;
+        };
+
+        const auto none = play (without, 1.0f, 0.0f);
+        const int noneLatency = latency;
+        const auto again = play (without, 1.0f, 0.0f);
+        const auto atZero = play (ORBITAMP_GATE_PRODUCT(), 1.0f, 0.0f);
+        const auto outOfStrip = play (ORBITAMP_GATE_PRODUCT(), 0.0f, 0.6f);
+        const auto full = play (ORBITAMP_GATE_PRODUCT(), 1.0f, 1.0f);
+        const int fullLatency = latency;
+        check (loud (none) > 1.0e-3f && none == again, "the chain with no octave plays the note, the same bit for bit twice (peak "
+                                                         + juce::String (loud (none), 3) + ")");
+        check (atZero == none, "the OCTAVE at 0: the chain with no octave's output, bit for bit");
+        check (outOfStrip == none, "...and out of the strip with its mix up: the same, bit for bit");
+        const double subWithout = levelAt (none, 0.5 * hz), subWith = levelAt (full, 0.5 * hz), tone = levelAt (full, hz);
+        check (subWith - subWithout > 20.0 && subWith > tone - 30.0,
+               "the OCTAVE at 1: the note gains its octave down, 55 Hz up " + juce::String (subWith - subWithout, 1) + " dB, "
+                   + juce::String (subWith - tone, 1) + " dB to the note's 110 Hz");
+        check (noneLatency >= 0 && fullLatency == noneLatency,
+               "...and the host is told the chain's latency as without it: " + juce::String (fullLatency) + " samples, "
+                   + juce::String (noneLatency) + " without");
+    }
+
     std::printf ("%s\n", failed == 0 ? "PASSED" : "FAILED");
     return failed == 0 ? 0 : 1;
 }

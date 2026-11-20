@@ -287,8 +287,8 @@ MetalEditor::MetalEditor (AmpProcessor& p)
             }
         };
 
-    // THE FADERS: COMP's threshold, FX 1 and REVERB upright in their slots, FX 2 dark; each says where it stands in the tag
-    // over it while it is held.
+    // THE FADERS: COMP's threshold, FX 1, FX 2 and REVERB upright in their slots; each says where it stands in the tag over
+    // it while it is held.
     const auto faderIn = [this] (face::ColumnFader& fader, juce::Rectangle<float> slot, const char* id)
     {
         fader.capLength = layout::faderCapLength;
@@ -316,16 +316,25 @@ MetalEditor::MetalEditor (AmpProcessor& p)
     bindTravel (reverb, params::reverbMix, [] (float v) { return v / 100.0f; }, [] (float t) { return t * 100.0f; });
     sayLeverAs (reverb, "REVERB", [this] { return percent (getParam (params::reverbMix) / 100.0f); });
 
-    // FX 2 HAS NOTHING TO PLAY YET: its fader dark at its foot, out of the hand's reach, and its name under the hand.
-    fx2.setValue (0.0f, false);
-    fx2.setEnabled (false);
-    fx2.setInterceptsMouseClicks (false, false);
-    fx2.setAlpha (0.35f);
-    addToStage (fx2Spot);
-    fx2Spot.setBounds (fx2.getBounds());
-    fx2Spot.onHover = [this] (bool over)
+    // FX 2, THE OCTAVE (the owner, 20.11): its mix, 0 at the foot the dry; its name OCTAVE under the hand, and again when
+    // the hand lets go over it. The word "Fx 2" under it stays as baked.
+    bindTravel (fx2, params::octaveAmount, [] (float v) { return v; }, [] (float t) { return t; });
+    sayLeverAs (fx2, "FX 2  OCTAVE", [this] { return percent (getParam (params::octaveAmount)); });
+    const auto nameFx2 = [this] (bool over)
     {
-        nameTag.show ({ layout::fx2Slot.getCentreX(), layout::fx2Slot.getY() - 14.0f }, over ? juce::String ("FX 2") : juce::String());
+        nameTag.show ({ layout::fx2Slot.getCentreX(), layout::fx2Slot.getY() - 14.0f }, over ? juce::String ("OCTAVE") : juce::String());
+    };
+    fx2.onHover = [this, nameFx2] (bool over)
+    {
+        if (! fx2.isMouseButtonDown())    // held, the tag says where it stands (sayLeverAs)
+            nameFx2 (over);
+    };
+    fx2.onGestureEnd = [this, nameFx2, before = fx2.onGestureEnd]
+    {
+        if (before)
+            before();
+        if (fx2.isMouseOver())
+            nameFx2 (true);
     };
 
     // THE LEVER: PARK over the four channels. PARK takes the whole amp out (the amp's bypass) and leaves the channel as it
@@ -611,8 +620,8 @@ void MetalEditor::webExtras (const juce::File& dir, juce::DynamicObject& kit, ju
                                                                   "whole dB, in the name tag while held: COMP  -24 dB" },
             { "fx1",    "FX 1",   &fx1,    params::delayMix,      "the value / 100, bottom to top",
                                                                   "percent, in the name tag while held: FX 1  DELAY  15%" },
-            { "fx2",    "FX 2",   &fx2,    nullptr,               "none: nothing plays there yet; dark at its foot, out of the hand's reach",
-                                                                  "none: the name tag FX 2 under the hand" },
+            { "fx2",    "FX 2",   &fx2,    params::octaveAmount,  "the value, 0..1, bottom to top: the octave's mix, 0 the dry",
+                                                                  "percent, in the name tag while held: FX 2  OCTAVE  40%; OCTAVE under the hand" },
             { "reverb", "REVERB", &reverb, params::reverbMix,     "the value / 100, bottom to top",
                                                                   "percent, in the name tag while held: REVERB  20%" } };
         juce::Array<juce::var> a;

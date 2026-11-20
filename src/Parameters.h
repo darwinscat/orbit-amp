@@ -697,10 +697,11 @@ inline constexpr bool bassChainHolds (ChainRow) noexcept
 }
 
 /** THE GUITAR'S CHAIN, every amp's but OrbitBass's: every link but the bass's own — OCTAVE, FILTER and CHORUS — which
-    no guitar amp has a parameter for, and COMP but where the amp has one (`comp`: OrbitAmp's, Product::guitarComp). */
-inline constexpr bool guitarChainHolds (ChainRow row, bool comp = false) noexcept
+    no guitar amp has a parameter for, COMP but where the amp has one (`comp`: OrbitAmp's, Product::guitarComp), and
+    OCTAVE but where the amp has one (`octave`: MetalAmp's, Product::guitarOctave). */
+inline constexpr bool guitarChainHolds (ChainRow row, bool comp = false, bool octave = false) noexcept
 {
-    return row != rowOctave && row != rowFilter && row != rowChorus && (row != rowComp || comp);
+    return (row != rowOctave || octave) && row != rowFilter && row != rowChorus && (row != rowComp || comp);
 }
 
 /** Whose cost a stage is. A captured block owns two — itself and its own console — and TOTAL
@@ -769,6 +770,10 @@ struct Opening
     // out of its strip until the player adds it.
     bool  compPresent   = false;
 
+    // ...and a GUITAR chain's OCTAVE in its strip from the start, where the product holds it there: MetalAmp's, its FX 2
+    // fader on the face (channels::Lineup::pinned). Declared by addGuitarOctaveParameters.
+    bool  octavePresent = false;
+
     // WHERE THE AMP'S MIDDLE OPENS: its console's first bell's frequency — 400 Hz on every amp but the basses, whose MID
     // FREQ opens at 1 kHz (RedGrooveBass's: the owner, 02.11; OrbitBass's: 10.11). A default, not a hold: the player moves it, and
     // INIT and a double click bring it back here (engineDefault leaves it its declared default).
@@ -796,6 +801,12 @@ void addBassParameters (juce::AudioProcessorValueTreeState::ParameterLayout&, co
 /** A guitar chain's COMP (addGuitarCompParameters, above), each of its parameters declaring as its default where `opening`
     says a fresh instance of the product stands: its share, its On and whether it is in the strip. */
 void addGuitarCompParameters (juce::AudioProcessorValueTreeState::ParameterLayout&, const Opening&);
+
+/** A GUITAR CHAIN'S OCTAVE (Product::guitarOctave): the bass's OCTAVE, its parameters and its module (felitronics-core's
+    octave), at the front of the guitar's chain — its On, its amount 0..1 opening at 0 (the dry bit for bit, nothing
+    computed), its TONE at the module's 120 Hz, and whether it is in the strip, where `opening` says. One processor is
+    one product's, so the bass's ids serve: no layout holds both. */
+void addGuitarOctaveParameters (juce::AudioProcessorValueTreeState::ParameterLayout&, const Opening&);
 
 /** The engine's parameters, for the product of that name: the devices a parameter offers are the ones
     it plays, and a fresh instance stands where `opening` says. */

@@ -537,6 +537,7 @@ public:
 
     std::function<void()>       onGestureStart, onGestureEnd;
     std::function<void (float)> onChange;
+    std::function<void (bool)>  onHover;         // the hand over it, or gone, when set: a name under the hand
     std::function<void()>       onMenu;          // a right click, when set — and then it does not move the cap
 
     void  setValue (float v, bool notify);
@@ -548,8 +549,8 @@ public:
     void mouseDrag (const juce::MouseEvent&) override;
     void mouseUp (const juce::MouseEvent&) override;
     void mouseDoubleClick (const juce::MouseEvent&) override;
-    void mouseEnter (const juce::MouseEvent&) override { repaint(); }
-    void mouseExit (const juce::MouseEvent&) override  { repaint(); }
+    void mouseEnter (const juce::MouseEvent&) override { repaint(); if (onHover) onHover (true); }
+    void mouseExit (const juce::MouseEvent&) override  { repaint(); if (onHover) onHover (false); }
 
 private:
     const juce::Image& cap;

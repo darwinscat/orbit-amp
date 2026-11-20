@@ -44,7 +44,7 @@ private:
     the tone strip and the key strip, as many as the playing pack has, the six keys of the history and the registers, IN
     and OUT, the tuner, the maker's plate; what it has not: the REVERB, DELAY and CAB plates and the HPF and LPF keys. What
     is its own over it: the lever, PARK over the four channels, its stops glyphs; COMP's fader and its squeeze; FX 1 (the
-    delay's amount), FX 2 (nothing yet, dark) and REVERB; GATE's and LIMITER's buttons; the cabinet's slider in its screen,
+    delay's amount), FX 2 (the octave's mix) and REVERB; GATE's and LIMITER's buttons; the cabinet's slider in its screen,
     its name over it, and the service readings — PRESET, the version, MEM and CPU — on the picture under it; the cat in the
     maker's plate, silver, and crimson in flames under the hand. */
 class MetalEditor final : public face::Console,
@@ -79,17 +79,10 @@ private:
     void renderOpenGL() override;
     void openGLContextClosing() override;
 
-    // THE FADERS: COMP's threshold and its squeeze beside it; FX 1, the delay's amount; FX 2, dark — nothing plays there
-    // yet — its name under the hand; REVERB, the room's share. A double click puts any of them back where it opens.
+    // THE FADERS: COMP's threshold and its squeeze beside it; FX 1, the delay's amount; FX 2, the octave's mix, its name
+    // OCTAVE under the hand; REVERB, the room's share. A double click puts any of them back where it opens.
     face::ColumnFader comp, fx1, fx2, reverb;
     redgroove::GrColumn squeeze;
-    struct HoverSpot final : juce::Component
-    {
-        std::function<void (bool)> onHover;
-        void mouseEnter (const juce::MouseEvent&) override { if (onHover) onHover (true); }
-        void mouseExit (const juce::MouseEvent&) override  { if (onHover) onHover (false); }
-    };
-    HoverSpot fx2Spot;
 
     template <typename Control>
     void bindTravel (Control&, const juce::String& paramId, std::function<float (float)> toTravel,

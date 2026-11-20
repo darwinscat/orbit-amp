@@ -95,7 +95,7 @@ inline constexpr float toneY = 822.0f, tonePitch = 72.0f, toneSocket = 72.0f, to
 inline const juce::Rectangle<float> keyStripBox = socket (760.0f, 893.0f, 212.0f, 60.0f);
 inline constexpr float keyY = 903.0f, keyPitch = 106.0f, keySize = 30.0f;
 
-// THE EFFECTS: FX 1, DELAY's amount; FX 2, nothing yet; the family's REVERB.
+// THE EFFECTS: FX 1, DELAY's amount; FX 2, the OCTAVE's mix; the family's REVERB.
 inline const juce::Rectangle<float> fx1Slot    = socket (1036.0f, 833.0f, 16.0f, 88.0f);
 inline const juce::Rectangle<float> fx2Slot    = socket (1096.0f, 833.0f, 16.0f, 88.0f);
 inline const juce::Rectangle<float> reverbSlot = socket (1156.0f, 833.0f, 16.0f, 88.0f);

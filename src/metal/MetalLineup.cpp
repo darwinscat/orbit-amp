@@ -24,7 +24,10 @@ const channels::Lineup& lineup()
     // WHAT THE CABIN HOLDS WHERE IT IS, as the bathyscaphe holds its own: COMP in the strip and on, three quarters of the
     // signal through it at 4:1 on OPTO, its fader the threshold alone (the parameters declaring it: Engine::opening reads
     // these into the Opening). The delay and the room are on, as on every channel amp (Engine::setUpChain), their faders,
-    // FX 1 and REVERB, their amounts, 0 the dry. Its cabinets the guitar's TOP 12, drawn, as the rovers'.
+    // FX 1 and REVERB, their amounts, 0 the dry. FX 2 is the OCTAVE (the owner, 20.11), an octave down at the front of
+    // the chain, before COMP, the boost and the AMP, as an octave pedal stands: in the strip and on, its fader the mix,
+    // kept by each channel as the delay is, opening at 0, so the stand-in's sound is untouched until the hand moves it.
+    // Its cabinets the guitar's TOP 12, drawn, as the rovers'.
     static const channels::Lineup e530 = []
     {
         auto line = channels::withTopTwelve ({
@@ -37,13 +40,15 @@ const channels::Lineup& lineup()
             },
         });
         line.channels[3].drive = leadHiDrive;
-        line.kept = { params::compThreshold };
+        line.kept = { params::compThreshold, params::octaveAmount };
         line.pinned = {
             { params::compPresent,   1.0f },
             { params::compOn,        1.0f },
             { params::compAmount,    0.75f },
             { params::compRatio,     4.0f },
             { params::compCharacter, (float) params::compCharacters.indexOf ("Opto") },
+            { params::octavePresent, 1.0f },
+            { params::octaveOn,      1.0f },
         };
         return line;
     }();
@@ -58,13 +63,14 @@ namespace orbitamp
 namespace
 {
     // The cabin's half of the two things a product gives the processor beside its face (Product.h): CHANNEL over its
-    // lineup, and the guitar's COMP before the AMP, which its fader plays.
+    // lineup, the guitar's COMP before the AMP, which its fader plays, and the OCTAVE at the front, FX 2's.
     void addParameters (const Product&, juce::AudioProcessorValueTreeState::ParameterLayout& layout)
     {
         channels::Engine::addParameters (layout, metal::lineup());
         params::Opening held;
         channels::Engine::opening (metal::lineup(), held);
         params::addGuitarCompParameters (layout, held);
+        params::addGuitarOctaveParameters (layout, held);
     }
 
     std::unique_ptr<ProductEngine> makeEngine (AmpProcessor& p)
@@ -79,8 +85,8 @@ namespace
 }
 
 /** METALAMP (Product.h), a working name: the ENGL E530 preamp's face in the metal world's cabin (metal/MetalEditor.h) over
-    four channels on the guitar's chain, and a COMP before the AMP. No first start: it has no player's files of before to
-    gather. */
+    four channels on the guitar's chain, an OCTAVE at its front and a COMP before the AMP. No first start: it has no
+    player's files of before to gather. */
 const Product& products::metalAmp()
 {
     static const Product e530 = []
@@ -90,6 +96,7 @@ const Product& products::metalAmp()
         p.makeEngine    = makeEngine;
         p.opening       = opening;
         p.guitarComp    = true;
+        p.guitarOctave  = true;
         return p;
     }();
     return e530;

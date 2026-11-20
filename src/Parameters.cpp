@@ -89,6 +89,18 @@ void addGuitarCompParameters (juce::AudioProcessorValueTreeState::ParameterLayou
     layout.add (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { compPresent, 1 }, "Comp In Strip", opening.compPresent));
 }
 
+void addGuitarOctaveParameters (juce::AudioProcessorValueTreeState::ParameterLayout& layout, const Opening& opening)
+{
+    // The bass's OCTAVE as addBassParameters declares it — on, its amount at 0, its TONE at 120 Hz — and in the strip
+    // only where the product holds it there (MetalAmp: its FX 2).
+    using Float = juce::AudioParameterFloat;
+    const juce::NormalisableRange<float> tone (30.0f, 2000.0f, 0.1f, std::log (0.5f) / std::log ((120.0f - 30.0f) / (2000.0f - 30.0f)));
+    layout.add (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { octaveOn, 1 }, "Octave", true),
+                std::make_unique<Float> (juce::ParameterID { octaveAmount, 1 }, "Octave Amount", juce::NormalisableRange<float> { 0.0f, 1.0f, 0.001f }, 0.0f),
+                std::make_unique<Float> (juce::ParameterID { octaveToneHz, 1 }, "Octave Tone Hz", tone, 120.0f),
+                std::make_unique<juce::AudioParameterBool> (juce::ParameterID { octavePresent, 1 }, "Octave In Strip", opening.octavePresent));
+}
+
 void addBassParameters (juce::AudioProcessorValueTreeState::ParameterLayout& layout)
 {
     addBassParameters (layout, Opening {});
