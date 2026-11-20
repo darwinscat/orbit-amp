@@ -45,6 +45,10 @@ namespace
                         { 1.28, 0.90, 0.56 }, { 0.30, 0.31, 0.45 }, { 0.24, 0.17, 0.10 }, { 1.0, 0.70, 0.36 } };
     constexpr std::array<float, 9> tiltNone { 1, 0, 0, 0, 1, 0, 0, 0, 1 };
     constexpr std::array<float, 4> lampNone { 0, 0, 0, 0 }, lampPaint { 0, 0, 0, 1 };
+    // What the ladder's bottom rung (UnderwaterWorld::Quality's thin) leaves out besides the prototype's own: the oaks
+    // past about 600 m (shrinking into the ground from footOakFrom, gone by footOakGone, metres from the camera) and
+    // the flowers' outer band (the half the ladder keeps gone footFloraBeyond metres past the half it thins).
+    constexpr double footOakFrom = 600.0, footOakGone = 750.0, footFloraBeyond = 4.0;
 
     inline double fract (double x) noexcept { return x - std::floor (x); }
     inline double clamp (double v, double lo, double hi) noexcept { return std::min (hi, std::max (lo, v)); }
@@ -54,6 +58,17 @@ namespace
     /** The shortest way round the world (the prototype's nearest). */
     inline double nearest (double d) noexcept { return d - Js::round (d / W::worldPeriod) * W::worldPeriod; }
     inline const void* offset (int bytes) noexcept { return reinterpret_cast<const void*> ((std::uintptr_t) bytes); }
+    /** An instance buffer's first `bytes` for this draw. Written over in place, or — `renew` — into new storage of the
+        buffer's whole `capacity` (the buffer orphaned): writing over a buffer that draws not yet sent still read makes
+        the driver send the frame's commands so far first (a command buffer cut mid-scene, the scene's targets stored
+        and loaded back), as each scene drawn again under --stress does; new storage leaves the earlier draws theirs.
+        The same pixels either way. */
+    void upload (GLuint buf, int bytes, int capacity, const void* data, bool renew)
+    {
+        glBindBuffer (GL_ARRAY_BUFFER, buf);
+        if (renew) glBufferData (GL_ARRAY_BUFFER, capacity, nullptr, GL_DYNAMIC_DRAW);
+        glBufferSubData (GL_ARRAY_BUFFER, 0, bytes, data);
+    }
 
     /** a * b, column-major, as the prototype multiplies its Float32Arrays: in doubles, kept as f32. */
     std::array<float, 16> multiply (const std::array<float, 16>& a, const std::array<float, 16>& b) noexcept
@@ -782,6 +797,9 @@ void CaliforniaGl::drawScene (int rw, int rh, int cw, int ch)
     // The frame's uniforms, the same for every draw of a scene: set once a scene in each program (a program keeps
     // them), not again for each of its draws.
     const auto setFrame = [&] (const Program& p) { if (p.stamp == frameStamp) return; p.stamp = frameStamp; setCommon (p); setLight (p); };
+    // At the foot the instance buffers take new storage for each draw (upload's renew): what was overwritten in place
+    // cut the command buffer once a scene drawn again. Kept to the bottom rung: the rungs above send what they sent.
+    const bool renew = quality.thin > 0;
     const bool cabin = drawsCabin();
     const auto box = cabin ? glassBox : std::optional<V4>();
 
@@ -848,11 +866,19 @@ void CaliforniaGl::drawScene (int rw, int rh, int cw, int ch)
         for (const auto& F : W::flora)
         {
             const int bx = (int) std::floor ((s.x + fx * F.ahead) / F.cell) - F.w / 2, bz = (int) std::floor ((s.z + fz * F.ahead) / F.cell) - F.w / 2;
+            // At the foot the field's outer band goes too: the half the ladder keeps shrinks away footFloraBeyond
+            // past the half it thins (the cells beyond are then not drawn).
+            auto far = F.far;
+            if (quality.thin > 0)
+            {
+                far[0] = lerp (far[0], far[2] + footFloraBeyond, quality.thin);
+                far[1] = lerp (far[1], far[3] + footFloraBeyond, quality.thin);
+            }
             glBindVertexArray (floraMesh[(size_t) F.kind].vao);
             glUniform1i (p.u ("uFloraM"), (int) Js::round (W::worldPeriod / F.cell));
             glUniform1f (p.u ("uFloraCell"), (float) F.cell); glUniform1f (p.u ("uFloraKind"), (float) F.kind); glUniform1f (p.u ("uFloraDensity"), (float) F.density);
             glUniform2f (p.u ("uFloraSize"), (float) F.smin, (float) F.smax);
-            glUniform4f (p.u ("uFloraFar"), (float) F.far[0], (float) F.far[1], (float) F.far[2], (float) F.far[3]);
+            glUniform4f (p.u ("uFloraFar"), (float) far[0], (float) far[1], (float) far[2], (float) far[3]);
             constexpr int band = 8;
             for (int j0 = 0; j0 < F.w; j0 += band)
             {
@@ -860,7 +886,7 @@ void CaliforniaGl::drawScene (int rw, int rh, int cw, int ch)
                 int i0 = F.w, i1 = -1;
                 for (int j = j0; j < j0 + rows; ++j)
                     for (int i = 0; i < F.w; ++i)
-                        if ((i < i0 || i > i1) && canShow ((bx + i) * F.cell - ccx, (bz + j) * F.cell - ccz, F.cell, F.far[1]))
+                        if ((i < i0 || i > i1) && canShow ((bx + i) * F.cell - ccx, (bz + j) * F.cell - ccz, F.cell, far[1]))
                         { i0 = std::min (i0, i); i1 = std::max (i1, i); }
                 if (i1 < i0) continue;
                 const int cols = i1 - i0 + 1;
@@ -880,15 +906,21 @@ void CaliforniaGl::drawScene (int rw, int rh, int cw, int ch)
         std::array<int, 3> nOak {};
         const std::array<Prop*, 3> lods { &oakNear, &oakMid, &oakFar };
         const double fl = Js::hypot (fx, fz) > 0 ? Js::hypot (fx, fz) : 1;
+        // At the foot the far oaks shrink into the ground, from footOakFrom, gone by footOakGone once thin is 1; while
+        // it grows, coming in from beyond the oaks' reach.
+        const bool oaksThin = quality.thin > 0;
+        const double oakGone = lerp (W::farCut + footOakGone - footOakFrom, footOakGone, quality.thin), oakFrom = oakGone - (footOakGone - footOakFrom);
         for (const auto& o : wd.listOaks())
         {
             const double dx = nearest (o.x - s.x), dz = nearest (o.z - s.z), dist = Js::hypot (dx, dz);
             if (dist > W::farCut || (dx * fx + dz * fz) / fl < 0.52 * dist - o.R * 1.5) continue;   // in view, 58 degrees off the way at most
+            const double k = oaksThin ? 1 - smoothstep (oakFrom, oakGone, dist) : 1;
+            if (k <= 0) continue;
             const int lod = dist < W::oakNearDistance ? 0 : dist < W::oakMidDistance ? 1 : 2;
             auto& P0 = *lods[(size_t) lod];
             const int i = nOak[(size_t) lod]++;
             if (i >= P0.max) continue;
-            put<8> (P0.data, (size_t) i * 8, { camFrac[0] + dx, o.y, camFrac[1] + dz, o.R, o.yaw, o.s, o.tint, o.vis });
+            put<8> (P0.data, (size_t) i * 8, { camFrac[0] + dx, o.y, camFrac[1] + dz, oaksThin ? o.R * k : o.R, o.yaw, o.s, o.tint, o.vis });
         }
         glUniform1f (p.u ("uKind"), 0);
         for (size_t lod = 0; lod < 3; ++lod)
@@ -896,7 +928,7 @@ void CaliforniaGl::drawScene (int rw, int rh, int cw, int ch)
             auto& P0 = *lods[lod];
             const int n = std::min (nOak[lod], P0.max);
             if (n == 0) continue;
-            glBindBuffer (GL_ARRAY_BUFFER, P0.inst); glBufferSubData (GL_ARRAY_BUFFER, 0, n * 32, P0.data.data());
+            upload (P0.inst, n * 32, P0.max * 32, P0.data.data(), renew);
             glBindVertexArray (P0.vao);
             glDrawElementsInstanced (GL_TRIANGLES, P0.count, GL_UNSIGNED_SHORT, nullptr, n);
         }
@@ -926,7 +958,7 @@ void CaliforniaGl::drawScene (int rw, int rh, int cw, int ch)
             prev = ends;
         }
         glUniform1f (p.u ("uKind"), 1);
-        glBindBuffer (GL_ARRAY_BUFFER, poles.inst); glBufferSubData (GL_ARRAY_BUFFER, 0, np * 32, poles.data.data());
+        upload (poles.inst, np * 32, poles.max * 32, poles.data.data(), renew);
         glBindVertexArray (poles.vao);
         glDrawElementsInstanced (GL_TRIANGLES, poles.count, GL_UNSIGNED_SHORT, nullptr, np);
         // the windpumps: the towers, then the fans turning (the breeze is steady: one speed)
@@ -946,7 +978,7 @@ void CaliforniaGl::drawScene (int rw, int rh, int cw, int ch)
             for (auto [P0, kind] : { std::pair<Prop*, int> { &pumpTower, 2 }, std::pair<Prop*, int> { &pumpFan, 3 } })
             {
                 glUniform1f (p.u ("uKind"), (float) kind);
-                glBindBuffer (GL_ARRAY_BUFFER, P0->inst); glBufferSubData (GL_ARRAY_BUFFER, 0, npm * 32, P0->data.data());
+                upload (P0->inst, npm * 32, P0->max * 32, P0->data.data(), renew);
                 glBindVertexArray (P0->vao);
                 glDrawElementsInstanced (GL_TRIANGLES, P0->count, GL_UNSIGNED_SHORT, nullptr, npm);
             }
@@ -966,7 +998,7 @@ void CaliforniaGl::drawScene (int rw, int rh, int cw, int ch)
                 put<16> (buf.data, (size_t) n++ * 16, { camFrac[0] + dx, b.y, camFrac[1] + dz, b.yaw, b.hx, b.hy, b.hz, (double) b.part,
                                                         b.rect[0], b.rect[1], b.rect[2], b.rect[3], b.vis, b.flutter, (double) kind, 0 });
             }
-            if (n > 0) { glBindBuffer (GL_ARRAY_BUFFER, buf.inst); glBufferSubData (GL_ARRAY_BUFFER, 0, n * 64, buf.data.data()); }
+            if (n > 0) { upload (buf.inst, n * 64, buf.max * 64, buf.data.data(), renew); }
             return n;
         };
         const auto& B = wd.signBoxes();
@@ -1023,7 +1055,7 @@ void CaliforniaGl::drawScene (int rw, int rh, int cw, int ch)
                                         Js::atan2 (rt[0] * side, -rt[1] * side) + 0.4 * Js::sin (t * 1.3), flap, 0.4, std::min (vis, 0.999) + 2 * (double) ((bs.seed + j) % 8) });
             }
         }
-        glBindBuffer (GL_ARRAY_BUFFER, instBfly); glBufferSubData (GL_ARRAY_BUFFER, 0, n * 32, bflyData.data());
+        upload (instBfly, n * 32, bfMax * 32, bflyData.data(), renew);
         glBindVertexArray (vaoBfly);
         glDrawElementsInstanced (GL_TRIANGLES, bflyIndices, GL_UNSIGNED_SHORT, nullptr, n);
     }
@@ -1332,7 +1364,7 @@ void CaliforniaGl::drawScene (int rw, int rh, int cw, int ch)
         glUseProgram (p.id);
         setFrame (p);
         glUniform1f (p.u ("uPxAngle"), (float) pxAngle);
-        glBindBuffer (GL_ARRAY_BUFFER, instWire); glBufferSubData (GL_ARRAY_BUFFER, 0, nw * 28, wireData.data());
+        upload (instWire, nw * 28, wireMax * 28, wireData.data(), renew);
         glBindVertexArray (vaoWire);
         glDrawElementsInstanced (GL_TRIANGLES, wireSegs * 6, GL_UNSIGNED_SHORT, nullptr, nw);
     }
@@ -1396,7 +1428,7 @@ void CaliforniaGl::drawScene (int rw, int rh, int cw, int ch)
             const auto& p = glass;
             glUseProgram (p.id); glBindVertexArray (vaoGlass);
             glUniform2f (p.u ("uCanvas"), (float) rw, (float) rh);
-            glBindBuffer (GL_ARRAY_BUFFER, instGlass); glBufferSubData (GL_ARRAY_BUFFER, 0, glassCount * 32, glassData.data());
+            upload (instGlass, glassCount * 32, glassCount * 32, glassData.data(), renew);
             glDrawArraysInstanced (GL_TRIANGLES, 0, 6, glassCount);
         }
     }
