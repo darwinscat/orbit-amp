@@ -27,15 +27,15 @@ namespace
         reaches the payment page — the hop logs the query and redirects clean. */
     /** What is the amp's own in the version window (OrbitAmp's, or OrbitBass's) — its page (ProductPage.h), the family's tag on the
         maker's page and the tip jar; the rest of it is aboutConfig's. */
-    appkit::VersionBadge::Config badgeConfig (const juce::String& name, bool standalone)
+    appkit::VersionBadge::Config badgeConfig (const Product& product, bool standalone)
     {
-        return aboutConfig (name, productPageUrl (name, standalone), familyLinkTag (name));
+        return aboutConfig (product.name, productPageUrl (product, standalone), familyLinkTag (product.name));
     }
 }
 
 Footer::Footer (AmpProcessor& processor)
     : amp (processor),
-      versionBadge (processor.updateChecker(), badgeConfig (processor.product().name, processor.wrapperType == juce::AudioProcessor::wrapperType_Standalone), processor.pluginFormat())
+      versionBadge (processor.updateChecker(), badgeConfig (processor.product(), processor.wrapperType == juce::AudioProcessor::wrapperType_Standalone), processor.pluginFormat())
 {
     // MONO | STEREO | STEREO SPACE: the click walks the loop — parameter truth, no local state.
     stereo.theme = chrome::ChromeTheme { .fill       = theme::panel,

@@ -79,7 +79,7 @@ namespace
             { products::amberPawAmp(), &redpaw::skinOf (products::amberPawAmp()).lineup },
             { products::redGrooveBass(), &redgroove::lineup() },
             { products::deepGrooveBass(), &underwater::lineup() },
-            { products::ioBass(),      &io::lineup() },
+            { products::ioTideBass(),     &io::lineup() },
         };
     }
 
@@ -340,14 +340,14 @@ int ORBITAMP_GATE_MAIN()
 
         // ...THE BASS AMPS, OrbitBass and the walker alike: none of the shelf, whatever the number; their player's IRs in
         // `Bass IRs` — the walker's cabinets drawn besides (channels::Lineup::drawnCabinets), no file at all.
-        for (const auto* bass : { &products::orbitBass(), &products::redGrooveBass(), &products::deepGrooveBass(), &products::ioBass() })
+        for (const auto* bass : { &products::orbitBass(), &products::redGrooveBass(), &products::deepGrooveBass(), &products::ioTideBass() })
         {
             bool none = cabinetsOn (*bass) == 0;
             for (int i = 0; i < params::cabIrNames.size(); ++i)
                 none = none && ! bass->playsCabIr (i) && AmpProcessor::cabIrBytes (*bass, i).data == nullptr;
             const bool ownDrawn = bass != &products::orbitBass();
             const bool drawn = ! ownDrawn || (bass == &products::redGrooveBass() ? redgroove::lineup()
-                                                 : bass == &products::ioBass() ? io::lineup() : underwater::lineup()).drawnCabinets;
+                                                 : bass == &products::ioTideBass() ? io::lineup() : underwater::lineup()).drawnCabinets;
             check (bass->chain == Chain::bass && none && drawn && juce::String (bass->irsFolder()) == "Bass IRs",
                    juce::String (bass->name) + " plays no guitar cabinet: no place of the shelf held, no number a cabinet, RED GIANT none; "
                    "the player's IRs in `Bass IRs`" + (ownDrawn ? ", its own cabinets drawn" : ""));
@@ -500,23 +500,35 @@ int ORBITAMP_GATE_MAIN()
     }
 
     // EACH PRODUCT'S PAGE ON THE SITE (ProductPage.h), as its badge, its version window and OrbitAmp's
-    // wordmark open it: https://darwinscat.com/felitronics/amps/<slug>, the slug its name in lower case, no
-    // language prefix, utm_source the slug and utm_medium plugin in a host, app standing alone — and the tip
-    // jar as it always was: its own hop, the family's tag on it, from=<slug> added by appkit.
+    // wordmark open it: https://darwinscat.com/felitronics/amps/<slug> for a guitar amp and
+    // .../felitronics/bass-amps/<slug> for a bass amp (the site's two shelves), the slug its name in lower
+    // case, no language prefix, utm_source the slug and utm_medium plugin in a host, app standing alone — and
+    // the tip jar as it always was: its own hop, the family's tag on it, from=<slug> added by appkit.
     for (const auto& [product, lineup] : family())
     {
         const auto slug = juce::String (product.name).toLowerCase();
-        const auto page = "https://darwinscat.com/felitronics/amps/" + slug + "?utm_source=" + slug;
-        check (productPageUrl (product.name, false) == page + "&utm_medium=plugin"
-                   && productPageUrl (product.name, true) == page + "&utm_medium=app",
-               juce::String (product.name) + "'s page: " + productPageUrl (product.name, false) + ", utm_medium=app standing alone");
-        const auto about = aboutConfig (product.name, productPageUrl (product.name, false), familyLinkTag (product.name));
+        const juce::String shelf = product.chain == Chain::bass ? "bass-amps/" : "amps/";
+        const auto page = "https://darwinscat.com/felitronics/" + shelf + slug + "?utm_source=" + slug;
+        check (productPageUrl (product, false) == page + "&utm_medium=plugin"
+                   && productPageUrl (product, true) == page + "&utm_medium=app",
+               juce::String (product.name) + "'s page: " + productPageUrl (product, false) + ", utm_medium=app standing alone");
+        const auto about = aboutConfig (product.name, productPageUrl (product, false), familyLinkTag (product.name));
         const auto tip = felitronics::appkit::brand::feedTheCatLink (product.name, about.feedUrl).toString (true);
         check (about.productUrl == page + "&utm_medium=plugin"
                    && tip.startsWith ("https://darwinscat.com/feed-the-cat?utm_source=" + slug + "&utm_medium=plugin")
                    && tip.contains ("from=" + slug),
                "...its version window opens that page, and its tip jar stays " + tip.upToFirstOccurrenceOf ("&platform", false, false));
     }
+    // ...and the pages the site has (README.md), spelled out: a guitar amp's and every bass amp's, IoTideBass's
+    // among them — not derived from the rule above, so a shelf named wrong in both places still shows here.
+    for (const auto& [product, url] : std::initializer_list<std::pair<const Product*, const char*>> {
+             { &products::orbitAmp(),       "https://darwinscat.com/felitronics/amps/orbitamp" },
+             { &products::orbitBass(),      "https://darwinscat.com/felitronics/bass-amps/orbitbass" },
+             { &products::redGrooveBass(),  "https://darwinscat.com/felitronics/bass-amps/redgroovebass" },
+             { &products::deepGrooveBass(), "https://darwinscat.com/felitronics/bass-amps/deepgroovebass" },
+             { &products::ioTideBass(),     "https://darwinscat.com/felitronics/bass-amps/iotidebass" } })
+        check (productPageUrl (*product, false).upToFirstOccurrenceOf ("?", false, false) == url,
+               juce::String (product->name) + "'s page is " + url);
 
     std::printf ("%s\n", failed == 0 ? "PASSED" : "FAILED");
     return failed == 0 ? 0 : 1;

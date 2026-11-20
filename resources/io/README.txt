@@ -1,5 +1,5 @@
-The Io rover's cabin art (IoBass, the SansAmp RBI's face), as the factory folder carries it (CMakeLists.txt,
-IOBASS_RENDERS): laid out in Faces/IoBass and read at run time (src/io/IoFaceArt.h).
+The Io rover's cabin art (IoTideBass, the SansAmp RBI's face), as the factory folder carries it (CMakeLists.txt,
+IOTIDEBASS_RENDERS): laid out in Faces/IoTideBass and read at run time (src/io/IoFaceArt.h).
 
 The plates are catbay's renders (~/CLAUDE_FILES/Worlds/io/cabin/final, variant b), kept there, not here (18 MB):
 dashboard_day.png and dashboard_dark.png, 3344 x 1882 RGBA, the cabin over the 1672 x 941 stage at 2x, its windscreen

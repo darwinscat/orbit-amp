@@ -1,6 +1,6 @@
 The Io world's finds (src/io/view/IoArt.h): the hardware left behind on Io, our own models, as the world's prototype
 (~/CLAUDE_FILES/Worlds/io/finds) has them, the same bytes. Laid out by the installer in the factory folder's
-Faces/IoBass/finds beside the cabin's two plates (resources/io/README.txt) and read from there at run time (IO_ART_DIR),
+Faces/IoTideBass/finds beside the cabin's two plates (resources/io/README.txt) and read from there at run time (IO_ART_DIR),
 never built into a binary.
 
   mast3d/ dish3d/ module3d/ lander3d/ station3d/ rover3d/     the six single pieces

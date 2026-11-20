@@ -42,7 +42,7 @@ const channels::Lineup& lineup()
     // pack, nothing held, everything else one set — from one to the other nothing changes but the gear the world drives in.
     //
     // A STAND-IN SOUND until the RBI has captures of its own: the Two Notes ReVolt Bass's DIRT channel (CMakeLists.txt:
-    // IOBASS_SET), on everything DeepGrooveBass's DIRT gear stands on — its BLEND opening at 80/20, the dozen's 8x10,
+    // IOTIDEBASS_SET), on everything DeepGrooveBass's DIRT gear stands on — its BLEND opening at 80/20, the dozen's 8x10,
     // COMP on, three quarters through it at 4:1 on OPTO, its fader the threshold alone; OCTAVE and CHORUS in the strip
     // and on, their faders their amounts; the room in the strip and on; both cuts on, the switches choosing between their
     // positions; no ENVELOPE and no delay (underwater/UnderwaterLineup.cpp). Its tones are Bass, Mid and Treble; it has
@@ -110,14 +110,14 @@ namespace
     }
 }
 
-/** IOBASS (Product.h), a working name: the SansAmp RBI's face in catbay's Io rover cabin (io/IoEditor.h), over Jupiter's
-    volcanic moon, on the bass's chain (Chain::bass) — one sound, a stand-in for now, its tuner down to a drop-A's A0. No
-    first start: it has no player's files of before to gather. */
-const Product& products::ioBass()
+/** IOTIDEBASS (Product.h), the owner's name (20.11): the SansAmp RBI's face in catbay's Io rover cabin (io/IoEditor.h),
+    over Jupiter's volcanic moon, on the bass's chain (Chain::bass) — one sound, a stand-in for now, its tuner down to a
+    drop-A's A0. No first start: it has no player's files of before to gather. */
+const Product& products::ioTideBass()
 {
     static const Product sub = []
     {
-        Product p { "IoBass", io::makeEditor };
+        Product p { "IoTideBass", io::makeEditor };
         p.addParameters = addParameters;
         p.makeEngine    = makeEngine;
         p.opening       = opening;
@@ -134,6 +134,6 @@ const Product& products::ioBass()
 #if ORBITAMP_PLUGIN_ENTRY
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()
 {
-    return new orbitamp::AmpProcessor (orbitamp::products::ioBass());
+    return new orbitamp::AmpProcessor (orbitamp::products::ioTideBass());
 }
 #endif

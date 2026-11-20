@@ -8,7 +8,7 @@
 namespace orbitamp::io
 {
 
-/** WHAT THE FACE DRAWS WITH, laid out in the factory folder under Faces/IoBass (CMakeLists.txt: IOBASS_RENDERS), as
+/** WHAT THE FACE DRAWS WITH, laid out in the factory folder under Faces/IoTideBass (CMakeLists.txt: IOTIDEBASS_RENDERS), as
     the bathyscaphe's are: the day's dashboard, which the face paints itself whenever the world does not draw the cabin (the
     dark plate beside it is the world's, crossfaded by the Sun; the face never reads it); the knobs and the faders' cap, renders of the family's; its MIDI list. No mark of its own: the maker's
     plate wears the family's cat. A render that fails to decode leaves its image null, and its control draws a

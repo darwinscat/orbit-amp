@@ -23,7 +23,7 @@ namespace orbitamp::io
     amp's bypass (AmpProcessor::bypassParameter). */
 const channels::Lineup& lineup();
 
-/** PRESENCE, IOBASS'S OWN PARAMETER (the owner, 20.11): the knob's place, 0..1, while the playing pack has no tone named
+/** PRESENCE, IOTIDEBASS'S OWN PARAMETER (the owner, 20.11): the knob's place, 0..1, while the playing pack has no tone named
     Presence — the sulphur snow of the Io world (IoDrive::setPresence) and no sound. Saved with the state, restored and
     automated as any parameter; declared by the product beside its CHANNEL (IoLineup.cpp, addParameters), so no other
     amp has it. It opens where the prototype's view opens, 0.2. Where a pack lists a Presence tone, the knob turns that

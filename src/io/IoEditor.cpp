@@ -515,7 +515,7 @@ IoEditor::~IoEditor()
     gl.detach();
 }
 
-/** THE WORLD BEHIND THE GLASS: Io (view/IoDrive.h), its art read from the factory folder's Faces/IoBass (view/IoArt.h)
+/** THE WORLD BEHIND THE GLASS: Io (view/IoDrive.h), its art read from the factory folder's Faces/IoTideBass (view/IoArt.h)
     — SLOW its first gear, FAST its second, PARK the rover on the shoulder. */
 std::unique_ptr<redpaw::Drive> IoEditor::makeDrive()
 {

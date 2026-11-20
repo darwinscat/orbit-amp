@@ -10,7 +10,7 @@ namespace orbitamp::io
 
 namespace
 {
-    constexpr const char* product = "IoBass";
+    constexpr const char* product = "IoTideBass";
     constexpr const char* folderVariable = "IO_ART_DIR";
 
     juce::Image load (const char* name)

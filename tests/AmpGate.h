@@ -244,7 +244,7 @@ inline const Product& product()
         // The Io rover: one sound under its two speeds, SLOW and FAST, a pair over one memory — a stand-in until the SansAmp
         // RBI has captures: the ReVolt Bass's DIRT, as DeepGrooveBass's DIRT gear stands, on a plate it opens with none of,
         // no delay, BLEND at 80/20, on the dozen's 8x10, drawn (src/io/IoLineup.cpp). Made after the family's folder.
-        { "IoBass", "Io rover", "IOBASS_GATE_OWNS_HOME",
+        { "IoTideBass", "Io rover", "IOTIDEBASS_GATE_OWNS_HOME",
           {
               { "revolt-bass-dirt-e9d4", "", "Plate", 0.0f, 0.0f, nullptr, "rock-03-8x10-stack", 0.8f },
               { "revolt-bass-dirt-e9d4", "", "Plate", 0.0f, 0.0f, nullptr, "rock-03-8x10-stack", 0.8f },

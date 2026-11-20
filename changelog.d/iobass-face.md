@@ -1,7 +1,7 @@
-Amps: IoBass
+Amps: IoTideBass
 
 ### Added
-- IoBass (a working name), a new bass amp: the SansAmp RBI's face in a rover's cabin on Io, Jupiter's volcanic moon.
+- IoTideBass, a new bass amp: the SansAmp RBI's face in a rover's cabin on Io, Jupiter's volcanic moon.
   Pictograms over its controls, each named on hover, and a few words in B612. A lever with PARK (the amp's bypass),
   SLOW and FAST, the rover's two speeds, which play the same sound; DRIVE, PRESENCE, BLEND, BASS, MIDDLE and TREBLE;
   COMP and its squeeze; OCTAVE, CHORUS and REVERB; the 5STR | 4STR and FING | SLAP switches; IN and OUT, GATE and

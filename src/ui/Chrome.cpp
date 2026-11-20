@@ -43,7 +43,7 @@ Chrome::Chrome (AmpProcessor& processor)
               .tracking   = 0.06f },
       // The family's own kit: appkit carries the mark and the face, so nothing here embeds either.
       brand (processor.product().name,
-             productPageUrl (processor.product().name, processor.wrapperType == juce::AudioProcessor::wrapperType_Standalone)),     // ProductPage.h
+             productPageUrl (processor.product(), processor.wrapperType == juce::AudioProcessor::wrapperType_Standalone)),     // ProductPage.h
       preset (theme)
 {
     auto& history = amp.history;

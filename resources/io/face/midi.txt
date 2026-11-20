@@ -1,4 +1,4 @@
-IoBass MIDI commands
+IoTideBass MIDI commands
 
 It listens to every MIDI input that is switched on, on all 16 channels.
 

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of OrbitAmp — see LICENSE.
 
-// Gate for IOBASS'S FACE (src/io/IoEditor.h), its window made and never shown, run as the Io rover out of the build's
+// Gate for IOTIDEBASS'S FACE (src/io/IoEditor.h), its window made and never shown, run as the Io rover out of the build's
 // factory folder:
 //
 //   - the lever: PARK over the two speeds, SLOW and FAST. PARK is the amp's bypass (AmpProcessor::bypassParameter) and
@@ -10,7 +10,7 @@
 //   - ONE SOUND: SLOW and FAST play the same pack, nothing held, and every parameter but CHANNEL stands where it stood
 //     when the lever goes from one to the other — whatever the hand set on either (Lineup::pairs, one memory);
 //   - the tones by name: BASS, MIDDLE and TREBLE each turn the channel's tone of that name; PRESENCE, which the stand-in's
-//     pack has no tone for, a live knob all the same — not dim, its ring lit, taking the hand — turning IoBass's own
+//     pack has no tone for, a live knob all the same — not dim, its ring lit, taking the hand — turning IoTideBass's own
 //     parameter (io::presenceParam), which opens at the prototype's 0.2;
 //   - every pictogram named (a spot over each, its title the name);
 //   - a still of the face renders: the day's dark panel painted, DRIVE's wedge on it in Io's light paint;
@@ -21,7 +21,7 @@
 //     snow — 0.2 as the face opens, 1.0 with the knob turned full — and a state saved with PRESENCE full and restored over
 //     another brings it back, the parameter and the world's snow both; the face's night glow follows how dark the world says the cabin is (IoDrive::cabinDark) — dark at
 //     DRIVE's start, the day at its end; and the world finds every file it reads where the build lays them out, the
-//     factory folder's Faces/IoBass (io::shippedArt): both plates, a mesh and its table for every variant of the finds,
+//     factory folder's Faces/IoTideBass (io::shippedArt): both plates, a mesh and its table for every variant of the finds,
 //     the skylight's pit radius.
 //
 // Each control is found by the name the face gives it; the tone knobs by the sockets they stand in (io/IoLayout.h).
@@ -238,7 +238,7 @@ int ORBITAMP_GATE_MAIN()
         juce::RangedAudioParameter* own = amp->apvts.getParameter (io::presenceParam);
         check (dynamic_cast<juce::AudioParameterFloat*> (own) != nullptr && std::abs (own->getDefaultValue() - io::presenceDefault) < 1.0e-6f
                    && std::abs (own->getValue() - io::presenceDefault) < 1.0e-6f && ! channels.toneNamesOf (0).contains ("Presence"),
-               "PRESENCE, which the stand-in's pack has no tone for, is IoBass's own parameter " + juce::String (io::presenceParam)
+               "PRESENCE, which the stand-in's pack has no tone for, is IoTideBass's own parameter " + juce::String (io::presenceParam)
                    + ", opening at " + juce::String (io::presenceDefault));
         check (presence != nullptr && presence->isEnabled() && takes && juce::approximatelyEqual (presence->getAlpha(), 1.0f)
                    && ring != nullptr && juce::approximatelyEqual (ring->getAlpha(), 1.0f)
@@ -450,7 +450,7 @@ int ORBITAMP_GATE_MAIN()
                    + juce::String (night.second, 3) + "; " + juce::String (noon.first, 3) + " at DRIVE 10, the face " + juce::String (noon.second, 3));
     }
 
-    // THE WORLD'S FILES, as the build lays them out: what io::shippedArt reads from the factory folder's Faces/IoBass.
+    // THE WORLD'S FILES, as the build lays them out: what io::shippedArt reads from the factory folder's Faces/IoTideBass.
     {
         const auto art = io::shippedArt();
         juce::StringArray lost;

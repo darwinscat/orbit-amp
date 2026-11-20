@@ -13,7 +13,7 @@ namespace orbitamp::io
 
 namespace
 {
-    constexpr const char* product = "IoBass";
+    constexpr const char* product = "IoTideBass";
     constexpr const char* folderVariable = "IO_ART_DIR";
 
     juce::File fileOf (const std::string& name) { return face::renders::fileOf (product, name.c_str(), folderVariable); }

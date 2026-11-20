@@ -85,7 +85,7 @@ namespace
         shared, not lent. */
     felitronics::appkit::VersionBadge::Config aboutTheProduct (const Product& p, const juce::String& svg, bool standalone)
     {
-        auto config = aboutConfig (p.name, productPageUrl (p.name, standalone), familyLinkTag (p.name));
+        auto config = aboutConfig (p.name, productPageUrl (p, standalone), familyLinkTag (p.name));
 
         std::shared_ptr<juce::Drawable> mark { juce::Drawable::createFromImageData (
             svg.toRawUTF8(), svg.getNumBytesAsUTF8()).release() };
@@ -446,7 +446,7 @@ Console::Console (AmpProcessor& p, std::unique_ptr<Picture> pic, const Places& w
         emblem.setBounds (face.getBounds().expanded (Emblem::bloom + 1.0f).getSmallestIntegerContainer());     // room for the lamp's glow; the target is the plate alone
     }
     emblem.setLamp (look.emblemLamp);
-    emblem.onClick = [page = productPageUrl (amp.product().name, amp.wrapperType == juce::AudioProcessor::wrapperType_Standalone)]
+    emblem.onClick = [page = productPageUrl (amp.product(), amp.wrapperType == juce::AudioProcessor::wrapperType_Standalone)]
     {
         juce::URL (page).launchInDefaultBrowser();
     };

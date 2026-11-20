@@ -47,7 +47,7 @@ private:
 };
 
 //==============================================================================
-/** IOBASS'S FACE over OrbitAmp's processor: the family's console (face/Console.h) laid out on the Io rover's dashboard
+/** IOTIDEBASS'S FACE over OrbitAmp's processor: the family's console (face/Console.h) laid out on the Io rover's dashboard
     — the SansAmp RBI's controls — a world under the whole of it, one sound under the rover's two speeds. What it has of
     the console's own: DRIVE, the six keys of the history and the registers, IN and OUT, the lamps, the tuner, the
     maker's plate; what it has not: the REVERB, DELAY and CAB plates, the HPF and LPF keys, the console's row of tone
