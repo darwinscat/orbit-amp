@@ -243,6 +243,20 @@ inline GLenum filteredFloatFormat() noexcept
    #endif
 }
 
+/** Whether a half-float frame (RGBA16F) can be drawn into here, its extension turned on where it is one: always in
+    the app (GL 3.2 core has it); on WebGL 2 only with EXT_color_buffer_float, or EXT_color_buffer_half_float where a
+    browser has only that. A frame made in it is still to be checked for completeness: that has the last word. */
+inline bool halfFloatFrames() noexcept
+{
+   #if defined (__EMSCRIPTEN__)
+    const auto context = emscripten_webgl_get_current_context();
+    return emscripten_webgl_enable_extension (context, "EXT_color_buffer_float")
+        || emscripten_webgl_enable_extension (context, "EXT_color_buffer_half_float");
+   #else
+    return true;
+   #endif
+}
+
 /** A monotonic clock, milliseconds: what a frame timed by finishing it reads. */
 inline double milliseconds() noexcept
 {

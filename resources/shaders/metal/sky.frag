@@ -11,6 +11,8 @@ uniform vec3 uCamFwd, uCamRight, uCamUp; uniform vec2 uTanHalf; uniform float uS
 uniform vec3 uBandH, uBandT, uBandN;
 #include <skypass>
 uniform sampler2D uSmooth; uniform vec4 uSmoothMap;      // the smooth pass's picture, and where the view's uv falls in it
+uniform float uSmoothSq;    // 1 where that picture is 8 bits a channel (no half floats to draw into): sqrt (v / 4) in it,
+                            // so what reaches 4 fits and what is dim keeps small steps
 uniform vec4 uCurtA[4], uCurtB[4];   // per curtain: its sway, its fine waver's phase, its ripple, the ripples' phase; its breath
 in vec2 vNdc;
 out vec4 fragColor;
@@ -74,7 +76,8 @@ void main() {
   float el = asin (clamp (dir.y, -1.0, 1.0));
   vec3 col = vec3 (0.0);
 #if SKY_SMOOTH
-  fragColor = vec4 (smoothSky (dir, az, el), 1.0);
+  vec3 sm = smoothSky (dir, az, el);
+  fragColor = vec4 (uSmoothSq > 0.5 ? 0.5 * sqrt (max (sm, vec3 (0.0))) : sm, 1.0);
 #else
   // the far ranges: two layers of silhouettes round the horizon, black, a faint glow at their foot; under them nothing
   // of the sky shows
@@ -115,7 +118,8 @@ void main() {
   }
   col *= 0.35 + 0.65 * smoothstep (-0.01, 0.07, el);
   col += vec3 (0.05, 0.11, 0.07) * exp (-max (el, 0.0) / 0.018) * 0.5;
-  col += texture (uSmooth, (vNdc * 0.5 + 0.5) * uSmoothMap.xy + uSmoothMap.zw).rgb;   // the galaxy and the aurora
+  vec3 sm = texture (uSmooth, (vNdc * 0.5 + 0.5) * uSmoothMap.xy + uSmoothMap.zw).rgb;
+  col += uSmoothSq > 0.5 ? 4.0 * sm * sm : sm;              // the galaxy and the aurora
   // the lightning's flash in the air: a violet glow, more toward the horizon
   if (uFlash > 0.002) col += uFlashCol * uFlash * (0.10 + 0.20 * exp (-max (el, 0.0) / 0.15)) * (0.6 + 0.8 * nz (az * 3.0, el * 0.4 + 0.1, 0));
   col = mix (col, uFar, smoothstep (0.003, -0.006, dir.y));

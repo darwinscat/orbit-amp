@@ -36,7 +36,10 @@ namespace orbitamp::metal
         opaque the scene is not read, outside a flash one plate is fetched. Drawn only while both plates are in and
         the cabin is asked for (drawsCabin()); without it the world alone, the face paints the plate.
     The quality ladder's rungs (the scale under 1) fade the aurora's finest rays (0.75) and at the foot (0.5) half the
-    fire's particles and of the embers, the near lattice coarse beyond 45 m, as the prototype's do.
+    fire's particles and of the embers, the near lattice coarse beyond 45 m, as the prototype's do; the foot besides
+    draws less than the prototype's: the near lattice only in its middle 108 m once it is coarse beyond 45 m (the middle
+    level draws the same coarse lattice beyond), and no far meshes (the guitars beyond 300 m, the landmarks beyond 450 m,
+    the dragons beyond 600 m, dithered out as the rung comes).
     The cabin's projection — a constant half-width tangent, the centre sheared — is set with setLens. Draws into
     frames of its own, then blits the finished one to the frame buffer it is given. GLSL 1.50 core in the app,
     GLSL ES 3.00 on the web (src/shaders/Gpu.h). GL thread only. */
@@ -77,7 +80,8 @@ public:
     /** The scene drawn this many times a frame, for measuring. */
     void setRepeats (int times) noexcept { repeats = std::clamp (times, 1, 16); }
     /** Parts left out, for measuring what each costs (the prototype's `off`: props, meshes, dragons, signs, ground, sky,
-        vents, fire, ribbons, letters, embers, post, beams, flash), comma-separated. */
+        vents, fire, ribbons, letters, embers, post, beams, flash), comma-separated; and halffloat: a half-float frame
+        taken as not drawable, as on a WebGL 2 without EXT_color_buffer_float, to see the fallback. */
     void setSkip (const std::string& list);
     const std::string& error() const noexcept { return trouble; }
 
@@ -106,8 +110,8 @@ private:
     std::vector<std::array<double, 4>> bannerCells;
 
     struct Gpu { std::uint32_t vao = 0, vbo = 0, ibo = 0, inst = 0; int count = 0; bool wide = false; int max = 0; double r = 0; };
-    std::uint32_t vaoGrid = 0, vboGrid = 0, iboGrid = 0;
-    int gridCount = 0;
+    std::uint32_t vaoGrid = 0, vboGrid = 0, iboGrid = 0, vaoGridFoot = 0, iboGridFoot = 0;
+    int gridCount = 0, gridFootCount = 0;                // the lattice; its middle cells, the near level at the foot
     std::map<std::string, Gpu> propBufs;
     std::vector<std::pair<std::string, std::vector<int>>> byMesh;   // the props by mesh, in the prototype's order
     std::vector<int> spireOf;                   // per prop, its spire (-1: none)
@@ -129,6 +133,7 @@ private:
     std::uint32_t fboSmooth = 0, texSmooth = 0, fboPost = 0, texPost = 0;   // the sky's smooth parts; the foot's post pass
     int smoothW = 0, smoothH = 0, postW = 0, postH = 0;
     int smoothDiv = 4;                          // the smooth parts at a quarter of the view's pixels each way
+    bool smoothFloats = true;                   // their frame in half floats; else 8 bits a channel, square-rooted
     bool outerKept = false;                     // the plate outside the window's box is in the finished frame...
     double keptFlash = -1.0;                    // ...as this flash drew it
 
