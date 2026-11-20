@@ -221,10 +221,15 @@ Console::Console (AmpProcessor& p, std::unique_ptr<Picture> pic, const Places& w
                                  places.filterKeyHeight > 0.0f ? places.filterKeyHeight : places.keySize));
             keyNames[i] = switches[i].name;
         }
-        b.onHover = [this, &b, i] (bool over)     // a key that does not answer the hand says nothing either
+        b.onHover = [this, &b, i] (bool over)     // a key that does not answer the hand says nothing either...
         {
             const auto at = b.getBounds().toFloat().getCentre();
-            nameTag.show (at.translated (0.0f, -40.0f), over && b.isEnabled() ? keyNames[i] + "  " + b.stateText() : juce::String());
+            const bool dark = std::any_of (rightKeys.begin(), rightKeys.end(), [i] (const RightKey& k) { return k.dark && k.button == (int) i; });
+            nameTag.show (at.translated (0.0f, -40.0f),
+                          ! over ? juce::String()
+                                 : b.isEnabled() ? keyNames[i] + "  " + b.stateText()
+                                 : dark          ? keyNames[i] + "  " + places.darkKeyWords      // ...but a dark one says why it is
+                                                 : juce::String());
         };
     }
 
@@ -933,6 +938,11 @@ void Console::exportForWeb (const juce::File& dir)
                         k->setProperty ("lit", r.position);         // the switch's value it is lit at, and puts it to
                         if (r.off >= 0)
                             k->setProperty ("off", r.off);          // ...an off/on key: where letting it up puts it
+                    }
+                    else if (r.dark)
+                    {
+                        k->setProperty ("dark", true);              // a key the face names and the pack has no switch for:
+                        k->setProperty ("says", r.name + "  " + places.darkKeyWords);   // dim, no hand's; its tag's words
                     }
                     else
                         k->setProperty ("own", true);               // the face's own key, not the pack's
@@ -1793,13 +1803,47 @@ void Console::showChannel()
     showCab();
 }
 
-std::vector<Console::RightKey> Console::rightKeysOf (int channel) const
+namespace
 {
-    const auto isOff = [] (const juce::String& v)
+    bool readsOff (const juce::String& v)
     {
         const auto w = v.trim().toLowerCase();
         return w == "off" || w == "0" || w == "false" || w == "no";
-    };
+    }
+}
+
+std::vector<Console::RightKey> Console::keysNamed (const std::vector<juce::String>& names, const std::vector<Channels::PackSwitch>& pack,
+                                                   const std::vector<int>& free)
+{
+    std::vector<RightKey> out;
+    for (size_t n = 0; n < names.size() && n < free.size(); ++n)
+    {
+        const auto& name = names[n];
+        const auto s = std::find_if (pack.begin(), pack.end(), [&name] (const Channels::PackSwitch& w)
+                                     { return ! w.held && w.values.size() > 1 && w.name.trim().equalsIgnoreCase (name.trim()); });
+        if (s == pack.end())
+        {
+            RightKey dark { free[n], -1, -1, -1, {}, name.toUpperCase(), {} };
+            dark.dark = true;
+            out.push_back (std::move (dark));
+            continue;
+        }
+        int off = 0;
+        for (int p = 0; p < s->values.size(); ++p)
+            if (readsOff (s->values[p]))
+            {
+                off = p;
+                break;
+            }
+        const int on = off == 0 ? 1 : 0;
+        out.push_back ({ free[n], s->slot, on, off, s->name, name.toUpperCase(), {} });
+    }
+    return out;
+}
+
+std::vector<Console::RightKey> Console::rightKeysOf (int channel) const
+{
+    const auto isOff = readsOff;
 
     // The keys the pack's switches may have: the right group's, but the ones the face has taken.
     std::vector<int> free, own;
@@ -1808,8 +1852,15 @@ std::vector<Console::RightKey> Console::rightKeysOf (int channel) const
 
     std::vector<RightKey> out;
     size_t next = 0;
+    if (! places.namedKeys.empty())
+    {
+        out = keysNamed (places.namedKeys, channels.switchesOf (channel), free);
+        next = free.size();     // nothing of the pack's beside them
+    }
     for (const auto& s : channels.switchesOf (channel))
     {
+        if (! places.namedKeys.empty())
+            break;
         if (s.held)
             continue;
         const bool offOn = s.values.size() == 2 && isOff (s.values[0]) != isOff (s.values[1]);
@@ -1846,6 +1897,15 @@ void Console::showKeys()
     rightKeys = rightKeysOf (channels.active());
     for (const auto& k : rightKeys)
     {
+        if (k.dark)
+        {
+            // A key the face names and the pack has no switch for: dim, out of the hand's reach, unlit.
+            auto& b = *buttons[(size_t) k.button];
+            b.setOn (false, false);
+            b.setEnabled (false);
+            keyNames[(size_t) k.button] = k.name;
+            continue;
+        }
         if (k.slot < 0)
             continue;       // the face's own: lit as the face says
         auto& b = *buttons[(size_t) k.button];
@@ -1995,7 +2055,7 @@ Strips Console::stripsFor (int channel) const
     const auto keysLaid = lay (p.keyStrip, (int) right.size());
     out.keyScale = keysLaid.scale;
     for (size_t i = 0; i < keysLaid.centres.size(); ++i)
-        out.keys.push_back (keyAt (keysLaid.centres[i], p.keySize * keysLaid.scale, (int) i, right[i].name, true,
+        out.keys.push_back (keyAt (keysLaid.centres[i], p.keySize * keysLaid.scale, (int) i, right[i].name, ! right[i].dark,
                                    right[i].title.isNotEmpty()));
 
     // A titled switch's name, once over its keys: its positions' names are all under them (keyAt), so the

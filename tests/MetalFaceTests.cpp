@@ -28,7 +28,9 @@
 #include "Parameters.h"
 #include "channels/Engine.h"
 #include "device/FactorySet.h"
+#include "face/Console.h"
 #include "face/Controls.h"
+#include "face/Sheet.h"
 #include "metal/MetalControls.h"
 #include "metal/MetalLayout.h"
 #include "metal/MetalLineup.h"
@@ -36,6 +38,7 @@
 #include "redpaw/view/Windscreen.h"
 #include "MetalShipped.h"
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstdio>
@@ -262,17 +265,84 @@ int ORBITAMP_GATE_MAIN()
                                  + (lost.empty() ? juce::String() : ": not " + words.joinIntoString (", ")));
     }
 
-    // THE STRIPS: the playing pack's tones, as many knobs, in the tone strip; its switch's key in the key strip.
-    for (const int c : { 0, 2 })
+    // THE STRIPS: the playing pack's tones, as many knobs, in the tone strip; in the key strip the E530's BRIGHT and
+    // CONTOUR, on every channel, laid as for two, both dark on the V4's packs — which have neither switch — and saying so
+    // under the hand; no key for the V4's Boost.
+    auto* tag = findOf<face::NameTag> (*face);
+    for (const int c : { 0, 1, 2, 3 })
     {
         pull (c + 1);
         const auto knobs = showingIn<face::ArtKnob> (*face, layout::toneStripBox);
-        const auto keys  = showingIn<face::PushButton> (*face, layout::keyStripBox);
+        auto keys = showingIn<face::PushButton> (*face, layout::keyStripBox);
+        std::sort (keys.begin(), keys.end(), [] (auto* a, auto* b) { return a->getX() < b->getX(); });
         const auto names = channels.toneNamesOf (c);
         check ((int) knobs.size() == names.size() && names.size() >= 3,
                nameOf (c) + "'s tone strip holds its pack's " + juce::String (names.size()) + " tones (" + names.joinIntoString (", ")
                    + "), " + juce::String ((int) knobs.size()) + " knobs");
-        check (keys.size() == 1, "...and its key strip the pack's one switch, the V4's Boost (" + juce::String ((int) keys.size()) + " keys)");
+        const float half = 0.5f * layout::keyPitch;
+        bool two = keys.size() == 2;
+        juce::StringArray said;
+        for (size_t k = 0; two && k < 2; ++k)
+        {
+            const auto centre = keys[k]->getBounds().toFloat().getCentre();
+            two = std::abs (centre.x - (layout::keyStripBox.getCentreX() + (k == 0 ? -half : half))) < 1.0f && std::abs (centre.y - layout::keyY) < 1.0f;
+            if (keys[k]->onHover && tag != nullptr)
+            {
+                keys[k]->onHover (true);
+                said.add (tag->says());
+                keys[k]->onHover (false);
+            }
+        }
+        check (two, "...its key strip two keys, laid as for two: " + juce::String ((int) keys.size()) + " keys");
+        check (two && ! keys[0]->isEnabled() && ! keys[1]->isEnabled() && ! keys[0]->isOn() && ! keys[1]->isOn()
+                   && keys[0]->getMouseCursor() == juce::MouseCursor::NormalCursor,
+               "...both dark: drawn dim, unlit, no hand's");
+        check (said.size() == 2 && said[0] == "BRIGHT  WAITS FOR THE E530 CAPTURES" && said[1] == "CONTOUR  WAITS FOR THE E530 CAPTURES",
+               "...BRIGHT and CONTOUR, in that order, each saying under the hand that it waits for the E530's captures: "
+                   + said.joinIntoString (" | "));
+    }
+
+    // THE V4'S BOOST, held off on every channel (Lineup::Channel::held): off where the channel stands, and a host that throws
+    // it on is overruled the next time the channel is pulled.
+    {
+        bool heldOff = true;
+        juce::StringArray wrong;
+        for (int c = 0; c < channels.count(); ++c)
+        {
+            pull (c + 1);
+            const auto sw = channels.switchesOf (c);
+            const auto boost = std::find_if (sw.begin(), sw.end(), [] (const auto& s) { return s.name == "Boost"; });
+            if (boost == sw.end() || ! boost->held || boost->values[boost->opening] != "off")
+            {
+                heldOff = false;
+                wrong.add (nameOf (c) + (boost == sw.end() ? " has no Boost" : " does not hold it off"));
+                continue;
+            }
+            const auto id = params::selectorId (params::preampId, boost->slot);
+            const bool offThere = juce::roundToInt (plain (id)) == boost->opening;
+            setPlain (id, (float) (1 - boost->opening));    // a host throws it on
+            pull (c == 0 ? 2 : 1);
+            pull (c + 1);
+            const bool offAgain = juce::roundToInt (plain (id)) == boost->opening;
+            if (! offThere || ! offAgain)
+                wrong.add (nameOf (c) + (offThere ? " keeps the host's Boost on" : " stands with the Boost on"));
+            heldOff = heldOff && offThere && offAgain;
+        }
+        check (heldOff, "every channel holds the V4's Boost off, a host's on overruled when the channel is pulled again"
+                            + (wrong.isEmpty() ? juce::String() : ": " + wrong.joinIntoString (", ")));
+    }
+
+    // A PACK WITH A BRIGHT SWITCH (one of the gate's own making: the V4's packs have none) makes that key live — one key,
+    // off to on, under the face's name, whatever case the pack writes it in — the CONTOUR it lacks dark, and its Boost,
+    // held, no key; the very reading the cabin lays its strip with (Console::rightKeysOf).
+    {
+        std::vector<channels::Channels::PackSwitch> pack (2);
+        pack[0].slot = 0; pack[0].name = "Boost";  pack[0].values = juce::StringArray { "off", "on" }; pack[0].held = true;
+        pack[1].slot = 1; pack[1].name = "BRIGHT"; pack[1].values = juce::StringArray { "off", "on" };
+        const auto laid = face::Console::keysNamed ({ "Bright", "Contour" }, pack, { 2, 3, 4, 5 });
+        check (laid.size() == 2 && ! laid[0].dark && laid[0].button == 2 && laid[0].slot == 1 && laid[0].position == 1 && laid[0].off == 0
+                   && laid[0].name == "BRIGHT" && laid[1].dark && laid[1].slot < 0 && laid[1].button == 3 && laid[1].name == "CONTOUR",
+               "a pack with a Bright switch makes BRIGHT live, its off/on key; CONTOUR, which it lacks, stays dark; its held Boost has no key");
     }
 
     // COMP: the threshold alone, and what the cabin holds of it.
@@ -327,6 +397,24 @@ int ORBITAMP_GATE_MAIN()
         logo->force (false);
     writeStill (face->createComponentSnapshot (face->getLocalBounds(), true, 1.0f), "metal-face-1x.png");
     writeStill (face->createComponentSnapshot (face->getLocalBounds(), true, 2.0f), "metal-face-2x.png");
+
+    // ...and the two strips at twice the stage, the keys at rest and BRIGHT under the hand, its tag up.
+    {
+        const auto area = layout::toneStripBox.getUnion (layout::keyStripBox).expanded (24.0f, 18.0f);
+        const auto shoot = [&] (const char* name, juce::Rectangle<float> box)
+        {
+            writeStill (face->createComponentSnapshot ((box * stageScale).toNearestInt(), true, 2.0f / stageScale), name);
+        };
+        shoot ("metal-face-keys-2x.png", area);
+        auto keys = showingIn<face::PushButton> (*face, layout::keyStripBox);
+        std::sort (keys.begin(), keys.end(), [] (auto* a, auto* b) { return a->getX() < b->getX(); });
+        if (! keys.empty() && keys[0]->onHover)
+        {
+            keys[0]->onHover (true);
+            shoot ("metal-face-keys-hover-2x.png", tag != nullptr ? area.getUnion (tag->getBounds().toFloat().expanded (12.0f)) : area);
+            keys[0]->onHover (false);
+        }
+    }
 
     face.reset();
 
@@ -386,6 +474,29 @@ int ORBITAMP_GATE_MAIN()
                 named = named && amp->apvts.getParameter (v["param"].toString()) != nullptr;
         });
         check (onStage && named, "...and every box in the world on the stage, every parameter it names the amp's");
+
+        // ...and on every channel its key strip BRIGHT and CONTOUR, both dark, no key for the Boost, which the channel holds off.
+        const auto& line = json["lineup"]["channels"];
+        bool kitKeys = line.size() == channels.count();
+        juce::StringArray kitWrong;
+        for (int c = 0; kitKeys && c < line.size(); ++c)
+        {
+            const auto& keys = line[c]["face"]["keys"];
+            bool ok = keys.size() == 2 && keys[0]["text"].toString() == "BRIGHT" && keys[1]["text"].toString() == "CONTOUR";
+            for (int k = 0; ok && k < 2; ++k)
+                ok = (bool) keys[k]["dark"] && ! keys[k].hasProperty ("param") && ! keys[k].hasProperty ("control")
+                  && keys[k]["says"].toString().endsWith ("WAITS FOR THE E530 CAPTURES");
+            bool boostHeldOff = false;
+            if (const auto* sw = line[c]["switches"].getArray())
+                for (const auto& w : *sw)
+                    if (w["name"].toString() == "Boost")
+                        boostHeldOff = (bool) w["held"] && w["values"][(int) w["opening"]].toString() == "off";
+            if (! ok || ! boostHeldOff)
+                kitWrong.add (nameOf (c) + (ok ? ": the Boost not held off" : ": keys " + juce::JSON::toString (keys, true)));
+            kitKeys = kitKeys && ok && boostHeldOff;
+        }
+        check (kitKeys, "...every channel's key strip in the kit BRIGHT and CONTOUR, both dark, no Boost key, the Boost held off"
+                            + (kitWrong.isEmpty() ? juce::String() : ": " + kitWrong.joinIntoString ("; ")));
 
         face.reset();
         kit.deleteRecursively();

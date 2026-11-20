@@ -243,14 +243,15 @@ inline const Product& product()
             "INIT gives COMP on, three quarters of the signal through it at 4:1 on OPTO, OCTAVE and CHORUS in the strip and on, no ENVELOPE, both cuts on, no delay, and the room in the strip and on" } },
         // The E530 (a working name, MetalAmp): four channels on the guitar's chain, a pack each and each its own memory, the
         // V4's as a stand-in sound — CLEAN GAIN LO the Copper, HI the Sheriff, LEAD GAIN LO the Kraken and LEAD GAIN HI the
-        // Kraken again, no switch held; all on a plate, the cleaner the wetter, the Kraken with no delay; every one on the
-        // TOP 12's first, drawn (src/metal/MetalLineup.cpp). Nothing of before to gather.
+        // Kraken again, every one holding the V4's Boost off (its key strip the E530's BRIGHT and CONTOUR, no Boost); all on
+        // a plate, the cleaner the wetter, the Kraken with no delay; every one on the TOP 12's first, drawn
+        // (src/metal/MetalLineup.cpp). Nothing of before to gather.
         { "MetalAmp", "metal amp", "METAL_GATE_OWNS_HOME",
           {
-              { "v4-copper-4ae0",      "", "Plate", 20.0f, 15.0f, nullptr, topFirst },
-              { "v4-sheriff-ch1-82ab", "", "Plate", 15.0f, 8.0f,  nullptr, topFirst },
-              { "v4-kraken-ch1-f7fc",  "", "Plate", 10.0f, 0.0f,  nullptr, topFirst },
-              { "v4-kraken-ch1-f7fc",  "", "Plate", 10.0f, 0.0f,  nullptr, topFirst },
+              { "v4-copper-4ae0",      "Boost=off", "Plate", 20.0f, 15.0f, nullptr, topFirst },
+              { "v4-sheriff-ch1-82ab", "Boost=off", "Plate", 15.0f, 8.0f,  nullptr, topFirst },
+              { "v4-kraken-ch1-f7fc",  "Boost=off", "Plate", 10.0f, 0.0f,  nullptr, topFirst },
+              { "v4-kraken-ch1-f7fc",  "Boost=off", "Plate", 10.0f, 0.0f,  nullptr, topFirst },
           },
           nullptr,
           {},
