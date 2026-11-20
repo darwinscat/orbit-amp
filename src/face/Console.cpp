@@ -446,6 +446,7 @@ Console::Console (AmpProcessor& p, std::unique_ptr<Picture> pic, const Places& w
         emblem.setBounds (face.getBounds().expanded (Emblem::bloom + 1.0f).getSmallestIntegerContainer());     // room for the lamp's glow; the target is the plate alone
     }
     emblem.setLamp (look.emblemLamp);
+    emblem.setGlow (look.emblemGlow);
     emblem.onClick = [page = productPageUrl (amp.product().name, amp.wrapperType == juce::AudioProcessor::wrapperType_Standalone)]
     {
         juce::URL (page).launchInDefaultBrowser();

@@ -290,6 +290,54 @@ int ORBITAMP_GATE_MAIN()
                     ++cream;
         check (cream > 200, "...and the cat on it is cream (" + juce::String (cream) + " cream pixels in its box)");
 
+        // THE CAT LIGHTS UP under the hand (the owner, 20.11: lit, the cat went out on the orange cap): the hand over the
+        // plate and the lamp let come all the way up, the cat's pixels — the cream ones of the still above — come out
+        // brighter than they were, and the cap beside it stays orange, no darker.
+        if (auto* emblem = findOf<face::Emblem> (*face))
+        {
+            const auto hand = [emblem] (bool over)
+            {
+                const auto now = juce::Time::getCurrentTime();
+                const auto centre = layout::emblemMark.getCentre() - emblem->getPosition().toFloat();
+                const juce::MouseEvent e (juce::Desktop::getInstance().getMainMouseSource(), centre, juce::ModifierKeys(), 0.0f,
+                                          juce::MouseInputSource::defaultOrientation, juce::MouseInputSource::defaultRotation,
+                                          juce::MouseInputSource::defaultTiltX, juce::MouseInputSource::defaultTiltY,
+                                          emblem, emblem, now, centre, now, 0, false);
+                over ? emblem->mouseEnter (e) : emblem->mouseExit (e);
+            };
+            hand (true);
+            for (int i = 0; i < 12; ++i)
+                settle();
+            const auto lit = face->createComponentSnapshot (face->getLocalBounds());
+            const auto litAt = [&lit, k] (float x, float y) { return lit.getPixelAt (juce::roundToInt (x * k), juce::roundToInt (y * k)); };
+            const auto luma = [] (juce::Colour c) { return 0.2126f * c.getFloatRed() + 0.7152f * c.getFloatGreen() + 0.0722f * c.getFloatBlue(); };
+            double before = 0.0, after = 0.0;
+            int n = 0;
+            for (float y = layout::emblemMark.getY(); y < layout::emblemMark.getBottom(); y += 1.0f)
+                for (float x = layout::emblemMark.getX(); x < layout::emblemMark.getRight(); x += 1.0f)
+                    if (const auto c = at (x, y); brightness (c) > 0.8f && c.getFloatRed() - c.getFloatBlue() < 0.15f)
+                    {
+                        before += luma (c);
+                        after += luma (litAt (x, y));
+                        ++n;
+                    }
+            before /= juce::jmax (1, n);
+            after /= juce::jmax (1, n);
+            check (n > 200 && after > before + 0.015,
+                   "the cat lit under the hand is brighter than at rest (its " + juce::String (n) + " pixels' mean luminance "
+                       + juce::String (before, 3) + " at rest, " + juce::String (after, 3) + " lit)");
+            const auto litCap = litAt (785.0f, 699.0f);
+            check (litCap.getFloatRed() - litCap.getFloatBlue() > 0.4f && litCap.getFloatRed() - litCap.getFloatGreen() > 0.15f
+                       && luma (litCap) >= luma (cap) - 0.004f,
+                   "...and the cap beside it stays orange, no darker (" + litCap.toDisplayString (false) + ", at rest "
+                       + cap.toDisplayString (false) + ")");
+            hand (false);
+            for (int i = 0; i < 12; ++i)
+                settle();
+        }
+        else
+            check (false, "the maker's cap answers the hand (its Emblem is on the face)");
+
         // THE READINGS along the top of the van (the owner, 20.11): PRESET and its preset's name at the cream band's left
         // end, MEM and CPU in its middle, the version at its right end, in the panels' ink; none left over the plates.
         const auto count = [&at] (juce::Rectangle<float> box, auto&& wanted)

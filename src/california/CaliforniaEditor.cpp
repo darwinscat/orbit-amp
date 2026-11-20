@@ -61,6 +61,23 @@ namespace
         return ink;
     }
 
+    /** THE CAT LIT under the hand (the owner, 20.11: lit, it must light up, not go out): the family's glass laid the
+        lamp's orange over the cream cat and it went out into the orange cap. Lit, it is a lamp behind
+        frosted glass instead: the cat near white at its middle and a warm cream to its corners, an orange-gold halo
+        hugging its lines and a wider one past them, and the cap round it a touch brighter and warmer. */
+    face::EmblemGlow catLight()
+    {
+        face::EmblemGlow glow;
+        glow.core        = juce::Colour (0xfffff6e0);
+        glow.edge        = juce::Colour (0xffffe6b0);
+        glow.halo        = juce::Colour (0xffffd88a).withAlpha (0.9f);
+        glow.haloRadius  = 1.6f;
+        glow.bloom       = juce::Colour (0xffffae3c).withAlpha (0.8f);
+        glow.bloomRadius = 7.0f;
+        glow.plate       = juce::Colour (0xffffa040).withAlpha (0.2f);
+        return glow;
+    }
+
     /** ...and on the light plates either side of the maker's: the panels' brown, no edge. */
     Ink plateInk()
     {
@@ -182,7 +199,8 @@ namespace
                  FaceArt::midiCommands(),
                  handLight,
                  cabinInk(),
-                 juce::Colour (0xffe0803c) };
+                 juce::Colour (0xffe0803c),
+                 catLight() };
     }
 }
 
