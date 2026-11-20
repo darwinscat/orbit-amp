@@ -38,8 +38,10 @@ namespace
     double lum3 (const V3& c) noexcept { return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]; }
     V3 unit3 (const V3& c) noexcept { const double l = orOne (lum3 (c)); return { c[0] / l, c[1] / l, c[2] / l }; }
 
-    // THE SURFACE'S LIGHT's constants (io-gl.js)
-    constexpr double ringAtIngress = 0.16, groundFloor = 0.035, ringNight = 0.85, jupNight = 2.6, jupFloor = 0.2, fillShare = 0.18, ringGoldAtIngress = 0.85;
+    // THE SURFACE'S LIGHT's constants (io-gl.js). jupNight: the full Jupiter's shine on the land at night against its
+    // unexposed strength, jupShineOf keeping it there, exposed, by day too; jupFloor: its share at BLEND 0 against the full
+    // Jupiter's, 1 since 20.11 (Jupiter lights the land as if full whatever its phase; it was a fifth).
+    constexpr double ringAtIngress = 0.16, groundFloor = 0.035, ringNight = 0.85, jupNight = 2.6, jupFloor = 1.0, fillShare = 0.18, ringGoldAtIngress = 0.85;
     constexpr V3 fillCol { 0.66, 0.74, 0.92 }, ringRed { 1.0, 0.30, 0.10 }, ringGold { 1.0, 0.86, 0.64 };
     const V3& fillDir() { static const V3 d = IoWorld::dirOf (IoWorld::jupAz() - 80 * DEG, 30 * DEG); return d; }
     // the work lights' reach by variant and their strength
@@ -60,7 +62,7 @@ IoWorld::Ring IoWorld::ringLevel (const Sun& sp)
 }
 V3 IoWorld::jupShineOf (const Sun& sp)
 {
-    const double jl = jupFloor + (1 - jupFloor) * (1 - Js::cos (sp.sep)) / 2, k = jl * (1 + (jupNight - 1) * sp.night);
+    const double jl = jupFloor + (1 - jupFloor) * (1 - Js::cos (sp.sep)) / 2, k = jl * jupNight * 1.6 / sp.expo;
     return { 0.105 * k, 0.090 * k, 0.070 * k };
 }
 IoWorld::Light IoWorld::surfaceLight (const Sun& sp)
