@@ -83,7 +83,7 @@ deepgroove-channel  orbitamp_gates  DEEPGROOVE_GATE_OWNS_HOME=1
 deepgroove-face     orbitamp_gates
 deepgroove-nofactory orbitamp_gates
 
-# ...and the E530's (MetalAmp), over its four channels on the guitar's chain, and its face: the lever's PARK and glyphs,
+# ...and the E530's (FerroClawAmp), over its four channels on the guitar's chain, and its face: the lever's PARK and glyphs,
 # the strips, COMP, the effects, a still.
 metal-set           orbitamp_gates
 metal-channel       orbitamp_gates  METAL_GATE_OWNS_HOME=1

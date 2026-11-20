@@ -47,7 +47,7 @@ struct Lineup
         bool blendHeld = false;
 
         /** WHERE ITS DRIVE OPENS (params::preampGain, 0..10), where the channel opens it elsewhere than the parameter's
-            middle: MetalAmp's LEAD GAIN HI, the same pack as LEAD GAIN LO, a hotter Gain. A default, not a hold — and a
+            middle: FerroClawAmp's LEAD GAIN HI, the same pack as LEAD GAIN LO, a hotter Gain. A default, not a hold — and a
             channel's other than the one the product opens on, whose DRIVE is the parameter's own default. */
         std::optional<float> drive {};
     };

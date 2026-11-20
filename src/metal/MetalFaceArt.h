@@ -8,7 +8,7 @@
 namespace orbitamp::metal
 {
 
-/** WHAT THE FACE DRAWS WITH, laid out in the factory folder under Faces/MetalAmp (CMakeLists.txt: METALAMP_RENDERS): the
+/** WHAT THE FACE DRAWS WITH, laid out in the factory folder under Faces/FerroClawAmp (CMakeLists.txt: FERROCLAWAMP_RENDERS): the
     cabin's night plate, which the face paints whenever the metal world does not draw it;
     the knobs and the faders' cap, renders of the family's; its mark and its MIDI list. The flash plate ships beside the
     night one for the world's renderer, which crossfades the two with the lightning: the face never reads it. A render

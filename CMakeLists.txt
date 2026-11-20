@@ -1067,9 +1067,9 @@ set(CATPITAMP_SET   "Soldano X88-IR Normal" "Soldano X88-IR Altered" "Soldano X8
 set(REDPAWAMP_SET   "Friedman IR-X Ch1 PowerAmp" "Friedman IR-X Ch2 PowerAmp")
 set(FROSTPAWAMP_SET "Two Notes ReVolt Clean PowerAmp" "Two Notes ReVolt Crunch PowerAmp" "Two Notes ReVolt Lead PowerAmp")
 set(AMBERPAWAMP_SET "Victory V4 Copper (clean)" "Victory V4 Sheriff (crunch)" "Victory V4 Kraken (hi-gain)")
-# MetalAmp's stand-in sound until the E530's own captures come: the V4's three, its four channels over them
+# FerroClawAmp's stand-in sound until the E530's own captures come: the V4's three, its four channels over them
 # (src/metal/MetalLineup.cpp).
-set(METALAMP_SET    "Victory V4 Copper (clean)" "Victory V4 Sheriff (crunch)" "Victory V4 Kraken (hi-gain)")
+set(FERROCLAWAMP_SET "Victory V4 Copper (clean)" "Victory V4 Sheriff (crunch)" "Victory V4 Kraken (hi-gain)")
 
 # THE FAMILY A BUILD RELEASES: installer/family.ini, the amps, unless -DFAMILY_INI= names another —
 # installer/bass.ini, the basses (the owner, 06.11: a package of their own). Everything below that says
@@ -1101,7 +1101,7 @@ separate_arguments(ORBITAMP_RELEASED)
 if(NOT ORBITAMP_DEV_FACTORY AND "OrbitAmp" IN_LIST ORBITAMP_RELEASED)
     set(kept "")
     set(left "")
-    foreach(amp CatpitAmp RedPawAmp FrostPawAmp AmberPawAmp MetalAmp)
+    foreach(amp CatpitAmp RedPawAmp FrostPawAmp AmberPawAmp FerroClawAmp)
         string(TOUPPER "${amp}" key)
         if(amp IN_LIST ORBITAMP_RELEASED)
             list(APPEND kept ${${key}_SET})
@@ -1488,7 +1488,7 @@ set(UNDERWATER_ART_SOURCES src/underwater/view/UnderwaterArt.cpp)
 # The metal world on the GPU (src/metal/view/MetalGl.h, metal-gl.js's passes from resources/shaders/metal) and the art
 # it reads at run time (src/metal/view/MetalArt.h): the cabin's two plates, the face's resources/metal/dashboard.webp
 # and dashboard_flash.webp, and resources/metal/world (the owner's meshes, the groves' guitars, the letters, the
-# banners, the dragon; its README.txt), laid out in Faces/MetalAmp and read from there (METAL_ART_DIR).
+# banners, the dragon; its README.txt), laid out in Faces/FerroClawAmp and read from there (METAL_ART_DIR).
 set(METAL_GL_SOURCES src/metal/view/MetalGl.cpp)
 set(METAL_ART_SOURCES src/metal/view/MetalArt.cpp)
 
@@ -1682,24 +1682,24 @@ set(DEEPGROOVEBASS_SOURCES
 
 # THE E530'S FACE (src/metal): the family's console on the ENGL E530's dashboard in the metal world's cabin. Its plates,
 # night and flash, as WebP made from catbay's renders (resources/metal/README.txt says which and how),
-# laid out in the factory folder's Faces/MetalAmp. The knobs and the faders' cap its own where resources/metal/face has
+# laid out in the factory folder's Faces/FerroClawAmp. The knobs and the faders' cap its own where resources/metal/face has
 # one, the helicopter's otherwise, with its mark and its MIDI list. Its world, the metal one (src/metal/view), reads the
-# same two plates, and world/ beside them, from the same folder (METALAMP_ART_FOLDERS: resources/metal/world laid out
+# same two plates, and world/ beside them, from the same folder (FERROCLAWAMP_ART_FOLDERS: resources/metal/world laid out
 # whole, the meshes with their credits, the guitars, the letters, the banners, the dragon); while it draws the cabin it
 # crossfades the plates by its lightning, and whenever it does not the face paints the night one flat.
-set(METALAMP_RENDERS
+set(FERROCLAWAMP_RENDERS
     "${CMAKE_CURRENT_SOURCE_DIR}/resources/metal/dashboard.webp"
     "${CMAKE_CURRENT_SOURCE_DIR}/resources/metal/dashboard_flash.webp")
-set(METALAMP_ART_FOLDERS "${CMAKE_CURRENT_SOURCE_DIR}/resources/metal/world")
+set(FERROCLAWAMP_ART_FOLDERS "${CMAKE_CURRENT_SOURCE_DIR}/resources/metal/world")
 file(GLOB metal_own CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/resources/metal/face/*")
 foreach(render IN ITEMS mark.svg midi.txt knob-drive.webp knob-tone.webp fader-cap.webp)
     if("${CMAKE_CURRENT_SOURCE_DIR}/resources/metal/face/${render}" IN_LIST metal_own)
-        list(APPEND METALAMP_RENDERS "${CMAKE_CURRENT_SOURCE_DIR}/resources/metal/face/${render}")
+        list(APPEND FERROCLAWAMP_RENDERS "${CMAKE_CURRENT_SOURCE_DIR}/resources/metal/face/${render}")
     else()
-        list(APPEND METALAMP_RENDERS "${CMAKE_CURRENT_SOURCE_DIR}/resources/amberpaw/${render}")
+        list(APPEND FERROCLAWAMP_RENDERS "${CMAKE_CURRENT_SOURCE_DIR}/resources/amberpaw/${render}")
     endif()
 endforeach()
-set(METALAMP_SOURCES
+set(FERROCLAWAMP_SOURCES
     ${FACE_SOURCES}
     src/redgroove/RedGrooveControls.cpp     # the walker's squeeze column, cabinet slider and readings
     src/metal/MetalControls.cpp
@@ -1819,14 +1819,14 @@ add_amp(DeepGrooveBass CODE Dgrv   BY_NAME    BASS
         juce::juce_opengl            # the sea, on the GPU
     SET       ${DEEPGROOVEBASS_SET})
 
-# MetalAmp, a working name — the ENGL E530 preamp's face in the metal world's cabin (src/metal): the family's console
-# over the guitar's chain, driven as channels: four, CLEAN GAIN LO and HI, LEAD GAIN LO and HI, PARK the amp's bypass;
-# the V4's packs as a stand-in sound, the guitar's TOP 12 drawn. Not in the family's release, and asked for by name. Its
-# icon its own (the owner's pick, 20.11): an orange lightning bolt striking a giant anvil.
-add_amp(MetalAmp      CODE Mtla    BY_NAME
-    ART       ${METALAMP_RENDERS}
-    ART_FOLDERS ${METALAMP_ART_FOLDERS}
-    SOURCES   ${METALAMP_SOURCES}
+# FerroClawAmp (the owner's name, 20.11) — the ENGL E530 preamp's face in the metal world's cabin (src/metal): the
+# family's console over the guitar's chain, driven as channels: four, CLEAN GAIN LO and HI, LEAD GAIN LO and HI, PARK
+# the amp's bypass; the V4's packs as a stand-in sound, the guitar's TOP 12 drawn. Not in the family's release, and
+# asked for by name. Its icon its own (the owner's pick, 20.11): an orange lightning bolt striking a giant anvil.
+add_amp(FerroClawAmp  CODE Mtla    BY_NAME
+    ART       ${FERROCLAWAMP_RENDERS}
+    ART_FOLDERS ${FERROCLAWAMP_ART_FOLDERS}
+    SOURCES   ${FERROCLAWAMP_SOURCES}
     LIBRARIES
         OrbitAmpData                 # the family's mark, the notice, the disclaimer — BinaryData::*
         OrbitAmpShaders              # the world's shaders
@@ -1834,7 +1834,7 @@ add_amp(MetalAmp      CODE Mtla    BY_NAME
         felitronics::appkit_webp     # the plates, decoded
         ${AMP_ENGINE_LIBRARIES}
         juce::juce_opengl            # the world, on the GPU
-    SET       ${METALAMP_SET})
+    SET       ${FERROCLAWAMP_SET})
 
 # ----------------------------------------------------------------------------
 # THE FACES' GATES — in the gates binary, with every other (THE GATES BINARY, below); amp_console builds an amp
@@ -1973,13 +1973,13 @@ gate_in_binary(deepgroove-set    tests/AmpSetTests.cpp      PRODUCT DeepGrooveBa
 # each gear's BLEND and CLEAN's held, COMP's threshold and what the bathyscaphe holds of it, CLEAN's two tones in the
 # outer sockets and the frozen one between them, each socket's reading its own knob's.
 gate_in_binary(deepgroove-face   tests/DeepGrooveFaceTests.cpp PRODUCT DeepGrooveBass)
-gate_in_binary(metal-channel     tests/AmpChannelTests.cpp  PRODUCT MetalAmp     CHANNELS 4)
-gate_in_binary(metal-set         tests/AmpSetTests.cpp      PRODUCT MetalAmp     CHANNELS 4)
+gate_in_binary(metal-channel     tests/AmpChannelTests.cpp  PRODUCT FerroClawAmp CHANNELS 4)
+gate_in_binary(metal-set         tests/AmpSetTests.cpp      PRODUCT FerroClawAmp CHANNELS 4)
 # ...and the E530's face, its window made and never shown: the lever's five stops, PARK the amp's bypass over the four
 # channels, each its own pack and LEAD GAIN HI its hotter Gain; the tone and key strips the playing pack's; COMP, FX 1,
 # FX 2 (the OCTAVE: its mix, and its sound against the chain without it) and REVERB their parameters; and a still of it
 # with the cat at rest and in flames.
-gate_in_binary(metal-face        tests/MetalFaceTests.cpp   PRODUCT MetalAmp)
+gate_in_binary(metal-face        tests/MetalFaceTests.cpp   PRODUCT FerroClawAmp)
 
 # ORBITBASS'S CHAIN, headless: where a fresh one stands (the gate off, the HPF on at 25 Hz, the LPF off, mono,
 # its one temporary pack), the strip's arrows in its order (GATE, AMP, CAB, LIMIT), the delay and the reverb
@@ -1996,7 +1996,7 @@ gate_in_binary(catpit-nofactory  tests/NoFactoryTests.cpp   PRODUCT CatpitAmp   
 gate_in_binary(redpaw-nofactory  tests/NoFactoryTests.cpp   PRODUCT RedPawAmp    NO_FACTORY)
 gate_in_binary(redgroove-nofactory tests/NoFactoryTests.cpp  PRODUCT RedGrooveBass NO_FACTORY)
 gate_in_binary(deepgroove-nofactory tests/NoFactoryTests.cpp PRODUCT DeepGrooveBass NO_FACTORY)
-gate_in_binary(metal-nofactory   tests/NoFactoryTests.cpp   PRODUCT MetalAmp     NO_FACTORY)
+gate_in_binary(metal-nofactory   tests/NoFactoryTests.cpp   PRODUCT FerroClawAmp NO_FACTORY)
 
 # ORBITAMP'S FACE AS THE SITE GETS IT (src/ui/WebFaceplate.h): a fresh OrbitAmp writes the kit, and the kit
 # builds the face back — its own format, every place on the stage, the hull the poster less its places.

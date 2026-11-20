@@ -1,5 +1,5 @@
-The metal cabin's art (MetalAmp, the ENGL E530's face), as the factory folder carries it (CMakeLists.txt,
-METALAMP_RENDERS): laid out in Faces/MetalAmp and read at run time (src/metal/MetalFaceArt.h).
+The metal cabin's art (FerroClawAmp, the ENGL E530's face), as the factory folder carries it (CMakeLists.txt,
+FERROCLAWAMP_RENDERS): laid out in Faces/FerroClawAmp and read at run time (src/metal/MetalFaceArt.h).
 
 The plates are catbay's renders (the metal world's cabin, variant c6, the owner's pick of 20.11; catbay's
 feat/rover-cabin 9235e72, blender/cabins/metal_cabin.py --final), kept there, not here (22 MB):

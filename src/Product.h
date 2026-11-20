@@ -98,7 +98,7 @@ struct Product
     bool guitarComp = false;
 
     /** A GUITAR CHAIN'S OCTAVE, at the front of it, before COMP and the AMP — the classic octave-down pedal, first on the
-        board (params::addGuitarOctaveParameters, which its `addParameters` adds): MetalAmp's. Every other guitar amp has
+        board (params::addGuitarOctaveParameters, which its `addParameters` adds): FerroClawAmp's. Every other guitar amp has
         none: no parameter, no stage, nothing computed. */
     bool guitarOctave = false;
 
@@ -155,7 +155,7 @@ const Product& amberPawAmp();
 const Product& orbitBass();
 const Product& redGrooveBass();
 const Product& deepGrooveBass();
-const Product& metalAmp();
+const Product& ferroClawAmp();
 } // namespace products
 
 } // namespace orbitamp

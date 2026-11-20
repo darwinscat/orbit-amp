@@ -13,7 +13,7 @@ namespace orbitamp::metal
 
 const channels::Lineup& lineup()
 {
-    // A STAND-IN SOUND, until the E530's own captures come: the released Victory V4 packs (CMakeLists.txt: METALAMP_SET),
+    // A STAND-IN SOUND, until the E530's own captures come: the released Victory V4 packs (CMakeLists.txt: FERROCLAWAMP_SET),
     // a pack a channel — CLEAN GAIN LO the Copper, CLEAN GAIN HI the Sheriff, LEAD GAIN LO the Kraken, and LEAD GAIN HI
     // the Kraken again, opening on a hotter Gain (Lineup::Channel::drive). Every channel holds the V4's Boost OFF: the key
     // strip is the E530's one key, BRIGHT on the clean two and CONTOUR on the lead two (MetalEditor.cpp), with no key for
@@ -85,14 +85,14 @@ namespace
     }
 }
 
-/** METALAMP (Product.h), a working name: the ENGL E530 preamp's face in the metal world's cabin (metal/MetalEditor.h) over
-    four channels on the guitar's chain, an OCTAVE at its front and a COMP before the AMP. No first start: it has no
-    player's files of before to gather. */
-const Product& products::metalAmp()
+/** FERROCLAWAMP (Product.h), the owner's name (20.11): the ENGL E530 preamp's face in the metal world's cabin
+    (metal/MetalEditor.h) over four channels on the guitar's chain, an OCTAVE at its front and a COMP before the AMP. No
+    first start: it has no player's files of before to gather. */
+const Product& products::ferroClawAmp()
 {
     static const Product e530 = []
     {
-        Product p { "MetalAmp", metal::makeEditor };
+        Product p { "FerroClawAmp", metal::makeEditor };
         p.addParameters = addParameters;
         p.makeEngine    = makeEngine;
         p.opening       = opening;
@@ -105,10 +105,10 @@ const Product& products::metalAmp()
 
 } // namespace orbitamp
 
-// THE PLUG-IN'S ENTRY, in MetalAmp's own plug-in alone (CMakeLists.txt: add_amp).
+// THE PLUG-IN'S ENTRY, in FerroClawAmp's own plug-in alone (CMakeLists.txt: add_amp).
 #if ORBITAMP_PLUGIN_ENTRY
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()
 {
-    return new orbitamp::AmpProcessor (orbitamp::products::metalAmp());
+    return new orbitamp::AmpProcessor (orbitamp::products::ferroClawAmp());
 }
 #endif

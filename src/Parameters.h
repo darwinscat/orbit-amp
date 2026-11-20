@@ -698,7 +698,7 @@ inline constexpr bool bassChainHolds (ChainRow) noexcept
 
 /** THE GUITAR'S CHAIN, every amp's but OrbitBass's: every link but the bass's own — OCTAVE, FILTER and CHORUS — which
     no guitar amp has a parameter for, COMP but where the amp has one (`comp`: OrbitAmp's, Product::guitarComp), and
-    OCTAVE but where the amp has one (`octave`: MetalAmp's, Product::guitarOctave). */
+    OCTAVE but where the amp has one (`octave`: FerroClawAmp's, Product::guitarOctave). */
 inline constexpr bool guitarChainHolds (ChainRow row, bool comp = false, bool octave = false) noexcept
 {
     return (row != rowOctave || octave) && row != rowFilter && row != rowChorus && (row != rowComp || comp);
@@ -765,12 +765,12 @@ struct Opening
     bool  filterPresent = true;
     bool  reverbPresent = false;
 
-    // ...and a GUITAR chain's COMP in its strip from the start, where the product holds it there: MetalAmp's, its fader on the
+    // ...and a GUITAR chain's COMP in its strip from the start, where the product holds it there: FerroClawAmp's, its fader on the
     // face (channels::Lineup::pinned). Declared by addGuitarCompParameters with compAmount and compOn above; OrbitAmp's is
     // out of its strip until the player adds it.
     bool  compPresent   = false;
 
-    // ...and a GUITAR chain's OCTAVE in its strip from the start, where the product holds it there: MetalAmp's, its FX 2
+    // ...and a GUITAR chain's OCTAVE in its strip from the start, where the product holds it there: FerroClawAmp's, its FX 2
     // fader on the face (channels::Lineup::pinned). Declared by addGuitarOctaveParameters.
     bool  octavePresent = false;
 

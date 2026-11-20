@@ -1,5 +1,5 @@
 The metal world's finds (the ENGL E530's view, src/metal/view), as the factory folder carries them beside the cabin's
-plates (Faces/MetalAmp/world) and the world reads them at run time (src/metal/view/MetalArt.h, METAL_ART_DIR); never
+plates (Faces/FerroClawAmp/world) and the world reads them at run time (src/metal/view/MetalArt.h, METAL_ART_DIR); never
 built into the binary. Taken from the view's prototype (catbay's Worlds/metal/finds and Worlds/rogue/finds/dragon3d),
 only what the world reads; the previews and the other 27 guitars of guitars3d/ are left out.
 

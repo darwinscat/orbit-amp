@@ -79,7 +79,7 @@ namespace
             { products::amberPawAmp(), &redpaw::skinOf (products::amberPawAmp()).lineup },
             { products::redGrooveBass(), &redgroove::lineup() },
             { products::deepGrooveBass(), &underwater::lineup() },
-            { products::metalAmp(),    &metal::lineup() },
+            { products::ferroClawAmp(),  &metal::lineup() },
         };
     }
 

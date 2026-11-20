@@ -216,7 +216,7 @@ AmpProcessor::AmpProcessor (const Product& product)
         jassert (bass.compAmount != nullptr && bass.compThreshold != nullptr);
     }
 
-    // MetalAmp's OCTAVE (Product::guitarOctave): the bass's, the same parameters. Every other guitar amp leaves these
+    // FerroClawAmp's OCTAVE (Product::guitarOctave): the bass's, the same parameters. Every other guitar amp leaves these
     // null, and its chain never runs the stage (processChunk).
     if (ownProduct.chain != Chain::bass && ownProduct.guitarOctave)
     {
@@ -1313,7 +1313,7 @@ void AmpProcessor::reportLatency()
     const int pr = preamp.latencySamples();
     const int total = pr + limiterLatency.load();      // ...and the limiter's lookahead and grid, always
 
-    // ...and nothing for OCTAVE, the bass's or MetalAmp's: the module adds its sub to the dry where it stands. A core
+    // ...and nothing for OCTAVE, the bass's or FerroClawAmp's: the module adds its sub to the dry where it stands. A core
     // whose octave starts to look ahead stops the build here, to be added to the sum.
     static_assert (felitronics::octave::Octaver::latencySamples() == 0, "OCTAVE adds no latency: the sum above holds it at 0");
 
@@ -1459,7 +1459,7 @@ void AmpProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
         guitarInputCut.prepare (sampleRate);
     if (ownProduct.chain != Chain::bass && bass.octave != nullptr && bass.octaveToneHz != nullptr)
     {
-        // MetalAmp's OCTAVE (Product::guitarOctave): as the bass's is prepared below — told where it stands before its
+        // FerroClawAmp's OCTAVE (Product::guitarOctave): as the bass's is prepared below — told where it stands before its
         // prepare, which snaps to it, so at 0 it is idle from the first sample — over as many signals as the guitar's chain
         // can work (two in STEREO), the one tracker summing them.
         octaveTap->prepare (sampleRate);
@@ -2615,7 +2615,7 @@ void AmpProcessor::processChunk (juce::AudioBuffer<float>& buffer)
         }
     }
 
-    // THE GUITAR'S OCTAVE (Product::guitarOctave: MetalAmp's), FIRST, as an octave pedal stands on a board: after the IN
+    // THE GUITAR'S OCTAVE (Product::guitarOctave: FerroClawAmp's), FIRST, as an octave pedal stands on a board: after the IN
     // meter, the input cut and the gate's key, before COMP, the boost and the AMP — the tracker hears the string itself, and
     // the sub goes into everything after it with the note. Over every signal the chain works (two in STEREO: one tracker,
     // the same sub on both). Zero latency (Octaver::latencySamples). At 0, standing by, or out of the strip it is idle:

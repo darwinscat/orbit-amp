@@ -1,7 +1,7 @@
-Amps: MetalAmp
+Amps: FerroClawAmp
 
 ### Added
-- **MetalAmp, a new guitar amp (a working name): the ENGL E530 preamp's face in the metal world's cabin.** A lever
+- **FerroClawAmp, a new guitar amp: the ENGL E530 preamp's face in the metal world's cabin.** A lever
   of five stops drawn as glyphs, PARK (the amp's bypass) over four channels, CLEAN GAIN LO and HI, LEAD GAIN LO and
   HI, the full name under the hand and on the tuner's screen as it lands; GAIN; the playing pack's tone knobs and
   keys, as many as it has, drawn by code; COMP and its squeeze; FX 1 (the delay), FX 2 (nothing yet) and REVERB; IN

@@ -39,7 +39,7 @@ private:
 };
 
 //==============================================================================
-/** METALAMP'S FACE over OrbitAmp's processor: the family's console (face/Console.h) laid out on the ENGL E530's
+/** FERROCLAWAMP'S FACE over OrbitAmp's processor: the family's console (face/Console.h) laid out on the ENGL E530's
     dashboard in the metal world's cabin, its channels the E530's four. What it has of the console's own: GAIN (DRIVE),
     the tone strip and the key strip, as many as the playing pack has, the six keys of the history and the registers, IN
     and OUT, the tuner, the maker's plate; what it has not: the REVERB, DELAY and CAB plates and the HPF and LPF keys. What

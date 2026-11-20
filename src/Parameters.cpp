@@ -92,7 +92,7 @@ void addGuitarCompParameters (juce::AudioProcessorValueTreeState::ParameterLayou
 void addGuitarOctaveParameters (juce::AudioProcessorValueTreeState::ParameterLayout& layout, const Opening& opening)
 {
     // The bass's OCTAVE as addBassParameters declares it — on, its amount at 0, its TONE at 120 Hz — and in the strip
-    // only where the product holds it there (MetalAmp: its FX 2).
+    // only where the product holds it there (FerroClawAmp: its FX 2).
     using Float = juce::AudioParameterFloat;
     const juce::NormalisableRange<float> tone (30.0f, 2000.0f, 0.1f, std::log (0.5f) / std::log ((120.0f - 30.0f) / (2000.0f - 30.0f)));
     layout.add (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { octaveOn, 1 }, "Octave", true),

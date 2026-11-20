@@ -21,7 +21,7 @@ namespace orbitamp::metal::shipped
     renderer draws them with: the banners' atlas, the eight meshes and the groves' eight guitars, each a CBMESH1, and the
     dragon's mesh with its wing-beat. The art needs `bytes`, `list` and `pictureSize`; `picture` is not asked. What is
     missing or will not read, in words; none when the world finds all it reads. Shared by metal_world_test (the source
-    tree's resources/metal) and the E530's face gate (the factory folder's Faces/MetalAmp, as the build lays it out). */
+    tree's resources/metal) and the E530's face gate (the factory folder's Faces/FerroClawAmp, as the build lays it out). */
 inline std::vector<std::string> missing (const Art& art)
 {
     using W = MetalWorld;

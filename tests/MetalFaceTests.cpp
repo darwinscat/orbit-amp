@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of OrbitAmp — see LICENSE.
 
-// Gate for METALAMP'S FACE (src/metal/MetalEditor.h), the ENGL E530 in the metal world's cabin, its window made and never
-// shown, run as MetalAmp out of the build's factory folder:
+// Gate for FERROCLAWAMP'S FACE (src/metal/MetalEditor.h), the ENGL E530 in the metal world's cabin, its window made and never
+// shown, run as FerroClawAmp out of the build's factory folder:
 //
 //   - the lever: five stops, PARK over the four channels, CLEAN GAIN LO and HI, LEAD GAIN LO and HI. Each channel's stop
 //     plays its own pack — the stand-in sound's Copper, Sheriff, Kraken and Kraken again — and LEAD GAIN HI opens on a
@@ -14,7 +14,7 @@
 //     quarters through it at 4:1 on OPTO; FX 1 the delay's amount, REVERB the room's share, FX 2 the octave's mix;
 //   - THE WORLD BEHIND THE GLASS is the metal world (MetalDrive), in the channel's gear — CLEAN GAIN LO 1, CLEAN GAIN HI 2,
 //     LEAD GAIN LO 3, LEAD GAIN HI 4, the storm — and parked at PARK; every file it reads lies in the factory folder's
-//     Faces/MetalAmp as the build lays it out (MetalShipped.h, the check metal_world_test makes of resources/metal);
+//     Faces/FerroClawAmp as the build lays it out (MetalShipped.h, the check metal_world_test makes of resources/metal);
 //   - a still: the face renders whole, the cat in the maker's plate silver at rest, and crimson in flames under the hand;
 //   - the site's kit (ORBITAMP_WEB_EXPORT): places.json's "world" in the walker's words — the glass the whole stage, the
 //     world's four gears under the four channels, the lever's five stops PARK first, the columns — and a poster a stop.

@@ -450,7 +450,7 @@ MetalEditor::~MetalEditor()
     gl.detach();
 }
 
-/** THE WORLD BEHIND THE GLASS: the metal world (view/MetalDrive.h), its art read from the factory folder's Faces/MetalAmp
+/** THE WORLD BEHIND THE GLASS: the metal world (view/MetalDrive.h), its art read from the factory folder's Faces/FerroClawAmp
     (view/MetalArt.h) — the channels its four gears, LEAD GAIN HI the storm, PARK the rover on the shoulder. While it draws
     the cabin it crossfades the night and flash plates by its lightning, and the face paints only its controls, its words
     and the cat over them; whenever it does not, the face paints the night plate flat. */

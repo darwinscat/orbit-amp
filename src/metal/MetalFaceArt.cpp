@@ -10,7 +10,7 @@ namespace orbitamp::metal
 
 namespace
 {
-    constexpr const char* product = "MetalAmp";
+    constexpr const char* product = "FerroClawAmp";
     constexpr const char* folderVariable = "METAL_ART_DIR";
 
     juce::Image load (const char* name)

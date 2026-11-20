@@ -16,7 +16,7 @@ namespace orbitamp::metal
 
 namespace
 {
-    constexpr const char* product = "MetalAmp";
+    constexpr const char* product = "FerroClawAmp";
     constexpr const char* folderVariable = "METAL_ART_DIR";
 
     /** The folder a path's file is read from: METAL_ART_DIR's where it has it, the product's own otherwise. */
