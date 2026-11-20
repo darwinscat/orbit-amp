@@ -1816,8 +1816,9 @@ add_amp(DeepGrooveBass CODE Dgrv   BY_NAME    BASS
 # CaliforniaAmp — a working name: the Orange Super Crush 100's face in catbay's 1967 hippie van (src/california) — the
 # family's console over the guitar's chain, driven as channels: two, CLEAN and DIRTY, PARK the amp's bypass, a stand-in
 # sound (the V4 Copper and Sheriff) until the Orange has captures; the guitar's TOP 12, drawn. Not in the family's release
-# (installer/family.ini), and asked for by name. Its icon AmberPawAmp's, for now.
-add_amp(CaliforniaAmp CODE Clfa    BY_NAME    ICON AmberPawAmp
+# (installer/family.ini), and asked for by name. Its icon its own (the owner's pick, 20.11): an open poppy, its heart the
+# orange dot, on a curved stem with one leaf.
+add_amp(CaliforniaAmp CODE Clfa    BY_NAME
     ART       ${CALIFORNIAAMP_RENDERS}
     ART_FOLDERS ${CALIFORNIAAMP_ART_FOLDERS}
     SOURCES   ${CALIFORNIAAMP_SOURCES}
