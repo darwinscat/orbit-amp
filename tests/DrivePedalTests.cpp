@@ -221,8 +221,11 @@ int main()
         }
 
         // TS's TONE IS HIS PEDAL'S: at 0, 60, 240 and 300 degrees (TONE 0, 2, 8, 10) less noon, within 1.5 dB of his
-        // measured tone ladder (Overdrive 0, ~/CLAUDE_FILES/drive-ref/ts-mini-tone-ladder-overdrive-0.tsv, interpolated
-        // in log frequency) at every 1/3 octave from 100 Hz to 10 kHz; and noon is the voicing as it was, no shelf at all.
+        // measured tone ladder at every 1/3 octave from 100 Hz to 10 kHz; and noon is the voicing as it was, no shelf at all.
+        // `his` below IS the reference, copied into the test so that no run reads a file: the owner's measurement
+        // ts-mini-tone-ladder-overdrive-0.tsv (his ~/CLAUDE_FILES/drive-ref, 21.11: the TS Mini at Overdrive 0, its Tone
+        // at 0..300 degrees, 1/12-octave smoothed), each column less its Tone noon (150 degrees), interpolated in log
+        // frequency at these 21 centres and rounded to 0.1 dB — recomputed from the file on 21.11, every entry as here.
         {
             static constexpr double hz[21] = { 100, 125, 160, 200, 250, 315, 400, 500, 630, 800, 1000, 1250, 1600, 2000, 2500,
                                                3150, 4000, 5000, 6300, 8000, 10000 };
@@ -589,8 +592,8 @@ int main()
             for (size_t i = 0; i < v.size(); ++i)
                 v[i] = (float) (0.25 * std::sin (2.0 * pi * 1997.0 * (double) i / rate));
             const auto a = std::chrono::steady_clock::now();
-            for (size_t i = 0; i < v.size(); i += 512)
-                p.process (v.data() + i, 512, s);
+            for (size_t i = 0; i < v.size(); i += 512)   // the last block short: 144000 is no multiple of 512
+                p.process (v.data() + i, (int) std::min<size_t> (512, v.size() - i), s);
             ns = std::chrono::duration<double> (std::chrono::steady_clock::now() - a).count() * 1.0e9 / (double) v.size();
             const size_t from = 96000, n = 48000;
             double total = 0.0, harmonic = 0.0, mean = 0.0;
@@ -632,8 +635,8 @@ int main()
         p.prepare (rate);
         const auto s = at ((Type) t, 5.0f);
         const auto a = std::chrono::steady_clock::now();
-        for (size_t i = 0; i < v.size(); i += 512)
-            p.process (v.data() + i, 512, s);
+        for (size_t i = 0; i < v.size(); i += 512)   // the last block short: 480000 is no multiple of 512
+            p.process (v.data() + i, (int) std::min<size_t> (512, v.size() - i), s);
         const double sec = std::chrono::duration<double> (std::chrono::steady_clock::now() - a).count();
         std::printf ("     %-9s %dx: %.0f ns a sample, %.2f %% of one core in real time (one channel, 48 kHz)\n",
                      names[t], t == 2 ? 1 : p.oversampling(), sec * 1.0e9 / (double) v.size(), 100.0 * sec / 10.0);

@@ -5,7 +5,11 @@
 //
 //   - NOT OFFERED, OrbitAmp plays what it played before the block existed, bit for bit on the compiler that recorded
 //     it (tests/golden/orbitamp-before-drive.f32, written by the tree before the block), and so does a session saved by
-//     that tree (tests/golden/orbitamp-before-drive.state) — every parameter it had comes back as it was;
+//     that tree (tests/golden/orbitamp-before-drive.state) — every parameter it had comes back as it was; and, on every
+//     compiler, bit for bit what the same build's OrbitAmp with no DRIVE in its chain plays, fresh and on that session,
+//     each on its own drawn cabinet — the rule itself, which a compiler of another libm or vector code cannot move;
+//   - the process's first OrbitAmp, driven with no message loop, plays the shelf's IR: its own cabinet is drawn on a
+//     worker and handed over on the message thread (said, and why a render for ears throws its first take away);
 //   - no other amp has a parameter of the block's;
 //   - offered (its checklist, or SETUP — the same parameter), it stands in the strip before the AMP, its arrow its
 //     STANDBY/ON, and it plays; out, it is not run at all;
@@ -39,6 +43,16 @@
  #error "the build says where the golden files are (CMakeLists.txt: gate_in_binary(drive ...))"
 #endif
 
+// WHICH COMPILER BUILT THIS, as the golden's .compiler file names it: clang and gcc say it in __VERSION__, which MSVC
+// does not define at all — there it is its full version number.
+#if defined (__VERSION__)
+ #define ORBITAMP_DRIVE_COMPILER __VERSION__
+#elif defined (_MSC_FULL_VER)
+ #define ORBITAMP_DRIVE_COMPILER "MSVC " JUCE_STRINGIFY (_MSC_FULL_VER)
+#else
+ #define ORBITAMP_DRIVE_COMPILER "an unnamed compiler"
+#endif
+
 using namespace orbitamp;
 
 namespace
@@ -70,6 +84,52 @@ namespace
     {
         auto amp = std::make_unique<AmpProcessor> (p);
         amp->inlineLoads = true;
+        amp->prepareToPlay (sampleRate, blockSize);
+        amp->pumpDeviceWork();
+        return amp;
+    }
+
+    /** ORBITAMP WITH NO DRIVE AT ALL, in this build: its chain holds no DRIVE (Product::guitarDrive), so the processor
+        never runs the pedal and never counts its latency — the plain path the block, not offered, must equal. */
+    const Product& orbitAmpWithout()
+    {
+        static const Product p = []
+        {
+            auto q = orbitAmp();
+            q.guitarDrive = false;
+            return q;
+        }();
+        return p;
+    }
+
+    /** ITS OWN CABINET, LANDED. A fresh OrbitAmp opens on the TOP 12's first, DRAWN: on a worker, handed over on the
+        message thread (AmpProcessor::takeFreshCabinet) — and until it lands it plays the shelf's IR under `cab_ir`. The
+        drawing is kept for the process (drawnOnce), so the process's first OrbitAmp waits for it and every later one
+        opens on it at once; with no message loop running the handover never comes at all. Here the loop runs until the
+        amp names its drawn cabinet, up to ten seconds, and the pump loads it; the milliseconds it took. */
+    double landed (AmpProcessor& amp)
+    {
+        const double from = juce::Time::getMillisecondCounterHiRes();
+        for (int i = 0; i < 1000 && amp.apvts.state.getProperty (params::cabIrUserKey).toString().isEmpty(); ++i)
+            juce::MessageManager::getInstance()->runDispatchLoopUntil (10);
+        amp.pumpDeviceWork();
+        return juce::Time::getMillisecondCounterHiRes() - from;
+    }
+
+    bool ownCabinet (const AmpProcessor& amp) { return amp.apvts.state.getProperty (params::cabIrUserKey).toString().isNotEmpty(); }
+
+    /** ...and an OrbitAmp as a host has it: made, its cabinet landed, prepared once more, so the drawn IR is in from the
+        first sample — a prepared cabinet takes the chosen IR straight after, no crossfade from the shelf's. A session
+        (`state`), when given, opened first, as a host opens one: its cabinet drawn again where it saved no bytes. */
+    std::unique_ptr<AmpProcessor> hosted (const Product& p, const juce::MemoryBlock* state = nullptr)
+    {
+        auto amp = make (p);
+        if (state != nullptr)
+        {
+            amp->setStateInformation (state->getData(), (int) state->getSize());
+            amp->pumpDeviceWork();
+        }
+        (void) landed (*amp);
         amp->prepareToPlay (sampleRate, blockSize);
         amp->pumpDeviceWork();
         return amp;
@@ -170,7 +230,7 @@ namespace
         }
         (void) golden ("state").loadFileAsData (b.state);
        #if defined (__APPLE__) && defined (__aarch64__)
-        b.recorder = golden ("compiler").loadFileAsString().trim() == juce::String (__VERSION__);
+        b.recorder = golden ("compiler").loadFileAsString().trim() == juce::String (ORBITAMP_DRIVE_COMPILER);
        #endif
         return b;
     }
@@ -216,7 +276,7 @@ namespace
         const auto name = juce::File (ORBITAMP_DRIVE_GOLDEN).getFileName();
         const bool ok = folder.getChildFile (name).withFileExtension ("f32").replaceWithData (out.getData(), out.getDataSize())
                      && folder.getChildFile (name).withFileExtension ("state").replaceWithData (state.getData(), state.getSize())
-                     && folder.getChildFile (name).withFileExtension ("compiler").replaceWithText (juce::String (__VERSION__) + "\n");
+                     && folder.getChildFile (name).withFileExtension ("compiler").replaceWithText (juce::String (ORBITAMP_DRIVE_COMPILER) + "\n");
         float peak = 0.0f;
         for (const float s : played)
             peak = std::max (peak, std::abs (s));
@@ -296,9 +356,10 @@ namespace
         };
         const auto render = [&] (int type, int clip) { return renderFrom (riff, type, clip); };
 
-        // A TAKE THROWN AWAY FIRST: the first OrbitAmp of a process does not play what every one after it plays (what it
-        // fits or loads off the audio thread lands late, then is shared), so the first take of a pair was never the
-        // amp at its defaults — up to 13 dB apart at 10 kHz, 7 at 100 Hz, from the same input. Every take is a later one.
+        // A TAKE THROWN AWAY FIRST: the first OrbitAmp of a process does not play what every one after it plays — its
+        // own cabinet is drawn on a worker and handed over on the message thread, which runs no loop here, so it plays
+        // the shelf's IR under `cab_ir` (landed, above) — up to 13 dB apart at 10 kHz, 7 at 100 Hz, from the same input.
+        // The drawing is kept for the process, so every take after it opens on the amp's own cabinet.
         (void) renderFrom (riff, -1, 0);
         const auto lufsOf = [&] (const juce::AudioBuffer<float>& b)
         {
@@ -502,10 +563,20 @@ int ORBITAMP_GATE_MAIN()
     check (was.played.size() == (size_t) (goldenBlocks * blockSize) && was.state.getSize() > 0,
            "the tree before the block left what it played and what it saved (tests/golden/orbitamp-before-drive.*)");
 
-    // NOT OFFERED: what OrbitAmp played before the block, fresh and from a session of then.
+    // NOT OFFERED: what OrbitAmp played before the block, fresh and from a session of then. Both are played as the tree
+    // before the block recorded them: the process's first OrbitAmps, no message loop running — on the shelf's IR under
+    // `cab_ir`, their own drawn cabinet not handed over (landed, above). That is what the golden holds.
+    bool firstOnShelf = false, firstLands = false;
+    double madeToLanded = 0.0, playedIn = 0.0;
     {
+        const double made = juce::Time::getMillisecondCounterHiRes();
         auto amp = make (orbitAmp());
         matches (was, play (*amp, goldenBlocks), "a fresh OrbitAmp plays what it played before the block");
+        playedIn = juce::Time::getMillisecondCounterHiRes() - made;
+        firstOnShelf = ! ownCabinet (*amp);
+        (void) landed (*amp);
+        firstLands = ownCabinet (*amp);
+        madeToLanded = juce::Time::getMillisecondCounterHiRes() - made;
     }
     {
         auto amp = make (orbitAmp());
@@ -514,6 +585,48 @@ int ORBITAMP_GATE_MAIN()
         amp->prepareToPlay (sampleRate, blockSize);
         amp->pumpDeviceWork();
         matches (was, play (*amp, goldenBlocks), "OrbitAmp on a session saved before the block plays what it played then");
+    }
+
+    // THE PROCESS'S FIRST ORBITAMP AND ITS CABINET (the DRIVE's listening renders, 21.11: the first take of a process
+    // played up to 13 dB apart at 10 kHz from every later one). With no message loop the first one plays the shelf's IR
+    // for good: its own cabinet is drawn on a worker and handed over on the message thread. The loop run, it lands, and
+    // the drawing is the process's: every OrbitAmp made after it opens on it at once, a host's or a render's alike.
+    {
+        auto later = make (orbitAmp());
+        check (firstOnShelf && firstLands && ownCabinet (*later),
+               "the first OrbitAmp of a process, no message loop, plays the shelf's IR; the loop run, its drawn cabinet lands ("
+                   + juce::String (madeToLanded, 0) + " ms after it was made, its blocks played in "
+                   + juce::String (playedIn, 0) + "), and a later one opens on it at once");
+    }
+
+    // NOT OFFERED, IN THIS BUILD — ON EVERY COMPILER: OrbitAmp as a host has it, its own cabinet in, plays what the same
+    // build's OrbitAmp with no DRIVE in its chain plays, bit for bit — fresh, and on the session saved before the block
+    // (which kept no cabinet's bytes, so its cabinet is drawn again). The golden above is the tree before the block, bit
+    // for bit only where the compiler is the one that recorded it; this is the rule itself, which no compiler moves.
+    {
+        const auto same = [] (const std::vector<float>& a, const std::vector<float>& b, const juce::String& what)
+        {
+            const float d = apart (a, b);
+            float loud = 0.0f;
+            for (const float s : b)
+                loud = std::max (loud, std::abs (s));
+            check (std::isfinite (d) && d <= 0.0f && loud > 0.05f,
+                   what + " (" + juce::String (d, 9) + " apart, peak " + juce::String (loud, 3) + ")");
+        };
+        {
+            auto amp = hosted (orbitAmp()), plain = hosted (orbitAmpWithout());
+            check (ownCabinet (*amp) && ownCabinet (*plain) && amp->chainHolds (params::rowDrive) && ! plain->chainHolds (params::rowDrive)
+                       && amp->getLatencySamples() == plain->getLatencySamples(),
+                   "both on their own cabinet, the one with the DRIVE in its chain, as late as the one without ("
+                       + juce::String (amp->getLatencySamples()) + ", " + juce::String (plain->getLatencySamples()) + ")");
+            same (play (*amp, 3 * goldenBlocks), play (*plain, 3 * goldenBlocks),
+                  "a fresh OrbitAmp, its DRIVE not offered, plays what this build's OrbitAmp with no DRIVE plays: bit for bit");
+        }
+        {
+            auto amp = hosted (orbitAmp(), &was.state), plain = hosted (orbitAmpWithout(), &was.state);
+            same (play (*amp, 3 * goldenBlocks), play (*plain, 3 * goldenBlocks),
+                  "...and on the session saved before the block: bit for bit");
+        }
     }
 
     // NO OTHER AMP HAS IT: not a parameter of the block's, not a place in its chain.
