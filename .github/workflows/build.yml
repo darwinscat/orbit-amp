@@ -64,11 +64,14 @@ jobs:
         with:
           version: v0.19.0
 
+      # The sources AND their sub-builds: JUCE's juceaide is configured inside build/_deps and remembers the very
+      # cl.exe it found. The runners' images do not all carry the same MSVC (20.11: 14.51 on one, 14.52 on another),
+      # and a juceaide configured on one could not find its compiler on the other, so the toolset is in the key.
       - name: Cache FetchContent sources
         uses: actions/cache@v6
         with:
           path: build/_deps
-          key: deps-windows-ninja-${{ hashFiles('CMakeLists.txt', 'cmake/**') }}
+          key: deps-windows-ninja-${{ env.VCToolsVersion }}-${{ hashFiles('CMakeLists.txt', 'cmake/**') }}
 
       - name: Configure
         run: >
