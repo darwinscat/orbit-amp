@@ -4,6 +4,7 @@
 // Gate for the DRIVE's pedal itself (src/core/DrivePedal.h), JUCE-free:
 //
 //   - the feedback's diodes: one Newton step a sample stays within 1 mV of the converged solve;
+//   - TS's TONE: his measured tone ladder less its noon, within 1.5 dB from 100 Hz to 10 kHz at TONE 0, 2, 8, 10;
 //   - each type's small-signal shape: TS's a rising shelf (2 kHz 12 dB and more over 100 Hz from GAIN 3 up) whose leg
 //     is 3 dB down at 720 Hz; PRECISION's leg corner moving with ATTACK and the clean leg left alone; 33's low cut
 //     moving with TIGHT, and the 33 growing 1 dB per dB of GAIN under its knee;
@@ -217,6 +218,30 @@ int main()
             (void) network (2880.0, at2880);
             const double under = db (std::abs (at2880)) - db (std::abs (at720));
             check (std::abs (under - 3.0) <= 0.5, "...its leg 3 dB (+-0.5) under its plateau at 720 Hz, dB", under);
+        }
+
+        // TS's TONE IS HIS PEDAL'S: at 0, 60, 240 and 300 degrees (TONE 0, 2, 8, 10) less noon, within 1.5 dB of his
+        // measured tone ladder (Overdrive 0, ~/CLAUDE_FILES/drive-ref/ts-mini-tone-ladder-overdrive-0.tsv, interpolated
+        // in log frequency) at every 1/3 octave from 100 Hz to 10 kHz; and noon is the voicing as it was, no shelf at all.
+        {
+            static constexpr double hz[21] = { 100, 125, 160, 200, 250, 315, 400, 500, 630, 800, 1000, 1250, 1600, 2000, 2500,
+                                               3150, 4000, 5000, 6300, 8000, 10000 };
+            static constexpr float tones[4] = { 0.0f, 2.0f, 8.0f, 10.0f };
+            static constexpr double his[4][21] = {
+                { 0.0, 0.1, 0.1, 0.0, -0.1, -0.3, -0.6, -1.0, -1.5, -2.2, -2.9, -3.7, -4.4, -5.0, -5.3, -5.5, -5.3, -5.0, -4.6, -4.2, -3.4 },
+                { -0.0, 0.0, -0.0, -0.1, -0.2, -0.4, -0.8, -1.2, -1.7, -2.3, -2.9, -3.3, -3.5, -3.5, -3.4, -3.0, -2.5, -2.0, -1.5, -1.2, -0.9 },
+                { 0.1, 0.2, 0.2, 0.3, 0.5, 0.7, 1.0, 1.4, 1.8, 2.4, 2.9, 3.3, 3.8, 4.2, 4.4, 4.6, 4.7, 4.7, 4.9, 4.9, 4.9 },
+                { 0.1, 0.1, 0.1, 0.2, 0.3, 0.4, 0.6, 0.9, 1.3, 1.9, 2.6, 3.4, 4.5, 5.7, 6.9, 8.1, 9.2, 10.2, 11.3, 12.1, 12.6 } };
+            double worst = 0.0;
+            for (int k = 0; k < 4; ++k)
+                for (int b = 0; b < 21; ++b)
+                    worst = std::max (worst, std::abs (smallSignal (at (Type::ts, 0.0f, tones[k]), hz[b])
+                                                       - smallSignal (at (Type::ts, 0.0f, 5.0f), hz[b]) - his[k][b]));
+            std::printf ("     TS's TONE 10 less noon: 1 kHz %+.1f, 5 kHz %+.1f, 10 kHz %+.1f dB (his +2.6, +10.2, +12.6)\n",
+                         smallSignal (at (Type::ts, 0.0f, 10.0f), 1000.0) - smallSignal (at (Type::ts, 0.0f, 5.0f), 1000.0),
+                         smallSignal (at (Type::ts, 0.0f, 10.0f), 5000.0) - smallSignal (at (Type::ts, 0.0f, 5.0f), 5000.0),
+                         smallSignal (at (Type::ts, 0.0f, 10.0f), 10000.0) - smallSignal (at (Type::ts, 0.0f, 5.0f), 10000.0));
+            check (worst < 1.5, "TS's TONE at 0, 2, 8 and 10 less noon: his tone ladder within 1.5 dB from 100 Hz to 10 kHz (worst dB)", worst);
         }
 
         // ...and at a DI's level (-18 and -12 dBFS), TONE noon, GAIN 0 and noon: where its peak stands and the skirts

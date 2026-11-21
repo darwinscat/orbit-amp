@@ -15,14 +15,15 @@
 // A NAM has no absolute level — the reamp chain of the day said which float meant which volt at his pedal — so his
 // captures are fed X dB off the DI (--nam-db=X), one X for all three, the X at which they clip as ours does.
 //
-//     orbitamp_drive_match <di.wav> <TS-0001.nam> <TS-0003.nam> <TS-0005.nam> [trims] [offset] [search] [--nam-db=X] [--out=<prefix>]
+//     orbitamp_drive_match <di.wav> <TS-0001.nam> <TS-0003.nam> <TS-0005.nam> [trims] [offset] [search] [--nam-db=X] [--out=<prefix>] [--ref]
 //
 // Prints the cards — round two's TS against his captures as they come, then ours as it ships against his fed X —;
 // `trims` fits every type's trim at VOLUME noon (out as loud as in, BS.1770, on the DI at -18 dBFS peak) and prints the
 // table for core::DrivePedal::Voicing::trimDb; the cards end with the level each hands the amp, ours against his fed X
 // and brought to the DI's loudness; `offset` walks X alone, half a dB at a time, a line per X and per capture; `search` walks ours' voicing numbers
 // (core::DrivePedal::Voicing) and X together for the least worst of the three measures and prints the cards again; --out writes the
-// DI at its own level, fed X, through TS-0001/0003/0005 for the blind pairs: <prefix>-60.wav, -150.wav, -240.wav.
+// DI at its own level (with --ref the reference, -18 dBFS peak), fed X, through TS-0001/0003/0005 for the blind pairs
+// and the comparisons after the amp: <prefix>-60.wav, -150.wav, -240.wav.
 
 #include "core/DrivePedal.h"
 #include "Loudness.h"
@@ -356,7 +357,7 @@ int main (int argc, char** argv)
 
     // The options: `offset` walks his captures' input; `search` retunes ours against them; --nam-db=<X> feeds his
     // captures X dB hotter than the DI (0 unless said); --out=<prefix> writes the DI through each of his three.
-    bool walk = false, search = false, fit = false;
+    bool walk = false, search = false, fit = false, fromRef = false;
     double namDb = 0.0;
     juce::String outPrefix;
     for (int a = 5; a < argc; ++a)
@@ -365,6 +366,7 @@ int main (int argc, char** argv)
         if (arg == "offset") walk = true;
         else if (arg == "search") search = true;
         else if (arg == "trims") fit = true;
+        else if (arg == "--ref") fromRef = true;
         else if (arg.startsWith ("--nam-db=")) namDb = arg.fromFirstOccurrenceOf ("=", false, false).getDoubleValue();
         else if (arg.startsWith ("--out=")) outPrefix = arg.fromFirstOccurrenceOf ("=", false, false);
     }
@@ -539,7 +541,7 @@ int main (int argc, char** argv)
         std::vector<float> raw ((size_t) file.getNumSamples());
         for (size_t i = 0; i < raw.size(); ++i)
             raw[i] = file.getSample (0, (int) i);
-        const auto out = throughNam (juce::File (argv[2 + k]), scaled (raw, namDb));
+        const auto out = throughNam (juce::File (argv[2 + k]), scaled (fromRef ? dis[1] : raw, namDb));
         juce::AudioBuffer<float> b (1, (int) out.size());
         b.copyFrom (0, 0, out.data(), (int) out.size());
         static const char* const hours[3] = { "-60.wav", "-150.wav", "-240.wav" };

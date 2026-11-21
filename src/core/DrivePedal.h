@@ -30,7 +30,9 @@ namespace orbitamp::core
         TS         leg HP 720 Hz, its gain 6 -> 40 dB evenly in dB over GAIN, its high cut the 51 pF across Rf; the
                    symmetric pair. After the sum the hardware's FIXED low-pass at 723 Hz (1k and 220n) — the clipping
                    stage alone is a rising shelf, and shelf times this low-pass is the famous hump near 720-800 Hz —
-                   then TONE a 1.5 kHz shelf -6 -> +6 dB (0 at noon), then a fixed low-pass at 8 kHz.     GAIN, TONE
+                   then a 1.5 kHz shelf, then TONE as the owner's own pedal measured it (its tone ladder, Overdrive 0,
+                   less its noon: a first-order shelf whose gain AND corner move — at 10 about +13.5 dB over 5.3 kHz,
+                   the air; at 0 about -4.6 dB over 500 Hz), then a fixed low-pass at 8 kHz.              GAIN, TONE
         PRECISION  the TS's, ATTACK moving the LEG's high-pass 340 -> 4800 Hz (noon about 1.28 kHz) — what goes into the
                    clip, never the clean leg — its gain 6 -> 36 dB; the fixed 723 Hz low-pass, then BRIGHT a 2 kHz
                    shelf 0 -> +9 dB.                                                            GAIN, ATTACK, BRIGHT
@@ -107,10 +109,17 @@ public:
     {
         double volt = 0.5;              // one volt in the float, every type: a DI at -12 dBFS is a humbucker's half volt
         double tsPostHz = 600.0;        // TS's fixed low-pass after the sum (723 by the book)
-        double tsShelfNoonDb = 9.0;     // TONE's shelf at noon, TS; the knob is +-6 dB about it (0 by the book)
+        double tsShelfNoonDb = 9.0;     // TS's fixed shelf over 1.5 kHz: its voice at TONE noon (0 by the book)
         double tsLegLoDb = 18.5, tsLegHiDb = 38.0;  // TS's leg gain at GAIN 0 and 10, even in dB between (6..40)
         double tsLpHz = 8500.0;         // TS's fixed low-pass at the top (8000)
         int    factor = 0;              // the oversampling, 0 = by the rate (`prepare`); a gate measures 4 against 8
+
+        /** TS's TONE: his tone ladder (~/CLAUDE_FILES/drive-ref/ts-mini-tone-ladder-overdrive-0.tsv) less its noon, one
+            first-order high shelf per 30 degrees of the dial (TONE 0..10) — its gain, dB, and its corner, Hz — fitted
+            for the least worst error from 100 Hz to 10 kHz (1.4 dB at most, 0.24 at 10); between them the gain in dB
+            and the corner in log. Noon is no shelf at all: the voicing above as it is, bit for bit. */
+        std::array<double, 11> tsToneDb { -4.6, -3.7, -2.3, -1.2, -0.5, 0.0, 0.6, 2.1, 4.9, 10.2, 13.5 };
+        std::array<double, 11> tsToneHz { 497.0, 403.0, 326.0, 100.0, 109.0, 300.0, 114.0, 420.0, 1063.0, 3187.0, 5289.0 };
 
         /** THE TRIM at VOLUME noon, dB, per type at GAIN 0, 1, .. 10 — a Catmull-Rom curve between: what makes the
             pedal's output as loud as its input on the reference DI at -18 dBFS peak (tests/DriveMatch.cpp `trims`). */
@@ -244,7 +253,7 @@ public:
     void reset() noexcept
     {
         oversampler.reset();
-        inCut = {}; legCut = {}; capCut = {}; post = {}; lowpass = {}; dcBlock = {}; shelf = {};
+        inCut = {}; legCut = {}; capCut = {}; post = {}; lowpass = {}; dcBlock = {}; shelf = {}; toneCut = {};
         tight = {};
         delay.fill (0.0f);
         delayAt = 0;
@@ -394,7 +403,7 @@ private:
             const float d = aim - *knob;
             if (std::abs (d) < 1.0e-6f)
                 continue;
-            *knob += std::clamp (d, -most, most);
+            *knob = std::abs (d) <= most ? aim : *knob + std::copysign (most, d);   // lands on the hand exactly
             moved = true;
         }
         if (moved)
@@ -413,15 +422,26 @@ private:
         voltNow = voicing.volt;
         double legDb = 0.0, legHz = 720.0, rg = 4700.0, capF = 51.0e-12, postHz = 723.0, shelfHz = 1500.0, shelfDb = 0.0,
                lpHz = 0.0;
-        linear = false; asymmetric = false;
+        linear = false; asymmetric = false; toneOn = false;
 
         switch (playing)
         {
             case Type::ts:
                 legDb   = voicing.tsLegLoDb + (voicing.tsLegHiDb - voicing.tsLegLoDb) * g;
                 postHz  = voicing.tsPostHz;
-                shelfDb = voicing.tsShelfNoonDb - 6.0 + 12.0 * unit (now.tone);   // TONE: +-6 dB over 1.5 kHz about noon's
+                shelfDb = voicing.tsShelfNoonDb;
                 lpHz    = voicing.tsLpHz;
+                {
+                    // TONE: his ladder's shelf for where the knob stands; at noon exactly, none.
+                    const double k = unit (now.tone) * 10.0;
+                    const int i = std::min (9, (int) k);
+                    const double f = k - i;
+                    const double db = voicing.tsToneDb[(size_t) i] + (voicing.tsToneDb[(size_t) i + 1] - voicing.tsToneDb[(size_t) i]) * f;
+                    const double hz = voicing.tsToneHz[(size_t) i] * std::pow (voicing.tsToneHz[(size_t) i + 1] / voicing.tsToneHz[(size_t) i], f);
+                    toneOn   = ! (std::abs (now.tone - 5.0f) <= 0.0f);
+                    toneGain = std::pow (10.0, db / 20.0);
+                    toneCut.set (hz, os);
+                }
                 break;
             case Type::precision:
                 legDb   = 6.0 + 30.0 * g;
@@ -534,6 +554,8 @@ private:
             }
             double y = post.lowpass (dcBlock.highpass ((double) upClean[(size_t) j] + v));
             y += shelfGain * (y - shelf.lowpass (y));
+            if (const double lp = toneCut.lowpass (y); toneOn)   // TS's TONE: its low-pass runs always, so leaving noon is no step
+                y = lp + toneGain * (y - lp);
             if (lpOn)
                 y = lowpass.lowpass (y);
             upClean[(size_t) j] = guard ((float) (y * voltNow * outAt (t)));
@@ -565,7 +587,7 @@ private:
 
     void flushTiny() noexcept
     {
-        for (OnePole* p : { &inCut, &legCut, &capCut, &post, &lowpass, &dcBlock, &shelf })
+        for (OnePole* p : { &inCut, &legCut, &capCut, &post, &lowpass, &dcBlock, &shelf, &toneCut })
             p->flush();
         tight.flush();
         if (std::abs (v) < 1.0e-25)
@@ -588,10 +610,10 @@ private:
     Phase phase = Phase::steady;
     float fadeGain = 1.0f, fadeFrom = 1.0f, fadeStep = 0.05f, slewKnob = 0.3f;
 
-    OnePole inCut, legCut, capCut, post, lowpass, dcBlock, shelf;
+    OnePole inCut, legCut, capCut, post, lowpass, dcBlock, shelf, toneCut;
     HighPass2 tight;
-    bool linear = false, asymmetric = false, lpOn = true;
-    double voltNow = 0.5, shelfGain = 0.0, rgNow = 4700.0, rfFrom = 4700.0, rfTo = 4700.0, boostFrom = 1.0, boostTo = 1.0, v = 0.0;
+    bool linear = false, asymmetric = false, lpOn = true, toneOn = false;
+    double voltNow = 0.5, shelfGain = 0.0, toneGain = 1.0, rgNow = 4700.0, rfFrom = 4700.0, rfTo = 4700.0, boostFrom = 1.0, boostTo = 1.0, v = 0.0;
     double volumeNow = 0.0, volumeEase = 0.1, outFrom = 1.0, outTo = 1.0;
     long long guardedCount = 0;
 };

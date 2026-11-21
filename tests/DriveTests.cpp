@@ -14,13 +14,15 @@
 // ORBITAMP_DRIVE_RECORD=<folder> writes the two golden files instead of checking them — run by the tree BEFORE the
 // block, never by the tree under test. ORBITAMP_DRIVE_LISTEN=<riff.wav> with ORBITAMP_DRIVE_LISTEN_OUT=<folder> renders
 // the riff through a fresh OrbitAmp — the block off, then each type at GAIN noon — for ears, and checks nothing; levels
-// it matches, it matches in integrated loudness (BS.1770, tests/Loudness.h), never in RMS.
+// it matches, it matches in integrated loudness (BS.1770, tests/Loudness.h), never in RMS. ORBITAMP_DRIVE_COMPARE=<his
+// capture's output on the reference> prints ours against it before and after the amp, 1/3 octave by 1/3 octave.
 // main() returns 0 when every check held.
 
 #include "GateMain.h"
 #include "Loudness.h"
 
 #include <juce_audio_formats/juce_audio_formats.h>
+#include <juce_dsp/juce_dsp.h>
 #include <juce_events/juce_events.h>
 
 #include "PluginEditor.h"
@@ -246,7 +248,7 @@ namespace
         (void) folder.createDirectory();
 
         // One take: a fresh OrbitAmp, the block off (type < 0) or the type at GAIN noon with the clip law `clip`.
-        const auto renderFrom = [&] (const juce::AudioBuffer<float>& src, int type, int clip, float gain = 5.0f)
+        const auto renderFrom = [&] (const juce::AudioBuffer<float>& src, int type, int clip, float gain = 5.0f, float tone = 5.0f)
         {
             const int srcLen = src.getNumSamples();
             auto amp = std::make_unique<AmpProcessor> (orbitAmp());
@@ -256,11 +258,17 @@ namespace
                 setParam (*amp, params::drivePresent, 1.0f);
                 setParam (*amp, params::driveType, (float) type);
                 setParam (*amp, params::driveGain, gain);
+                setParam (*amp, params::driveTone, tone);
                 setParam (*amp, params::driveClipTmp, (float) clip);
             }
+            // ORBITAMP_DRIVE_LISTEN_NOGATE=1: the GATE off — it keys off the raw guitar ahead of the chain, so a pedal
+            // played INTO the amp from a file and the DRIVE in front of it are gated on two different signals.
+            if (juce::SystemStats::getEnvironmentVariable ("ORBITAMP_DRIVE_LISTEN_NOGATE", {}) == "1")
+                setParam (*amp, params::gateOn, 0.0f);
             amp->prepareToPlay (rate, blockSize);
             amp->pumpDeviceWork();
             const int lead = (int) rate, tail = 2 * (int) rate, total = lead + srcLen + tail;
+            float peakIn = 0.0f, peakOut = 0.0f;
             juce::AudioBuffer<float> out (2, srcLen + tail), buf (2, blockSize);
             juce::MidiBuffer midi;
             for (int at = 0; at < total; at += blockSize)
@@ -276,14 +284,25 @@ namespace
                 }
                 amp->processBlock (buf, midi);
                 amp->pumpDeviceWork();
+                peakIn = std::max (peakIn, amp->driveInPeak.exchange (0.0f));
+                peakOut = std::max (peakOut, amp->driveOutPeak.exchange (0.0f));
                 for (int i = 0; i < n; ++i)
                     if (const int k = at + i - lead; k >= 0)
                         for (int ch = 0; ch < 2; ++ch)
                             out.setSample (ch, k, buf.getSample (ch, i));
             }
+            if (type >= 0)
+                std::printf ("     the DRIVE in the chain: in %.1f dBFS peak, out %.1f dBFS peak (the source %.1f)\n",
+                             (double) juce::Decibels::gainToDecibels (peakIn), (double) juce::Decibels::gainToDecibels (peakOut),
+                             (double) juce::Decibels::gainToDecibels (src.getMagnitude (0, 0, srcLen)));
             return out;
         };
         const auto render = [&] (int type, int clip) { return renderFrom (riff, type, clip); };
+
+        // A TAKE THROWN AWAY FIRST: the first OrbitAmp of a process does not play what every one after it plays (what it
+        // fits or loads off the audio thread lands late, then is shared), so the first take of a pair was never the
+        // amp at its defaults — up to 13 dB apart at 10 kHz, 7 at 100 Hz, from the same input. Every take is a later one.
+        (void) renderFrom (riff, -1, 0);
         const auto lufsOf = [&] (const juce::AudioBuffer<float>& b)
         {
             std::vector<const float*> chans;
@@ -313,6 +332,119 @@ namespace
                          (double) juce::Decibels::gainToDecibels (out.getRMSLevel (0, 0, out.getNumSamples())), lufsOf (out));
             return true;
         };
+
+        // AFTER THE AMP, ours against his (ORBITAMP_DRIVE_COMPARE: the reference — the riff at -18 dBFS peak — through his
+        // capture fed at its offset, written by orbitamp_drive_match --ref): his brought to the reference's loudness and
+        // given the BOOSTER's TONE shelf (src/core/BoosterNam.h's fit, its path), ours the DRIVE at GAIN
+        // ORBITAMP_DRIVE_COMPARE_GAIN, TONE ORBITAMP_DRIVE_COMPARE_TONE, VOLUME noon; both into a fresh OrbitAmp at its
+        // defaults; the takes' long-term 1/3 octaves from 80 Hz to 10 kHz, levels aligned, and their loudness, compared.
+        if (const auto his = juce::SystemStats::getEnvironmentVariable ("ORBITAMP_DRIVE_COMPARE", {}); his.isNotEmpty())
+        {
+            std::unique_ptr<juce::AudioFormatReader> r (formats.createReaderFor (juce::File (his)));
+            if (r == nullptr)
+                return 1;
+            const float gain = (float) juce::SystemStats::getEnvironmentVariable ("ORBITAMP_DRIVE_COMPARE_GAIN", "5").getDoubleValue();
+            const float tone = (float) juce::SystemStats::getEnvironmentVariable ("ORBITAMP_DRIVE_COMPARE_TONE", "5").getDoubleValue();
+            juce::AudioBuffer<float> ref (riff);
+            ref.applyGain (juce::Decibels::decibelsToGain (-18.0f) / std::max (1.0e-9f, ref.getMagnitude (0, 0, len)));
+            juce::AudioBuffer<float> hisPedal (1, (int) r->lengthInSamples);
+            r->read (&hisPedal, 0, hisPedal.getNumSamples(), 0, true, false);
+            (void) bringTo (hisPedal, lufsOf (ref));
+            {
+                static constexpr double toneDb[11] = { -5.5, -5.0, -2.5, -1.0, -0.5, 0.0, 0.5, 2.0, 5.0, 10.0, 13.5 };
+                static constexpr double toneHz[11] = { 476, 300, 300, 300, 300, 300, 300, 449, 1133, 3204, 5708 };
+                const double k = juce::jlimit (0.0, 10.0, (double) tone);
+                const int i = std::min (9, (int) k);
+                const double f = k - i, db = toneDb[i] + (toneDb[i + 1] - toneDb[i]) * f;
+                const double hz = toneHz[i] * std::pow (toneHz[i + 1] / toneHz[i], f), g = std::pow (10.0, db / 20.0);
+                const double w = std::tan (juce::MathConstants<double>::pi * hz / rate), c = w / (1.0 + w);
+                double st = 0.0;
+                float* x = hisPedal.getWritePointer (0);
+                for (int i2 = 0; i2 < hisPedal.getNumSamples(); ++i2)
+                {
+                    const double v = ((double) x[i2] - st) * c, lp = v + st;
+                    st = lp + v;
+                    x[i2] = (float) (lp + g * ((double) x[i2] - lp));
+                }
+            }
+            if (juce::SystemStats::getEnvironmentVariable ("ORBITAMP_DRIVE_COMPARE_SELF", {}) == "1")   // the control: ours, from a file
+            {
+                hisPedal.makeCopyOf (ref);
+                core::DrivePedal pedal;
+                pedal.prepare (rate);
+                core::DrivePedal::Settings ts;
+                ts.gain = gain;
+                ts.tone = tone;
+                for (int at = 0; at < len; at += blockSize)
+                    pedal.process (hisPedal.getWritePointer (0) + at, std::min (blockSize, len - at), ts);
+            }
+            const auto hisTake = renderFrom (hisPedal, -1, 0);
+            const auto ourTake = renderFrom (ref, 0, 0, gain, tone);
+            static constexpr double centres[22] = { 80, 100, 125, 160, 200, 250, 315, 400, 500, 630, 800, 1000, 1250, 1600, 2000,
+                                                    2500, 3150, 4000, 5000, 6300, 8000, 10000 };
+            const auto thirds = [&] (const juce::AudioBuffer<float>& b)
+            {
+                constexpr int order = 13, n = 1 << order;
+                juce::dsp::FFT fft (order);
+                std::vector<float> buf ((size_t) n * 2);
+                std::vector<double> power ((size_t) n / 2 + 1, 0.0);
+                for (int at = 0; at + n <= b.getNumSamples(); at += n / 2)
+                {
+                    std::fill (buf.begin(), buf.end(), 0.0f);
+                    for (int i = 0; i < n; ++i)
+                        buf[(size_t) i] = b.getSample (0, at + i) * (float) (0.5 - 0.5 * std::cos (2.0 * juce::MathConstants<double>::pi * i / n));
+                    fft.performFrequencyOnlyForwardTransform (buf.data());
+                    for (int k = 0; k <= n / 2; ++k)
+                        power[(size_t) k] += (double) buf[(size_t) k] * buf[(size_t) k];
+                }
+                std::array<double, 22> out {};
+                for (int c = 0; c < 22; ++c)
+                {
+                    double e = 1.0e-30;
+                    for (int k = 1; k <= n / 2; ++k)
+                        if (const double f = k * rate / n; f >= centres[c] / std::pow (2.0, 1.0 / 6.0) && f < centres[c] * std::pow (2.0, 1.0 / 6.0))
+                            e += power[(size_t) k];
+                    out[(size_t) c] = 10.0 * std::log10 (e);
+                }
+                return out;
+            };
+            // ...and before the amp, the two pedals' own outputs.
+            {
+                juce::AudioBuffer<float> ourPedal (ref);
+                core::DrivePedal pedal;
+                pedal.prepare (rate);
+                core::DrivePedal::Settings ts;
+                ts.gain = gain;
+                ts.tone = tone;
+                for (int at = 0; at < len; at += blockSize)
+                    pedal.process (ourPedal.getWritePointer (0) + at, std::min (blockSize, len - at), ts);
+                const auto a = thirds (ourPedal), b = thirds (hisPedal);
+                double m = 0.0, w = 0.0;
+                for (int c = 0; c < 22; ++c)
+                    m += (a[(size_t) c] - b[(size_t) c]) / 22.0;
+                std::printf ("before the amp, ours less his, %+.2f LU;\n   ", lufsOf (ourPedal) - lufsOf (hisPedal));
+                for (int c = 0; c < 22; ++c)
+                {
+                    w = std::max (w, std::abs (a[(size_t) c] - b[(size_t) c] - m));
+                    std::printf (" %g:%+.1f", centres[c], a[(size_t) c] - b[(size_t) c] - m);
+                }
+                std::printf ("\n   worst 1/3 octave %.1f dB\n", w);
+            }
+            const auto o = thirds (ourTake), h = thirds (hisTake);
+            double mean = 0.0, worst = 0.0;
+            for (int c = 0; c < 22; ++c)
+                mean += (o[(size_t) c] - h[(size_t) c]) / 22.0;
+            std::printf ("after the amp, DRIVE TS GAIN %.0f TONE %.0f against his TS through the booster's path at TONE %.0f: ours less his, "
+                         "%+.2f LU;\n   ", (double) gain, (double) tone, (double) tone, lufsOf (ourTake) - lufsOf (hisTake));
+            for (int c = 0; c < 22; ++c)
+            {
+                const double d = o[(size_t) c] - h[(size_t) c] - mean;
+                worst = std::max (worst, std::abs (d));
+                std::printf (" %g:%+.1f", centres[c], d);
+            }
+            std::printf ("\n   worst 1/3 octave %.1f dB\n", worst);
+            return 0;
+        }
 
         // THE BLIND PAIR: the DI through his TS-0003 (ORBITAMP_DRIVE_BLIND, written by orbitamp_drive_match, his capture
         // fed at its offset) into the amp with the block off, and the DI into the amp through our TS at noon — his
