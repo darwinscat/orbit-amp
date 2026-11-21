@@ -23,7 +23,7 @@ set(CMAKE_OSX_DEPLOYMENT_TARGET "11.0" CACHE STRING "The oldest macOS the binari
 # Darwin's Cat Amps, under one tag, vX.Y.Z — and this is its number: every amp shows it, stamps its bundles
 # with it and compares the family's releases against it (add_amp). The release refuses a tag that says
 # another (installer/version.sh, which reads it from this line).
-project(OrbitAmp VERSION 0.10.1 LANGUAGES C CXX)
+project(OrbitAmp VERSION 0.11.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -1314,6 +1314,7 @@ set(AMP_ENGINE_LIBRARIES
     felitronics::nam                 # NAM inference — the captured devices actually play
     felitronics::rigplayer           # the pack player: captures, their crossfade, tone, alignment
     felitronics::limiter             # the safety at the door: a true-peak limiter with lookahead
+    felitronics::oversampling        # the DRIVE's: core's Kaiser polyphase oversampler (src/core/DrivePedal.h)
     felitronics::octave              # the bass's OCTAVE (Octaver) and its slider's law
     felitronics::envfilter           # the bass's FILTER (EnvelopeFilter, keyed) and its slider's law
     felitronics::chorus              # the bass's CHORUS (BassChorus) and its slider's law
@@ -1838,6 +1839,10 @@ gate_in_binary(boost-level       tests/BoostLevelTests.cpp)
 # The amp's bypass: the host's, in no state; out, the input as it came in and as late, bit for bit on both planes;
 # back in, what an amp never taken out plays.
 gate_in_binary(bypass            tests/BypassTests.cpp)
+# OrbitAmp's DRIVE: not offered, OrbitAmp plays what it played before the block (the golden files the tree before it
+# recorded); offered, it stands in the strip before the AMP and plays; a session keeps it; no other amp has it.
+gate_in_binary(drive             tests/DriveTests.cpp
+               DEFINES "ORBITAMP_DRIVE_GOLDEN=\"${CMAKE_CURRENT_SOURCE_DIR}/tests/golden/orbitamp-before-drive\"")
 
 # AN AMP'S GATES, the same two for the cockpit and every rover, run as that amp — what tells one amp from
 # another, the gates read in tests/AmpGate.h. Its channels with no window at all — as many as CHANNELS says,
@@ -2318,6 +2323,20 @@ target_link_libraries(orbitamp_nam_bench PRIVATE felitronics::nam juce::juce_dsp
 # curl/curl.h, which a bare Linux CI runner does not have — the first Linux build found it.
 target_compile_definitions(orbitamp_nam_bench PRIVATE JUCE_STANDALONE_APPLICATION=1
                                                        JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
+
+# The DRIVE's pedal itself (src/core/DrivePedal.h), JUCE-free like the next: its half-bands, each type's response and
+# clip, silence, what is not a signal, the ceiling and the calibration, no clicks, and what it costs.
+add_executable(orbitamp_drive_test tests/DrivePedalTests.cpp)
+target_include_directories(orbitamp_drive_test PRIVATE src)
+target_link_libraries(orbitamp_drive_test PRIVATE felitronics::oversampling)
+target_compile_features(orbitamp_drive_test PRIVATE cxx_std_20)
+
+# ...and the DRIVE's TS against the owner's own pedal: not a gate, a measuring instrument (tests/DriveMatch.cpp).
+add_executable(orbitamp_drive_match tests/DriveMatch.cpp)
+target_include_directories(orbitamp_drive_match PRIVATE src)
+target_link_libraries(orbitamp_drive_match PRIVATE felitronics::nam felitronics::oversampling
+                      juce::juce_audio_formats juce::juce_dsp juce::juce_core)
+target_compile_definitions(orbitamp_drive_match PRIVATE JUCE_STANDALONE_APPLICATION=1 JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
 
 add_executable(orbitamp_eqlink_test tests/EqLinkTests.cpp)
 target_include_directories(orbitamp_eqlink_test PRIVATE src)

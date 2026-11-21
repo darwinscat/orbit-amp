@@ -512,6 +512,28 @@ inline constexpr float compRatioMin = 1.5f, compRatioMax = 10.0f;
 inline constexpr const char* compPresent = "comp_present";
 void addGuitarCompParameters (juce::AudioProcessorValueTreeState::ParameterLayout&);
 
+/** ORBITAMP'S DRIVE (the owner, 21.11: «блок, включаемый в SETUP, перед преампом ... TS и ещё парочку самых модных»): a
+    modest pedal after COMP and before the AMP (core::DrivePedal says what each type is and why its level is where it
+    is). Out of the strip until the player offers it — SETUP's PEDALS page, or the strip's checklist, both writing
+    `drivePresent` — and then a link like COMP: its arrow its STANDBY/ON (`driveOn`), its tile on the face.
+
+    Its ids carry `drive_`, new: `boost_` is the prefix of the boost BLOCK of before (boostLevel says why no engine
+    parameter carries it), so a session of that time that still names one can never switch this on; and OrbitAmp's
+    BOOST key (`out_boost`, `preamp_boost`) stays what it was. FOR NOW IT IS THE TS ALONE, under its DIODE law (the
+    owner, 21.11): GAIN and TONE 0..10, as the face reads them, and VOLUME (`driveVolume`) in dB, -12..+12, at noon
+    (0) the pedal hands on the loudness it was given (core::DrivePedal). The other types' voicings sleep in the pedal,
+    still gated; no parameter reaches them, so a session that named one (a `drive_type` of before) opens as the TS.
+    When they come back, a type parameter and their own EQ ids come back with them. */
+inline constexpr const char* drivePresent = "drive_present";
+inline constexpr const char* driveOn      = "drive_on";
+inline constexpr const char* driveGain    = "drive_gain";
+inline constexpr const char* driveTone    = "drive_tone";
+inline constexpr const char* driveVolume  = "drive_volume";
+/** The types the tile's selector offers, in core::DrivePedal::Type's order: the TS alone for now — the place where
+    the others come back. */
+inline const juce::StringArray driveTypes { "TS" };
+void addGuitarDriveParameters (juce::AudioProcessorValueTreeState::ParameterLayout&);
+
 /** THE GUITAR'S INPUT CUT (the owner, 02.11): a 2nd-order high-pass at the input of every guitar amp's chain, always,
     under the lowest note (a low E loses half a decibel), so rumble, thumps and DC reach neither the gate, nor COMP, nor
     the AMP. */
@@ -624,7 +646,7 @@ void addBassParameters (juce::AudioProcessorValueTreeState::ParameterLayout&);
 /** The DSP cost entries, in the order the chain runs them: a captured block is followed by its own
     console. Here rather than in the processor so a link can name its stage and the footer can
     label one, without either of them having to know about the other. */
-enum Stage { stTotal, stTuner, stGate, stComp, stOctave, stFilter, stPreamp, stPreampEq, stChorus, stDelay,
+enum Stage { stTotal, stTuner, stGate, stComp, stOctave, stFilter, stDrive, stPreamp, stPreampEq, stChorus, stDelay,
              stReverb, stCab, stLimit, stOut, numStages };
 
 /** What the breakdown calls a stage. TWO spellings, both ASCII on purpose: the copied report runs
@@ -639,6 +661,7 @@ inline constexpr StageName stageNames[numStages] = {
     { "COMP",   "COMP"      },
     { "OCTAVE", "OCTAVE"    },
     { "ENVELOPE", "ENVELOPE" },   // FILTER: the owner reads it as ENVELOPE (31.10)
+    { "DRIVE",  "DRIVE"     },
     { "AMP",    "AMP"       },
     { "AMP EQ", "AMP EQ"    },
     { "CHORUS", "CHORUS"    },
@@ -654,7 +677,7 @@ inline constexpr StageName stageNames[numStages] = {
     every row after it sliding under somebody's `i - first` sum. */
 /** The bass's CHORUS stands before the echo and the room (OrbitBass: CHORUS -> DELAY -> REVERB -> the cabinet); no
     guitar amp has a CHORUS, so its strip and its chain read as they always did. */
-enum ChainRow { rowIn, rowTuner, rowGate, rowComp, rowOctave, rowFilter, rowPreamp, rowChorus, rowDelay, rowReverb,
+enum ChainRow { rowIn, rowTuner, rowGate, rowComp, rowOctave, rowFilter, rowDrive, rowPreamp, rowChorus, rowDelay, rowReverb,
                 rowCab, rowLimit, rowOut, numChainRows };
 
 /** One link of the chain. */
@@ -679,6 +702,7 @@ inline constexpr ChainLink chainLinks[numChainRows] = {
     /* COMP   */ { "COMP",   false, false, compOn,    stComp,   numStages, compPresent },
     /* OCTAVE */ { "OCTAVE", false, false, octaveOn,  stOctave, numStages, octavePresent },
     /* FILTER */ { "ENVELOPE", false, false, filterOn, stFilter, numStages, filterPresent },
+    /* DRIVE  */ { "DRIVE",  false, true,  driveOn,   stDrive,  numStages, drivePresent },
     /* AMP    */ { "AMP",    true,  true,  preampOn,  stPreamp, stPreampEq },
     /* CHORUS */ { "CHORUS", false, false, chorusOn,  stChorus, numStages, chorusPresent },
     /* DELAY  */ { "DELAY",  false, true,  delayOn,   stDelay,  numStages, delayPresent },
@@ -688,19 +712,20 @@ inline constexpr ChainLink chainLinks[numChainRows] = {
     /* OUT    */ { "OUT",    false, true,  nullptr,   stOut,    numStages },
 };
 
-/** THE BASS'S CHAIN (OrbitBass, Product's Chain::bass): every link there is — the guitar's, its COMP and its effects.
-    Five of them stand in it only while the player keeps them in the strip (`presentParam`): OCTAVE, ENVELOPE and CHORUS
-    in out of the box, DELAY and REVERB out (the owner, 31.10). */
-inline constexpr bool bassChainHolds (ChainRow) noexcept
+/** THE BASS'S CHAIN (OrbitBass, Product's Chain::bass): every link there is — the guitar's, its COMP and its effects —
+    but OrbitAmp's DRIVE, a guitar's pedal. Five of them stand in it only while the player keeps them in the strip
+    (`presentParam`): OCTAVE, ENVELOPE and CHORUS in out of the box, DELAY and REVERB out (the owner, 31.10). */
+inline constexpr bool bassChainHolds (ChainRow row) noexcept
 {
-    return true;
+    return row != rowDrive;
 }
 
 /** THE GUITAR'S CHAIN, every amp's but OrbitBass's: every link but the bass's own — OCTAVE, FILTER and CHORUS — which
-    no guitar amp has a parameter for, and COMP but where the amp has one (`comp`: OrbitAmp's, Product::guitarComp). */
-inline constexpr bool guitarChainHolds (ChainRow row, bool comp = false) noexcept
+    no guitar amp has a parameter for, COMP but where the amp has one (`comp`: OrbitAmp's, Product::guitarComp), and
+    DRIVE the same (`drive`: OrbitAmp's, Product::guitarDrive). */
+inline constexpr bool guitarChainHolds (ChainRow row, bool comp = false, bool drive = false) noexcept
 {
-    return row != rowOctave && row != rowFilter && row != rowChorus && (row != rowComp || comp);
+    return row != rowOctave && row != rowFilter && row != rowChorus && (row != rowComp || comp) && (row != rowDrive || drive);
 }
 
 /** Whose cost a stage is. A captured block owns two — itself and its own console — and TOTAL

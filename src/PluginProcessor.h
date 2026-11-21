@@ -19,6 +19,7 @@
 #include "core/EqLink.h"
 #include "core/HumLearnLink.h"
 #include "core/BassComp.h"
+#include "core/DrivePedal.h"
 #include "core/OctaveTap.h"
 #include "core/BassCuts.h"
 #include "core/FilterTap.h"
@@ -1062,14 +1063,15 @@ public:
         chain. Any thread. */
     int bassBackPlanes() const noexcept { return bassWide.load (std::memory_order_relaxed); }
 
-    /** WHETHER THIS PRODUCT'S CHAIN HAS THE LINK AT ALL (Product::chain) — the bass's holds every one (its DELAY and
-        REVERB out of its strip until the player adds them: linkInRig); a guitar amp's none of the bass's own, OCTAVE,
-        ENVELOPE and CHORUS, and COMP only where the amp has one (Product::guitarComp: OrbitAmp's). A link it does not
+    /** WHETHER THIS PRODUCT'S CHAIN HAS THE LINK AT ALL (Product::chain) — the bass's holds every one but DRIVE (its DELAY
+        and REVERB out of its strip until the player adds them: linkInRig); a guitar amp's none of the bass's own, OCTAVE,
+        ENVELOPE and CHORUS, and COMP and DRIVE only where the amp has them (Product::guitarComp, guitarDrive: OrbitAmp's). A link it does not
         hold never works, whatever its switch says (a state of another amp's, a host's automation), and has no arrow on
         the strip and no block on the panel. */
     bool chainHolds (params::ChainRow row) const noexcept
     {
-        return ownProduct.chain == Chain::bass ? params::bassChainHolds (row) : params::guitarChainHolds (row, ownProduct.guitarComp);
+        return ownProduct.chain == Chain::bass ? params::bassChainHolds (row)
+                                               : params::guitarChainHolds (row, ownProduct.guitarComp, ownProduct.guitarDrive);
     }
 
 private:
@@ -1342,6 +1344,10 @@ public:
     /** COMP squeezing now, in dB (0 or below) — the indicator beside its knob. 0 on every amp that has no COMP. */
     std::atomic<float> compGrDb { 0.0f };
 
+    /** THE DRIVE's input and output peaks since the face last read them: the audio thread raises them while the block
+        stands in the strip, its tile's columns take them (exchange 0; ui/LevelColumns.h). Linear. */
+    std::atomic<float> driveInPeak { 0.0f }, driveOutPeak { 0.0f };
+
     /** THE HUM AT THE INPUT, as the stage last heard it — written by the audio thread at the end of
         every block, read by the windows on their own clocks. `humInForce` is the mode the stage is
         IN FORCE, which is the machine's (prefs::hum) unless the stage could not be prepared for this
@@ -1555,6 +1561,26 @@ private:
         in STEREO, where its chain works two signals, a second one squeezes the right (`compRight`, unwatched). */
     core::BassComp bassComp, compRight;
     bool compRightRan = false;   // the audio thread's: the twin worked the last block
+
+    /** ORBITAMP'S DRIVE (Product::guitarDrive), after COMP and before the AMP: one pedal per signal the front half works,
+        started fresh whenever it starts working again. Its parameters, null on every other amp — which never runs it.
+
+        IN THE STRIP IT IS 63 SAMPLES LONG (core::DrivePedal::latencySamples, its oversampler's round trip), ON or in
+        STANDBY alike: in STANDBY `driveWire` is the block, the dry as late as the pedal would have been, and the
+        crossfade between them lines up. Out of the strip it is nothing — no delay, nothing run, the latency not
+        counted (reportLatency). */
+    struct DriveParams
+    {
+        std::atomic<float>* gain = nullptr;
+        std::atomic<float>* tone = nullptr;
+        std::atomic<float>* volume = nullptr;
+    } driveParams;
+    core::DrivePedal drivePedal[2];
+    core::BypassWire driveWire;
+    bool driveWired = false; // the audio thread's: the block stood in the strip the last block...
+    bool driveRan = false;   // ...the pedal worked in it...
+    int drivePlanes = 0;     // ...on so many signals
+    void runDrive (float* const* channels, int nch, int numSamples) noexcept;
     core::BassCuts bassCuts;
 
     /** THE GUITAR'S INPUT CUT (params::guitarInputCutHz) — every guitar amp's, always on. */

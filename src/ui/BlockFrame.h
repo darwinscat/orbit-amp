@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <optional>
 #include "OnFirst.h"
 #include "Theme.h"
 
@@ -35,10 +36,18 @@ public:
         addChildComponent (shield);
     }
 
-    /** The accent this block is coded with — orange when captured, violet when DSP. */
+    /** The accent this block is coded with — orange when captured, violet when DSP, unless the block wears its own
+        (`setAccent`: the DRIVE's Tube Screamer green) — its frame, its title and its switch. */
     juce::Colour accent() const
     {
-        return kind == Kind::captured ? theme::orange : theme::violet;
+        return ownAccent.has_value() ? *ownAccent : kind == Kind::captured ? theme::orange : theme::violet;
+    }
+
+    /** A colour of its own for the frame's lines and title, in place of the kind's. */
+    void setAccent (juce::Colour c)
+    {
+        ownAccent = c;
+        repaint();
     }
 
     /** A block whose nature depends on what is loaded into it — a boost is a captured pedal or our
@@ -181,7 +190,7 @@ public:
                                     .withCentre ({ titleBox.getCentreX(), box.getY() }));
             }
 
-            g.setColour (kind == Kind::captured ? theme::orange : theme::lilac);
+            g.setColour (ownAccent.has_value() ? *ownAccent : kind == Kind::captured ? theme::orange : theme::lilac);
             theme::drawTracked (g, title.toUpperCase(), titleBox, theme::displayFont (titleHeight),
                                 0.15f, juce::Justification::centredLeft);
         }
@@ -555,6 +564,7 @@ private:
 
     juce::String title;
     Kind kind;
+    std::optional<juce::Colour> ownAccent;
     bool hasSwitch = true;
     bool on = true;
     bool shieldRaising = false;

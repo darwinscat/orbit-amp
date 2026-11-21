@@ -17,6 +17,7 @@ namespace orbitamp
 {
 
 class CompBlock;
+class DriveBlock;
 class FilterBlock;
 class ChorusBlock;
 
@@ -132,6 +133,9 @@ public:
     /** OrbitBass's COMP block, after the GATE: its slider, its picture and its ratio square (ui/CompBlock.h). */
     static constexpr int compWidth = 320;
 
+    /** OrbitAmp's DRIVE block, after COMP: its type on the border, GAIN and the type's one or two (ui/DriveBlock.h). */
+    static constexpr int driveWidth = 250;   // GAIN, TONE and the thin level columns, VOLUME on the OUT one
+
     /** OrbitBass's OCTAVE block, its rail and its picture of the note and its sub (ui/OctaveScope.h), after COMP. */
     static constexpr int octaveWidth = 170;
 
@@ -229,6 +233,9 @@ private:
 
     /** OrbitBass's COMP, a block of its own (ui/CompBlock.h); none on a guitar amp. */
     std::unique_ptr<CompBlock> comp;
+
+    /** OrbitAmp's DRIVE, a block of its own (ui/DriveBlock.h); none on any other amp. */
+    std::unique_ptr<DriveBlock> drive;
     std::atomic<bool> octaveWorked {};   // the latch OCTAVE's guard block holds for a lamp it does not show
 
     /** Who stands on the panel, indexed by Block. The core three out of the box; the delay is

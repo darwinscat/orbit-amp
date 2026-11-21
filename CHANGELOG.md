@@ -8,6 +8,71 @@ Up to 0.7.0 this book was OrbitAmp's alone. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [0.11.0] — 2026-11-21 — OrbitAmp's DRIVE, the host's bypass, the input by number, JUCE 9
+
+### Every amp
+
+#### Added
+- **Bypass, the host's.** The whole amp out and the bass or guitar through as it came in, crossfaded, held as late as the
+  amp plays so nothing jumps, and the tuner still listening. It is the host's bypass, and no preset, A/B/C/D register or
+  undo step carries it: a preset never switches the amp off.
+- **The standalone lists the interface's inputs by number, each with its meter.** A right click on the INPUT column (or
+  the settings menu's INPUT, IN) shows IN 1 to IN n of the interface, and the one the amp plays is lit. A plucked
+  string moves the meter of the input it is plugged into, so the guitar plays from IN 4 without repatching and without
+  ticking inputs in Audio/MIDI Settings. A click plays that input. A Shift-click adds a second, and the amp plays the
+  two together at half each, which combs a DI with a mic. In STEREO a click sets the left amp's input and a Shift-click
+  the right one's. The menu stays open while you pluck. The choice is kept for each interface by its name, apart for
+  STEREO, and comes back with the interface. An interface seen for the first time keeps playing what it played, and
+  every one of its inputs opens for the list. Inside a host the menu keeps Left, Right and L+R, which the host's
+  routing feeds.
+- **Which input the amp plays: Left, Right or L+R.** With a DI in one input of the interface and a cabinet's mic in
+  the other, the guitar plays from either without moving a cable. L+R plays the two at half each (a DI and a mic
+  together comb). The choice is in the menu of the INPUT column, and in the settings menu's INPUT; in STEREO both
+  inputs play, each through its own amp, as before. It belongs to the session, not to the sound: a session keeps
+  it, a preset, the A/B registers and INIT never change it. A new instance plays the left, as every amp did.
+
+#### Fixed
+- A cabinet IR longer than 1.41 s at 48 kHz, picked while the cabinet is out of the chain, now plays alone from
+  the first sample when the cabinet comes back; it used to finish its crossfade from the cabinet before.
+
+#### Dependencies
+- **felitronics-appkit v0.25.0**: the input picker the standalones list their inputs with, moved there from the cab
+  builders so that the builders and the amps share it.
+- **cab-ir-generator v0.5.0**, the builders' first release on JUCE 9: the cabinets, their panel and their presets
+  are as they were.
+- felitronics-core v0.67.0 (from v0.62.0). The cabinet's convolver keeps only the memory its IR needs instead of
+  its whole 5 s, and an IR longer than 1.41 s at 48 kHz (0.70 s at 96 kHz) is convolved in smaller steps, which
+  plays within float noise of before. The echo plays exactly as before; with REPEATS at 0 the plug-in no longer
+  tells the host about echo tail that is not there.
+- **felitronics-guitar-core v0.12.0** (from v0.8.0) and **namz v5.1.0** with it: the bass amps' crossover blend and a
+  pack's own filters, which no guitar pack carries. Every guitar pack plays as before.
+- **felitronics-guitar-core v0.13.0** and **namz v5.2.0** with it: a capture's clean match read from the pack, which only
+  the bass packs carry. Every guitar pack plays as before.
+- **JUCE 9.0.5**, up from 8.0.17: every amp, its plug-ins and its app are built on it.
+
+### OrbitAmp
+
+#### Added
+- **DRIVE, a pedal before the amp.** Offer it in SETUP, on the new PEDALS page (DRIVE, "pedals before the amp"), or from
+  the strip's checklist: it stands after COMP and right before the AMP, its arrow its STANDBY and ON. For now it is a
+  Tube Screamer, voiced to a real one, its clipping and its TONE matched to measurements of that pedal: GAIN from a
+  gentle push to full drive, TONE the treble after the clip. On the right two thin level columns show what goes into
+  the pedal and what leaves it, each with the AMP's own input window marked, and VOLUME is the OUT column's orange hand,
+  also typed in under the columns: at noon the pedal hands the amp the loudness it was given, whatever the GAIN. A
+  session keeps it. Added at the request of Oleksiy Nikitchenko.
+- **Its latency only while it is offered.** In the strip it adds 63 samples (1.3 ms at 48 kHz), in STANDBY too, so
+  switching it on and off never moves the sound in time. Out of the strip it adds nothing, and OrbitAmp plays exactly
+  what it played before.
+
+### AmberPawAmp
+
+#### Fixed
+- **DRIVE turned smoothly no longer combs the Copper and the Kraken with the boost on.** Their boosted captures stated
+  how late they play against the pack's first capture wrong: up to 96 samples, where every one of them is within four
+  of it. The amp delayed the captures to match, and between two neighbouring settings, where it plays both, the sound
+  lost whole notches, as deep as -28 dB. The packs now state the delays measured anew, so a blend between neighbours is as
+  flat as the captures themselves. The boost-off captures, the Sheriff, and the captures themselves are unchanged.
+
 ## [0.10.1] — 2026-11-12 — JUCE's security release
 
 ### Every amp

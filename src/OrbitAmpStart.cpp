@@ -23,10 +23,11 @@ namespace
         return new AmpEditor (p);
     }
 
-    /** Its own parameters, after the engine's: COMP's (the owner, 02.11). */
+    /** Its own parameters, after the engine's: COMP's (the owner, 02.11), then DRIVE's (21.11). */
     void orbitAmpParameters (const Product&, juce::AudioProcessorValueTreeState::ParameterLayout& layout)
     {
         params::addGuitarCompParameters (layout);
+        params::addGuitarDriveParameters (layout);
     }
 
     /** THE CABINET A FRESH ONE OPENS ON, and INIT: the guitar's TOP 12's first, drawn — its CAB is the twelve and the
@@ -39,7 +40,7 @@ namespace
 }
 
 /** ORBITAMP (Product.h): the player of the whole library, in its own face (PluginEditor.h) — and the
-    engine as it stands, with a COMP before the AMP (out of its strip until the player adds it); no half of its own. Its
+    engine as it stands, with a COMP and a DRIVE before the AMP (each out of its strip until the player adds it); no half of its own. Its
     tuner listens always. */
 const Product& products::orbitAmp()
 {
@@ -48,6 +49,7 @@ const Product& products::orbitAmp()
         Product p { "OrbitAmp", makeEditor, firstStart };
         p.addParameters = orbitAmpParameters;
         p.guitarComp    = true;
+        p.guitarDrive   = true;
         p.tunerSwitch   = false;
         p.freshCabinet  = freshCabinet;
         return p;

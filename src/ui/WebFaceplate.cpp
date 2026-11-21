@@ -223,6 +223,9 @@ void WebFaceplate::playAndShoot (const juce::File& riffFile)
     // ORBITAMP_LIVE_SHOT_COMP=1: OrbitAmp's COMP in the strip, as its checklist puts it there.
     if (juce::SystemStats::getEnvironmentVariable ("ORBITAMP_LIVE_SHOT_COMP", {}) == "1" && amp.linkRemovable (params::rowComp))
         standPlain (params::compPresent, 1.0f);
+    // ORBITAMP_LIVE_SHOT_DRIVE=1: OrbitAmp's DRIVE in the strip, as SETUP or its checklist puts it there.
+    if (juce::SystemStats::getEnvironmentVariable ("ORBITAMP_LIVE_SHOT_DRIVE", {}) == "1" && amp.linkRemovable (params::rowDrive))
+        standPlain (params::drivePresent, 1.0f);
     pre.showsLoudnessTag = true;
     prefs::spectraCache (amp.product()).store (true);
     editor.applyStripChoice();

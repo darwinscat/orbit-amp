@@ -87,10 +87,11 @@ private:
         the strip. */
     static int minDesignWidthFor (const AmpProcessor& p)
     {
-        // A guitar amp's: the design's, wider by COMP where it stands in the strip (OrbitAmp's), the AMP kept whole.
+        // A guitar amp's: the design's, wider by COMP and DRIVE where they stand in the strip (OrbitAmp's), the AMP kept whole.
         if (p.product().chain != Chain::bass)
             return FaceplateView::designWidth
-                 + (p.linkShown (params::rowComp) ? FaceplateView::compWidth + FaceplateView::colGap : 0);
+                 + (p.linkShown (params::rowComp) ? FaceplateView::compWidth + FaceplateView::colGap : 0)
+                 + (p.linkShown (params::rowDrive) ? FaceplateView::driveWidth + FaceplateView::colGap : 0);
         const int sides = 2 * (VolumeColumn::designWidth + chromeGap);   // the in and out columns, as resized() stands them
         return juce::jmax ((int) FaceplateView::designWidth,
                            FaceplateView::bassLeastWidth (p.linkShown (params::rowOctave), p.linkShown (params::rowFilter),
