@@ -244,7 +244,7 @@ namespace
         (void) folder.createDirectory();
 
         // One take: a fresh OrbitAmp, the block off (type < 0) or the type at GAIN noon with the clip law `clip`.
-        const auto renderFrom = [&] (const juce::AudioBuffer<float>& src, int type, int clip)
+        const auto renderFrom = [&] (const juce::AudioBuffer<float>& src, int type, int clip, float gain = 5.0f)
         {
             const int srcLen = src.getNumSamples();
             auto amp = std::make_unique<AmpProcessor> (orbitAmp());
@@ -253,7 +253,7 @@ namespace
             {
                 setParam (*amp, params::drivePresent, 1.0f);
                 setParam (*amp, params::driveType, (float) type);
-                setParam (*amp, params::driveGain, 5.0f);
+                setParam (*amp, params::driveGain, gain);
                 setParam (*amp, params::driveClipTmp, (float) clip);
             }
             amp->prepareToPlay (rate, blockSize);
@@ -313,20 +313,24 @@ namespace
             core::DrivePedal pedal;
             pedal.prepare (rate);
             core::DrivePedal::Settings ts;
+            const float gain = (float) juce::SystemStats::getEnvironmentVariable ("ORBITAMP_DRIVE_BLIND_GAIN", "5").getDoubleValue();
+            const auto pair = juce::SystemStats::getEnvironmentVariable ("ORBITAMP_DRIVE_BLIND_NAME", "noon");
+            const auto said = juce::SystemStats::getEnvironmentVariable ("ORBITAMP_DRIVE_BLIND_SAID", "his TS-0003.nam (Overdrive noon, Tone noon)");
+            ts.gain = gain;
             for (int at = 0; at < len; at += blockSize)
                 pedal.process (ourPedal.getWritePointer (0) + at, std::min (blockSize, len - at), ts);
             const float into = ourPedal.getRMSLevel (0, 0, len) / std::max (1.0e-9f, hisPedal.getRMSLevel (0, 0, hisPedal.getNumSamples()));
             hisPedal.applyGain (into);
             auto hisTake = renderFrom (hisPedal, -1, 0);
-            auto ourTake = render (0, 0);
+            auto ourTake = renderFrom (riff, 0, 0, gain);
             ourTake.applyGain (hisTake.getRMSLevel (0, 0, hisTake.getNumSamples()) / std::max (1.0e-9f, ourTake.getRMSLevel (0, 0, ourTake.getNumSamples())));
             const bool hisFirst = juce::Random (juce::Time::currentTimeMillis()).nextBool();
             const auto dir = folder.getChildFile ("ts-blind");
-            if (! write (dir.getChildFile ("A.wav"), hisFirst ? hisTake : ourTake) || ! write (dir.getChildFile ("B.wav"), hisFirst ? ourTake : hisTake))
+            if (! write (dir.getChildFile (pair + "-A.wav"), hisFirst ? hisTake : ourTake) || ! write (dir.getChildFile (pair + "-B.wav"), hisFirst ? ourTake : hisTake))
                 return 1;
-            (void) dir.getChildFile ("KEY.txt").replaceWithText (juce::String ("A: ") + (hisFirst ? "his TS-0003.nam (Overdrive noon, Tone noon)" : "our TS, GAIN noon, TONE noon")
-                + "\nB: " + (hisFirst ? "our TS, GAIN noon, TONE noon" : "his TS-0003.nam (Overdrive noon, Tone noon)")
-                + "\nBoth into a fresh OrbitAmp at its defaults; his pedal's output brought to ours' RMS before the amp ("
+            const auto ours = "our TS, GAIN " + juce::String (gain, 0) + ", TONE noon";
+            (void) dir.getChildFile ("KEY.txt").appendText (pair + "-A: " + (hisFirst ? said : ours) + "\n" + pair + "-B: " + (hisFirst ? ours : said)
+                + "\n" + pair + ": both into a fresh OrbitAmp at its defaults; his pedal's output brought to ours' RMS before the amp ("
                 + juce::String (juce::Decibels::gainToDecibels (into), 1) + " dB), the takes matched in RMS after it.\n");
             return 0;
         }

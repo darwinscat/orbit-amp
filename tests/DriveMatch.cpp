@@ -275,16 +275,17 @@ int main (int argc, char** argv)
         std::printf ("worst band over all: %.1f dB\n", score (best, true));
     }
 
-    if (argc > 6)
+    // The DI as it is (its own level) through each of his three, for the blind pairs: <out>-60.wav, -150.wav, -240.wav.
+    for (int k = 0; argc > 6 && k < 3; ++k)
     {
-        // The DI as it is (its own level) through TS-0003, for the blind pair.
         std::vector<float> raw ((size_t) file.getNumSamples());
         for (size_t i = 0; i < raw.size(); ++i)
             raw[i] = file.getSample (0, (int) i);
-        const auto out = throughNam (juce::File (argv[3]), raw);
+        const auto out = throughNam (juce::File (argv[2 + k]), raw);
         juce::AudioBuffer<float> b (1, (int) out.size());
         b.copyFrom (0, 0, out.data(), (int) out.size());
-        juce::File dst (argv[6]);
+        static const char* const hours[3] = { "-60.wav", "-150.wav", "-240.wav" };
+        juce::File dst (juce::String (argv[6]) + hours[k]);
         (void) dst.deleteFile();
         juce::WavAudioFormat wav;
         std::unique_ptr<juce::OutputStream> stream (dst.createOutputStream());
