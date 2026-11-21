@@ -8,6 +8,7 @@
 #include "BassControls.h"
 #include "ChorusBlock.h"
 #include "CompBlock.h"
+#include "DriveBlock.h"
 #include "FilterBlock.h"
 #include "OctaveScope.h"
 
@@ -51,6 +52,14 @@ FaceplateView::FaceplateView (AmpProcessor& processor)
         comp = std::make_unique<CompBlock> (processor);
         comp->setSwitchShown (false);
         addAndMakeVisible (*comp);
+    }
+
+    // OrbitAmp's DRIVE, after COMP: its type, its GAIN and the type's own.
+    if (processor.chainHolds (params::rowDrive))
+    {
+        drive = std::make_unique<DriveBlock> (processor);
+        drive->setSwitchShown (false);
+        addAndMakeVisible (*drive);
     }
 
     // The bass's three effects, a rail each over its amount and its picture beside it, in the signal's order — OCTAVE
@@ -322,6 +331,10 @@ void FaceplateView::resized()
     const bool compIn = comp != nullptr && owner.linkShown (params::rowComp);
     if (comp != nullptr)
         comp->setVisible (compIn && ! row1.isEmpty());
+    // ...and its DRIVE after it, the same way (Product::guitarDrive).
+    const bool driveIn = drive != nullptr && owner.linkShown (params::rowDrive);
+    if (drive != nullptr)
+        drive->setVisible (driveIn && ! row1.isEmpty());
     if (chorus != nullptr)
         chorus->setVisible (! row2.isEmpty());
 
@@ -333,6 +346,12 @@ void FaceplateView::resized()
         if (compIn)
         {
             comp->setBounds (row1.removeFromLeft (compWidth));
+            row1.removeFromLeft (colGap);
+        }
+
+        if (driveIn)
+        {
+            drive->setBounds (row1.removeFromLeft (driveWidth));
             row1.removeFromLeft (colGap);
         }
 

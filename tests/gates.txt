@@ -29,6 +29,7 @@ factory            orbitamp_gates
 hum                orbitamp_hum_test
 hum-off            orbitamp_gates
 eqlink             orbitamp_eqlink_test
+drive-pedal        orbitamp_drive_test
 tuner              orbitamp_tuner_test
 bass-tuner         orbitamp_bass_tuner_test
 tuner-poly         orbitamp_polytuner_test
@@ -98,3 +99,6 @@ boost-level        orbitamp_gates
 
 # The amp's bypass: the host's and in no state; out, the input as it came in, as late, bit for bit; back in, the amp.
 bypass             orbitamp_gates
+
+# OrbitAmp's DRIVE: not offered, what OrbitAmp played before it; offered, in the strip before the AMP; kept by a session.
+drive              orbitamp_gates

@@ -84,6 +84,22 @@ void addGuitarCompParameters (juce::AudioProcessorValueTreeState::ParameterLayou
     layout.add (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { compPresent, 1 }, "Comp In Strip", false));
 }
 
+void addGuitarDriveParameters (juce::AudioProcessorValueTreeState::ParameterLayout& layout)
+{
+    // Out of the strip until the player offers it, ON once there, TS at noon (the owner, 21.11).
+    using Float = juce::AudioParameterFloat;
+    const juce::NormalisableRange<float> knob { 0.0f, 10.0f, 0.01f };
+    layout.add (std::make_unique<juce::AudioParameterBool>   (juce::ParameterID { drivePresent, 1 }, "Drive In Strip", false),
+                std::make_unique<juce::AudioParameterBool>   (juce::ParameterID { driveOn, 1 },      "Drive", true),
+                std::make_unique<juce::AudioParameterChoice> (juce::ParameterID { driveType, 1 },    "Drive Type", driveTypes, 0),
+                std::make_unique<Float> (juce::ParameterID { driveGain, 1 },   "Drive Gain",   knob, 5.0f),
+                std::make_unique<Float> (juce::ParameterID { driveTone, 1 },   "Drive Tone",   knob, 5.0f),
+                std::make_unique<Float> (juce::ParameterID { driveAttack, 1 }, "Drive Attack", knob, 5.0f),
+                std::make_unique<Float> (juce::ParameterID { driveBright, 1 }, "Drive Bright", knob, driveBrightDefault),
+                std::make_unique<Float> (juce::ParameterID { driveTight, 1 },  "Drive Tight",  knob, 5.0f),
+                std::make_unique<juce::AudioParameterChoice> (juce::ParameterID { driveClipTmp, 1 }, "Drive Clip (TEMPORARY)", driveClips, 0));
+}
+
 void addBassParameters (juce::AudioProcessorValueTreeState::ParameterLayout& layout)
 {
     addBassParameters (layout, Opening {});

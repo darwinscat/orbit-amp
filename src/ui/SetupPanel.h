@@ -20,6 +20,7 @@ class AmpProcessor;
         LIBRARY   the packs and the IRs, one sub-tab per list
         VIEW      what this window shows — the eye's business, and only the eye's
         TUNER     what the tuner listens for — how quiet this guitar and this room are
+        PEDALS    OrbitAmp's alone: the pedal it offers before the AMP, DRIVE
 
     The libraries used to BE this window, one tab each, and there was nowhere for a setting to
     live except a popup menu hanging off the gear. They are one page now with their own sub-tabs,
@@ -30,7 +31,10 @@ class AmpProcessor;
     switches for what an emptied row does to the window went with it, since they only mean
     anything while a link is being taken out. Nothing here is a second copy of a switch that
     lives somewhere else; a setting with two homes is a setting that will read wrong in one of
-    them.
+    them. The one exception is the owner's (21.11): OrbitAmp's DRIVE is offered HERE, on PEDALS —
+    «включаемый в SETUP, тогда появляется в полосе» — and the strip's checklist lists it too, as it
+    lists every link a player may take out. Both write the one parameter, `drive_present`, and read
+    it back, so neither can read wrong.
 
     An overlay rather than a desktop window because a plugin editor is a guest: hosts reparent,
     hide, and destroy it freely, and a floating window can outlive or lose the editor it belongs
@@ -95,6 +99,10 @@ private:
 
     /** TUNER: machine preferences like VIEW's — a room and a guitar, not a sound. */
     SettingsList   tunerPage;
+
+    /** PEDALS, where the product has OrbitAmp's DRIVE: its place in the strip — the sound's, so a preset, a session and
+        undo keep it. */
+    SettingsList   pedalPage;
     MiniClose    closeButton;
 
     static constexpr int panelW = 720;

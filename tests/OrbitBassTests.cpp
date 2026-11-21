@@ -4328,7 +4328,7 @@ int ORBITAMP_GATE_MAIN()
                        && least0 == FaceplateView::bassLeastWidth (true, true, true, false, false, 0) + 2 * 48   // row one's (02.11)
                        && least1 >= least0 && least2 > least1   // one added: the cabinet's least may widen it (step 11)
                        && least2 == FaceplateView::bassLeastWidth (true, true, true, true, true, 0) + 2 * 48   // the face's row, and the IN and OUT columns
-                       && gList == "COMP- " && gLeast0 == FaceplateView::designWidth
+                       && gList == "COMP- DRIVE- " && gLeast0 == FaceplateView::designWidth
                        && gLeast1 == FaceplateView::designWidth + FaceplateView::compWidth + FaceplateView::colGap,
                    "the strip's checklist: " + list + "; a pick one undo step, the face and the least width following ("
                        + juce::String (least0) + ", one added " + juce::String (least1) + ", both " + juce::String (least2)
@@ -4677,8 +4677,8 @@ int ORBITAMP_GATE_MAIN()
     // ---- THE LOAD WINDOW: a guitar amp's as it was before the bass's COMP and a row for its own (02.11), the bass's four ---
     {
         LoadBreakdown gw (*guitar), bw (*amp);
-        check (gw.getHeight() == 384 + 22 && bw.getHeight() == 384 + 4 * 22,
-               "the load window: OrbitAmp's " + juce::String (gw.getHeight()) + " px (384 before, a row for its COMP), OrbitBass's " + juce::String (bw.getHeight())
+        check (gw.getHeight() == 384 + 2 * 22 && bw.getHeight() == 384 + 4 * 22,
+               "the load window: OrbitAmp's " + juce::String (gw.getHeight()) + " px (384 before, a row each for its COMP and its DRIVE), OrbitBass's " + juce::String (bw.getHeight())
                    + " (its DELAY and REVERB too, which a player may add; COMP, OCTAVE, ENVELOPE, CHORUS)");
     }
 

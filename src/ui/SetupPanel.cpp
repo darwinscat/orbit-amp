@@ -66,6 +66,26 @@ SetupPanel::SetupPanel (AmpProcessor& processor)
     pages.push_back ({ "VIEW",    &viewView,    [this] { buildViewPage(); }, {} });
     pages.push_back ({ "TUNER",   &tunerPage,   [this] { buildTunerPage(); }, {} });
 
+    // PEDALS: OrbitAmp's DRIVE offered — in the strip before the AMP, its arrow its STANDBY/ON from there. One undo step.
+    if (amp.linkRemovable (params::rowDrive))
+    {
+        auto* p = amp.apvts.getParameter (params::drivePresent);
+        pedalPage.setRows ({ { "DRIVE",
+                               "a pedal before the amp: TS, Precision, 33 or SD-1 - in the strip when ticked, it travels with the preset",
+                               [p] { return p->getValue() > 0.5f; },
+                               [this, p] (bool on)
+                               {
+                                   amp.history.beginGesture();
+                                   p->beginChangeGesture();
+                                   p->setValueNotifyingHost (on ? 1.0f : 0.0f);
+                                   p->endChangeGesture();
+                                   amp.history.endGesture();
+                               },
+                               {}, false, {}, {}, {} } });
+        addAndMakeVisible (pedalPage);
+        pages.push_back ({ "PEDALS", &pedalPage, [] {}, {} });
+    }
+
     addAndMakeVisible (closeButton);
     selectLibrary (0);
     selectPage (0);

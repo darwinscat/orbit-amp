@@ -97,6 +97,10 @@ struct Product
         the cockpit's and the rovers' faces have none. */
     bool guitarComp = false;
 
+    /** A GUITAR CHAIN'S DRIVE, after COMP and before the AMP (params::addGuitarDriveParameters, which its `addParameters`
+        adds): OrbitAmp's alone (the owner, 21.11). */
+    bool guitarDrive = false;
+
     /** THE LOWEST PITCH ITS TUNER LOOKS FOR, in Hz (core::PitchTracker::setLowestHz). Every guitar amp
         stays at the guitar's, which reaches a bass's low E and costs a guitar nothing more; OrbitBass
         reaches its low B and a drop-A's A0. */

@@ -216,6 +216,15 @@ AmpProcessor::AmpProcessor (const Product& product)
         jassert (bass.compAmount != nullptr && bass.compThreshold != nullptr);
     }
 
+    // OrbitAmp's DRIVE (Product::guitarDrive).
+    if (ownProduct.chain != Chain::bass && ownProduct.guitarDrive)
+    {
+        const auto raw = [this] (const char* id) { return apvts.getRawParameterValue (id); };
+        driveParams = { raw (params::driveType), raw (params::driveGain), raw (params::driveTone),
+                        raw (params::driveAttack), raw (params::driveBright), raw (params::driveTight), raw (params::driveClipTmp) };
+        jassert (driveParams.type != nullptr && driveParams.tight != nullptr);
+    }
+
     gateThresholdParam = apvts.getRawParameterValue (params::gateThreshold);
     gatePosParam       = apvts.getRawParameterValue (params::gatePos);
     gateDecayParam     = apvts.getRawParameterValue (params::gateDecay);
@@ -1302,7 +1311,9 @@ void AmpProcessor::reportLatency()
     // number is the resampler's geometry and it will move again, which is why nothing downstream of
     // here may write it down.
     const int pr = preamp.latencySamples();
-    const int total = pr + limiterLatency.load();      // ...and the limiter's lookahead and grid, always
+    // ...OrbitAmp's DRIVE while it stands in the strip, ON or in STANDBY: its oversampler's round trip, every type alike...
+    const int drive = driveParams.type != nullptr && linkInRig (params::rowDrive) ? core::DrivePedal::latencySamples() : 0;
+    const int total = pr + drive + limiterLatency.load();      // ...and the limiter's lookahead and grid, always
 
     // 🔴 THE WIRE IS SIZED FROM THE NUMBER THE BLOCK ACTUALLY REPORTS, here and nowhere else.
     // `latencySamples()` came out of `NamStage::rateMatch` and therefore out of the rates that are
@@ -1441,6 +1452,13 @@ void AmpProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
             compRightRan = false;
         }
         compTap.prepare (sampleRate);
+    }
+    if (driveParams.type != nullptr)   // OrbitAmp's DRIVE: its oversamplers and its wire, here and nowhere else
+    {
+        for (auto& pedal : drivePedal)
+            pedal.prepare (sampleRate);
+        driveWire.prepare (core::DrivePedal::latencySamples());
+        driveRan = driveWired = false;
     }
     if (ownProduct.chain != Chain::bass)   // the guitar's input cut: snapped where it stands at the first block
         guitarInputCut.prepare (sampleRate);
@@ -1824,6 +1842,70 @@ void AmpProcessor::tellChorus() noexcept
         chorusTold = p;
         chorusToldValid = true;
     }
+}
+
+void AmpProcessor::runDrive (float* const* channels, int nch, int numSamples) noexcept
+{
+    // OUT OF THE STRIP it is not there at all: no delay, nothing run, the signal as it came, bit for bit.
+    if (! linkInRig (params::rowDrive))
+    {
+        driveRan = driveWired = false;
+        drivePlanes = 0;
+        blockFade[(size_t) params::rowDrive].snapTo (false);
+        return;
+    }
+
+    // IN IT, the block is 63 samples long whatever its switch: the wire carries the dry as late as the pedal is, and
+    // is fed every block — in STANDBY it IS the block; ON, it is what the house's crossfade blends from.
+    const int lat    = core::DrivePedal::latencySamples();
+    const int planes = juce::jmin (nch, 2);
+    if (! driveWired)
+        driveWire.reset();   // offered again: from silence, not from whatever it heard when it was last in
+    driveWired = true;
+    if (! canFade (numSamples, planes))
+        return;              // a block past the prepared size: nothing here can carry it (prepareToPlay)
+    driveWire.process (channels, fadeDry.getArrayOfWritePointers(), planes, numSamples, lat);
+
+    const bool works = linkWorks (params::rowDrive);
+    const auto span  = blockFade[(size_t) params::rowDrive].advance (numSamples, works);
+    if (! core::BypassFade::runs (span, works))
+    {
+        driveRan = false;
+        drivePlanes = 0;
+        for (int ch = 0; ch < planes; ++ch)
+            juce::FloatVectorOperations::copy (channels[ch], fadeDry.getReadPointer (ch), numSamples);
+        return;
+    }
+
+    // Back to work: from rest, not from whatever its filters held when it last stopped.
+    if (! driveRan)
+    {
+        for (auto& pedal : drivePedal)
+            pedal.reset();
+        drivePlanes = 2;
+    }
+    driveRan = true;
+
+    core::DrivePedal::Settings s;
+    s.type   = (core::DrivePedal::Type) juce::jlimit (0, (int) core::DrivePedal::Type::count - 1,
+                                                       juce::roundToInt (driveParams.type->load (std::memory_order_relaxed)));
+    s.gain   = driveParams.gain->load (std::memory_order_relaxed);
+    s.tone   = driveParams.tone->load (std::memory_order_relaxed);
+    s.attack = driveParams.attack->load (std::memory_order_relaxed);
+    s.bright = driveParams.bright->load (std::memory_order_relaxed);
+    s.tight  = driveParams.tight->load (std::memory_order_relaxed);
+    s.clip   = (core::DrivePedal::Clip) juce::jlimit (0, (int) core::DrivePedal::Clip::count - 1,   // TEMPORARY
+                                                       juce::roundToInt (driveParams.clip->load (std::memory_order_relaxed)));
+
+    if (planes > drivePlanes)   // STEREO has just begun: the right's pedal from rest too
+        drivePedal[1].reset();
+    drivePlanes = planes;
+
+    for (int ch = 0; ch < planes; ++ch)
+        drivePedal[ch].process (channels[ch], numSamples, s);
+
+    if (span.moving)
+        core::BypassFade::blend (channels, fadeDry.getArrayOfReadPointers(), planes, numSamples, span);
 }
 
 void AmpProcessor::runOctave (float* const* channels, int numChannels, int numSamples) noexcept
@@ -2620,6 +2702,15 @@ void AmpProcessor::processChunk (juce::AudioBuffer<float>& buffer)
         compGrDb.store (bassComp.grDb.load (std::memory_order_relaxed), std::memory_order_relaxed);
         innerCut (1);   // after COMP
         nsStage[stComp] = elapsedNs (a);
+    }
+
+    // ORBITAMP'S DRIVE, after COMP and before the AMP, as a pedal stands. Out of the strip, or in STANDBY once its fade
+    // is done, it is not run at all: the signal passes bit for bit.
+    if (driveParams.type != nullptr && nch > 0)
+    {
+        const auto a = PerfClock::now();
+        runDrive (channels, nch, numSamples);
+        nsStage[stDrive] = elapsedNs (a);
     }
 
     // THE BASS'S OCTAVE, then its FILTER (Chain::bass), on the one signal, before the AMP: the sub goes into the amp

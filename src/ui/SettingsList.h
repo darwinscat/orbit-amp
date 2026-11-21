@@ -47,6 +47,9 @@ public:
         std::function<void (int)> choose;
     };
 
+    /** The rows as they stand — what a click on one runs is its `set` (mouseDown), which a gate runs the same way. */
+    const std::vector<Row>& shownRows() const noexcept { return rows; }
+
     void setRows (std::vector<Row> newRows)
     {
         rows = std::move (newRows);
