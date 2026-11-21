@@ -27,7 +27,7 @@ class DriveBlock final : public BlockFrame
 {
 public:
     explicit DriveBlock (AmpProcessor& processor)
-        : BlockFrame ("DRIVE", Kind::dsp)
+        : BlockFrame ("DRIVE", Kind::dsp), volumeNumber (*processor.apvts.getParameter (params::driveVolume))
     {
         auto& state = processor.apvts;
         setAccent (theme::tsGreen);
@@ -76,6 +76,7 @@ public:
         };
         columns.attachOutFader (*state.getParameter (params::driveVolume));
         addAndMakeVisible (columns);
+        addAndMakeVisible (volumeNumber);   // ...and VOLUME's number under the columns, typed there
 
         attachPower (*state.getParameter (params::driveOn));
     }
@@ -90,6 +91,7 @@ public:
         return names;
     }
     LevelColumns& levelColumns() noexcept { return columns; }
+    LevelReadout& volumeReadout() noexcept { return volumeNumber; }
     juce::String typeShown() const { return params::driveTypes[type.getSelection()]; }
 
 protected:
@@ -101,9 +103,13 @@ protected:
             borderSlotUsed = type.getBounds();   // the frame opens the line under it
         }
 
-        // The level columns on the right, the whole height.
-        columns.setBounds (r.removeFromRight (LevelColumns::designWidth));
+        // The level columns on the right, VOLUME's number centred under them — wider than they are, never past the box.
+        auto right = r.removeFromRight (LevelColumns::designWidth);
         r.removeFromRight (6);
+        const auto under = right.removeFromBottom (LevelReadout::designHeight);
+        columns.setBounds (right.withTrimmedBottom (2));
+        const int w = LevelReadout::designWidth;
+        volumeNumber.setBounds (juce::jmin (under.getCentreX() - w / 2, getLocalBounds().getRight() - 4 - w), under.getY(), w, under.getHeight());
 
         // GAIN and TONE in even shares of one row, dials as large as the row lets them, centred in the box.
         const int side = juce::jmin (64, r.getHeight() - 16 - Knob::valueRowH, r.getWidth() / count - 8);
@@ -120,6 +126,7 @@ private:
     std::array<Knob, count> knobs { Knob { "Gain", theme::tsGreen, 11 }, Knob { "Tone", theme::tsGreen, 11 } };
     std::array<std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>, count> attachments;
     LevelColumns columns;
+    LevelReadout volumeNumber;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DriveBlock)
 };

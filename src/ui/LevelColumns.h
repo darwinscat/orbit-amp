@@ -187,4 +187,85 @@ private:
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (LevelColumns)
 };
 
+/** THE OUT FADER'S NUMBER under the columns (the owner, 21.11: an editable OUT in dB): "+0.0 dB", following the hand, and
+    typed there in the house's way (Knob's value row) — a click opens the field, Enter writes (clamped to the range, at
+    its step), Esc leaves it as it was. 13 px, the floor; its dashed frame while typed in is the hand's orange. Wider
+    than the columns: its owner centres it under them. */
+class LevelReadout final : public juce::Label
+{
+public:
+    static constexpr float fontH = 13.0f;
+    static constexpr int designWidth = 64, designHeight = 16;
+
+    explicit LevelReadout (juce::RangedAudioParameter& p) : parameter (p)
+    {
+        setEditable (true, false, false);
+        setJustificationType (juce::Justification::centred);
+        setFont (theme::displayFont (fontH));
+        setMouseCursor (juce::MouseCursor::IBeamCursor);
+        setRepaintsOnMouseActivity (true);
+        setColour (textWhenEditingColourId, theme::tx);
+        setColour (backgroundWhenEditingColourId, theme::bezel);
+        setTooltip ("VOLUME, what the pedal hands the amp in dB: click to type, -12 to +12 (0 is as loud as what came in)");
+        attachment = std::make_unique<juce::ParameterAttachment> (p, [this] (float) { repaint(); });
+        attachment->sendInitialUpdate();
+
+        // The field keeps no text of its own: the parameter's value is the text, so a number typed twice is typed twice.
+        onTextChange = [this]
+        {
+            const auto typed = getText();
+            setText ({}, juce::dontSendNotification);
+            if (typed.containsAnyOf ("0123456789"))
+                attachment->setValueAsCompleteGesture (parameter.getNormalisableRange().snapToLegalValue (
+                    typed.retainCharacters ("0123456789.,+-").replaceCharacter (',', '.').getFloatValue()));
+            repaint();
+        };
+    }
+
+    /** The number as the face writes it: one decimal, a sign, "dB". */
+    juce::String shownText() const
+    {
+        const float v = (float) juce::roundToInt (parameter.convertFrom0to1 (parameter.getValue()) * 10.0f) / 10.0f;
+        return (v >= 0.0f ? "+" : "") + juce::String (std::abs (v) < 0.05f ? 0.0f : v, 1) + " dB";
+    }
+
+    void paint (juce::Graphics& g) override
+    {
+        if (isBeingEdited())
+            return;
+        g.setColour (isMouseOver() ? theme::tx : theme::txDim);
+        theme::drawTracked (g, shownText(), getLocalBounds().toFloat(), theme::displayFont (fontH), 0.04f, juce::Justification::centred);
+    }
+
+    void editorShown (juce::TextEditor* ed) override
+    {
+        ed->setBorder ({});
+        ed->setIndents (0, 0);
+        ed->setJustification (juce::Justification::centred);
+        ed->setColour (juce::TextEditor::outlineColourId, juce::Colours::transparentBlack);
+        ed->setColour (juce::TextEditor::focusedOutlineColourId, juce::Colours::transparentBlack);
+        ed->setColour (juce::TextEditor::highlightColourId, theme::orange.withAlpha (0.4f));
+        ed->setText (juce::String (parameter.convertFrom0to1 (parameter.getValue()), 1), false);
+        ed->selectAll();
+    }
+
+    void paintOverChildren (juce::Graphics& g) override
+    {
+        if (! isBeingEdited())
+            return;
+        const auto r = getLocalBounds().toFloat().reduced (0.5f);
+        const float dash[] = { 3.0f, 2.0f };
+        g.setColour (theme::orange);
+        for (const auto& side : { juce::Line<float> (r.getTopLeft(), r.getTopRight()), juce::Line<float> (r.getTopRight(), r.getBottomRight()),
+                                  juce::Line<float> (r.getBottomRight(), r.getBottomLeft()), juce::Line<float> (r.getBottomLeft(), r.getTopLeft()) })
+            g.drawDashedLine (side, dash, 2, 1.0f);
+    }
+
+private:
+    juce::RangedAudioParameter& parameter;
+    std::unique_ptr<juce::ParameterAttachment> attachment;
+
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (LevelReadout)
+};
+
 } // namespace orbitamp

@@ -71,7 +71,7 @@ SetupPanel::SetupPanel (AmpProcessor& processor)
     {
         auto* p = amp.apvts.getParameter (params::drivePresent);
         pedalPage.setRows ({ { "DRIVE",
-                               "a pedal before the amp: TS, Precision, 33 or SD-1 - in the strip when ticked, it travels with the preset",
+                               "pedals before the amp",
                                [p] { return p->getValue() > 0.5f; },
                                [this, p] (bool on)
                                {

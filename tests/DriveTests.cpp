@@ -732,6 +732,16 @@ int ORBITAMP_GATE_MAIN()
             setParam (*amp, params::driveVolume, 6.0f);
             const bool hand = std::abs (columns.value() - 6.0f) < 0.01f && columns.handY() < noonY - 10.0f;
             setParam (*amp, params::driveVolume, 0.0f);
+            // ...and its number under the columns, typed there: "-4.5" writes drive_volume and moves the hand, "+20" is clamped.
+            auto& number = tile->volumeReadout();
+            const float noonAgain = columns.handY();
+            number.setText ("-4.5", juce::sendNotificationSync);
+            const bool typed = std::abs (param (*amp, params::driveVolume) + 4.5f) < 0.01f && columns.handY() > noonAgain + 5.0f
+                            && number.shownText() == "-4.5 dB";
+            number.setText ("+20", juce::sendNotificationSync);
+            const bool clamped = std::abs (param (*amp, params::driveVolume) - 12.0f) < 0.01f && number.shownText() == "+12.0 dB";
+            setParam (*amp, params::driveVolume, 0.0f);
+            const bool noonText = number.shownText() == "+0.0 dB";
             juce::String list;
             for (const auto& [r, in] : editor->checklistRows())
                 list << params::chainLinks[(size_t) r].name << (in ? "+ " : "- ");
@@ -743,6 +753,8 @@ int ORBITAMP_GATE_MAIN()
                    "SETUP's DRIVE row puts it in the strip and on the face, the window wider by it, one undo step back ("
                        + knobs + ", type " + tile->typeShown() + ", VOLUME's hand " + (hand ? "follows" : "DOES NOT follow")
                        + "; the checklist " + list + ")");
+            check (typed && clamped && noonText, "VOLUME's number under the columns: typed -4.5 writes drive_volume and moves the hand, "
+                                                 "+20 lands on +12.0 dB, noon reads +0.0 dB");
         }
     }
 
