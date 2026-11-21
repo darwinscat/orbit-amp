@@ -244,8 +244,9 @@ namespace
         (void) folder.createDirectory();
 
         // One take: a fresh OrbitAmp, the block off (type < 0) or the type at GAIN noon with the clip law `clip`.
-        const auto render = [&] (int type, int clip)
+        const auto renderFrom = [&] (const juce::AudioBuffer<float>& src, int type, int clip)
         {
+            const int srcLen = src.getNumSamples();
             auto amp = std::make_unique<AmpProcessor> (orbitAmp());
             amp->inlineLoads = true;
             if (type >= 0)
@@ -257,8 +258,8 @@ namespace
             }
             amp->prepareToPlay (rate, blockSize);
             amp->pumpDeviceWork();
-            const int lead = (int) rate, tail = 2 * (int) rate, total = lead + len + tail;
-            juce::AudioBuffer<float> out (2, len + tail), buf (2, blockSize);
+            const int lead = (int) rate, tail = 2 * (int) rate, total = lead + srcLen + tail;
+            juce::AudioBuffer<float> out (2, srcLen + tail), buf (2, blockSize);
             juce::MidiBuffer midi;
             for (int at = 0; at < total; at += blockSize)
             {
@@ -267,7 +268,7 @@ namespace
                 for (int i = 0; i < n; ++i)
                 {
                     const int k = at + i - lead;
-                    const float x = k >= 0 && k < len ? riff.getSample (0, k) : 0.0f;
+                    const float x = k >= 0 && k < srcLen ? src.getSample (0, k) : 0.0f;
                     buf.setSample (0, i, x);
                     buf.setSample (1, i, x);
                 }
@@ -280,6 +281,7 @@ namespace
             }
             return out;
         };
+        const auto render = [&] (int type, int clip) { return renderFrom (riff, type, clip); };
         const auto write = [&] (const juce::File& file, const juce::AudioBuffer<float>& out)
         {
             (void) file.getParentDirectory().createDirectory();
@@ -296,6 +298,38 @@ namespace
                          (double) juce::Decibels::gainToDecibels (out.getRMSLevel (0, 0, out.getNumSamples())));
             return true;
         };
+
+        // THE BLIND PAIR: the DI through his TS-0003 (ORBITAMP_DRIVE_BLIND, written by orbitamp_drive_match) into the
+        // amp with the block off, and the DI into the amp through our TS at noon — his pedal's output brought to ours'
+        // level first, so the amp is pushed alike; the two takes then matched in RMS; the order a coin's.
+        if (const auto his = juce::SystemStats::getEnvironmentVariable ("ORBITAMP_DRIVE_BLIND", {}); his.isNotEmpty())
+        {
+            std::unique_ptr<juce::AudioFormatReader> r (formats.createReaderFor (juce::File (his)));
+            if (r == nullptr)
+                return 1;
+            juce::AudioBuffer<float> hisPedal (1, (int) r->lengthInSamples);
+            r->read (&hisPedal, 0, hisPedal.getNumSamples(), 0, true, false);
+            juce::AudioBuffer<float> ourPedal (riff);
+            core::DrivePedal pedal;
+            pedal.prepare (rate);
+            core::DrivePedal::Settings ts;
+            for (int at = 0; at < len; at += blockSize)
+                pedal.process (ourPedal.getWritePointer (0) + at, std::min (blockSize, len - at), ts);
+            const float into = ourPedal.getRMSLevel (0, 0, len) / std::max (1.0e-9f, hisPedal.getRMSLevel (0, 0, hisPedal.getNumSamples()));
+            hisPedal.applyGain (into);
+            auto hisTake = renderFrom (hisPedal, -1, 0);
+            auto ourTake = render (0, 0);
+            ourTake.applyGain (hisTake.getRMSLevel (0, 0, hisTake.getNumSamples()) / std::max (1.0e-9f, ourTake.getRMSLevel (0, 0, ourTake.getNumSamples())));
+            const bool hisFirst = juce::Random (juce::Time::currentTimeMillis()).nextBool();
+            const auto dir = folder.getChildFile ("ts-blind");
+            if (! write (dir.getChildFile ("A.wav"), hisFirst ? hisTake : ourTake) || ! write (dir.getChildFile ("B.wav"), hisFirst ? ourTake : hisTake))
+                return 1;
+            (void) dir.getChildFile ("KEY.txt").replaceWithText (juce::String ("A: ") + (hisFirst ? "his TS-0003.nam (Overdrive noon, Tone noon)" : "our TS, GAIN noon, TONE noon")
+                + "\nB: " + (hisFirst ? "our TS, GAIN noon, TONE noon" : "his TS-0003.nam (Overdrive noon, Tone noon)")
+                + "\nBoth into a fresh OrbitAmp at its defaults; his pedal's output brought to ours' RMS before the amp ("
+                + juce::String (juce::Decibels::gainToDecibels (into), 1) + " dB), the takes matched in RMS after it.\n");
+            return 0;
+        }
 
         const std::pair<const char*, int> takes[] = { { "0-block-off", -1 }, { "1-ts-noon", 0 }, { "2-precision-noon", 1 },
                                                       { "3-33-noon", 2 }, { "4-sd1-noon", 3 } };

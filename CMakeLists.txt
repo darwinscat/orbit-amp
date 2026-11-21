@@ -2331,6 +2331,13 @@ target_include_directories(orbitamp_drive_test PRIVATE src)
 target_link_libraries(orbitamp_drive_test PRIVATE felitronics::oversampling)
 target_compile_features(orbitamp_drive_test PRIVATE cxx_std_20)
 
+# ...and the DRIVE's TS against the owner's own pedal: not a gate, a measuring instrument (tests/DriveMatch.cpp).
+add_executable(orbitamp_drive_match tests/DriveMatch.cpp)
+target_include_directories(orbitamp_drive_match PRIVATE src)
+target_link_libraries(orbitamp_drive_match PRIVATE felitronics::nam felitronics::oversampling
+                      juce::juce_audio_formats juce::juce_dsp juce::juce_core)
+target_compile_definitions(orbitamp_drive_match PRIVATE JUCE_STANDALONE_APPLICATION=1 JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
+
 add_executable(orbitamp_eqlink_test tests/EqLinkTests.cpp)
 target_include_directories(orbitamp_eqlink_test PRIVATE src)
 target_link_libraries(orbitamp_eqlink_test PRIVATE felitronics::eq)

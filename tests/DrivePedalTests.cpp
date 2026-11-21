@@ -85,10 +85,11 @@ namespace
 
     double levelAt (const std::vector<float>& v, double hz, size_t from, size_t len) { return db (std::abs (binAt (v, hz, from, len))); }
 
-    /** The transfer at `hz` at -60 dBFS, where every clip is still a line. */
+    /** The transfer at `hz` at -100 dBFS, where every clip is still a line — the TS's too, which his pedal says a DI
+        drives far harder than the book (DrivePedal::Voicing::tsVolt). */
     std::complex<double> transfer (const DrivePedal::Settings& s, double hz)
     {
-        const double a = 0.001;
+        const double a = 1.0e-5;
         const auto out = run (s, [&] (int i) { return (float) (a * std::sin (2.0 * pi * hz * i / rate)); }, 48000);
         const size_t len = (size_t) (std::floor (24000.0 * hz / rate) * rate / hz);   // whole periods
         return binAt (out, hz, 24000, std::max<size_t> (len, 1000)) / a;
@@ -174,7 +175,9 @@ int main()
         // THE CLIPPING STAGE ALONE, out of the whole pedal: two GAINs low enough that the 51 pF stays out of the band —
         // their difference is the leg through the tone network after the sum, and that network alone (the clean leg's
         // path) is the first less k0 times it. The stage is then the transfer over the network.
-        const double k0 = std::pow (10.0, 6.0 / 20.0) - 1.0, k1 = std::pow (10.0, (6.0 + 34.0 * 0.2) / 20.0) - 1.0;
+        const DrivePedal::Voicing voice;
+        const double k0 = std::pow (10.0, voice.tsLegLoDb / 20.0) - 1.0,
+                     k1 = std::pow (10.0, (voice.tsLegLoDb + (voice.tsLegHiDb - voice.tsLegLoDb) * 0.2) / 20.0) - 1.0;
         const auto network = [&] (double hz, std::complex<double>& legThere)
         {
             const auto h0 = transfer (at (Type::ts, 0.0f), hz), h1 = transfer (at (Type::ts, 2.0f), hz);
@@ -212,7 +215,7 @@ int main()
         // against it — said, for the owner's measured TS (its Tone noon: the peak 714-734 Hz, 100 Hz -4 to -6, 300 Hz
         // -1.4, 3 kHz -5 to -6, 6 kHz -10 to -11).
         for (const float g : { 0.0f, 5.0f })
-            for (const double lvl : { 0.125, 0.25 })
+            for (const double lvl : { 0.0316, 0.125, 0.25 })
             {
                 const auto shape = [&] (double hz)
                 {
@@ -227,20 +230,31 @@ int main()
                              (double) g, db (lvl), where, shape (100.0) - best, shape (300.0) - best, shape (3000.0) - best, shape (6000.0) - best);
             }
 
-        // THE WHOLE PEDAL has the hump: TS at TONE noon and a low GAIN, its maximum between 600 Hz and 1 kHz and 6 dB and
-        // more above 100 Hz and 5 kHz; SD-1 the same, its maximum between 600 Hz and 1.1 kHz.
+        // THE WHOLE PEDAL has the hump. TS at the level his sweeps' -24 dB rung reached his pedal (-30 dBFS), GAIN and
+        // TONE noon, as he measured it: its maximum between 600 Hz and 1.25 kHz, 4 dB and more over 100 Hz (his: -3.9 at
+        // Overdrive 0, -6.0 at noon) and 6 dB and more over 5 kHz. His pedal moved this window twice: from the small
+        // signal to a DI's level, where it clips already, and its top from 1 kHz to 1.25 — his peak stands at 714 Hz but
+        // flat, 1.2 kHz only 1 dB under it (-3 dB from 217 Hz to 1.9 kHz), and the match to his captures lands ours there. SD-1 at the small signal and a low GAIN, its maximum between 600 Hz and
+        // 1.1 kHz, 6 dB over both.
         for (const auto t : { Type::ts, Type::sd1 })
         {
-            const auto s = at (t, 3.0f);
+            const auto s = at (t, t == Type::ts ? 5.0f : 3.0f);
+            const double a = t == Type::ts ? 0.0316 : 1.0e-5;
+            const auto gainAt = [&] (double hz)
+            {
+                const auto v = run (s, [&] (int i) { return (float) (a * std::sin (2.0 * pi * hz * i / rate)); }, 24000);
+                const size_t len = (size_t) (std::floor (12000.0 * hz / rate) * rate / hz);
+                return levelAt (v, hz, 12000, std::max<size_t> (len, 1000)) - db (a);
+            };
             double best = -200.0, where = 0.0;
             for (double hz = 300.0; hz <= 3000.0; hz *= std::pow (2.0, 1.0 / 12.0))
-                if (const double g = smallSignal (s, hz); g > best) { best = g; where = hz; }
-            const double low = smallSignal (s, 100.0), high = smallSignal (s, 5000.0);
-            std::printf ("     %s, GAIN 3, TONE noon: 100 Hz %+.1f dB, the hump %+.1f dB at %.0f Hz, 5 kHz %+.1f dB\n", names[(int) t],
+                if (const double g = gainAt (hz); g > best) { best = g; where = hz; }
+            const double low = gainAt (100.0), high = gainAt (5000.0);
+            std::printf ("     %s, TONE noon: 100 Hz %+.1f dB, the hump %+.1f dB at %.0f Hz, 5 kHz %+.1f dB\n", names[(int) t],
                          low, best, where, high);
-            const double top = t == Type::ts ? 1000.0 : 1100.0;
-            check (where >= 600.0 && where <= top && best - low >= 6.0 && best - high >= 6.0,
-                   t == Type::ts ? "TS has the hump: its maximum between 600 Hz and 1 kHz, 6 dB over 100 Hz and 5 kHz, Hz"
+            const double top = t == Type::ts ? 1250.0 : 1100.0;
+            check (where >= 600.0 && where <= top && best - low >= (t == Type::ts ? 4.0 : 6.0) && best - high >= 6.0,
+                   t == Type::ts ? "TS has the hump at -30 dBFS: its maximum between 600 Hz and 1.25 kHz, 4 dB over 100 Hz, 6 over 5 kHz, Hz"
                                  : "SD-1 has the hump: its maximum between 600 Hz and 1.1 kHz, 6 dB over 100 Hz and 5 kHz, Hz", where);
         }
 
@@ -452,6 +466,56 @@ int main()
         const float during = std::max (steps (48128, 52928), steps (72192, 76992));
         check (during < 1.25f * steady, "a change of type, and GAIN thrown 5 to 10, mid-note: no step past the steady ones' (ratio)",
                (double) (during / steady));
+    }
+
+    // WHAT THE OVERSAMPLING BUYS: a 1997 Hz sine at -12 dBFS, full GAIN — a second of whole cycles, so every harmonic and
+    // every alias of one sits on its own bin — the energy that is no harmonic, against the fundamental; and the cost, at
+    // 4x and at 8x, under the DIODE law and under HARD (no solver: what the Newton steps cost is the difference).
+    {
+        const auto measure = [] (Type t, DrivePedal::Clip clip, int factor, double& dbc, double& ns)
+        {
+            DrivePedal p;
+            p.voicing.factor = factor;
+            p.prepare (rate);
+            auto s = at (t, 10.0f);
+            s.clip = clip;
+            std::vector<float> v (48000 * 3);
+            for (size_t i = 0; i < v.size(); ++i)
+                v[i] = (float) (0.25 * std::sin (2.0 * pi * 1997.0 * (double) i / rate));
+            const auto a = std::chrono::steady_clock::now();
+            for (size_t i = 0; i < v.size(); i += 512)
+                p.process (v.data() + i, 512, s);
+            ns = std::chrono::duration<double> (std::chrono::steady_clock::now() - a).count() * 1.0e9 / (double) v.size();
+            const size_t from = 96000, n = 48000;
+            double total = 0.0, harmonic = 0.0, mean = 0.0;
+            for (size_t i = from; i < from + n; ++i)
+                mean += v[i];
+            mean /= (double) n;
+            for (size_t i = from; i < from + n; ++i)
+                total += (v[i] - mean) * (v[i] - mean);
+            double fund = 0.0;
+            for (int h = 1; 1997.0 * h < rate / 2.0; ++h)
+            {
+                const double e = std::norm (binAt (v, 1997.0 * h, from, n)) * (double) n / 2.0;
+                harmonic += e;
+                if (h == 1)
+                    fund = e;
+            }
+            dbc = 10.0 * std::log10 (std::max (total - harmonic, 1.0e-30) / fund);
+        };
+        bool clean = true;
+        for (const auto t : { Type::ts, Type::precision, Type::sd1 })
+            for (const auto clip : { DrivePedal::Clip::diode, DrivePedal::Clip::hard })
+            {
+                double d4, d8, ns4, ns8;
+                measure (t, clip, 4, d4, ns4);
+                measure (t, clip, 8, d8, ns8);
+                std::printf ("     %-9s %-5s  4x: %.1f dBc, %.0f ns a sample   8x: %.1f dBc, %.0f ns a sample\n", names[(int) t],
+                             clip == DrivePedal::Clip::diode ? "DIODE" : "HARD", d4, ns4, d8, ns8);
+                if (clip == DrivePedal::Clip::diode)
+                    clean = clean && d8 < d4 - 6.0;
+            }
+        check (clean, "8x keeps what is no harmonic 6 dB and more under 4x for the DIODE law, every clipping type: it stays 8x");
     }
 
     // WHAT IT COSTS.

@@ -89,8 +89,19 @@ public:
     static constexpr float guardFromDb = -4.5f;
     static constexpr float ceiling() noexcept { return 0.707945784f; }   // 10^(ceilingDb / 20)
 
-    /** One volt in the float. */
-    static constexpr float volt = 0.5f;
+    /** THE VOICING'S NUMBERS that were matched against the owner's own TS (tests/DriveMatch.cpp: his trained captures
+        TS-0001/0003/0005 on one DI, 1/3 octave by 1/3 octave) — here so that the tool can move them; the amp never does. */
+    struct Voicing
+    {
+        double volt = 0.5;              // one volt in the float, by the circuit's book: PRECISION and SD-1, no capture of theirs yet
+        double tsVolt = 0.043;          // ...and TS's, as his pedal says: a DI drives it far harder than the book
+        double tsPostHz = 1160.0;       // TS's fixed low-pass after the sum (723 by the book)
+        double tsShelfNoonDb = 9.0;     // TONE's shelf at noon, TS; the knob is +-6 dB about it (0 by the book)
+        double tsLegLoDb = 15.5, tsLegHiDb = 37.0;  // TS's leg gain at GAIN 0 and 10, even in dB between (6..40)
+        double tsLpHz = 5500.0;         // TS's fixed low-pass at the top (8000)
+        int    factor = 0;              // the oversampling, 0 = by the rate (`prepare`); a gate measures 4 against 8
+    };
+    Voicing voicing;
 
     static constexpr int taps = 64;
     static constexpr int grid = 64;
@@ -147,8 +158,9 @@ public:
             return v;
         }
 
-        /** One Newton step, bracketed: a step that leaves the bracket lands on its edge and steps once more from there —
-            from above, where the curve is convex, Newton never overshoots. */
+        /** One Newton step, bracketed: between 0 and the nearer of rf i (Rf alone) and `diodesAlone` (the diodes
+            alone), the latter asked only where the diodes can conduct. A step that leaves the bracket lands on its edge
+            and steps once more from there — from above, where the curve is convex, Newton never overshoots. */
         static double stepOnce (double i, double rf, double v, bool asymmetric) noexcept
         {
             const double lin = rf * i;
@@ -199,7 +211,7 @@ public:
     void prepare (double sampleRate)
     {
         rate = sampleRate > 0.0 ? sampleRate : 48000.0;
-        factor = rate <= 50000.0 ? 8 : (rate <= 100000.0 ? 4 : 2);
+        factor = voicing.factor > 0 ? voicing.factor : rate <= 50000.0 ? 8 : (rate <= 100000.0 ? 4 : 2);
         ready = oversampler.prepare (factor, 2, taps);
         fadeStep = (float) (grid * 1000.0 / (fadeMs * rate));
         slewKnob = (float) (10.0 * grid * 1000.0 / (glideMs * rate));
@@ -360,6 +372,7 @@ private:
     void retune() noexcept
     {
         const double fs = rate, os = rate * factor, g = unit (now.gain);
+        voltNow = playing == Type::ts ? voicing.tsVolt : voicing.volt;
         double legDb = 0.0, legHz = 720.0, rg = 4700.0, capF = 51.0e-12, postHz = 723.0, shelfHz = 1500.0, shelfDb = 0.0,
                lpHz = 0.0;
         linear = false; asymmetric = false;
@@ -367,9 +380,10 @@ private:
         switch (playing)
         {
             case Type::ts:
-                legDb   = 6.0 + 34.0 * g;
-                shelfDb = -6.0 + 12.0 * unit (now.tone);   // TONE: -6 .. +6 dB over 1.5 kHz, 0 at noon
-                lpHz    = 8000.0;
+                legDb   = voicing.tsLegLoDb + (voicing.tsLegHiDb - voicing.tsLegLoDb) * g;
+                postHz  = voicing.tsPostHz;
+                shelfDb = voicing.tsShelfNoonDb - 6.0 + 12.0 * unit (now.tone);   // TONE: +-6 dB over 1.5 kHz about noon's
+                lpHz    = voicing.tsLpHz;
                 break;
             case Type::precision:
                 legDb   = 6.0 + 30.0 * g;
@@ -436,7 +450,7 @@ private:
         for (int i = 0; i < m; ++i)
         {
             const float raw = x[i];
-            double in = std::isfinite (raw) ? (double) raw / (double) volt : 0.0;
+            double in = std::isfinite (raw) ? (double) raw / voltNow : 0.0;
             if (linear)
             {
                 const double t = (double) (i + 1) / (double) m;
@@ -455,7 +469,7 @@ private:
         if (linear)
         {
             for (int i = 0; i < m; ++i)
-                x[i] = limit (guard (clean[(size_t) i] * volt) * fadeAt (i, m));
+                x[i] = limit (guard ((float) (clean[(size_t) i] * voltNow)) * fadeAt (i, m));
             return;
         }
 
@@ -482,7 +496,7 @@ private:
             y += shelfGain * (y - shelf.lowpass (y));
             if (lpOn)
                 y = lowpass.lowpass (y);
-            upClean[(size_t) j] = guard ((float) (y * volt));
+            upClean[(size_t) j] = guard ((float) (y * voltNow));
         }
         const float* back[1] = { upClean.data() };
         float* outs[1] = { x };
@@ -534,7 +548,7 @@ private:
     OnePole inCut, legCut, capCut, post, lowpass, dcBlock, shelf;
     HighPass2 tight;
     bool linear = false, asymmetric = false, lpOn = true;
-    double shelfGain = 0.0, rgNow = 4700.0, rfFrom = 4700.0, rfTo = 4700.0, boostFrom = 1.0, boostTo = 1.0, v = 0.0;
+    double voltNow = 0.5, shelfGain = 0.0, rgNow = 4700.0, rfFrom = 4700.0, rfTo = 4700.0, boostFrom = 1.0, boostTo = 1.0, v = 0.0;
     long long guardedCount = 0;
 };
 
