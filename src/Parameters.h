@@ -519,27 +519,19 @@ void addGuitarCompParameters (juce::AudioProcessorValueTreeState::ParameterLayou
 
     Its ids carry `drive_`, new: `boost_` is the prefix of the boost BLOCK of before (boostLevel says why no engine
     parameter carries it), so a session of that time that still names one can never switch this on; and OrbitAmp's
-    BOOST key (`out_boost`, `preamp_boost`) stays what it was. A type, GAIN, and each type's own EQ under its own id —
-    TONE is TS's and SD-1's, ATTACK and BRIGHT PRECISION's, TIGHT 33's — so a host's lane says what it moves, and a
-    type picked again comes back as it was left. Every knob 0..10, as the face reads it — but VOLUME (`driveVolume`),
-    every type's, in dB: -12..+12, at noon (0) the pedal hands on the loudness it was given (core::DrivePedal). */
+    BOOST key (`out_boost`, `preamp_boost`) stays what it was. FOR NOW IT IS THE TS ALONE, under its DIODE law (the
+    owner, 21.11): GAIN and TONE 0..10, as the face reads them, and VOLUME (`driveVolume`) in dB, -12..+12, at noon
+    (0) the pedal hands on the loudness it was given (core::DrivePedal). The other types' voicings sleep in the pedal,
+    still gated; no parameter reaches them, so a session that named one (a `drive_type` of before) opens as the TS.
+    When they come back, a type parameter and their own EQ ids come back with them. */
 inline constexpr const char* drivePresent = "drive_present";
 inline constexpr const char* driveOn      = "drive_on";
-inline constexpr const char* driveType    = "drive_type";
 inline constexpr const char* driveGain    = "drive_gain";
 inline constexpr const char* driveTone    = "drive_tone";
-inline constexpr const char* driveAttack  = "drive_attack";
-inline constexpr const char* driveBright  = "drive_bright";
-inline constexpr const char* driveTight   = "drive_tight";
 inline constexpr const char* driveVolume  = "drive_volume";
-/** The types in core::DrivePedal::Type's order — the index a session stores is the type the pedal plays. Working
-    names (the owner renames them by ear). */
-inline const juce::StringArray driveTypes { "TS", "Precision", "33", "SD-1" };
-inline constexpr float driveBrightDefault = 5.0f;   // PRECISION's BRIGHT out of the box: +4.5 dB
-/** TEMPORARY (the owner, 21.11: to choose the clip by ear; out before any release, like the portable set's IN/OUT
-    knobs): core::DrivePedal::Clip, in its order. */
-inline constexpr const char* driveClipTmp = "drive_clip_tmp";
-inline const juce::StringArray driveClips { "Diode", "Tanh", "Hard", "Asym" };
+/** The types the tile's selector offers, in core::DrivePedal::Type's order: the TS alone for now — the place where
+    the others come back. */
+inline const juce::StringArray driveTypes { "TS" };
 void addGuitarDriveParameters (juce::AudioProcessorValueTreeState::ParameterLayout&);
 
 /** THE GUITAR'S INPUT CUT (the owner, 02.11): a 2nd-order high-pass at the input of every guitar amp's chain, always,

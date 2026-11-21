@@ -220,10 +220,8 @@ AmpProcessor::AmpProcessor (const Product& product)
     if (ownProduct.chain != Chain::bass && ownProduct.guitarDrive)
     {
         const auto raw = [this] (const char* id) { return apvts.getRawParameterValue (id); };
-        driveParams = { raw (params::driveType), raw (params::driveGain), raw (params::driveTone),
-                        raw (params::driveAttack), raw (params::driveBright), raw (params::driveTight), raw (params::driveVolume),
-                        raw (params::driveClipTmp) };
-        jassert (driveParams.type != nullptr && driveParams.tight != nullptr && driveParams.volume != nullptr);
+        driveParams = { raw (params::driveGain), raw (params::driveTone), raw (params::driveVolume) };
+        jassert (driveParams.gain != nullptr && driveParams.tone != nullptr && driveParams.volume != nullptr);
     }
 
     gateThresholdParam = apvts.getRawParameterValue (params::gateThreshold);
@@ -1313,7 +1311,7 @@ void AmpProcessor::reportLatency()
     // here may write it down.
     const int pr = preamp.latencySamples();
     // ...OrbitAmp's DRIVE while it stands in the strip, ON or in STANDBY: its oversampler's round trip, every type alike...
-    const int drive = driveParams.type != nullptr && linkInRig (params::rowDrive) ? core::DrivePedal::latencySamples() : 0;
+    const int drive = driveParams.gain != nullptr && linkInRig (params::rowDrive) ? core::DrivePedal::latencySamples() : 0;
     const int total = pr + drive + limiterLatency.load();      // ...and the limiter's lookahead and grid, always
 
     // 🔴 THE WIRE IS SIZED FROM THE NUMBER THE BLOCK ACTUALLY REPORTS, here and nowhere else.
@@ -1454,7 +1452,7 @@ void AmpProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
         }
         compTap.prepare (sampleRate);
     }
-    if (driveParams.type != nullptr)   // OrbitAmp's DRIVE: its oversamplers and its wire, here and nowhere else
+    if (driveParams.gain != nullptr)   // OrbitAmp's DRIVE: its oversamplers and its wire, here and nowhere else
     {
         for (auto& pedal : drivePedal)
             pedal.prepare (sampleRate);
@@ -1905,17 +1903,12 @@ void AmpProcessor::runDrive (float* const* channels, int nch, int numSamples) no
     }
     driveRan = true;
 
-    core::DrivePedal::Settings s;
-    s.type   = (core::DrivePedal::Type) juce::jlimit (0, (int) core::DrivePedal::Type::count - 1,
-                                                       juce::roundToInt (driveParams.type->load (std::memory_order_relaxed)));
+    core::DrivePedal::Settings s;   // the TS under its DIODE law: the only type and law the player reaches for now
+    s.type   = core::DrivePedal::Type::ts;
+    s.clip   = core::DrivePedal::Clip::diode;
     s.gain   = driveParams.gain->load (std::memory_order_relaxed);
     s.tone   = driveParams.tone->load (std::memory_order_relaxed);
-    s.attack = driveParams.attack->load (std::memory_order_relaxed);
-    s.bright = driveParams.bright->load (std::memory_order_relaxed);
-    s.tight  = driveParams.tight->load (std::memory_order_relaxed);
     s.volume = driveParams.volume->load (std::memory_order_relaxed);
-    s.clip   = (core::DrivePedal::Clip) juce::jlimit (0, (int) core::DrivePedal::Clip::count - 1,   // TEMPORARY
-                                                       juce::roundToInt (driveParams.clip->load (std::memory_order_relaxed)));
 
     if (planes > drivePlanes)   // STEREO has just begun: the right's pedal from rest too
         drivePedal[1].reset();
@@ -2726,7 +2719,7 @@ void AmpProcessor::processChunk (juce::AudioBuffer<float>& buffer)
 
     // ORBITAMP'S DRIVE, after COMP and before the AMP, as a pedal stands. Out of the strip, or in STANDBY once its fade
     // is done, it is not run at all: the signal passes bit for bit.
-    if (driveParams.type != nullptr && nch > 0)
+    if (driveParams.gain != nullptr && nch > 0)
     {
         const auto a = PerfClock::now();
         runDrive (channels, nch, numSamples);

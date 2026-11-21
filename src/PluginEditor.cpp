@@ -24,7 +24,8 @@ std::vector<LayoutStrip::Row> AmpEditor::stripRows (const AmpProcessor& p)
     {
         const auto& link = params::chainLinks[(size_t) i];
 
-        LayoutStrip::Row row { link.name, link.captured ? theme::orange : theme::violet };
+        LayoutStrip::Row row { link.name, i == params::rowDrive ? theme::tsGreen   // the DRIVE wears the Tube Screamer's green
+                                                               : link.captured ? theme::orange : theme::violet };
         row.present = link.onParam != nullptr && i != params::rowTuner && p.chainHolds ((params::ChainRow) i)
                       && p.linkShown ((params::ChainRow) i);   // OrbitBass's checklist: a link out of the strip has no arrow
         rows.push_back (std::move (row));

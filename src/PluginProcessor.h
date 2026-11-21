@@ -1571,14 +1571,9 @@ private:
         counted (reportLatency). */
     struct DriveParams
     {
-        std::atomic<float>* type = nullptr;
         std::atomic<float>* gain = nullptr;
         std::atomic<float>* tone = nullptr;
-        std::atomic<float>* attack = nullptr;
-        std::atomic<float>* bright = nullptr;
-        std::atomic<float>* tight = nullptr;
         std::atomic<float>* volume = nullptr;
-        std::atomic<float>* clip = nullptr;   // TEMPORARY
     } driveParams;
     core::DrivePedal drivePedal[2];
     core::BypassWire driveWire;

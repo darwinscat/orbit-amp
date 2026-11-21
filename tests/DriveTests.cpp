@@ -131,8 +131,7 @@ namespace
         amp.pumpDeviceWork();
     }
 
-    const char* const driveIds[] = { params::drivePresent, params::driveOn, params::driveType, params::driveGain,
-                                     params::driveTone, params::driveAttack, params::driveBright, params::driveTight, params::driveVolume };
+    const char* const driveIds[] = { params::drivePresent, params::driveOn, params::driveGain, params::driveTone, params::driveVolume };
 
     void walk (juce::Component& c, const std::function<void (juce::Component&)>& f)
     {
@@ -256,10 +255,8 @@ namespace
             if (type >= 0)
             {
                 setParam (*amp, params::drivePresent, 1.0f);
-                setParam (*amp, params::driveType, (float) type);
                 setParam (*amp, params::driveGain, gain);
                 setParam (*amp, params::driveTone, tone);
-                setParam (*amp, params::driveClipTmp, (float) clip);
             }
             // ORBITAMP_DRIVE_LISTEN_NOGATE=1: the GATE off — it keys off the raw guitar ahead of the chain, so a pedal
             // played INTO the amp from a file and the DRIVE in front of it are gated on two different signals.
@@ -482,25 +479,10 @@ namespace
             return 0;
         }
 
-        const std::pair<const char*, int> takes[] = { { "0-block-off", -1 }, { "1-ts-noon", 0 }, { "2-precision-noon", 1 },
-                                                      { "3-33-noon", 2 }, { "4-sd1-noon", 3 } };
+        const std::pair<const char*, int> takes[] = { { "0-block-off", -1 }, { "1-ts-noon", 0 } };
         for (const auto& [name, type] : takes)
             if (! write (folder.getChildFile (juce::String (name) + ".wav"), render (type, 0)))
                 return 1;
-
-        // TEMPORARY: TS at GAIN noon under each clip law, levels matched to DIODE's loudness.
-        double diode = 0.0;
-        for (int clip = 0; clip < params::driveClips.size(); ++clip)
-        {
-            auto out = render (0, clip);
-            if (clip == 0)
-                diode = lufsOf (out);
-            else
-                (void) bringTo (out, diode);
-            if (! write (folder.getChildFile ("clippers").getChildFile ("ts-noon-" + juce::String (clip + 1) + "-"
-                                                                          + params::driveClips[clip].toLowerCase() + ".wav"), out))
-                return 1;
-        }
         return 0;
     }
 }
@@ -557,8 +539,8 @@ int ORBITAMP_GATE_MAIN()
     {
         auto amp = make (orbitAmp());
         check (amp->chainHolds (params::rowDrive) && amp->linkRemovable (params::rowDrive) && ! amp->linkShown (params::rowDrive)
-                   && param (*amp, params::driveOn) > 0.5f && juce::roundToInt (param (*amp, params::driveType)) == 0
-                   && juce::exactlyEqual (param (*amp, params::driveGain), 5.0f),
+                   && param (*amp, params::driveOn) > 0.5f && juce::exactlyEqual (param (*amp, params::driveGain), 5.0f)
+                   && amp->apvts.getParameter ("drive_type") == nullptr && amp->apvts.getParameter ("drive_clip_tmp") == nullptr,
                "OrbitAmp holds the DRIVE, out of its strip out of the box — ON, TS, GAIN 5 for when it comes in");
         check (juce::String (params::chainLinks[(size_t) params::rowDrive].onParam) == params::driveOn
                    && params::rowDrive + 1 == params::rowPreamp && params::rowDrive > params::rowComp,
@@ -607,12 +589,11 @@ int ORBITAMP_GATE_MAIN()
                    + juce::String (before) + ", " + juce::String (offered) + ", " + juce::String (amp->getLatencySamples()) + ")");
     }
 
-    // OFFERED AND ON, every type plays — something else than before, and nothing that is not a number.
+    // OFFERED AND ON, the TS plays — something else than before, and nothing that is not a number.
     for (int t = 0; t < params::driveTypes.size(); ++t)
     {
         auto amp = make (orbitAmp());
         setParam (*amp, params::drivePresent, 1.0f);
-        setParam (*amp, params::driveType, (float) t);
         amp->prepareToPlay (sampleRate, blockSize);
         amp->pumpDeviceWork();
         const auto now = play (*amp, goldenBlocks);
@@ -627,13 +608,11 @@ int ORBITAMP_GATE_MAIN()
                                                    + juce::String (apartFrom, 4) + " apart from before)");
     }
 
-    // A SESSION KEEPS IT: its place, its switch, its type, GAIN, every type's EQ and VOLUME.
+    // A SESSION KEEPS IT: its place, its switch, GAIN, TONE and VOLUME.
     {
         auto a = make (orbitAmp());
         const std::pair<const char*, float> set[] = { { params::drivePresent, 1.0f }, { params::driveOn, 0.0f },
-                                                      { params::driveType, 2.0f }, { params::driveGain, 7.3f },
-                                                      { params::driveTone, 2.2f }, { params::driveAttack, 9.0f },
-                                                      { params::driveBright, 1.5f }, { params::driveTight, 8.1f },
+                                                      { params::driveGain, 7.3f }, { params::driveTone, 2.2f },
                                                       { params::driveVolume, -3.5f } };
         for (const auto& [id, v] : set)
             setParam (*a, id, v);
@@ -651,6 +630,54 @@ int ORBITAMP_GATE_MAIN()
             said << id << " " << juce::String (back, 2) << "  ";
         }
         check (kept, "a session keeps the DRIVE: " + said);
+    }
+
+    // A SESSION THAT NAMED ANOTHER TYPE (a drive_type of before, the 33) opens as the TS: no parameter takes the old
+    // value, and the amp plays what a fresh one with the DRIVE offered plays, bit for bit.
+    {
+        auto fresh = make (orbitAmp());
+        setParam (*fresh, params::drivePresent, 1.0f);
+        juce::MemoryBlock m;
+        fresh->getStateInformation (m);
+        auto xml = juce::AudioProcessor::getXmlFromBinary (m.getData(), (int) m.getSize());
+        // Every parameter tree in the session (the live one and the registers): a drive_type beside its drive_gain.
+        int named = 0;
+        std::function<void (juce::XmlElement&)> name = [&] (juce::XmlElement& e)
+        {
+            bool here = false;
+            for (auto* c : e.getChildIterator())
+                here = here || (c->hasTagName ("PARAM") && c->getStringAttribute ("id") == params::driveGain);
+            if (here)
+            {
+                auto* p = e.createNewChildElement ("PARAM");
+                p->setAttribute ("id", "drive_type");
+                p->setAttribute ("value", 2.0);
+                ++named;
+            }
+            for (auto* c : e.getChildIterator())
+                if (! c->hasTagName ("PARAM"))
+                    name (*c);
+        };
+        if (xml != nullptr)
+            name (*xml);
+        juce::MemoryBlock old;
+        if (xml != nullptr)
+            juce::AudioProcessor::copyXmlToBinary (*xml, old);
+        auto opened = make (orbitAmp());
+        opened->setStateInformation (old.getData(), (int) old.getSize());
+        opened->pumpDeviceWork();
+        for (auto* a : { fresh.get(), opened.get() })
+        {
+            a->prepareToPlay (sampleRate, blockSize);
+            a->pumpDeviceWork();
+        }
+        const auto a = play (*fresh, goldenBlocks), b = play (*opened, goldenBlocks);
+        float d = 0.0f;
+        for (size_t i = 0; i < a.size() && i < b.size(); ++i)
+            d = std::max (d, std::abs (a[i] - b[i]));
+        check (named > 0 && opened->linkShown (params::rowDrive) && opened->apvts.getParameter ("drive_type") == nullptr && d <= 0.0f,
+               "a session that named the 33 (drive_type 2) opens with the DRIVE offered, as the TS: what a fresh one plays ("
+                   + juce::String (d, 9) + " apart)");
     }
 
     // OFFERED IN SETUP: its PEDALS page's DRIVE row, clicked, puts it in the strip — its arrow there, its tile on the face,
@@ -688,20 +715,23 @@ int ORBITAMP_GATE_MAIN()
             const bool after = amp->linkShown (params::rowDrive) && stripHas() && shownIn (*tile, *editor) && row->get()
                             && editor->leastDesignWidth() == least0 + FaceplateView::driveWidth + FaceplateView::colGap;
             const auto knobs = tile->shownKnobs().joinIntoString (" ");
-            // ORBITAMP_DRIVE_SHOT=<file.png>: the tile as it stands, at twice its size, for eyes.
+            // ORBITAMP_DRIVE_SHOT=<folder>: the tile as it stands, at 1x and 2x, for eyes.
             if (const auto shot = juce::SystemStats::getEnvironmentVariable ("ORBITAMP_DRIVE_SHOT", {}); shot.isNotEmpty())
-            {
-                juce::File out (shot);
-                (void) out.deleteFile();
-                juce::FileOutputStream stream (out);
-                juce::PNGImageFormat png;
-                (void) png.writeImageToStream (tile->createComponentSnapshot (tile->getLocalBounds(), true, 2.0f), stream);
-            }
-            setParam (*amp, params::driveType, 1.0f);
-            const auto precision = tile->shownKnobs().joinIntoString (" ");
-            setParam (*amp, params::driveType, 2.0f);
-            const auto thirtyThree = tile->shownKnobs().joinIntoString (" ");
-            setParam (*amp, params::driveType, 0.0f);
+                for (const int scale : { 1, 2 })
+                {
+                    juce::File out (juce::File (shot).getChildFile ("drive-ts-green-" + juce::String (scale) + "x.png"));
+                    (void) out.getParentDirectory().createDirectory();
+                    (void) out.deleteFile();
+                    juce::FileOutputStream stream (out);
+                    juce::PNGImageFormat png;
+                    (void) png.writeImageToStream (tile->createComponentSnapshot (tile->getLocalBounds(), true, (float) scale), stream);
+                }
+            // VOLUME's hand on the OUT column follows the parameter, noon in the middle, up for louder.
+            auto& columns = tile->levelColumns();
+            const float noonY = columns.handY();
+            setParam (*amp, params::driveVolume, 6.0f);
+            const bool hand = std::abs (columns.value() - 6.0f) < 0.01f && columns.handY() < noonY - 10.0f;
+            setParam (*amp, params::driveVolume, 0.0f);
             juce::String list;
             for (const auto& [r, in] : editor->checklistRows())
                 list << params::chainLinks[(size_t) r].name << (in ? "+ " : "- ");
@@ -709,11 +739,10 @@ int ORBITAMP_GATE_MAIN()
             amp->pumpDeviceWork();
             const bool undone = ! amp->linkShown (params::rowDrive) && ! stripHas() && ! shownIn (*tile, *editor)
                              && editor->leastDesignWidth() == least0;
-            check (before && after && undone && knobs == "GAIN TONE VOLUME" && precision == "GAIN ATTACK BRIGHT VOLUME"
-                       && thirtyThree == "GAIN TIGHT VOLUME"
-                       && list == "COMP- DRIVE+ ",
+            check (before && after && undone && knobs == "GAIN TONE" && tile->typeShown() == "TS" && hand && list == "COMP- DRIVE+ ",
                    "SETUP's DRIVE row puts it in the strip and on the face, the window wider by it, one undo step back ("
-                       + knobs + " | " + precision + " | " + thirtyThree + "; the checklist " + list + ")");
+                       + knobs + ", type " + tile->typeShown() + ", VOLUME's hand " + (hand ? "follows" : "DOES NOT follow")
+                       + "; the checklist " + list + ")");
         }
     }
 

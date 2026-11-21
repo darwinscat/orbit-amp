@@ -54,6 +54,9 @@ inline const juce::Colour dspBot  { 0xff111019 };
     that tells heat, so the whole face warms up through the same weather. */
 inline const juce::Colour heatFloor  { 0xff443a7d };   // the dark corporate ground
 inline const juce::Colour heatGreen  { 0xff5fc97a };   // the zone worth living in
+/** The Tube Screamer's green, muted to sit with the violet and orange on the dark panel: the DRIVE's lines (its frame,
+    title and arrow), never a wash. */
+inline const juce::Colour tsGreen    { 0xff4fae6a };
 inline const juce::Colour heatYellow { 0xffe9c94c };
 inline const juce::Colour heatRed    { 0xffff4646 };   // past orange — the truly hot
 
