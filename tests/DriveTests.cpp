@@ -13,10 +13,12 @@
 //
 // ORBITAMP_DRIVE_RECORD=<folder> writes the two golden files instead of checking them — run by the tree BEFORE the
 // block, never by the tree under test. ORBITAMP_DRIVE_LISTEN=<riff.wav> with ORBITAMP_DRIVE_LISTEN_OUT=<folder> renders
-// the riff through a fresh OrbitAmp — the block off, then each type at GAIN noon — for ears, and checks nothing.
+// the riff through a fresh OrbitAmp — the block off, then each type at GAIN noon — for ears, and checks nothing; levels
+// it matches, it matches in integrated loudness (BS.1770, tests/Loudness.h), never in RMS.
 // main() returns 0 when every check held.
 
 #include "GateMain.h"
+#include "Loudness.h"
 
 #include <juce_audio_formats/juce_audio_formats.h>
 #include <juce_events/juce_events.h>
@@ -128,7 +130,7 @@ namespace
     }
 
     const char* const driveIds[] = { params::drivePresent, params::driveOn, params::driveType, params::driveGain,
-                                     params::driveTone, params::driveAttack, params::driveBright, params::driveTight };
+                                     params::driveTone, params::driveAttack, params::driveBright, params::driveTight, params::driveVolume };
 
     void walk (juce::Component& c, const std::function<void (juce::Component&)>& f)
     {
@@ -282,6 +284,19 @@ namespace
             return out;
         };
         const auto render = [&] (int type, int clip) { return renderFrom (riff, type, clip); };
+        const auto lufsOf = [&] (const juce::AudioBuffer<float>& b)
+        {
+            std::vector<const float*> chans;
+            for (int ch = 0; ch < b.getNumChannels(); ++ch)
+                chans.push_back (b.getReadPointer (ch));
+            return loudness::integrated (chans, (size_t) b.getNumSamples(), rate);
+        };
+        const auto bringTo = [&] (juce::AudioBuffer<float>& b, double lufs)   // returns the gain, dB
+        {
+            const double db = lufs - lufsOf (b);
+            b.applyGain ((float) std::pow (10.0, db / 20.0));
+            return db;
+        };
         const auto write = [&] (const juce::File& file, const juce::AudioBuffer<float>& out)
         {
             (void) file.getParentDirectory().createDirectory();
@@ -293,15 +308,16 @@ namespace
                 return false;
             (void) stream.release();
             writer->writeFromAudioSampleBuffer (out, 0, out.getNumSamples());
-            std::printf ("%s: peak %.1f dBFS, RMS %.1f dBFS\n", file.getFileName().toRawUTF8(),
+            std::printf ("%s: peak %.1f dBFS, RMS %.1f dBFS, %.1f LUFS\n", file.getFileName().toRawUTF8(),
                          (double) juce::Decibels::gainToDecibels (out.getMagnitude (0, 0, out.getNumSamples())),
-                         (double) juce::Decibels::gainToDecibels (out.getRMSLevel (0, 0, out.getNumSamples())));
+                         (double) juce::Decibels::gainToDecibels (out.getRMSLevel (0, 0, out.getNumSamples())), lufsOf (out));
             return true;
         };
 
-        // THE BLIND PAIR: the DI through his TS-0003 (ORBITAMP_DRIVE_BLIND, written by orbitamp_drive_match) into the
-        // amp with the block off, and the DI into the amp through our TS at noon — his pedal's output brought to ours'
-        // level first, so the amp is pushed alike; the two takes then matched in RMS; the order a coin's.
+        // THE BLIND PAIR: the DI through his TS-0003 (ORBITAMP_DRIVE_BLIND, written by orbitamp_drive_match, his capture
+        // fed at its offset) into the amp with the block off, and the DI into the amp through our TS at noon — his
+        // pedal's output brought to ours' loudness first, so the amp is pushed alike; the two takes then matched in
+        // loudness; the order a coin's.
         if (const auto his = juce::SystemStats::getEnvironmentVariable ("ORBITAMP_DRIVE_BLIND", {}); his.isNotEmpty())
         {
             std::unique_ptr<juce::AudioFormatReader> r (formats.createReaderFor (juce::File (his)));
@@ -319,19 +335,18 @@ namespace
             ts.gain = gain;
             for (int at = 0; at < len; at += blockSize)
                 pedal.process (ourPedal.getWritePointer (0) + at, std::min (blockSize, len - at), ts);
-            const float into = ourPedal.getRMSLevel (0, 0, len) / std::max (1.0e-9f, hisPedal.getRMSLevel (0, 0, hisPedal.getNumSamples()));
-            hisPedal.applyGain (into);
+            const double into = bringTo (hisPedal, lufsOf (ourPedal));
             auto hisTake = renderFrom (hisPedal, -1, 0);
             auto ourTake = renderFrom (riff, 0, 0, gain);
-            ourTake.applyGain (hisTake.getRMSLevel (0, 0, hisTake.getNumSamples()) / std::max (1.0e-9f, ourTake.getRMSLevel (0, 0, ourTake.getNumSamples())));
+            const double after = bringTo (ourTake, lufsOf (hisTake));
             const bool hisFirst = juce::Random (juce::Time::currentTimeMillis()).nextBool();
             const auto dir = folder.getChildFile ("ts-blind");
             if (! write (dir.getChildFile (pair + "-A.wav"), hisFirst ? hisTake : ourTake) || ! write (dir.getChildFile (pair + "-B.wav"), hisFirst ? ourTake : hisTake))
                 return 1;
             const auto ours = "our TS, GAIN " + juce::String (gain, 0) + ", TONE noon";
             (void) dir.getChildFile ("KEY.txt").appendText (pair + "-A: " + (hisFirst ? said : ours) + "\n" + pair + "-B: " + (hisFirst ? ours : said)
-                + "\n" + pair + ": both into a fresh OrbitAmp at its defaults; his pedal's output brought to ours' RMS before the amp ("
-                + juce::String (juce::Decibels::gainToDecibels (into), 1) + " dB), the takes matched in RMS after it.\n");
+                + "\n" + pair + ": both into a fresh OrbitAmp at its defaults; his pedal's output brought to ours' loudness before the amp ("
+                + juce::String (into, 1) + " dB), the takes matched in integrated loudness after it (ours " + juce::String (after, 1) + " dB).\n");
             return 0;
         }
 
@@ -341,16 +356,15 @@ namespace
             if (! write (folder.getChildFile (juce::String (name) + ".wav"), render (type, 0)))
                 return 1;
 
-        // TEMPORARY: TS at GAIN noon under each clip law, levels matched to DIODE's RMS.
-        float diodeRms = 0.0f;
+        // TEMPORARY: TS at GAIN noon under each clip law, levels matched to DIODE's loudness.
+        double diode = 0.0;
         for (int clip = 0; clip < params::driveClips.size(); ++clip)
         {
             auto out = render (0, clip);
-            const float rms = out.getRMSLevel (0, 0, out.getNumSamples());
             if (clip == 0)
-                diodeRms = rms;
-            else if (rms > 0.0f)
-                out.applyGain (diodeRms / rms);
+                diode = lufsOf (out);
+            else
+                (void) bringTo (out, diode);
             if (! write (folder.getChildFile ("clippers").getChildFile ("ts-noon-" + juce::String (clip + 1) + "-"
                                                                           + params::driveClips[clip].toLowerCase() + ".wav"), out))
                 return 1;
@@ -481,13 +495,14 @@ int ORBITAMP_GATE_MAIN()
                                                    + juce::String (apartFrom, 4) + " apart from before)");
     }
 
-    // A SESSION KEEPS IT: its place, its switch, its type, GAIN and every type's EQ.
+    // A SESSION KEEPS IT: its place, its switch, its type, GAIN, every type's EQ and VOLUME.
     {
         auto a = make (orbitAmp());
         const std::pair<const char*, float> set[] = { { params::drivePresent, 1.0f }, { params::driveOn, 0.0f },
                                                       { params::driveType, 2.0f }, { params::driveGain, 7.3f },
                                                       { params::driveTone, 2.2f }, { params::driveAttack, 9.0f },
-                                                      { params::driveBright, 1.5f }, { params::driveTight, 8.1f } };
+                                                      { params::driveBright, 1.5f }, { params::driveTight, 8.1f },
+                                                      { params::driveVolume, -3.5f } };
         for (const auto& [id, v] : set)
             setParam (*a, id, v);
         juce::MemoryBlock m;
@@ -541,6 +556,15 @@ int ORBITAMP_GATE_MAIN()
             const bool after = amp->linkShown (params::rowDrive) && stripHas() && shownIn (*tile, *editor) && row->get()
                             && editor->leastDesignWidth() == least0 + FaceplateView::driveWidth + FaceplateView::colGap;
             const auto knobs = tile->shownKnobs().joinIntoString (" ");
+            // ORBITAMP_DRIVE_SHOT=<file.png>: the tile as it stands, at twice its size, for eyes.
+            if (const auto shot = juce::SystemStats::getEnvironmentVariable ("ORBITAMP_DRIVE_SHOT", {}); shot.isNotEmpty())
+            {
+                juce::File out (shot);
+                (void) out.deleteFile();
+                juce::FileOutputStream stream (out);
+                juce::PNGImageFormat png;
+                (void) png.writeImageToStream (tile->createComponentSnapshot (tile->getLocalBounds(), true, 2.0f), stream);
+            }
             setParam (*amp, params::driveType, 1.0f);
             const auto precision = tile->shownKnobs().joinIntoString (" ");
             setParam (*amp, params::driveType, 2.0f);
@@ -553,7 +577,8 @@ int ORBITAMP_GATE_MAIN()
             amp->pumpDeviceWork();
             const bool undone = ! amp->linkShown (params::rowDrive) && ! stripHas() && ! shownIn (*tile, *editor)
                              && editor->leastDesignWidth() == least0;
-            check (before && after && undone && knobs == "GAIN TONE" && precision == "GAIN ATTACK BRIGHT" && thirtyThree == "GAIN TIGHT"
+            check (before && after && undone && knobs == "GAIN TONE VOLUME" && precision == "GAIN ATTACK BRIGHT VOLUME"
+                       && thirtyThree == "GAIN TIGHT VOLUME"
                        && list == "COMP- DRIVE+ ",
                    "SETUP's DRIVE row puts it in the strip and on the face, the window wider by it, one undo step back ("
                        + knobs + " | " + precision + " | " + thirtyThree + "; the checklist " + list + ")");

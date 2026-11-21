@@ -1344,6 +1344,10 @@ public:
     /** COMP squeezing now, in dB (0 or below) — the indicator beside its knob. 0 on every amp that has no COMP. */
     std::atomic<float> compGrDb { 0.0f };
 
+    /** THE DRIVE's input and output peaks since the face last read them: the audio thread raises them while the block
+        stands in the strip, its tile's columns take them (exchange 0; ui/LevelColumns.h). Linear. */
+    std::atomic<float> driveInPeak { 0.0f }, driveOutPeak { 0.0f };
+
     /** THE HUM AT THE INPUT, as the stage last heard it — written by the audio thread at the end of
         every block, read by the windows on their own clocks. `humInForce` is the mode the stage is
         IN FORCE, which is the machine's (prefs::hum) unless the stage could not be prepared for this
@@ -1573,6 +1577,7 @@ private:
         std::atomic<float>* attack = nullptr;
         std::atomic<float>* bright = nullptr;
         std::atomic<float>* tight = nullptr;
+        std::atomic<float>* volume = nullptr;
         std::atomic<float>* clip = nullptr;   // TEMPORARY
     } driveParams;
     core::DrivePedal drivePedal[2];

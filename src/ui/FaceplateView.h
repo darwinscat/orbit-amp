@@ -134,7 +134,7 @@ public:
     static constexpr int compWidth = 320;
 
     /** OrbitAmp's DRIVE block, after COMP: its type on the border, GAIN and the type's one or two (ui/DriveBlock.h). */
-    static constexpr int driveWidth = 220;
+    static constexpr int driveWidth = 280;   // GAIN, the type's own, VOLUME and the level columns
 
     /** OrbitBass's OCTAVE block, its rail and its picture of the note and its sub (ui/OctaveScope.h), after COMP. */
     static constexpr int octaveWidth = 170;

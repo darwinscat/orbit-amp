@@ -221,8 +221,9 @@ AmpProcessor::AmpProcessor (const Product& product)
     {
         const auto raw = [this] (const char* id) { return apvts.getRawParameterValue (id); };
         driveParams = { raw (params::driveType), raw (params::driveGain), raw (params::driveTone),
-                        raw (params::driveAttack), raw (params::driveBright), raw (params::driveTight), raw (params::driveClipTmp) };
-        jassert (driveParams.type != nullptr && driveParams.tight != nullptr);
+                        raw (params::driveAttack), raw (params::driveBright), raw (params::driveTight), raw (params::driveVolume),
+                        raw (params::driveClipTmp) };
+        jassert (driveParams.type != nullptr && driveParams.tight != nullptr && driveParams.volume != nullptr);
     }
 
     gateThresholdParam = apvts.getRawParameterValue (params::gateThreshold);
@@ -1864,6 +1865,24 @@ void AmpProcessor::runDrive (float* const* channels, int nch, int numSamples) no
     driveWired = true;
     if (! canFade (numSamples, planes))
         return;              // a block past the prepared size: nothing here can carry it (prepareToPlay)
+
+    // ITS TWO LEVELS for the tile's columns: what came in, and (on every way out below) what goes on to the AMP.
+    const auto peakOf = [&]
+    {
+        float m = 0.0f;
+        for (int ch = 0; ch < planes; ++ch)
+            m = juce::jmax (m, juce::FloatVectorOperations::findMaximum (channels[ch], numSamples),
+                            -juce::FloatVectorOperations::findMinimum (channels[ch], numSamples));
+        return m;
+    };
+    const auto raise = [] (std::atomic<float>& a, float v)
+    {
+        float was = a.load (std::memory_order_relaxed);
+        while (v > was && ! a.compare_exchange_weak (was, v, std::memory_order_relaxed)) {}
+    };
+    raise (driveInPeak, peakOf());
+    const juce::ScopeGuard outLevel { [&] { raise (driveOutPeak, peakOf()); } };
+
     driveWire.process (channels, fadeDry.getArrayOfWritePointers(), planes, numSamples, lat);
 
     const bool works = linkWorks (params::rowDrive);
@@ -1894,6 +1913,7 @@ void AmpProcessor::runDrive (float* const* channels, int nch, int numSamples) no
     s.attack = driveParams.attack->load (std::memory_order_relaxed);
     s.bright = driveParams.bright->load (std::memory_order_relaxed);
     s.tight  = driveParams.tight->load (std::memory_order_relaxed);
+    s.volume = driveParams.volume->load (std::memory_order_relaxed);
     s.clip   = (core::DrivePedal::Clip) juce::jlimit (0, (int) core::DrivePedal::Clip::count - 1,   // TEMPORARY
                                                        juce::roundToInt (driveParams.clip->load (std::memory_order_relaxed)));
 

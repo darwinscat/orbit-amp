@@ -521,7 +521,8 @@ void addGuitarCompParameters (juce::AudioProcessorValueTreeState::ParameterLayou
     parameter carries it), so a session of that time that still names one can never switch this on; and OrbitAmp's
     BOOST key (`out_boost`, `preamp_boost`) stays what it was. A type, GAIN, and each type's own EQ under its own id —
     TONE is TS's and SD-1's, ATTACK and BRIGHT PRECISION's, TIGHT 33's — so a host's lane says what it moves, and a
-    type picked again comes back as it was left. Every knob 0..10, as the face reads it. */
+    type picked again comes back as it was left. Every knob 0..10, as the face reads it — but VOLUME (`driveVolume`),
+    every type's, in dB: -12..+12, at noon (0) the pedal hands on the loudness it was given (core::DrivePedal). */
 inline constexpr const char* drivePresent = "drive_present";
 inline constexpr const char* driveOn      = "drive_on";
 inline constexpr const char* driveType    = "drive_type";
@@ -530,6 +531,7 @@ inline constexpr const char* driveTone    = "drive_tone";
 inline constexpr const char* driveAttack  = "drive_attack";
 inline constexpr const char* driveBright  = "drive_bright";
 inline constexpr const char* driveTight   = "drive_tight";
+inline constexpr const char* driveVolume  = "drive_volume";
 /** The types in core::DrivePedal::Type's order — the index a session stores is the type the pedal plays. Working
     names (the owner renames them by ear). */
 inline const juce::StringArray driveTypes { "TS", "Precision", "33", "SD-1" };

@@ -42,13 +42,21 @@ namespace orbitamp::core
 
     After every clip a first-order DC block at 12 Hz (the SD-1's asymmetry makes DC; the others' none, at no cost).
 
-    THE LEVEL. 1 V is 0.5 in the float (-6 dBFS) — where the NAM's own training stimulus lives: v3_0_0.wav peaks at
-    p99.9 -6.2 dBFS, 0.034 % of its samples above -6, next to nothing above -1. The pedal's output never passes
-    `ceilingDb`, -3 dBFS peak: -7 dBFS at the network behind the guitar packs' own chain[].input_db of -4. (TURBO's
-    push past the top of a dial, +6 dB, can then reach -1 there — as a hot DI with TURBO does today.) THE GUARD makes it
-    so: nothing below -4.5 dBFS, then a soft knee to a hard stop just under -3, inside the oversampled loop — the 33's
-    rail — and at the session's rate one hard limit at exactly -3 for the half-band's ripple over a stop pressed hard
-    (`guarded` counts it). No RMS normalising: the level moves with the playing, as a pedal's does.
+    THE SCALE. 1 V is 0.5 in the float (-6 dBFS), every type: a DI peaking at -12 dBFS is a humbucker's half volt.
+    The owner's own TS captures were trained at a level of their own — a NAM has none, the reamp chain of the day said
+    which float meant which volt — and fed 9.5 dB under the DI they clip, compress and colour as this TS does
+    (tests/DriveMatch.cpp: the 3rd and 5th harmonics within 1 dB, the crest within 0.2, every 1/3 octave within 2).
+
+    THE LEVEL HANDED ON. VOLUME (`Settings::volume`, -12..+12 dB) is the output, after the tone and before the guard;
+    at noon the pedal hands on the LOUDNESS it was given — integrated, K-weighted (BS.1770) on the reference DI, within
+    0.3 LU at every GAIN, every type (`Voicing::trimDb`, a curve smooth in GAIN): GAIN changes how it clips and
+    sounds, not how hard it pushes the amp; VOLUME does that. Smoothed: VOLUME eases to the hand in about 10 ms, the
+    trim follows GAIN's own glide.
+
+    THE CEILING. The output never passes `ceilingDb`, -1 dBFS peak. THE GUARD makes it so: nothing below -2.5 dBFS,
+    then a soft knee to a hard stop just under -1, inside the oversampled loop — the 33's rail — and at the session's
+    rate one hard limit at exactly -1 for the half-band's ripple over a stop pressed hard (`guarded` counts it). No
+    RMS normalising: the level moves with the playing, as a pedal's does.
 
     OVERSAMPLED 8x (4x past 50 kHz, 2x past 100 kHz) where it clips, through core's Kaiser polyphase oversampler at
     64 taps a phase: the clean leg and the clipped one go up together, so they meet in time, and the round trip is 63
@@ -81,25 +89,35 @@ public:
         float attack = 5.0f;   // 0..10, PRECISION
         float bright = 5.0f;   // 0..10, PRECISION
         float tight  = 5.0f;   // 0..10, 33
+        float volume = 0.0f;   // dB, -12..+12, every type: 0 hands on the loudness it was given
         Clip  clip   = Clip::diode;   // TEMPORARY
     };
 
     /** The pedal's output never passes this, dBFS peak; the guard begins at `guardFromDb`. */
-    static constexpr float ceilingDb   = -3.0f;
-    static constexpr float guardFromDb = -4.5f;
-    static constexpr float ceiling() noexcept { return 0.707945784f; }   // 10^(ceilingDb / 20)
+    static constexpr float ceilingDb   = -1.0f;
+    static constexpr float guardFromDb = -2.5f;
+    static constexpr float ceiling() noexcept { return 0.891250938f; }   // 10^(ceilingDb / 20)
+    static constexpr float volumeRangeDb = 12.0f;                         // VOLUME: -12..+12 dB
 
     /** THE VOICING'S NUMBERS that were matched against the owner's own TS (tests/DriveMatch.cpp: his trained captures
         TS-0001/0003/0005 on one DI, 1/3 octave by 1/3 octave) — here so that the tool can move them; the amp never does. */
     struct Voicing
     {
-        double volt = 0.5;              // one volt in the float, by the circuit's book: PRECISION and SD-1, no capture of theirs yet
-        double tsVolt = 0.043;          // ...and TS's, as his pedal says: a DI drives it far harder than the book
-        double tsPostHz = 1160.0;       // TS's fixed low-pass after the sum (723 by the book)
+        double volt = 0.5;              // one volt in the float, every type: a DI at -12 dBFS is a humbucker's half volt
+        double tsPostHz = 600.0;        // TS's fixed low-pass after the sum (723 by the book)
         double tsShelfNoonDb = 9.0;     // TONE's shelf at noon, TS; the knob is +-6 dB about it (0 by the book)
-        double tsLegLoDb = 15.5, tsLegHiDb = 37.0;  // TS's leg gain at GAIN 0 and 10, even in dB between (6..40)
-        double tsLpHz = 5500.0;         // TS's fixed low-pass at the top (8000)
+        double tsLegLoDb = 18.5, tsLegHiDb = 38.0;  // TS's leg gain at GAIN 0 and 10, even in dB between (6..40)
+        double tsLpHz = 8500.0;         // TS's fixed low-pass at the top (8000)
         int    factor = 0;              // the oversampling, 0 = by the rate (`prepare`); a gate measures 4 against 8
+
+        /** THE TRIM at VOLUME noon, dB, per type at GAIN 0, 1, .. 10 — a Catmull-Rom curve between: what makes the
+            pedal's output as loud as its input on the reference DI (tests/DriveMatch.cpp `trims` fits it). */
+        std::array<std::array<double, 11>, (size_t) Type::count> trimDb {{
+            {{ -9.35, -10.08, -10.73, -11.29, -11.78, -12.20, -12.55, -12.85, -13.10, -13.31, -13.48 }},   // TS
+            {{ -0.09, -1.21, -2.65, -4.21, -5.69, -7.04, -8.13, -9.06, -9.80, -10.41, -10.87 }},       // PRECISION
+            {{ 0.49, -1.01, -2.51, -4.01, -5.51, -7.01, -8.51, -10.01, -11.51, -13.01, -14.51 }},      // 33: its push, undone
+            {{ -0.86, -3.14, -5.48, -7.72, -9.75, -11.40, -12.70, -13.66, -14.35, -14.83, -15.18 }},   // SD-1
+        }};
     };
     Voicing voicing;
 
@@ -215,6 +233,7 @@ public:
         ready = oversampler.prepare (factor, 2, taps);
         fadeStep = (float) (grid * 1000.0 / (fadeMs * rate));
         slewKnob = (float) (10.0 * grid * 1000.0 / (glideMs * rate));
+        volumeEase = 1.0 - std::exp (-grid * 1000.0 / (volumeMs * rate));
         guardedCount = 0;
         reset();
     }
@@ -240,6 +259,17 @@ public:
 
     /** How many samples since `prepare` the hard limit at the session's rate had to touch. */
     long long guarded() const noexcept { return guardedCount; }
+
+    /** The trim at VOLUME noon for `type` at `gain` (0..10), dB: `Voicing::trimDb`, Catmull-Rom between its steps. */
+    double trimAt (Type type, float gain) const noexcept
+    {
+        const auto& p = voicing.trimDb[(size_t) std::clamp ((int) type, 0, (int) Type::count - 1)];
+        const double x = unit (gain) * 10.0;
+        const int i = std::min (9, (int) x);
+        const double f = x - i;
+        const double p0 = p[(size_t) std::max (i - 1, 0)], p1 = p[(size_t) i], p2 = p[(size_t) i + 1], p3 = p[(size_t) std::min (i + 2, 10)];
+        return p1 + 0.5 * f * (p2 - p0 + f * (2.0 * p0 - 5.0 * p1 + 4.0 * p2 - p3 + f * (3.0 * (p1 - p2) + p3 - p0)));
+    }
 
     /** In place, `n` samples of one channel. */
     void process (float* x, int n, const Settings& s) noexcept
@@ -268,7 +298,7 @@ public:
 
 private:
     static constexpr double pi = 3.14159265358979323846;
-    static constexpr double fadeMs = 20.0, glideMs = 20.0;
+    static constexpr double fadeMs = 20.0, glideMs = 20.0, volumeMs = 10.0;
 
     /** A TPT one-pole, its state in double: the 12 Hz DC block runs at eight times 48 kHz. */
     struct OnePole
@@ -325,6 +355,7 @@ private:
         fadeFrom = fadeGain;
         rfFrom = rfTo;
         boostFrom = boostTo;
+        outFrom = outTo;
 
         // A CHANGE OF TYPE: out, swap from rest, in.
         if (phase == Phase::steady && target.type != playing)
@@ -366,13 +397,18 @@ private:
         }
         if (moved)
             retune();
+
+        // VOLUME eases to the hand in about 10 ms; the trim rides GAIN's glide. Both a line across the grid.
+        const double aim = std::clamp ((double) target.volume, (double) -volumeRangeDb, (double) volumeRangeDb);
+        volumeNow = std::abs (aim - volumeNow) < 1.0e-4 ? aim : volumeNow + (aim - volumeNow) * volumeEase * share;
+        outTo = std::pow (10.0, (trimAt (playing, now.gain) + volumeNow) / 20.0);
     }
 
     /** The type's circuit for the knobs where they now stand. */
     void retune() noexcept
     {
         const double fs = rate, os = rate * factor, g = unit (now.gain);
-        voltNow = playing == Type::ts ? voicing.tsVolt : voicing.volt;
+        voltNow = voicing.volt;
         double legDb = 0.0, legHz = 720.0, rg = 4700.0, capF = 51.0e-12, postHz = 723.0, shelfHz = 1500.0, shelfDb = 0.0,
                lpHz = 0.0;
         linear = false; asymmetric = false;
@@ -429,15 +465,17 @@ private:
         {
             rfFrom = rfTo;
             boostFrom = boostTo;
+            volumeNow = std::clamp ((double) now.volume, (double) -volumeRangeDb, (double) volumeRangeDb);
+            outTo = outFrom = std::pow (10.0, (trimAt (playing, now.gain) + volumeNow) / 20.0);
             primedGrid = true;
         }
     }
 
-    /** THE GUARD inside the loop: nothing below -4.5 dBFS, then a knee to a hard stop at 0.94 of the ceiling (-3.5 dBFS):
+    /** THE GUARD inside the loop: nothing below -2.5 dBFS, then a knee to a hard stop at 0.94 of the ceiling (-1.5 dBFS):
         the rest is room for the way down's own ripple. */
     static float guard (float y) noexcept
     {
-        constexpr float from = 0.595662144f, stop = 0.94f * ceiling(), room = stop - from;   // 10^(-4.5/20)
+        constexpr float from = 0.749894209f, stop = 0.94f * ceiling(), room = stop - from;   // 10^(guardFromDb / 20)
         const float a = std::abs (y);
         if (a <= from)
             return y;
@@ -469,7 +507,7 @@ private:
         if (linear)
         {
             for (int i = 0; i < m; ++i)
-                x[i] = limit (guard ((float) (clean[(size_t) i] * voltNow)) * fadeAt (i, m));
+                x[i] = limit (guard ((float) (clean[(size_t) i] * voltNow * outAt ((double) (i + 1) / (double) m))) * fadeAt (i, m));
             return;
         }
 
@@ -496,7 +534,7 @@ private:
             y += shelfGain * (y - shelf.lowpass (y));
             if (lpOn)
                 y = lowpass.lowpass (y);
-            upClean[(size_t) j] = guard ((float) (y * voltNow));
+            upClean[(size_t) j] = guard ((float) (y * voltNow * outAt (t)));
         }
         const float* back[1] = { upClean.data() };
         float* outs[1] = { x };
@@ -504,6 +542,9 @@ private:
         for (int i = 0; i < m; ++i)
             x[i] = limit (x[i] * fadeAt (i, m));
     }
+
+    /** The output's gain — the trim and VOLUME — `t` of the way across the grid. */
+    double outAt (double t) const noexcept { return outFrom + (outTo - outFrom) * t; }
 
     float fadeAt (int i, int m) const noexcept
     {
@@ -549,6 +590,7 @@ private:
     HighPass2 tight;
     bool linear = false, asymmetric = false, lpOn = true;
     double voltNow = 0.5, shelfGain = 0.0, rgNow = 4700.0, rfFrom = 4700.0, rfTo = 4700.0, boostFrom = 1.0, boostTo = 1.0, v = 0.0;
+    double volumeNow = 0.0, volumeEase = 0.1, outFrom = 1.0, outTo = 1.0;
     long long guardedCount = 0;
 };
 

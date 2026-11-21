@@ -5,6 +5,7 @@
 
 #include "BlockFrame.h"
 #include "Knob.h"
+#include "LevelColumns.h"
 #include "VoicingSelector.h"
 #include "../Parameters.h"
 #include "../PluginProcessor.h"
@@ -16,9 +17,11 @@ namespace orbitamp
 
 /** OrbitAmp's DRIVE (params::driveOn, core::DrivePedal), after COMP and before the AMP — a modest pedal and a modest
     tile (the owner, 21.11): its TYPE on the top border beside its name, set like COMP's character, and in a row under
-    it GAIN and the type's own one or two: TONE for TS and SD-1, ATTACK and BRIGHT for PRECISION, TIGHT for 33. A knob
-    another type owns is not on the face, and keeps its place in the sound for when that type comes back. Every word a
-    player reads is 13 px. Dumb: parameters in, nothing reached through. */
+    it GAIN, the type's own one or two — TONE for TS and SD-1, ATTACK and BRIGHT for PRECISION, TIGHT for 33 — and
+    VOLUME, every type's, in dB. A knob another type owns is not on the face, and keeps its place in the sound for when
+    that type comes back. On the right THE LEVEL BEFORE AND AFTER the pedal (the owner, 21.11: the volume is critical,
+    the level must be seen before and after): the house's double column (LevelColumns), the AMP's trained-input zone
+    on both. Every word a player reads is 13 px. Dumb: parameters and the processor's level taps in. */
 class DriveBlock final : public BlockFrame
 {
 public:
@@ -44,10 +47,11 @@ public:
         knobs[attack].setHint ("ATTACK:   how much low end is cut before the clip - right is tighter");
         knobs[bright].setHint ("BRIGHT:   the treble after the clip");
         knobs[tight].setHint  ("TIGHT:   the low cut before the amp - right is tighter");
+        knobs[volume].setHint ("VOLUME:   the level it hands the amp - at noon as loud as what came in");
 
         static constexpr const char* ids[count] = { params::driveGain, params::driveTone, params::driveAttack,
-                                                    params::driveBright, params::driveTight };
-        static constexpr const char* names[count] = { "GAIN", "TONE", "ATTACK", "BRIGHT", "TIGHT" };
+                                                    params::driveBright, params::driveTight, params::driveVolume };
+        static constexpr const char* names[count] = { "GAIN", "TONE", "ATTACK", "BRIGHT", "TIGHT", "VOLUME" };
         for (int k = 0; k < count; ++k)
         {
             auto& knob = knobs[(size_t) k];
@@ -56,7 +60,8 @@ public:
             knob.labelTracking   = Knob::fxLabelTracking;
             knob.labelRowHeight  = 16;
             knob.valueInDial     = false;
-            knob.textForValue    = [] (double v) { return juce::String (v, 1); };
+            knob.textForValue    = k == volume ? std::function<juce::String (double)> ([] (double v) { return (v > 0.05 ? "+" : "") + juce::String (v, 1) + " dB"; })
+                                               : std::function<juce::String (double)> ([] (double v) { return juce::String (v, 1); });
             knob.setValueRowShown (true);
             addChildComponent (knob);
             attachments[(size_t) k] = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (state, ids[k], knob);
@@ -92,6 +97,18 @@ public:
         clipTmp.onPick = [this] (int i) { clipAttachment->setValueAsCompleteGesture ((float) i); };
         clipAttachment->sendInitialUpdate();
 
+        // THE LEVEL BEFORE AND AFTER, and the AMP's zone carried back to here: the network's door less the pack's own
+        // level and TURBO's push, which still stand between this block's output and it.
+        columns.takeIn  = [&processor] { return processor.driveInPeak.exchange (0.0f); };
+        columns.takeOut = [&processor] { return processor.driveOutPeak.exchange (0.0f); };
+        columns.zone = [&processor]
+        {
+            auto& block = processor.blockAt (0);
+            const float back = (float) block.packInputDb() + block.turboPushDb();
+            return juce::Range<float> (params::captureColdDb - back, params::captureHotDb - back);
+        };
+        addAndMakeVisible (columns);
+
         attachPower (*state.getParameter (params::driveOn));
     }
 
@@ -114,6 +131,10 @@ protected:
             borderSlotUsed = type.getBounds();   // the frame opens the line under it
         }
 
+        // The level columns on the right, the whole height but the clip law's line.
+        columns.setBounds (r.removeFromRight (LevelColumns::designWidth).withTrimmedBottom (20));
+        r.removeFromRight (4);
+
         // TEMPORARY: the clip law's line at the foot.
         clipTmp.setBounds (r.removeFromBottom (20).withSizeKeepingCentre (juce::jmin (r.getWidth(), clipTmp.idealWidth()), 20));
         clipTmp.setVisible (type.getSelection() != 2);   // the 33 has no clip of its own
@@ -131,7 +152,7 @@ protected:
     }
 
 private:
-    enum { gain, tone, attack, bright, tight, count };
+    enum { gain, tone, attack, bright, tight, volume, count };
 
     void showKnobs()
     {
@@ -142,14 +163,16 @@ private:
         knobs[bright].setVisible (t == 1);
         knobs[tight].setVisible (t == 2);
         knobs[gain].setVisible (true);
+        knobs[volume].setVisible (true);
     }
 
     VoicingSelector type;
     std::array<Knob, count> knobs { Knob { "Gain", theme::violet, 11 }, Knob { "Tone", theme::violet, 11 },
                                     Knob { "Attack", theme::violet, 11 }, Knob { "Bright", theme::violet, 11 },
-                                    Knob { "Tight", theme::violet, 11 } };
+                                    Knob { "Tight", theme::violet, 11 }, Knob { "Volume", theme::violet, 11 } };
     std::array<std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>, count> attachments;
     std::unique_ptr<juce::ParameterAttachment> typeAttachment;
+    LevelColumns columns;
     VoicingSelector clipTmp;                                     // TEMPORARY
     std::unique_ptr<juce::ParameterAttachment> clipAttachment;   // TEMPORARY
 

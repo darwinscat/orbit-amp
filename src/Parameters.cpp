@@ -97,6 +97,9 @@ void addGuitarDriveParameters (juce::AudioProcessorValueTreeState::ParameterLayo
                 std::make_unique<Float> (juce::ParameterID { driveAttack, 1 }, "Drive Attack", knob, 5.0f),
                 std::make_unique<Float> (juce::ParameterID { driveBright, 1 }, "Drive Bright", knob, driveBrightDefault),
                 std::make_unique<Float> (juce::ParameterID { driveTight, 1 },  "Drive Tight",  knob, 5.0f),
+                std::make_unique<Float> (juce::ParameterID { driveVolume, 1 }, "Drive Volume",
+                                         juce::NormalisableRange<float> { -12.0f, 12.0f, 0.1f }, 0.0f,
+                                         juce::AudioParameterFloatAttributes().withLabel ("dB")),
                 std::make_unique<juce::AudioParameterChoice> (juce::ParameterID { driveClipTmp, 1 }, "Drive Clip (TEMPORARY)", driveClips, 0));
 }
 

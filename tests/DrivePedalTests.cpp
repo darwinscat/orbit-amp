@@ -10,8 +10,11 @@
 //   - the clip on a sine: TS and PRECISION symmetric (odd harmonics only), SD-1 asymmetric (even harmonics too);
 //     TS and PRECISION within 1.5 dB from GAIN 3 to 10 — the clamp;
 //   - every type delays by the same 63 samples;
-//   - at full GAIN, a -6 dBFS 2 kHz sine and a 100 Hz + 2 kHz pair, a guitar's phrase up to 0 dBFS: never past
-//     -3 dBFS; and +60 dBFS, NaN, infinity and DC in: finite, under the ceiling, no denormal;
+//   - THE LEVEL HANDED ON: VOLUME is that many dB, eased in about 10 ms, no click; at noon a guitar's phrases come out
+//     about as loud as they went in (BS.1770) at every GAIN, every type — the trims, fitted on the reference DI by
+//     tests/DriveMatch.cpp to 0.3 LU, here on phrases of our own;
+//   - at full GAIN and VOLUME, a -6 dBFS 2 kHz sine and a 100 Hz + 2 kHz pair, a guitar's phrase up to 0 dBFS: never
+//     past -1 dBFS; and +60 dBFS, NaN, infinity and DC in: finite, under the ceiling, no denormal;
 //   - silence in, silence out — exactly zero, and back to exactly zero after playing;
 //   - a change of type and a jump of GAIN are no clicks;
 //   - what it costs, said.
@@ -19,6 +22,7 @@
 // main() returns 0 when every check held.
 
 #include "core/DrivePedal.h"
+#include "Loudness.h"
 
 #include <chrono>
 #include <cmath>
@@ -58,10 +62,14 @@ namespace
         return s;
     }
 
+    /** What `run` plays: the shipping voicing, unless a check says otherwise (and puts it back). */
+    DrivePedal::Voicing voicing;
+
     /** `n` samples of `in` through a fresh pedal at `s`, in blocks of 256. */
     std::vector<float> run (const DrivePedal::Settings& s, const std::function<float (int)>& in, int n, long long* guarded = nullptr)
     {
         DrivePedal p;
+        p.voicing = voicing;
         p.prepare (rate);
         std::vector<float> v ((size_t) n);
         for (int i = 0; i < n; ++i)
@@ -85,8 +93,7 @@ namespace
 
     double levelAt (const std::vector<float>& v, double hz, size_t from, size_t len) { return db (std::abs (binAt (v, hz, from, len))); }
 
-    /** The transfer at `hz` at -100 dBFS, where every clip is still a line — the TS's too, which his pedal says a DI
-        drives far harder than the book (DrivePedal::Voicing::tsVolt). */
+    /** The transfer at `hz` at -100 dBFS, where every clip is still a line. */
     std::complex<double> transfer (const DrivePedal::Settings& s, double hz)
     {
         const double a = 1.0e-5;
@@ -170,8 +177,9 @@ int main()
         check (worst < 1.0e-3, "the diodes: Newton from the last sample (a step, more only where it moved 1 mV) within 1 mV of the converged solve, mV", worst * 1000.0);
     }
 
-    // SMALL-SIGNAL SHAPES.
+    // SMALL-SIGNAL SHAPES — the circuit's, before the trim at VOLUME noon (a gain that moves with GAIN) takes its level.
     {
+        voicing.trimDb = {};
         // THE CLIPPING STAGE ALONE, out of the whole pedal: two GAINs low enough that the 51 pF stays out of the band —
         // their difference is the leg through the tone network after the sum, and that network alone (the clean leg's
         // path) is the first less k0 times it. The stage is then the transfer over the network.
@@ -300,7 +308,8 @@ int main()
                 if (smallSignal (s, hz) - ref >= -3.0) { corner = hz; break; }
             check (corner >= 135.0 && corner <= 180.0, "33: at TIGHT noon the low cut's -3 dB stands near 155 Hz, Hz", corner);
             const double grows = smallSignal (at (Type::thirtyThree, 8.0f), 1000.0) - smallSignal (at (Type::thirtyThree, 2.0f), 1000.0);
-            check (std::abs (grows - 9.0) < 0.05, "33: GAIN 2 to 8 is 9 dB more out, 1 dB per dB, dB", grows);
+            voicing = {};
+            check (std::abs (grows - 9.0) < 0.05, "33: GAIN 2 to 8 is 9 dB more out, 1 dB per dB, before the trim, dB", grows);
         }
     }
 
@@ -325,15 +334,18 @@ int main()
         check (std::max (pr[2], pr[4]) < -100.0, "PRECISION's too", std::max (pr[2], pr[4]));
         check (sd[2] > -40.0, "SD-1's clip is asymmetric: its 2nd harmonic above -40 dB", sd[2]);
 
+        voicing.trimDb = {};   // the clip's own clamp, before the trim
         for (const auto t : { Type::ts, Type::precision })
         {
             const auto note = [] (int i) { return (float) (0.125 * std::sin (2.0 * pi * 1000.0 * i / rate)); };   // -18 dBFS, held
             const double lo = rmsDb (run (at (t, 3.0f), note, 48000), 4800);
             const double hi = rmsDb (run (at (t, 10.0f), note, 48000), 4800);
             std::printf ("     %s on a held note at -18 dBFS: GAIN 3 %.1f dB RMS, GAIN 10 %.1f dB RMS\n", names[(int) t], lo, hi);
-            check (std::abs (hi - lo) < 1.5, t == Type::ts ? "TS clamps: GAIN 3 to 10 within 1.5 dB, dB" : "PRECISION clamps: GAIN 3 to 10 within 1.5 dB, dB",
+            check (std::abs (hi - lo) < 1.5, t == Type::ts ? "TS clamps: GAIN 3 to 10 within 1.5 dB, before the trim, dB"
+                                                           : "PRECISION clamps: GAIN 3 to 10 within 1.5 dB, before the trim, dB",
                    hi - lo);
         }
+        voicing = {};
     }
 
     // EVERY TYPE DELAYS BY THE SAME 63 SAMPLES: 63 is the oversampler's own round trip, the 33's line is as long — a
@@ -357,18 +369,87 @@ int main()
         check (same && DrivePedal::latencySamples() == 63, "every type delays by the same 63 samples");
     }
 
-    // THE CEILING: -3 dBFS, every type at full GAIN.
+    // THE LEVEL HANDED ON. VOLUME is that many dB (a quiet phrase, under the guard, past the ease); at noon a guitar's
+    // phrases come out about as loud as they went in, every type at GAIN 0, 5 and 10.
+    {
+        bool exact = true;
+        double worst = 0.0;
+        for (int t = 0; t < (int) Type::count; ++t)
+        {
+            const auto quiet = phrase (0, 0.03, 48000);
+            const auto with = [&] (float volume)
+            {
+                auto s = at ((Type) t, 5.0f);
+                s.volume = volume;
+                return rmsDb (run (s, [&] (int i) { return quiet[(size_t) i]; }, 48000), 4800);
+            };
+            const double noon = with (0.0f);
+            for (const float volume : { -12.0f, -6.0f, 6.0f, 12.0f })
+            {
+                const double d = with (volume) - noon - volume;
+                worst = std::max (worst, std::abs (d));
+                exact = exact && std::abs (d) < 0.05;
+            }
+        }
+        check (exact, "VOLUME -12, -6, +6, +12 is that many dB over noon, every type (worst dB off)", worst);
+
+        // The trims are fitted on the reference DI to 0.3 LU (tests/DriveMatch.cpp `trims`); our phrases are sustained
+        // sines, denser at a high GAIN than a guitar is, so here they land under it — never over it by more than 1 LU,
+        // never 6 under: no block hands the amp more than it was given.
+        double most = -100.0, least = 100.0;
+        for (int t = 0; t < (int) Type::count; ++t)
+            for (const float gain : { 0.0f, 5.0f, 10.0f })
+                for (int kind = 0; kind < 3; ++kind)
+                {
+                    const auto v = phrase (kind, 0.3, 96000);
+                    const auto out = run (at ((Type) t, gain), [&] (int i) { return v[(size_t) i]; }, 96000);
+                    const double d = orbitamp::loudness::integrated (out, rate) - orbitamp::loudness::integrated (v, rate);
+                    most = std::max (most, d);
+                    least = std::min (least, d);
+                }
+        std::printf ("     at VOLUME noon, our own phrases (-10.5 dBFS peak, as the reference DI peaks) out less in: %+.2f to %+.2f LU\n", least, most);
+        check (most < 1.0 && least > -6.0, "...and at noon a guitar's phrases never come out louder than in, every type at GAIN 0, 5, 10 (most LU over)", most);
+
+        // VOLUME thrown +12 to -12 mid-note on the 33 at noon (a line, so the level is VOLUME's alone): a third to nine
+        // tenths of the way there 10 ms on, there within half a dB by 60 ms, no step past the steady ones'.
+        DrivePedal p;
+        p.prepare (rate);
+        std::vector<float> v (48000 * 2);
+        for (size_t i = 0; i < v.size(); ++i)
+            v[i] = (float) (0.03 * std::sin (2.0 * pi * 1000.0 * (double) i / rate));
+        auto s = at (Type::thirtyThree, 5.0f);
+        s.volume = 12.0f;
+        constexpr size_t thrown = 48128;
+        for (size_t i = 0; i < v.size(); i += 256)
+        {
+            if (i == thrown) s.volume = -12.0f;
+            p.process (v.data() + i, 256, s);
+        }
+        const auto levelAround = [&] (size_t at) { return db (peakOf (std::vector<float> (v.begin() + (long) at - 48, v.begin() + (long) at + 48))); };
+        const double from = levelAround (thrown - 960), to = levelAround (thrown + 24000);
+        const double share10 = (from - levelAround (thrown + 480)) / (from - to), gap60 = std::abs (levelAround (thrown + 2880) - to);
+        float steady = 0.0f, during = 0.0f;
+        for (size_t i = 24001; i < thrown; ++i) steady = std::max (steady, std::abs (v[i] - v[i - 1]));
+        for (size_t i = thrown; i < thrown + 4800; ++i) during = std::max (during, std::abs (v[i] - v[i - 1]));
+        std::printf ("     VOLUME thrown +12 to -12: %.0f %% of the way 10 ms on, %.2f dB short of it 60 ms on\n", share10 * 100.0, gap60);
+        check (share10 > 0.33 && share10 < 0.9 && gap60 < 0.5 && during <= steady * 1.01f,
+               "VOLUME thrown +12 to -12 mid-note eases in about 10 ms, there by 60 ms, no click (share 10 ms on)", share10);
+    }
+
+    // THE CEILING: -1 dBFS, every type at full GAIN and full VOLUME.
     {
         long long touched = 0;
         float worst = 0.0f;
+        const auto loudest = [] (Type t) { auto s = at (t, 10.0f); s.volume = DrivePedal::volumeRangeDb; return s; };
         for (int t = 0; t < (int) Type::count; ++t)
         {
-            worst = std::max (worst, peakOf (run (at ((Type) t, 10.0f), [] (int i) { return (float) (0.5 * std::sin (2.0 * pi * 2000.0 * i / rate)); }, 48000, &touched)));
-            worst = std::max (worst, peakOf (run (at ((Type) t, 10.0f), [] (int i)
+            worst = std::max (worst, peakOf (run (loudest ((Type) t), [] (int i) { return (float) (0.5 * std::sin (2.0 * pi * 2000.0 * i / rate)); }, 48000, &touched)));
+            worst = std::max (worst, peakOf (run (loudest ((Type) t), [] (int i)
                                                   { return (float) (0.25 * std::sin (2.0 * pi * 100.0 * i / rate) + 0.25 * std::sin (2.0 * pi * 2000.0 * i / rate)); },
                                                   48000, &touched)));
         }
-        check (db (worst) <= -3.0 + 0.01, "a -6 dBFS 2 kHz sine and a 100 Hz + 2 kHz pair at full GAIN: never past -3 dBFS, dBFS", db (worst));
+        check (db (worst) <= -1.0 + 0.01, "a -6 dBFS 2 kHz sine and a 100 Hz + 2 kHz pair at full GAIN and VOLUME: never past -1 dBFS, dBFS", db (worst));
+        check (db (worst) > -2.0, "...and up to it: the guard lets them past -2 dBFS (it was -3), dBFS", db (worst));
         std::printf ("     ...the hard limit at the session's rate touched %lld samples of them\n", touched);
 
         long long onPhrases = 0;
@@ -377,9 +458,9 @@ int main()
             for (int kind = 0; kind < 3; ++kind)
             {
                 const auto v = phrase (kind, 1.0, 48000);
-                loud = std::max (loud, peakOf (run (at ((Type) t, 10.0f), [&] (int i) { return v[(size_t) i]; }, 48000, &onPhrases)));
+                loud = std::max (loud, peakOf (run (loudest ((Type) t), [&] (int i) { return v[(size_t) i]; }, 48000, &onPhrases)));
             }
-        check (db (loud) <= -3.0 + 0.01, "a guitar's phrases up to 0 dBFS at full GAIN: never past -3 dBFS, dBFS", db (loud));
+        check (db (loud) <= -1.0 + 0.01, "a guitar's phrases up to 0 dBFS at full GAIN and VOLUME: never past -1 dBFS, dBFS", db (loud));
         std::printf ("     ...the hard limit touched %lld samples of them\n", onPhrases);
 
         // A hard strum (-6 dBFS peak) at noon, what each hands the AMP.
@@ -422,7 +503,7 @@ int main()
         float worst = 0.0f;
         const float inf = std::numeric_limits<float>::infinity(), nan = std::numeric_limits<float>::quiet_NaN();
         for (int t = 0; t < (int) Type::count; ++t)
-            for (const float x : run (at ((Type) t, 10.0f), [&] (int i)
+            for (const float x : run ([&] { auto s = at ((Type) t, 10.0f); s.volume = DrivePedal::volumeRangeDb; return s; }(), [&] (int i)
                                       {
                                           switch ((i / 4800) % 5)
                                           {
@@ -438,7 +519,7 @@ int main()
                 worst = std::max (worst, std::abs (x));
             }
         check (finite, "+60 dBFS, NaN, infinity, DC and loud noise in: every sample out finite, no denormal");
-        check (db (worst) <= -3.0 + 0.01, "...and never past -3 dBFS, dBFS", db (worst));
+        check (db (worst) <= -1.0 + 0.01, "...and never past -1 dBFS, at full VOLUME too, dBFS", db (worst));
     }
 
     // NO CLICKS: a change of type, then GAIN thrown 5 to 10, mid-note.
