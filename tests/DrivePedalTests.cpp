@@ -11,8 +11,8 @@
 //     TS and PRECISION within 1.5 dB from GAIN 3 to 10 — the clamp;
 //   - every type delays by the same 63 samples;
 //   - THE LEVEL HANDED ON: VOLUME is that many dB, eased in about 10 ms, no click; at noon a guitar's phrases come out
-//     about as loud as they went in (BS.1770) at every GAIN, every type — the trims, fitted on the reference DI by
-//     tests/DriveMatch.cpp to 0.3 LU, here on phrases of our own;
+//     about as loud as they went in (BS.1770) at every GAIN, every type — the trims, fitted on the reference DI at
+//     -18 dBFS peak by tests/DriveMatch.cpp to 0.3 LU, here on phrases of our own at that peak;
 //   - at full GAIN and VOLUME, a -6 dBFS 2 kHz sine and a 100 Hz + 2 kHz pair, a guitar's phrase up to 0 dBFS: never
 //     past -1 dBFS; and +60 dBFS, NaN, infinity and DC in: finite, under the ceiling, no denormal;
 //   - silence in, silence out — exactly zero, and back to exactly zero after playing;
@@ -393,22 +393,22 @@ int main()
         }
         check (exact, "VOLUME -12, -6, +6, +12 is that many dB over noon, every type (worst dB off)", worst);
 
-        // The trims are fitted on the reference DI to 0.3 LU (tests/DriveMatch.cpp `trims`); our phrases are sustained
-        // sines, denser at a high GAIN than a guitar is, so here they land under it — never over it by more than 1 LU,
-        // never 6 under: no block hands the amp more than it was given.
+        // The trims are fitted on the reference DI at -18 dBFS peak to 0.3 LU (tests/DriveMatch.cpp `trims`); our
+        // phrases at that peak are sustained sines, denser at a high GAIN than a guitar is, so here they land under it —
+        // never over it by more than 1 LU, never 8 under: no block hands the amp more than it was given.
         double most = -100.0, least = 100.0;
         for (int t = 0; t < (int) Type::count; ++t)
             for (const float gain : { 0.0f, 5.0f, 10.0f })
                 for (int kind = 0; kind < 3; ++kind)
                 {
-                    const auto v = phrase (kind, 0.3, 96000);
+                    const auto v = phrase (kind, 0.125893, 96000);   // -18 dBFS peak
                     const auto out = run (at ((Type) t, gain), [&] (int i) { return v[(size_t) i]; }, 96000);
                     const double d = orbitamp::loudness::integrated (out, rate) - orbitamp::loudness::integrated (v, rate);
                     most = std::max (most, d);
                     least = std::min (least, d);
                 }
-        std::printf ("     at VOLUME noon, our own phrases (-10.5 dBFS peak, as the reference DI peaks) out less in: %+.2f to %+.2f LU\n", least, most);
-        check (most < 1.0 && least > -6.0, "...and at noon a guitar's phrases never come out louder than in, every type at GAIN 0, 5, 10 (most LU over)", most);
+        std::printf ("     at VOLUME noon, our own phrases at -18 dBFS peak (the reference's) out less in: %+.2f to %+.2f LU\n", least, most);
+        check (most < 1.0 && least > -8.0, "...and at noon a guitar's phrases never come out louder than in, every type at GAIN 0, 5, 10 (most LU over)", most);
 
         // VOLUME thrown +12 to -12 mid-note on the 33 at noon (a line, so the level is VOLUME's alone): a third to nine
         // tenths of the way there 10 ms on, there within half a dB by 60 ms, no step past the steady ones'.

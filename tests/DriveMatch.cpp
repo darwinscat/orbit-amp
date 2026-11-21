@@ -18,7 +18,7 @@
 //     orbitamp_drive_match <di.wav> <TS-0001.nam> <TS-0003.nam> <TS-0005.nam> [trims] [offset] [search] [--nam-db=X] [--out=<prefix>]
 //
 // Prints the cards — round two's TS against his captures as they come, then ours as it ships against his fed X —;
-// `trims` fits every type's trim at VOLUME noon (out as loud as in, BS.1770, on the DI at its own level) and prints the
+// `trims` fits every type's trim at VOLUME noon (out as loud as in, BS.1770, on the DI at -18 dBFS peak) and prints the
 // table for core::DrivePedal::Voicing::trimDb; the cards end with the level each hands the amp, ours against his fed X
 // and brought to the DI's loudness; `offset` walks X alone, half a dB at a time, a line per X and per capture; `search` walks ours' voicing numbers
 // (core::DrivePedal::Voicing) and X together for the least worst of the three measures and prints the cards again; --out writes the
@@ -382,15 +382,14 @@ int main (int argc, char** argv)
     std::printf ("\nHIS CAPTURES FED %+.1f dB\n", namDb);
     cards (v, his, "THE SHIPPING VOICING");
 
-    // THE LEVEL EACH HANDS THE AMP, the DI at its own level: ours at VOLUME noon, and his fed X with its output brought
-    // to the DI's loudness — the rule a block before the amp keeps (the BOOSTER's path: its capture fed X, then
-    // trimmed the same way). Integrated loudness and peak, ours less his.
-    std::vector<float> di ((size_t) file.getNumSamples());
-    for (size_t i = 0; i < di.size(); ++i)
-        di[i] = file.getSample (0, (int) i);
+    // THE LEVEL EACH HANDS THE AMP, on THE REFERENCE: the DI at -18 dBFS peak, the one level every block before the amp
+    // is calibrated at (a pedal that clips is at unity at one input level only): ours at VOLUME noon, and his fed X with
+    // its output brought to the DI's loudness — the rule a block before the amp keeps (the BOOSTER's path: its capture
+    // fed X, then trimmed the same way). Integrated loudness and peak, ours less his.
+    const auto& di = dis[1];
     const double diLufs = orbitamp::loudness::integrated (di, rate);
-    std::printf ("\nAT THE AMP'S INPUT, the DI at its own level (%.1f LUFS, peak %.1f dBFS); his fed %+.1f dB, then trimmed to the DI's loudness\n",
-                 diLufs, 20.0 * std::log10 ((double) peak), namDb);
+    std::printf ("\nAT THE AMP'S INPUT, the reference DI at -18 dBFS peak (%.1f LUFS); his fed %+.1f dB, then trimmed to the DI's loudness\n",
+                 diLufs, namDb);
     for (int k = 0; k < 3; ++k)
     {
         const auto ours = throughPedal (di, gains[k], v);
@@ -408,8 +407,9 @@ int main (int argc, char** argv)
                      names[k], lo, peakDb (ours), lh, peakDb (hisOut), lo - lh, peakDb (ours) - peakDb (hisOut));
     }
 
-    // THE TRIMS: every type at GAIN 0, 1, .. 10, VOLUME noon, the other knobs at noon, as loud out as the DI went in.
-    // Fitted three rounds from the shipping table (the guard is a curve too), then checked at every step and half step.
+    // THE TRIMS: every type at GAIN 0, 1, .. 10, VOLUME noon, the other knobs at noon, as loud out as the reference DI
+    // (-18 dBFS peak) went in. Fitted three rounds from the shipping table (the guard is a curve too), then checked at
+    // every step and half step — and at -12 dBFS peak, where a pedal that compresses comes out under.
     if (fit)
     {
         static const char* const typeNames[] = { "TS", "PRECISION", "33", "SD-1" };
@@ -432,7 +432,11 @@ int main (int argc, char** argv)
             std::printf ("  trim %-9s", typeNames[type]);
             for (int g = 0; g <= 10; ++g)
                 std::printf (" %+.2f", t.trimDb[(size_t) type][(size_t) g]);
-            std::printf ("   (out less in: worst %.2f LU at the steps, %.2f between)\n", worst, worstHalf);
+            std::printf ("   (out less in: worst %.2f LU at the steps, %.2f between)\n   at -12 dBFS peak, out less in:", worst, worstHalf);
+            const double hotLufs = orbitamp::loudness::integrated (dis[0], rate);
+            for (int g = 0; g <= 10; g += 2)
+                std::printf (" GAIN %d %+.2f", g, orbitamp::loudness::integrated (throughPedal (dis[0], (float) g, t, (DrivePedal::Type) type), rate) - hotLufs);
+            std::printf (" LU\n");
         }
         std::printf ("  as C++:\n");
         for (int type = 0; type < (int) DrivePedal::Type::count; ++type)

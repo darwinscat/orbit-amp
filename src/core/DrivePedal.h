@@ -48,9 +48,11 @@ namespace orbitamp::core
     (tests/DriveMatch.cpp: the 3rd and 5th harmonics within 1 dB, the crest within 0.2, every 1/3 octave within 2).
 
     THE LEVEL HANDED ON. VOLUME (`Settings::volume`, -12..+12 dB) is the output, after the tone and before the guard;
-    at noon the pedal hands on the LOUDNESS it was given — integrated, K-weighted (BS.1770) on the reference DI, within
-    0.3 LU at every GAIN, every type (`Voicing::trimDb`, a curve smooth in GAIN): GAIN changes how it clips and
-    sounds, not how hard it pushes the amp; VOLUME does that. Smoothed: VOLUME eases to the hand in about 10 ms, the
+    at noon the pedal hands on the LOUDNESS it was given — integrated, K-weighted (BS.1770) on THE REFERENCE, the
+    reference DI at -18 dBFS peak (every block before the amp is calibrated there: a pedal that clips is at unity at
+    one input level only; played hotter it comes out under), within 0.3 LU at every GAIN, every type
+    (`Voicing::trimDb`, a curve smooth in GAIN): GAIN changes how it clips and sounds, not how hard it pushes the amp;
+    VOLUME does that. Smoothed: VOLUME eases to the hand in about 10 ms, the
     trim follows GAIN's own glide.
 
     THE CEILING. The output never passes `ceilingDb`, -1 dBFS peak. THE GUARD makes it so: nothing below -2.5 dBFS,
@@ -111,12 +113,12 @@ public:
         int    factor = 0;              // the oversampling, 0 = by the rate (`prepare`); a gate measures 4 against 8
 
         /** THE TRIM at VOLUME noon, dB, per type at GAIN 0, 1, .. 10 — a Catmull-Rom curve between: what makes the
-            pedal's output as loud as its input on the reference DI (tests/DriveMatch.cpp `trims` fits it). */
+            pedal's output as loud as its input on the reference DI at -18 dBFS peak (tests/DriveMatch.cpp `trims`). */
         std::array<std::array<double, 11>, (size_t) Type::count> trimDb {{
-            {{ -9.35, -10.08, -10.73, -11.29, -11.78, -12.20, -12.55, -12.85, -13.10, -13.31, -13.48 }},   // TS
-            {{ -0.09, -1.21, -2.65, -4.21, -5.69, -7.04, -8.13, -9.06, -9.80, -10.41, -10.87 }},       // PRECISION
-            {{ 0.49, -1.01, -2.51, -4.01, -5.51, -7.01, -8.51, -10.01, -11.51, -13.01, -14.51 }},      // 33: its push, undone
-            {{ -0.86, -3.14, -5.48, -7.72, -9.75, -11.40, -12.70, -13.66, -14.35, -14.83, -15.18 }},   // SD-1
+            {{ -11.47, -12.70, -13.77, -14.76, -15.59, -16.33, -16.97, -17.53, -18.01, -18.42, -18.76 }},   // TS
+            {{ -0.09, -1.24, -2.89, -4.89, -7.01, -9.04, -10.85, -12.41, -13.68, -14.75, -15.61 }},          // PRECISION
+            {{ 0.49, -1.01, -2.51, -4.01, -5.51, -7.01, -8.51, -10.01, -11.51, -13.01, -14.51 }},            // 33: its push, undone
+            {{ -0.87, -3.37, -6.28, -9.15, -11.80, -14.22, -16.24, -17.86, -19.09, -19.99, -20.61 }},        // SD-1
         }};
     };
     Voicing voicing;
